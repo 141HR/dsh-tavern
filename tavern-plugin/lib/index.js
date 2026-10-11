@@ -1835,18 +1835,7 @@ export async function apply(ctx) {
       replyDisplay.projections = withLegacyPresentationProjection(chat, replyDisplay.projections)
     }
     const activity = backgroundTasks.activity(chat)
-    const debugTurns = []
-    for (const message of Array.isArray(chat.messages) ? chat.messages : []) {
-      if (!message || message.role !== 'assistant') continue
-      const turn = Math.max(0, Number(message.turn) || (message.greeting === true ? 1 : 0))
-      if (turn === 0) continue
-      const source = (str(message.sourceText) || str(message.text)).replace(/\s+/g, ' ').trim()
-      debugTurns.push({ turn, preview: source.slice(0, 90), chars: source.length })
-    }
-    const latestStoryTurn = Number(debugTurns[debugTurns.length - 1]?.turn) || 0
-    const liveSession = sessionStore.get(str(chat.sessionId)) || agentRegistry.get(str(chat.sessionId))?.session
-    const latestAssistant = latestStoryTurn > 0 ? assistantResultForTurn(liveSession, latestStoryTurn) : null
-    const latestAssistantMessageId = str(latestAssistant?.event?.data?.message?.id)
+    const { debugTurns, latestAssistantTurn: latestStoryTurn, latestAssistantMessageId } = latestTurnFields(chat)
     const forkTurnsByMessageId = forkTurnsForChat(chat)
     const {inputSources,inputTemplateDisplays}=inputFieldsProjection.project(persistedProjection ? chat : {...chat,_storageRevision:undefined}, options.inputChanges)
     const cardUpdate = ['story', 'script'].includes(chat.mode || 'story') && chat.requestMode !== 'sillytavern'
@@ -1904,7 +1893,7 @@ export async function apply(ctx) {
       characterDesignTask: manualCharacterDesign.project(chat),
       phoneChat: phoneChat.project(chat, card),
       guides: Array.isArray(chat.guides) ? chat.guides : [],
-      debugTurns: debugTurns.slice(-12).reverse(),
+      debugTurns,
       latestAssistantMessageId,
       forkTurnsByMessageId,
       latestAssistantTurn: latestStoryTurn,
@@ -1942,6 +1931,24 @@ export async function apply(ctx) {
       scriptProgress: scriptProgress,
       updatedAt: chat.updatedAt || 0
     }
+  }
+  // Derived from the newest messages; every projection (full or incremental) recomputes them,
+  // so plugin actions never target a turn from an earlier view.
+  function latestTurnFields(chat) {
+    const messages = Array.isArray(chat.messages) ? chat.messages : []
+    const debugTurns = []
+    for (let index = messages.length - 1; index >= 0 && debugTurns.length < 12; index--) {
+      const message = messages[index]
+      if (!message || message.role !== 'assistant') continue
+      const turn = Math.max(0, Number(message.turn) || (message.greeting === true ? 1 : 0))
+      if (turn === 0) continue
+      const source = (str(message.sourceText) || str(message.text)).replace(/\s+/g, ' ').trim()
+      debugTurns.push({ turn, preview: source.slice(0, 90), chars: source.length })
+    }
+    const latestAssistantTurn = Number(debugTurns[0]?.turn) || 0
+    const liveSession = sessionStore.get(str(chat.sessionId)) || agentRegistry.get(str(chat.sessionId))?.session
+    const latestAssistant = latestAssistantTurn > 0 ? assistantResultForTurn(liveSession, latestAssistantTurn) : null
+    return { debugTurns, latestAssistantTurn, latestAssistantMessageId: str(latestAssistant?.event?.data?.message?.id) }
   }
   function replyProjectionsOf(chat) {
     const messages = Array.isArray(chat && chat.messages) ? chat.messages : []
@@ -2069,7 +2076,8 @@ export async function apply(ctx) {
       ledger: readLedger(chat.ledger),
       ledgerTask: manualLedger.project(chat),
       characterDesigns: projectCharacterDesignDocument(chat.characterDesignDocument),
-      characterDesignTask: manualCharacterDesign.project(chat)
+      characterDesignTask: manualCharacterDesign.project(chat),
+      ...latestTurnFields(chat)
     })
     if (mode === 'script') next.scriptProgress = await scriptProgressOf(chat)
     Object.assign(next,inputFieldsProjection.project(chat,{baseRevision:changes.baseRevision,indices:dirtyMessageIndices,changedHeaderFields,runtimeInputChanges}))
