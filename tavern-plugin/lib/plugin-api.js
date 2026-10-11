@@ -669,6 +669,22 @@ export function createTavernPluginApi(deps) {
     return copied
   }
 
+  /** Plugin data and media of one game, for a save package; null when there is nothing. */
+  async function exportGame(chatId) {
+    const [data, media] = await Promise.all([deps.data.snapshot(chatId), deps.media.snapshot(chatId)])
+    return data || media ? { data, media } : null
+  }
+
+  /** A save package's plugin data and media into the imported game; a failure never undoes the import. */
+  async function importGame({ targetChatId, targetSessionId, keyMap, data, media, attachment }) {
+    const imported = { data: 0, media: 0 }
+    try { if (data) imported.data = await deps.data.importInto({ source: data, targetChatId, keyMap }) }
+    catch (error) { log.warn?.('dsh-tavern: 导入存档时恢复插件数据失败: ' + String(error?.message || error)) }
+    try { if (media) imported.media = await deps.media.importInto({ source: media, targetChatId, targetSessionId, keyMap, attachment }) }
+    catch (error) { log.warn?.('dsh-tavern: 导入存档时恢复插件媒体失败: ' + String(error?.message || error)) }
+    return imported
+  }
+
   /**
    * The plugin replacing a stage in this game, or null for Tavern's own. One candidate
    * applies by itself; several apply only when the player chose one (none otherwise).
@@ -894,6 +910,6 @@ export function createTavernPluginApi(deps) {
     }
   })
 
-  return Object.freeze({ service, callHandler, turnState, turnSettled, gameRemoved, timelineChanged, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
+  return Object.freeze({ service, callHandler, turnState, exportGame, importGame, turnSettled, gameRemoved, timelineChanged, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
     runSettlementTasks, manualTaskFor, runManualTask, stopTasks, runningTask, gamePlugins, setGamePlugin })
 }

@@ -163,10 +163,21 @@ export function createPluginMedia({ store, now = Date.now, id = randomUUID }) {
   }
   /** Carry a fork's visible media: items whose version maps into the new game get new ids there. */
   async function copyForFork({ sourceChatId, targetChatId, targetSessionId, keyMap }) {
-    const source = await read(sourceChatId)
-    const items = source.items.flatMap(item => {
+    return importInto({ source: await read(sourceChatId), targetChatId, targetSessionId, keyMap })
+  }
+  /** One game's items, for a save package; null when there are none. */
+  async function snapshot(chatId) {
+    const value = await read(chatId)
+    return value.items.length ? structuredClone(value) : null
+  }
+  /** Items of a fork or a save package whose version maps into the new game (keyMap: 'turn\0key' → key).
+   * attachment, when given, replaces each item's file reference (a save package stores files anew). */
+  async function importInto({ source, targetChatId, targetSessionId, keyMap, attachment = ref => ref }) {
+    const items = (source && Array.isArray(source.items) ? source.items : []).flatMap(item => {
       const key = keyMap.get(item.turn + '\u0000' + item.key)
-      return key ? [{ ...structuredClone(item), id: pluginMediaId(targetSessionId, id()), key }] : []
+      if (!key) return []
+      const ref = item.attachment ? attachment(item.attachment) : null
+      return item.attachment && !ref ? [] : [{ ...structuredClone(item), id: pluginMediaId(targetSessionId, id()), key, attachment: ref ? { ...ref } : null }]
     })
     if (!items.length) return 0
     await update(targetChatId, value => {
@@ -181,7 +192,7 @@ export function createPluginMedia({ store, now = Date.now, id = randomUUID }) {
     await store.remove(pathFor(chatId))
     for (const known of issuedKnown) if (known.startsWith(chatId + '\u0000')) issuedKnown.delete(known)
   }
-  return Object.freeze({ issue, attach, patch, remove, list, find, copyForFork, turns, removeChat, pathFor })
+  return Object.freeze({ issue, attach, patch, remove, list, find, copyForFork, snapshot, importInto, turns, removeChat, pathFor })
 }
 
 const FILE_MEDIA_TYPES = {

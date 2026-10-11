@@ -75,11 +75,22 @@ export function createPluginData({ store, now = Date.now }) {
 
   /** Carry a fork's visible history: records whose version maps into the new game. */
   async function copyForFork({ sourceChatId, targetChatId, keyMap }) {
-    const source = await read(sourceChatId)
+    return importInto({ source: await read(sourceChatId), targetChatId, keyMap })
+  }
+
+  /** The whole file of one game, for a save package; null when no plugin kept anything. */
+  async function snapshot(chatId) {
+    const value = await read(chatId)
+    return Object.keys(value.owners).length || value.settings ? structuredClone(value) : null
+  }
+
+  /** Write a fork's or a save package's records into a new game; keyMap maps 'turn\0key' to the new key. */
+  async function importInto({ source, targetChatId, keyMap }) {
+    if (!valid(source)) return 0
     const owners = {}
     for (const [owner, own] of Object.entries(source.owners)) {
-      const turns = own.turns.flatMap(item => keyMap.get(item.turn + '\u0000' + item.key) ? [{ ...item, key: keyMap.get(item.turn + '\u0000' + item.key) }] : [])
-      if (turns.length || own.game !== null) owners[owner] = { turns, game: own.game ?? null }
+      const turns = (Array.isArray(own?.turns) ? own.turns : []).flatMap(item => keyMap.get(item.turn + '\u0000' + item.key) ? [{ ...item, key: keyMap.get(item.turn + '\u0000' + item.key) }] : [])
+      if (turns.length || (own?.game ?? null) !== null) owners[owner] = { turns, game: own?.game ?? null }
     }
     if (!Object.keys(owners).length && !source.settings) return 0
     await update(targetChatId, value => { value.owners = owners; if (source.settings) value.settings = structuredClone(source.settings) })
@@ -104,5 +115,5 @@ export function createPluginData({ store, now = Date.now }) {
 
   async function removeChat(chatId) { await store.remove(pathFor(chatId)) }
 
-  return Object.freeze({ saveTurn, turnsUpTo, saveGame, readGame, copyForFork, turns, readSettings, updateSettings, removeChat, pathFor })
+  return Object.freeze({ saveTurn, turnsUpTo, saveGame, readGame, copyForFork, snapshot, importInto, turns, readSettings, updateSettings, removeChat, pathFor })
 }

@@ -1352,10 +1352,41 @@ export async function apply(ctx) {
     }
     if (scene) scene.attachments = attachments
     else if (attachments.length) scene = { files: [], worldbooks: [], attachments }
-    const buffer = buildGameSave({ chat, revisions, session, card: { path: chat.cardPath, payload: cardPayload }, script, scene,
+    const plugins = await pluginSaveContents(chat)
+    const buffer = buildGameSave({ chat, revisions, session, card: { path: chat.cardPath, payload: cardPayload }, script, scene, plugins,
       tavernVersion: TAVERN_PACKAGE_VERSION, exportedAt: Date.now() })
     const name = (sessionTitleOf(session.events) || str(chat.title) || str(chat.cardName) || 'game').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 60)
     return { filename: name + '.dshsave', base64: buffer.toString('base64'), bytes: buffer.length, revisions: revisions.length, images: attachments.length }
+  }
+  // Plugin data and media of the story line shown now, with the files the media point at.
+  async function pluginSaveContents(chat) {
+    let state = null
+    try { state = await pluginApi.exportGame(chat.id) } catch (error) { console.warn('dsh-tavern: 读取插件数据失败，存档不含插件数据:', str(error?.message || error)) }
+    if (!state) return null
+    const shown = new Set()
+    for (const message of chat.messages || []) {
+      if (message?.role !== 'assistant') continue
+      const turn = Number(message.turn || (message.greeting ? 1 : 0))
+      try { shown.add(turn + '\u0000' + computeSceneTarget(chat, turn).key) } catch {}
+    }
+    const media = state.media ? { ...state.media, items: state.media.items.filter(item => shown.has(item.turn + '\u0000' + item.key)) } : null
+    const attachments = [], seen = new Set(), store = ctx.get('attachments')
+    for (const item of media?.items || []) {
+      const ref = item.attachment
+      if (!ref || seen.has(ref.attachmentId) || !store) continue
+      seen.add(ref.attachmentId)
+      try {
+        let data
+        if (ref.mediaType) data = Buffer.from((await store.readImage(ref)).data)
+        else {
+          const chunks = []
+          for await (const chunk of store.readFileStream(ref)) chunks.push(Buffer.from(chunk))
+          data = Buffer.concat(chunks)
+        }
+        attachments.push({ attachmentId: ref.attachmentId, mediaType: ref.mediaType, name: ref.name, data })
+      } catch { /* A missing file must not block the save; its item is left out on import. */ }
+    }
+    return { data: state.data, media, attachments }
   }
   // Imports always create a new game: new chat and session ids, the native session rebuilt
   // for this install's paths, the history re-numbered, background agents rebuilt on demand.
@@ -1473,6 +1504,26 @@ export async function apply(ctx) {
           for (const file of save.scene.files) await profileData.writeBytes('scene-images/' + createHash('sha256').update(chatId).digest('hex') + '/' + rename(file.path),
             Buffer.from(JSON.stringify(renameJson(JSON.parse(file.content.toString('utf8'))))))
           for (const book of save.scene.worldbooks) if (/^[a-zA-Z0-9_-]+$/.test(book.digest)) await profileData.writeBytes('scene-images/worldbooks/' + book.digest + '.json', book.content)
+        }
+        // 7. Plugin data and media, re-keyed to the new game's text versions; their content is the plugins' own.
+        if (save.plugins) {
+          const files = new Map(), store = ctx.get('attachments')
+          for (const attachment of save.plugins.attachments) {
+            if (!attachment.data || !store) continue
+            try {
+              files.set(attachment.attachmentId, attachment.mediaType
+                ? await store.saveImage({ data: new Uint8Array(attachment.data), mediaType: attachment.mediaType, name: 'imported-save' })
+                : await store.saveFile({ data: new Uint8Array(attachment.data), name: attachment.name || 'file' }))
+            } catch { /* The item that needs it is left out. */ }
+          }
+          const pluginKeys = new Map()
+          for (const message of save.chat.messages || []) {
+            if (message?.role !== 'assistant') continue
+            const turn = Number(message.turn || (message.greeting ? 1 : 0))
+            try { pluginKeys.set(turn + '\u0000' + computeSceneTarget(save.chat, turn).key, computeSceneTarget({ ...save.chat, id: chatId }, turn).key) } catch {}
+          }
+          await pluginApi.importGame({ targetChatId: chatId, targetSessionId: sessionId, keyMap: pluginKeys, data: save.plugins.data, media: save.plugins.media,
+            attachment: ref => files.has(ref.attachmentId) ? { ...ref, ...files.get(ref.attachmentId) } : null })
         }
       } catch (error) {
         if (created) {
