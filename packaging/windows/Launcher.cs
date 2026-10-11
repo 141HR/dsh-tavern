@@ -310,7 +310,12 @@ class Launcher : Form {
     int remaining=Math.Max(0,(int)(deadline-DateTime.UtcNow).TotalMilliseconds);
     if(!p.WaitForExit(remaining)) {
      if(!OwnsDesktop(p.MainModule.FileName))throw new Exception("酒馆进程位置已改变，请退出后重试。");
-     p.Kill();if(!p.WaitForExit(10000))throw new Exception("酒馆仍在退出，请稍后重试。");
+     // Kill is denied for a process that is already exiting or runs with higher rights;
+     // the first case finishes on its own, the second needs the user to quit it.
+     try {p.Kill();}
+     catch(System.ComponentModel.Win32Exception){if(!p.WaitForExit(10000))throw new Exception("无法结束运行中的酒馆（可能以管理员身份运行）。请手动退出此安装的 DSH Tavern 后点重试。");}
+     catch(InvalidOperationException){}
+     if(!p.WaitForExit(10000))throw new Exception("酒馆仍在退出，请稍后重试。");
     }
    }
   } finally {foreach(var p in owned)p.Dispose();}
