@@ -2,7 +2,8 @@ import { ensureSessionVariableDirectory } from './domain/session-variable-direct
 import { createCompatibilityTurnCompiler } from './domain/compatibility-turn.js'
 import { registerTavernHttpRoutes } from './http/routes.js'
 import { registerRequestHooks } from './hooks/request.js'
-import { syncUserPlugins, watchUserPlugins } from './domain/user-plugins.js'
+import { syncUserPlugins, watchUserPlugins, userPluginPaths } from './domain/user-plugins.js'
+import { createPluginAssets } from './domain/plugin-assets.js'
 import { registerModelStreamHooks } from './hooks/model-stream.js'
 import { registerTurnLifecycleHooks } from './hooks/turn-lifecycle.js'
 import { registerGameplayTools } from './tools/gameplay.js'
@@ -4501,6 +4502,7 @@ export async function apply(ctx) {
 
   registerTavernHttpRoutes({
     ctx,
+    pluginAssets: createPluginAssets({ pluginsDir: userPluginPaths(dataRoot).plugins }),
     dispatch,
     fileResources,
     helperHistoryAccess,

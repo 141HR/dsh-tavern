@@ -7,6 +7,7 @@ import { observeHttpRequests } from '../domain/http-performance-diagnostics.js'
 import { projectCachedResourceBody } from '../domain/tavern-static-resource-cache.js'
 import { redactMvuLoadError } from '../domain/mvu-diagnostics.js'
 import { pluginMediaRange, slicePluginMediaStream } from '../domain/plugin-media.js'
+import { PLUGIN_ASSET_PREFIX } from '../domain/plugin-assets.js'
 
 export function registerTavernHttpRoutes({
   ctx,
@@ -19,6 +20,7 @@ export function registerTavernHttpRoutes({
   runtimeReadiness,
   sceneIllustrations,
   readPluginMediaFile,
+  pluginAssets,
   sessionResources,
   str,
   tavernRemoteAssets,
@@ -52,6 +54,7 @@ export function registerTavernHttpRoutes({
         const readsOfficialMvu = req.method === 'GET' && pathname === OFFICIAL_MVU_VERSION.assetUrl
         const readsRuntimeAsset = req.method === 'GET' && pathname.startsWith(TAVERN_RUNTIME_ASSET_PREFIX)
         const readsClientAsset = req.method === 'GET' && pathname.startsWith(TAVERN_CLIENT_ASSET_PREFIX)
+        const readsPluginAsset = (req.method === 'GET' || req.method === 'HEAD') && pathname.startsWith(PLUGIN_ASSET_PREFIX)
         const origin = req.headers.origin
         if (pathname === '/api/dsh-tavern/session-resource' && req.method === 'GET') {
           const headers = {'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, max-age=600',
@@ -98,7 +101,7 @@ export function registerTavernHttpRoutes({
           res.end('forbidden')
           return
         }
-        if (!readsCachedAsset && !readsStaticAsset && !readsOfficialMvu && !readsFullTemplate && !readsRuntimeAsset && !readsClientAsset && !sceneSameOrigin && typeof origin === 'string' && origin !== '' && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
+        if (!readsCachedAsset && !readsStaticAsset && !readsOfficialMvu && !readsFullTemplate && !readsRuntimeAsset && !readsClientAsset && !readsPluginAsset && !sceneSameOrigin && typeof origin === 'string' && origin !== '' && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
           res.writeHead(403)
           res.end('forbidden')
           return
@@ -135,6 +138,24 @@ export function registerTavernHttpRoutes({
               'X-Content-Type-Options': 'nosniff'
             })
             res.end(asset.body)
+            return
+          }
+          if (readsPluginAsset) {
+            const asset = pluginAssets ? await pluginAssets.read(pathname) : undefined
+            if (asset === undefined) { res.writeHead(404, { 'X-Content-Type-Options': 'nosniff' }); res.end('not found'); return }
+            // Opened directly (an SVG, say), an asset runs no script with the page's rights.
+            const headers = { 'Content-Type': asset.mediaType, 'Accept-Ranges': 'bytes', ETag: asset.etag, 'Cache-Control': 'no-cache',
+              'Access-Control-Allow-Origin': '*', 'Cross-Origin-Resource-Policy': 'cross-origin', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': 'sandbox' }
+            if (req.headers['if-none-match'] === asset.etag) { res.writeHead(304, headers); res.end(); return }
+            const range = pluginMediaRange(req.headers.range, asset.length)
+            if (range && range.invalid) { res.writeHead(416, { ...headers, 'Content-Range': 'bytes */' + asset.length }); res.end(); return }
+            const start = range ? range.start : 0, end = range ? range.end : asset.length - 1
+            res.writeHead(range ? 206 : 200, { ...headers, 'Content-Length': Math.max(0, end - start + 1), ...(range ? { 'Content-Range': 'bytes ' + start + '-' + end + '/' + asset.length } : {}) })
+            if (req.method === 'HEAD' || end < start) { res.end(); return }
+            const stream = asset.stream(start, end)
+            res.on('close', () => stream.destroy())
+            stream.on('error', () => res.destroy())
+            stream.pipe(res)
             return
           }
           if (readsRuntimeAsset) {

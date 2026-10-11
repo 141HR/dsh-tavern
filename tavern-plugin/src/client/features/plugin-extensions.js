@@ -98,6 +98,11 @@
 						return function () { if (typeof dispose === "function") dispose(); panels.delete(tabId); changed(); };
 					}, "tavernUi.registerPanel()");
 				},
+				// URL of a file in the plugin folder's assets/ (images, maps, sounds, fonts).
+				assetUrl(file) {
+					if (typeof file !== "string" || !file || file.split("/").some(function (part) { return !part || part === "." || part === ".." || part.charAt(0) === "."; })) throw new TypeError("assetUrl 需要 assets/ 下的相对路径，例如 'map/forest.png'");
+					return "/api/dsh-tavern/plugin-assets/" + ownerOf(this).split("/").map(encodeURIComponent).join("/") + "/" + file.split("/").map(encodeURIComponent).join("/");
+				},
 				// Where a game stands now (apiVersion 2): latest turn and whether a reply or settlement runs.
 				getTurnState(gameId) {
 					if (typeof gameId !== "string" || !gameId) return Promise.reject(new TypeError("getTurnState 需要 gameId"));

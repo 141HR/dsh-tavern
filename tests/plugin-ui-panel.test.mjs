@@ -139,3 +139,11 @@ test('插件全屏界面：openOverlay 挂到页面上，Esc 或 close 关闭，
   assert.equal(body.length, 1, 'dismissible:false 时 Esc 不关闭')
   assert.throws(() => plugin.openOverlay({}), /render/)
 })
+
+test('插件资源地址：assetUrl 按插件名指向 assets/ 下的文件，拒绝越界路径', () => {
+  const ui = load()
+  const plugin = { ctx: { fiber: { name: 'dsh-tavern-battle' } } }
+  Object.setPrototypeOf(plugin, ui.service)
+  assert.equal(plugin.assetUrl('map/森林 1.png'), '/api/dsh-tavern/plugin-assets/dsh-tavern-battle/map/' + encodeURIComponent('森林 1.png'))
+  for (const bad of ['', '../x.png', 'a/../../b', '.env', '/abs.png']) assert.throws(() => plugin.assetUrl(bad), /相对路径/, bad)
+})
