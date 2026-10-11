@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "544c2baecbeb226303074ba33cd5654f7bcfa43e",
-  "releaseSequence": 590,
+  "revision": "b36f10b1ea5f53edb2144b1876512ccd9cf7e54d",
+  "releaseSequence": 591,
   "version": "2.5.0",
   "files": [
     {
@@ -266,13 +266,13 @@
     },
     {
       "path": "patches/dsh-better-sidebar@0.19.1.patch",
-      "sha256": "b29bb1e1e983c7efc5e71e4bad2f1acc4b134f3d5ded25cab9f8eee2111e60a3",
-      "size": 1812
+      "sha256": "173c43516a505a34c8d554cf5b7a70c25775d7ac28a032c05cc8626abc44be43",
+      "size": 1853
     },
     {
       "path": "patches/dsh-pocket@2.10.6.patch",
-      "sha256": "b87a52109852c2e61a3f4d89a00e580460ebb5b3f89c47d1170b68ad594adb38",
-      "size": 635
+      "sha256": "ace55cf452ea922103d992115c56bd235c4d3da5e0607ac7664f4ba73032311d",
+      "size": 684
     },
     {
       "path": "patches/dsh-web-mobile@2.3.0.patch",
@@ -281,7 +281,7 @@
     },
     {
       "path": "pnpm-lock.yaml",
-      "sha256": "a5f5ad35ed55951aa1d1e85a6e5f5fdae340799ae6682c489bae511caca11186",
+      "sha256": "c8e0ac4e11e5d30a80e6121ad34380af90fde14fdfedb5923748ce32f9e7b598",
       "size": 85796
     },
     {
