@@ -505,8 +505,11 @@ export function createStoryTimeline(options = {}) {
       // Editing keeps the same committed round, but its next settlement must
       // bind to the edited revision. Old in-flight work still fails basedOn.
       const editedRound = backgroundBody(chat)
+      const resettle = intent.resettle === true && editedRound?.status === 'completed' && Number(editedRound.turn) === Number(intent.turn)
       if (editedRound && Number(editedRound.turn) === Number(intent.turn)) {
         editedRound.committedRevision = chat.timeline.revision
+        // The edited prose gets its own posture: settle this round again.
+        if (resettle) editedRound.background = { phase: 'pending', role: 'settlement', updatedAt: now() }
       }
       chat.timeline.updatedAt = now()
       chat.candidates = null
@@ -514,7 +517,7 @@ export function createStoryTimeline(options = {}) {
       // edited scene in foreground requests or in the resident background Agent.
       chat.posture = ''
       chat.lastSettle = null
-      chat.settleStatus = 'idle'
+      chat.settleStatus = resettle ? 'pending' : 'idle'
       chat.settleError = null
       const checkpoint = chat.timeline.checkpoints.at(-1)
       for (const [role, participant] of Object.entries(chat.timeline.participants)) {
@@ -531,7 +534,7 @@ export function createStoryTimeline(options = {}) {
         }
       }
       chat.candidateAgent = null
-      value = { status: 'edited', revision: chat.timeline.revision }
+      value = { status: 'edited', revision: chat.timeline.revision, resettle }
     }
     else if (intent.kind === 'body.begin') value = beginBody(chat, intent)
     else if (intent.kind === 'agent.begin') value = beginAgent(chat, intent)

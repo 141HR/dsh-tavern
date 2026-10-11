@@ -262,3 +262,19 @@ test('body edit invalidates stale posture and rewinds background before the edit
   assert.equal(task.value.participant.sessionId, 'bg')
   assert.equal(task.value.participant.rewindTo, 19)
 })
+
+test('body edit with posture settlement on settles the edited round again', () => {
+  const { timeline, chat: initial } = harness()
+  const committed = beginAndCommitBody(timeline, initial, 1, '开门', '陆伯拿蓝灯笼')
+  committed.messages.at(-1).turn = 1
+  const off = timeline.apply({ chat: structuredClone(committed), intent: { kind: 'body.edit', turn: 1, patch: { text: '沈青拿红纸伞' } } }).chat
+  assert.equal(off.settleStatus, 'idle')
+  const edited = timeline.apply({ chat: committed, intent: { kind: 'body.edit', turn: 1, patch: { text: '沈青拿红纸伞' }, resettle: true } })
+  assert.equal(edited.value.resettle, true)
+  assert.equal(edited.chat.settleStatus, 'pending')
+  const begun = timeline.apply({ chat: edited.chat, intent: { kind: 'agent.begin', role: 'settlement' } })
+  const settled = timeline.complete({ chat: begun.chat, operationId: begun.value.operationId, basedOn: begun.value.basedOn,
+    outcome: { status: 'success', stateChanged: true }, apply(draft) { draft.posture = '沈青撑伞' } })
+  assert.equal(settled.value.status, 'committed')
+  assert.equal(settled.chat.posture, '沈青撑伞')
+})

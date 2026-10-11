@@ -2575,7 +2575,6 @@ export async function apply(ctx) {
     writeVariables: writePluginVariables,
     editText: async (material, text) => {
       await bodyEditor.replaceText(material.sessionId, text)
-      notifyPluginTimeline(material.sessionId, 'edit', { settled: true })
     },
     runTask: runPluginTask,
     publish: sessionId => sessionSignals.publish(sessionId, { kind: 'plugin-media', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
@@ -3710,6 +3709,12 @@ export async function apply(ctx) {
     },
     present: presentStory,
     sessionPatch,
+    // A posture settlement of the edited round reports onTurnSettled when it finishes.
+    onSaved: async (chat, sessionId) => {
+      const resettle = chat.settleStatus === 'pending'
+      if (resettle) void queueSettlement(chat.id).catch(error => console.error('dsh-tavern: 编辑后重新结算失败', str(error?.message || error)))
+      notifyPluginTimeline(sessionId, 'edit', { settled: !resettle })
+    },
   })
 
   // ---------- HTTP RPC（客户端同源 fetch） ----------
@@ -4339,9 +4344,7 @@ export async function apply(ctx) {
       case 'listGamePlugins': return { plugins: await pluginApi.gamePlugins(str(args && args.sessionId)) }
       case 'setGamePlugin': return { plugins: await pluginApi.setGamePlugin(str(args && args.sessionId), { name: args && args.name, enabled: args && args.enabled, replace: args && args.replace }) }
       case 'saveBodyEdit': {
-        const view = await bodyEditor.save(args && args.sessionId, args)
-        notifyPluginTimeline(args && args.sessionId, 'edit', { settled: true })
-        return { view }
+        return { view: await bodyEditor.save(args && args.sessionId, args) }
       }
       case 'regenBody': {
         const view = await regenBody(args && args.chatId, args && args.guidance, args && args.sessionId)

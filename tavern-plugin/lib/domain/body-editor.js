@@ -5,6 +5,7 @@ import { locateRegenerationSurface } from './rollback-surface.js'
 import { sessionEvents } from './session-events.js'
 import { isScopedMessages } from './scoped-messages.js'
 import { diffJson } from './json-mutation.js'
+import { normalizeBackgroundTasks } from './tavern-settings.js'
 
 function latest(chat) {
   const message = chat.messages?.at(-1)
@@ -56,9 +57,11 @@ export async function synchronizeBodyEdits(session, chat, flush, persistChat) {
   return cleared
 }
 
-/** Edit prose only; do not replay macros, scripts or settlement. */
-export function createBodyEditor({ chats, sessions, timeline, activity, project, present, sessionPatch }) {
+/** Edit prose only; do not replay macros or scripts. With posture settlement on,
+ * the edited round is settled again for posture; `onSaved` starts that job. */
+export function createBodyEditor({ chats, sessions, timeline, activity, project, present, sessionPatch, onSaved = async () => {} }) {
   const pending = new Set()
+  const resettles = chat => normalizeBackgroundTasks(chat.backgroundTasks).posture
   function refuseClosedPatch() {
     if (sessionPatch && !sessionPatch.replacementAllowed()) throw new Error(sessionPatch.blockReason())
   }
@@ -99,7 +102,7 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
     if (!isScopedMessages(chat.messages) || typeof chats.patch !== 'function') return undefined
     const index = chat.messages.length - 1
     const { messages: _rows, ...header } = chat
-    const edited = timeline.apply({ chat: { ...header, messages: [message] }, intent: { kind: 'body.edit', turn: message.turn, patch } }).chat
+    const edited = timeline.apply({ chat: { ...header, messages: [message] }, intent: { kind: 'body.edit', turn: message.turn, patch, resettle: resettles(chat) } }).chat
     const { messages: [row], ...head } = edited
     const changes = diffJson({ ...header, messages: [] }, { ...head, messages: [] }).filter(change => !['_storageRevision', 'updatedAt'].includes(change.path[0]))
     for (const change of diffJson(message, row)) changes.push({ ...change, path: ['messages', index, ...change.path] })
@@ -108,6 +111,7 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
     } })
     if (!saved) return undefined
     await synchronizeBodyEdits(agent.session, { messages: [row] }, sessions.flush)
+    await onSaved(saved, agent.session.id)
     return present(saved)
   }
   async function read(sessionId) {
@@ -153,9 +157,10 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
         idle(current, agent)
         if (token(current, latest(current)) !== input.token) throw new Error('正文或会话已变化，请重新打开编辑')
         if (!agent.session.surface?.nodes.includes(target.assistantSeq)) throw new Error('模型上下文已变化，请重新打开编辑')
-        return timeline.apply({ chat: current, intent: { kind: 'body.edit', turn: message.turn, patch } }).chat
+        return timeline.apply({ chat: current, intent: { kind: 'body.edit', turn: message.turn, patch, resettle: resettles(current) } }).chat
       }, { source: 'foreground.body-edit' })
       await synchronizeBodyEdits(agent.session, saved, sessions.flush)
+      await onSaved(saved, sessionId)
       return present(saved)
     } finally { pending.delete(sessionId) }
   }
