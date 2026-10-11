@@ -117,6 +117,7 @@ const data = await ctx.tavern.readGameData({ gameId })
 | `compactionSection` | 压缩 | 添加 |
 | `tavernUi.registerPanel` | 界面 | 添加 |
 | `tavernUi.openOverlay` | 界面 | 添加 |
+| `tavernUi.assetUrl` | 界面（插件 `assets/` 静态资源） | — |
 | `tavernUi.setInput`、`tavernUi.submitInput` | 玩家输入 | 代玩家填写或发送，走玩家输入的同一条路径 |
 | `saveTurnData`、`readTurnData`、`saveGameData`、`readGameData` | （存档数据，见第 4 节） | — |
 | `attach`、`update`、`remove`、`list` | 界面 | 添加 |

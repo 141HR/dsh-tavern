@@ -193,6 +193,32 @@ ctx.tavernUi.registerPanel({ id: 'memory', title: '记忆', render: ({ gameId })
 
 面板要读宿主侧的数据时，由插件自己的宿主代码提供读取入口。玩家可以在「本局设置 → 插件」里按局关掉插件；关掉后插件不再收到这局的通知，它已经保存的数据保留。
 
+## 做小游戏（战斗、地图、小游戏界面）
+
+在故事里插一段插件自己的玩法，例如回合制战斗：打开全屏界面，用图片和音效，结束后把结果作为玩家输入交回故事。
+
+```js
+// 浏览器侧
+ctx.tavernUi.registerComposerAction({
+  id: 'battle', label: '战斗',
+  when: ({ busy }) => !busy,
+  run: ({ gameId }) => {
+    const overlay = ctx.tavernUi.openOverlay({
+      gameId, dismissible: false,
+      render: ({ close }) => h(BattleScreen, {
+        background: ctx.tavernUi.assetUrl('map/forest.png'),
+        hitSound: ctx.tavernUi.assetUrl('sfx/hit.mp3'),
+        onFinish: result => { close(); ctx.tavernUi.submitInput({ gameId, text: '（战斗结束：' + result + '）' }) },
+      }),
+    })
+  },
+})
+```
+
+- 图片、地图、音效放进插件文件夹的 `assets/`，用 `assetUrl` 取地址。
+- 界面要知道当前是哪一轮、正文是否写完，用 `watchTurnState(gameId, state => …)`；`state.busy` 为真时不要提交输入。
+- 战斗的中间状态（血量、回合数）跟剧情走就存成按轮数据（`saveTurnData`），这样回退后自然回到之前的状态。
+
 ## 缺接口时
 
 上面的组合做不到时，请提[插件接口需求](https://github.com/flizzywine/dsh-tavern/issues/new?template=plugin-api.yml)，写清要做的插件和卡在哪一步。不要改 Tavern 源码或读 Tavern 的数据文件，Tavern 一更新插件就会失效。
