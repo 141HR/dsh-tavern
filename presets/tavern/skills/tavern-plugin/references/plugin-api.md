@@ -81,7 +81,7 @@ Tavern 向 DSH 注册了两个服务，插件用 DSH 自带的 `inject` 拿：
 | 服务名 | 在哪边 | 用来做什么 |
 |---|---|---|
 | `tavern` | 宿主（Node） | 监听轮次、读正文与设定、挂媒体、往正文请求和后台结算里加内容 |
-| `tavernUi` | 浏览器 | 自定义媒体的显示方式、正文标记、消息按钮、输入框按钮 |
+| `tavernUi` | 浏览器 | 自定义媒体的显示方式、正文标记、消息按钮、输入框按钮、侧栏面板、全屏界面、替玩家输入 |
 
 ```js
 export const name = 'my-image-plugin'
@@ -103,7 +103,7 @@ export function apply(ctx) {
 | 名词 | 含义 |
 |---|---|
 | `gameId` | 一局游戏。等于 DSH 的会话编号。 |
-| `turn` | 轮次编号，开场白是第 1 轮。编号只增不减：回退后重新生成的正文用新编号，所以编号可能不连续；被回退的轮次读不到，撤销回退后恢复。区分同一轮的不同正文请用 `textVersion`。 |
+| `turn` | 轮次编号，开场白是第 1 轮，玩家的第一轮是第 2 轮。编号只增不减：回退后重新生成的正文用新编号，所以编号可能不连续；被回退的轮次读不到，撤销回退后恢复。区分同一轮的不同正文请用 `textVersion`。 |
 | `textVersion` | 这一轮正文的某个版本。重写、编辑、切换版本、回退后重新生成，都会得到新的 `textVersion`。不透明字符串，不要解析。 |
 | 媒体项 | 插件挂到某个 `textVersion` 上的一样东西：图片、视频、音频，或插件自定义的类型。 |
 
@@ -124,6 +124,7 @@ export function apply(ctx) {
 ```js
 {
   gameId, turn, textVersion,
+  greeting,      // 这一轮是不是开场白（onTurnSettled 里总是 false）
   text,          // 这一轮正文的纯文本（去掉了 HTML 标签与程序块，宏已展开）
   rawText,       // 模型原始输出（含插件让模型写进正文的标记）
   card: { id, name },  // id 是人物卡在库里的位置，卡被移动或改名后可能变化
@@ -139,6 +140,25 @@ export function apply(ctx) {
 ### `getTurn({ gameId, turn })`
 
 读某一轮**当前显示版本**的同一份内容（含 `variables`，不含 `settledAt`）。这一轮不存在、或者是还没结算完的最新一轮时返回 `null`。用于插件自己的「手动生成」按钮。只读这一轮，不读整局历史，可以按需随时调用。
+
+### `getTurnState({ gameId })`（第 2 版）
+
+这一局现在的状态，供需要知道「当前是哪一轮、能不能操作」的插件使用：
+
+```js
+{
+  gameId,
+  turn,          // 最新一轮（正文还在生成时，是上一轮写完的那一轮）
+  textVersion,   // 最新一轮当前显示的正文版本
+  greeting,      // 最新一轮是不是开场白
+  generating,    // 前台正在写正文
+  settling,      // 后台正在结算（或即将开始）
+  busy,          // generating 或 settling
+  settled,       // 最新一轮已写完、后台结算已结束
+}
+```
+
+回退、撤销回退、重新生成后读到的是回退后的当前状态。浏览器侧用 `tavernUi.getTurnState` / `watchTurnState`。
 
 ### `getCardContext({ gameId, turn })`
 
@@ -543,6 +563,34 @@ ctx.tavernUi.registerMessageAction({
 
 处理函数不存在（插件宿主侧没加载、或没注册这个名字）时失败，错误码 `TAVERN_PLUGIN_NOT_FOUND`。
 
+### `getTurnState(gameId)`、`watchTurnState(gameId, listener)`（第 2 版）
+
+`getTurnState` 返回 Promise，结果与宿主侧 `tavern.getTurnState` 相同。`watchTurnState` 先用当前状态调用一次 `listener(state)`，之后每次状态变化（开始或写完正文、结算开始或结束、回退等）再调用；返回取消函数，插件卸载时自动取消。只在这一局在当前页面打开时有通知。
+
+### `setInput({ gameId, text })`、`submitInput({ gameId, text })`（第 2 版）
+
+`setInput` 把文字填进这一局的输入框，不发送，玩家可以改了再发。`submitInput` 直接作为玩家输入发送并生成正文，返回 Promise（提交后完成，不等正文写完；要等结果用 `watchTurnState`）。正在生成时会排在当前这轮之后。这一局没有在当前页面打开时报错。
+
+```js
+ctx.tavernUi.submitInput({ gameId, text: '我举盾格挡，然后反击。' })
+```
+
+### `openOverlay({ gameId?, render, dismissible?, onClose? })`（第 2 版）
+
+打开一层盖住整个页面的插件界面，适合战斗、地图这类需要大空间的玩法。返回 `{ close }`。
+
+```js
+const overlay = ctx.tavernUi.openOverlay({
+  gameId,
+  render: ({ gameId, close }) => h(BattleScreen, { gameId, onFinish: close }),
+  onClose: () => { /* 界面关闭后 */ },
+})
+```
+
+- `render` 收到 `{ gameId, close }`，返回 React 元素；界面自己负责提供关闭的按钮。
+- 按 Esc 关闭；`dismissible: false` 时 Esc 不关闭，只能调用 `close`。
+- 关闭时调用一次 `onClose`。插件卸载时界面自动关闭。界面出错时显示一行错误和关闭按钮。
+
 ### `registerPanel({ id, title, render })`（第 2 版）
 
 在右侧栏加一页插件自己的面板，比如记忆、锚点或状态一览。玩家从侧栏的「＋」里打开，面板显示在「插件」一组。
@@ -603,4 +651,4 @@ Tavern 尽量开放接口，并保持每个接口简单、稳定；接口按插�
 | 版本 | 变化 |
 |---|---|
 | 1 | 首个版本。 |
-| 2 | 新增 `turnSection`、`worldbookSource`、`settlementSection`、`settlementTool`：插件可以往每轮正文请求和后台结算里添加内容。新增插件存档数据（`saveTurnData`、`readTurnData`、`saveGameData`、`readGameData`）与 `onTimelineChanged`；编辑正文后重新发 `onTurnSettled`；分叉时带上插件数据和媒体项。新增第一个替换类接口 `replaceSettlement`，以及本局插件面板（按局开关、选择结算由谁负责、错误记录）。新增 `candidateSection`、`compactionSection`、`worldbookEntries`；浏览器侧新增 `registerPanel`、`registerStartGroup`（`tavernUi.apiVersion` 为 2）。`onTurnSettled`、`getTurn` 增加只读的 `variables`。新增 `getCard`、`getHistory`、`setVariables`、`editTurn`、`runTask`。新增宿主侧 `handle` 与浏览器侧 `callHost`，插件的浏览器侧可以调用自己的宿主侧。新增 `settlementTask`、`manualTask`、`startTask`：插件可以定义每轮结算前后运行的任务和玩家手动运行的任务。插件可放进数据目录的 `plugins/` 文件夹加载。第 1 版接口不变。 |
+| 2 | 新增 `turnSection`、`worldbookSource`、`settlementSection`、`settlementTool`：插件可以往每轮正文请求和后台结算里添加内容。新增插件存档数据（`saveTurnData`、`readTurnData`、`saveGameData`、`readGameData`）与 `onTimelineChanged`；编辑正文后重新发 `onTurnSettled`；分叉时带上插件数据和媒体项。新增第一个替换类接口 `replaceSettlement`，以及本局插件面板（按局开关、选择结算由谁负责、错误记录）。新增 `candidateSection`、`compactionSection`、`worldbookEntries`；浏览器侧新增 `registerPanel`、`registerStartGroup`（`tavernUi.apiVersion` 为 2）。`onTurnSettled`、`getTurn` 增加只读的 `variables`。新增 `getCard`、`getHistory`、`setVariables`、`editTurn`、`runTask`。新增宿主侧 `handle` 与浏览器侧 `callHost`，插件的浏览器侧可以调用自己的宿主侧。新增 `settlementTask`、`manualTask`、`startTask`：插件可以定义每轮结算前后运行的任务和玩家手动运行的任务。新增 `getTurnState`，`onTurnSettled`、`getTurn` 增加 `greeting`；浏览器侧新增 `getTurnState`、`watchTurnState`、`setInput`、`submitInput`、`openOverlay`。插件可放进数据目录的 `plugins/` 文件夹加载。第 1 版接口不变。 |

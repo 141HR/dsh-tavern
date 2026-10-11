@@ -35,6 +35,15 @@
 				if (input.when !== undefined && typeof input.when !== "function") throw new TypeError(kind + " 的 when 必须是函数");
 				return { id: String(input.id || input.label), label: input.label.trim(), when: input.when, run: input.run };
 			}
+			// The input box of a game open in this page, for setInput / submitInput.
+			function composerFor(input, label) {
+				if (!input || typeof input.gameId !== "string" || !input.gameId) throw new TypeError(label + " 需要 gameId");
+				if (typeof input.text !== "string") throw new TypeError(label + " 需要 text 字符串");
+				const scope = host && host.sessions && host.sessions.scope(input.gameId);
+				const conversation = host && typeof host.get === "function" && host.get("conversation");
+				if (!scope || !conversation) throw new Error("这一局没有在当前页面打开，无法使用输入框");
+				return { input: conversation.input.for(scope), text: input.text };
+			}
 			const service = {
 				ctx: undefined,
 				apiVersion: 2,
@@ -88,6 +97,87 @@
 						changed();
 						return function () { if (typeof dispose === "function") dispose(); panels.delete(tabId); changed(); };
 					}, "tavernUi.registerPanel()");
+				},
+				// Where a game stands now (apiVersion 2): latest turn and whether a reply or settlement runs.
+				getTurnState(gameId) {
+					if (typeof gameId !== "string" || !gameId) return Promise.reject(new TypeError("getTurnState 需要 gameId"));
+					return rpc("pluginTurnState", {}, gameId).then(function (reply) { return reply ? reply.state : null; });
+				},
+				// Calls listener with the state now and after every change, while that game is open here.
+				watchTurnState(gameId, listener) {
+					if (typeof gameId !== "string" || !gameId) throw new TypeError("watchTurnState 需要 gameId");
+					if (typeof listener !== "function") throw new TypeError("watchTurnState 需要 listener 函数");
+					const owner = ownerOf(this), getTurnState = service.getTurnState;
+					return owned(this, function () {
+						let disposed = false, queued = false, last = "", running;
+						function refresh() {
+							if (queued || disposed) return;
+							queued = true;
+							Promise.resolve().then(function () { queued = false; return disposed ? null : getTurnState(gameId); }).then(function (state) {
+								const text = JSON.stringify(state);
+								if (disposed || !state || text === last) return;
+								last = text;
+								try { listener(state); } catch (error) { try { tavernErrorHub.report("插件 " + owner, error); } catch (_) {} }
+							}, function () {});
+						}
+						const list = host && host.sessions && host.sessions.list;
+						// The session list changes while text streams; only a start or stop of this game matters.
+						const stopSessions = list && typeof list.subscribe === "function" ? list.subscribe(function () {
+							const next = list.getSnapshot().byId[gameId]?.running === true;
+							if (next !== running) { running = next; refresh(); }
+						}) : function () {};
+						const stopView = liveTavernView.subscribe(gameId, refresh, [["latestAssistantTurn"], ["activity"], ["settlementTurn"], ["settleStatus"]]);
+						return function () { disposed = true; stopView(); if (typeof stopSessions === "function") stopSessions(); };
+					}, "tavernUi.watchTurnState()");
+				},
+				// Put text in the game's input box without sending it.
+				setInput(input) {
+					const composer = composerFor(input, "setInput");
+					composer.input.setDraft(composer.text);
+				},
+				// Send text as the player's input; queued behind a reply already being written.
+				submitInput(input) {
+					let composer;
+					try { composer = composerFor(input, "submitInput"); } catch (error) { return Promise.reject(error); }
+					if (!composer.text.trim()) return Promise.reject(new TypeError("submitInput 的 text 不能为空"));
+					composer.input.setDraft(composer.text);
+					return Promise.resolve(composer.input.submit("queue")).then(function () { return { submitted: true }; });
+				},
+				// A layer over the whole page for the plugin's own screen (a battle, a map). Escape closes it
+				// unless dismissible is false; it closes by itself when the plugin unloads.
+				openOverlay(input) {
+					if (!input || typeof input.render !== "function") throw new TypeError("openOverlay 需要 render 函数");
+					if (input.onClose !== undefined && typeof input.onClose !== "function") throw new TypeError("openOverlay 的 onClose 必须是函数");
+					if (typeof document === "undefined") throw new Error("当前环境没有页面，无法打开插件界面");
+					const owner = ownerOf(this);
+					let cleanup = function () {}, dispose = null;
+					const handle = { close: function () { if (typeof dispose === "function") dispose(); else cleanup(); } };
+					dispose = owned(this, function () {
+						const container = document.createElement("div");
+						container.className = "dsh-tavern-plugin-overlay";
+						container.setAttribute("role", "dialog");
+						container.setAttribute("aria-modal", "true");
+						document.body.append(container);
+						const root = require("react-dom/client").createRoot(container);
+						let closed = false;
+						function onKey(event) { if (event.key === "Escape" && input.dismissible !== false) { event.stopPropagation(); handle.close(); } }
+						document.addEventListener("keydown", onKey, true);
+						cleanup = function () {
+							if (closed) return;
+							closed = true;
+							document.removeEventListener("keydown", onKey, true);
+							root.unmount();
+							container.remove();
+							if (input.onClose) try { input.onClose(); } catch (error) { try { tavernErrorHub.report("插件 " + owner, error); } catch (_) {} }
+						};
+						const h = React.createElement;
+						const fallback = h("div", { className: "dsh-tavern-plugin-overlay-error" }, "插件 " + owner + " 的界面出错了",
+							h("button", { type: "button", onClick: handle.close }, "关闭"));
+						function Screen() { return input.render({ gameId: String(input.gameId || ""), close: handle.close }); }
+						root.render(h(tavernPluginBoundary(), { owner: owner, fallback: fallback }, h(Screen)));
+						return function () { cleanup(); };
+					}, "tavernUi.openOverlay()");
+					return handle;
 				},
 				// A group of the plugin's own on the sidebar start page; tabs not in any group stay under 「插件」 or 「其他」.
 				registerStartGroup(input) {

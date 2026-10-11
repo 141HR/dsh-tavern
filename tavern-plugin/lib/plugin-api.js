@@ -155,7 +155,7 @@ export function createTavernPluginApi(deps) {
   async function snapshotOf(material) {
     const variables = deps.readVariables ? await deps.readVariables(material).catch(() => null) : null
     return {
-      gameId: material.sessionId, turn: material.turn, textVersion: material.key,
+      gameId: material.sessionId, turn: material.turn, textVersion: material.key, greeting: material.greeting === true,
       text: material.text, rawText: material.source,
       card: { id: material.card.path, name: material.card.name },
       variables: variables ?? null
@@ -170,6 +170,19 @@ export function createTavernPluginApi(deps) {
     const latest = await deps.readLatestSettledTurn(material.sessionId)
     if (!latest || latest.turn !== material.turn) throw Object.assign(new Error(label + ' 只能用于最新一轮，且要等这一轮写完、后台结算结束'), { code: 'TAVERN_PLUGIN_TURN_UNAVAILABLE' })
     return material
+  }
+
+  /** Where a game stands now: its latest written turn, and whether a reply or settlement is under way. */
+  async function turnState(gameId) {
+    const game = await requireGame(gameId)
+    const [latest, settled, activity] = await Promise.all([deps.readPendingTurn(game.sessionId), deps.readLatestSettledTurn(game.sessionId),
+      deps.readActivity ? deps.readActivity(game.sessionId) : null])
+    const generating = activity?.generating === true, settling = activity?.settling === true
+    return {
+      gameId: game.sessionId, turn: latest?.turn ?? 0, textVersion: latest?.key ?? null, greeting: latest?.greeting === true,
+      generating, settling, busy: generating || settling,
+      settled: !!latest && !!settled && settled.turn === latest.turn && settled.key === latest.key
+    }
   }
 
   async function requireGame(gameId) {
@@ -275,6 +288,10 @@ export function createTavernPluginApi(deps) {
       if (!material) return null
       await deps.media.issue(material.chatId, material.turn, material.key)
       return await snapshotOf(material)
+    },
+
+    async getTurnState({ gameId } = {}) {
+      return await turnState(gameId)
     },
 
     async getCardContext({ gameId, turn } = {}) {
@@ -877,6 +894,6 @@ export function createTavernPluginApi(deps) {
     }
   })
 
-  return Object.freeze({ service, callHandler, turnSettled, gameRemoved, timelineChanged, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
+  return Object.freeze({ service, callHandler, turnState, turnSettled, gameRemoved, timelineChanged, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
     runSettlementTasks, manualTaskFor, runManualTask, stopTasks, runningTask, gamePlugins, setGamePlugin })
 }

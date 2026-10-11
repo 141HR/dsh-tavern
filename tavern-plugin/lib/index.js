@@ -2580,6 +2580,12 @@ export async function apply(ctx) {
     backgroundModel: async sessionId => backgroundModelSelection(await backgroundConfigForSession(sessionId)),
     readCard: readPluginCard,
     readHistory: readPluginHistory,
+    readActivity: async sessionId => {
+      const chat = await taskStateReader.forSession(sessionId)
+      const activity = chat ? backgroundTasks.activity(chat) : null
+      return { generating: agentRegistry.get(str(sessionId))?.phase?.kind === 'running',
+        settling: !!activity && (activity.busy === true || activity.phase === 'pending') }
+    },
     writeVariables: writePluginVariables,
     editText: async (material, text) => {
       await bodyEditor.replaceText(material.sessionId, text)
@@ -4443,6 +4449,7 @@ export async function apply(ctx) {
         return { view }
       }
       case 'callPluginHandler': return { result: await pluginApi.callHandler(args && args.name, args && args.args) }
+      case 'pluginTurnState': return { state: await pluginApi.turnState(args && args.sessionId) }
       case 'getBackgroundProgress': return { progress: backgroundAgentRunner.progress(args && args.sessionId) || pluginSettlementProgress.snapshot(args && args.sessionId) }
       case 'stopBackground': return { view: await stopBackground(args && args.sessionId, args && args.operationId) }
       case 'retrySettlement': return { view: await retrySettlement(args && args.sessionId, args && args.turn, args && args.guidance) }

@@ -740,3 +740,23 @@ test('手动任务：玩家或插件启动，带输入，可停止；插件关�
   await h.api.setGamePlugin('game-1', { name: 'alpha', enabled: false })
   await assert.rejects(h.api.manualTaskFor('game-1', 'alpha:summary'), /关闭了插件/)
 })
+
+test('tavern 服务：getTurnState 给出最新一轮、正文版本、是否在写或在结算；开场白带 greeting', { skip: !cordis }, async t => {
+  let pending = turnMaterial({ turn: 4, key: 'key-4' }), settled = turnMaterial(), activity = { generating: false, settling: true }
+  const h = await harness(t, {
+    readPendingTurn: async () => pending, readLatestSettledTurn: async () => settled, readActivity: async () => activity
+  })
+  let tavern
+  await h.root.plugin({ name: 'battle', inject: ['tavern'], apply(ctx) { tavern = ctx.tavern } })
+  await tick()
+  assert.deepEqual(await tavern.getTurnState({ gameId: 'game-1' }),
+    { gameId: 'game-1', turn: 4, textVersion: 'key-4', greeting: false, generating: false, settling: true, busy: true, settled: false })
+  settled = pending; activity = { generating: false, settling: false }
+  const state = await h.api.turnState('game-1')
+  assert.equal(state.settled, true); assert.equal(state.busy, false)
+  pending = settled = turnMaterial({ turn: 1, key: 'key-1', greeting: true })
+  assert.equal((await tavern.getTurnState({ gameId: 'game-1' })).greeting, true)
+  await assert.rejects(tavern.getTurnState({ gameId: 'missing' }), /不存在/)
+  h.setLatest(turnMaterial({ turn: 1, key: 'key-1', greeting: true }))
+  assert.equal((await tavern.getTurn({ gameId: 'game-1', turn: 1 })).greeting, true)
+})

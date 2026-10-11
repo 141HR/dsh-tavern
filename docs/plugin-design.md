@@ -108,7 +108,7 @@ const data = await ctx.tavern.readGameData({ gameId })
 | 接口 | 阶段 | 方式 |
 |---|---|---|
 | `onTurnSettled`、`onTimelineChanged`、`onGameRemoved` | 生命周期 | 观察 |
-| `getTurn`、`getCardContext`、`backgroundModel` | 上下文 | 观察（按需读取） |
+| `getTurn`、`getTurnState`、`getCardContext`、`backgroundModel` | 上下文 | 观察（按需读取） |
 | `promptSection`、`turnSection`、`worldbookSource` | 上下文 | 添加 |
 | `settlementSection`、`settlementTool` | 结算 | 添加 |
 | `replaceSettlement` | 结算 | 替换 |
@@ -116,6 +116,8 @@ const data = await ctx.tavern.readGameData({ gameId })
 | `candidateSection` | 候选 | 添加 |
 | `compactionSection` | 压缩 | 添加 |
 | `tavernUi.registerPanel` | 界面 | 添加 |
+| `tavernUi.openOverlay` | 界面 | 添加 |
+| `tavernUi.setInput`、`tavernUi.submitInput` | 玩家输入 | 代玩家填写或发送，走玩家输入的同一条路径 |
 | `saveTurnData`、`readTurnData`、`saveGameData`、`readGameData` | （存档数据，见第 4 节） | — |
 | `attach`、`update`、`remove`、`list` | 界面 | 添加 |
 | `tavernUi` 全部 | 界面、回复 | 添加 |
