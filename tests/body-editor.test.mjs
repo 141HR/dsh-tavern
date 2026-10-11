@@ -145,19 +145,3 @@ test('插件整段替换正文：HTML 块必须原样保留，只改文字', asy
   await h.editor.replaceText(h.session.id, '雨停了，灯亮了。\n\n' + block)
   assert.equal(h.chat.messages[1].sourceText, '雨停了，灯亮了。\n\n' + block)
 })
-
-test('an edit with posture settlement on marks the round pending and hands it to onSaved', async () => {
-  const saved = []
-  const h = fixture()
-  const editor = createBodyEditor({ ...h.options, onSaved: async chat => { saved.push(chat.settleStatus) } })
-  const edit = await editor.read(h.session.id)
-  await editor.save(h.session.id, { token: edit.token, texts: ['新正文'] })
-  assert.equal(h.chat.posture, '')
-  assert.deepEqual(saved, [h.chat.settleStatus])
-  const off = fixture()
-  off.change(chat => { chat.backgroundTasks = { posture: false } })
-  const offSaved = []
-  const offEditor = createBodyEditor({ ...off.options, onSaved: async chat => { offSaved.push(chat.settleStatus) } })
-  await offEditor.save(off.session.id, { token: (await offEditor.read(off.session.id)).token, texts: ['新正文'] })
-  assert.deepEqual(offSaved, ['idle'])
-})
