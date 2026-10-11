@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "68dff3ddaa012bdb155424f90a8d6eb779881bde",
-  "releaseSequence": 582,
+  "revision": "bec3f7fa9f6220e186c08d76c4717f568b11fb16",
+  "releaseSequence": 583,
   "version": "2.5.0",
   "files": [
     {
@@ -521,8 +521,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/body-editor.js",
-      "sha256": "60c37036ebd875ba8841c3f8282a63143827175baf479653afe9d4ee1c16c99e",
-      "size": 11205
+      "sha256": "5418bd0674fcedf4c0f11e793972e9774b004d97422f3f7d4178d2061d5324e5",
+      "size": 11609
     },
     {
       "path": "tavern-plugin/lib/domain/bounded-compaction.js",
@@ -1631,8 +1631,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/story-timeline.js",
-      "sha256": "c95a7d10dc8bc183cf4901b3c07ee4b572ac28c0fc42f2a2b2fee1bf9392d3da",
-      "size": 36281
+      "sha256": "8a3762d2c56b2ad270e119f791fa46ab429a42926d0254b89ffbf46114c77c7a",
+      "size": 36634
     },
     {
       "path": "tavern-plugin/lib/domain/surface-recovery.js",
@@ -1971,8 +1971,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "773356f7dadbdcdbb85f4ef77c5700ef75cc2add882d38439baf72137eb39977",
-      "size": 304579
+      "sha256": "f66f477f0aa278075a6b5ab4de2ce44bdddb16e4087310bd0f1254775015ee9f",
+      "size": 304820
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
