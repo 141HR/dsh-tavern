@@ -112,6 +112,28 @@ function rememberRuntimeInput(chat, turn, source, text) {
   for (const oldTurn of keys.slice(40)) delete chat.runtimeInputs[String(oldTurn)]
 }
 
+// The prompt-template projection of a turn's input changes the template variables before the
+// reply exists. Keep what they were, so a turn that fails (or is left behind by one) is undone
+// instead of carrying its input into the next turn.
+function stageTemplateInput(chat, turn, source, projected) {
+  if (chat.promptTemplateInput && chat.promptTemplateInput.turn !== turn) restoreTemplateInput(chat)
+  const before = chat.promptTemplateInput?.before || { variables: clone(chat.variables ?? null), initial: clone(chat.promptTemplateInitialVariables ?? null) }
+  chat.promptTemplateInput = { turn, source, message: projected.message, before }
+  chat.variables = projected.scopes.local
+  chat.promptTemplateInitialVariables = projected.scopes.initial
+}
+
+function restoreTemplateInput(chat) {
+  const before = chat.promptTemplateInput?.before
+  if (before) {
+    if (before.variables === null) delete chat.variables
+    else chat.variables = before.variables
+    if (before.initial === null) delete chat.promptTemplateInitialVariables
+    else chat.promptTemplateInitialVariables = before.initial
+  }
+  delete chat.promptTemplateInput
+}
+
 function runtimeInputFor(chat, turn, source) {
   const value = chat.runtimeInputs && chat.runtimeInputs[String(turn)]
   return value !== null && typeof value === 'object' && str(value.source) === source ? str(value.text) : null
@@ -344,9 +366,7 @@ export function createTurnOrchestrator(options) {
       if (typeof options.projectUserTemplate === 'function' && runtimeUserText !== '') {
         const projected = await options.projectUserTemplate({chat,card,turn,text:runtimeUserText})
         runtimeUserText = projected.message.text
-        chat.promptTemplateInput = {turn,source:userText,message:projected.message}
-        chat.variables = projected.scopes.local
-        chat.promptTemplateInitialVariables = projected.scopes.initial
+        stageTemplateInput(chat, turn, userText, projected)
       }
       const prompted = projectBackgroundInput(runtimeUserText, promptOnly, 1)
       if (prompted.changed) {
@@ -480,9 +500,7 @@ export function createTurnOrchestrator(options) {
       if (typeof options.projectUserTemplate === 'function' && userText !== '') {
         const projected = await options.projectUserTemplate({chat,card:await store.readCard(cardPathOf(chat), chat),turn,text:userText})
         projectedText = projected.message.text
-        chat.promptTemplateInput = {turn,source:userText,message:projected.message}
-        chat.variables = projected.scopes.local
-        chat.promptTemplateInitialVariables = projected.scopes.initial
+        stageTemplateInput(chat, turn, userText, projected)
       }
       rememberRuntimeInput(chat, turn, userText, projectedText)
     }
@@ -845,6 +863,10 @@ export function createTurnOrchestrator(options) {
           chat.scriptState = scripts.transition({ script, state: chat.scriptState, event: { kind: 'restore', revision: null, reference: chat.scriptState.prepared } }).state
           changed = true
         }
+      }
+      if (chat.promptTemplateInput?.turn === turn) {
+        restoreTemplateInput(chat)
+        changed = true
       }
       if ((chat.mode || 'story') === 'card' && chat.workspace && chat.workspace.prepared && Number(chat.workspace.prepared.nativeTurn) === turn) {
         chat.workspace.prepared = null

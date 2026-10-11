@@ -33,6 +33,9 @@ export function createForegroundHandoff(options = {}) {
     if (chat !== undefined) await options.waitBackground?.(chat.id)
     // An unfinished prefilter is optional: sending cancels it instead of waiting.
     if (chat !== undefined) await options.cancelPrefilter?.(chat.id)
+    // A failed turn is cleaned up after the failure, but that may not have happened (no live
+    // session then, or it failed). Its input must not reach this request beside the new one.
+    if (chat !== undefined) await options.clearFailedTurns?.(input.sessionId)
     // A greeting is already story text. Direct typing may bypass candidate
     // preparation, so project its keywords locally before the first body request.
     const onlyGreeting = opening ? opening.messageCount === 1 && opening.firstGreeting === true

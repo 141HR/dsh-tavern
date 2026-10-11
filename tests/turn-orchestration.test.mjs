@@ -317,6 +317,29 @@ test('玩家模板先于本轮召回，重试不重复执行；提交后只产�
   }
 })
 
+test('失败回合的玩家模板变量被撤销，遗留的别轮模板输入在下一轮开始前恢复（#193）', async () => {
+  const projectUserTemplate = async ({ text }) => ({ message: { role: 'user', text: '渲染:' + text }, scopes: { local: { place: text }, initial: { seen: text } } })
+  const run = harness('story', { projectUserTemplate })
+  await run.orchestrator.prepare({ sessionId: 'session-1', turn: 2, userText: '阳台浇花' })
+  assert.equal(run.chat().variables.place, '阳台浇花')
+  assert.equal(await run.orchestrator.discard({ sessionId: 'session-1', turn: 2 }), true)
+  assert.equal(run.chat().promptTemplateInput, undefined)
+  assert.equal(run.chat().variables, undefined, '失败回合写下的模板变量撤销')
+  assert.equal(run.chat().promptTemplateInitialVariables, undefined)
+
+  const again = harness('story', { projectUserTemplate })
+  await again.orchestrator.prepare({ sessionId: 'session-1', turn: 2, userText: '阳台浇花' })
+  // The failed turn was never discarded; the next turn starts from the state before it.
+  await again.orchestrator.prepare({ sessionId: 'session-1', turn: 3, userText: '教室写字' })
+  const chat = again.chat()
+  assert.equal(chat.promptTemplateInput.turn, 3)
+  assert.equal(chat.promptTemplateInput.message.text, '渲染:教室写字')
+  assert.equal(chat.promptTemplateInput.before.variables, null, '下一轮的撤销点是失败回合之前的状态')
+  await again.orchestrator.finalize({ sessionId: 'session-1', turn: 3, userText: '教室写字', assistantText: '小明在教室写字。' })
+  assert.equal(again.chat().promptTemplateInput, undefined)
+  assert.equal(again.chat().messages.filter(message => message.role === 'user').length, 1)
+})
+
 test('插件的本轮上下文和世界书条目进入正文帧，插件层出错时本轮照常', async () => {
   const seen = []
   const run = harness('story', { pluginTurnContext: async context => { seen.push(context); return [

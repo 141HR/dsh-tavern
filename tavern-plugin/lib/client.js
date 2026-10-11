@@ -18838,7 +18838,9 @@ function bindTavernFontZoom(node, win) {
                             const text = String(result.view && result.view.clearedInput || "");
                             if (text.trim() !== "") {
                                 const current = String(draftRef.current || "");
-                                props.inputActions.setDraft(current.trim() === "" ? text : text + "\n" + current);
+                                // Never glue the old input onto a new one: sent together, the reply acts out both.
+                                if (current.trim() === "" || current === text) props.inputActions.setDraft(text);
+                                else if (await askTavernConfirm("输入框里已有新的内容。要用撤回的原输入替换它吗？\n\n原输入：" + text, { confirmText: "替换", cancelText: "保留新内容" })) props.inputActions.setDraft(text);
                             }
                         } catch (error) { tavernErrorHub.report("撤回这条输入", error); }
                         finally { refreshAfterRecovery(); }
