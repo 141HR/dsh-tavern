@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "866345ac90aff0d137b51b6a72df430bf272f815",
-  "releaseSequence": 592,
+  "revision": "d45df3eeda765c9de586c22b1881a9afbaae108d",
+  "releaseSequence": 593,
   "version": "2.5.0",
   "files": [
     {
@@ -261,7 +261,7 @@
     },
     {
       "path": "package.json",
-      "sha256": "8ac4134391c81b757c41c2ffac44be1ce614aca5d80b164f1cbb67a128df9911",
+      "sha256": "21df7894a18d523cc297aa60d1c15aa950bbe9cb1f6b97d9ed299a7da5b513ee",
       "size": 3820
     },
     {
@@ -275,18 +275,18 @@
       "size": 684
     },
     {
-      "path": "patches/dsh-web-mobile@2.3.0.patch",
-      "sha256": "46583f7e1ecd267a97508af95d1afbf119c523d4cae4be010d5b7d727e848f63",
-      "size": 1177
+      "path": "patches/dsh-web-mobile@2.4.1.patch",
+      "sha256": "d03569985f4443edd99b059ab83e3837038092c0eef2a97f34271510c91bbc97",
+      "size": 1805
     },
     {
       "path": "pnpm-lock.yaml",
-      "sha256": "c8e0ac4e11e5d30a80e6121ad34380af90fde14fdfedb5923748ce32f9e7b598",
-      "size": 85796
+      "sha256": "a5666e17a6b3b3170d55ed66daafd7c504484efa53a9003611d927a9f4c99836",
+      "size": 85828
     },
     {
       "path": "pnpm-workspace.yaml",
-      "sha256": "14631770ad6b8bfd18dd97e83997e742fe0f6ddedc1fbf11a2d9cf47ab6ed963",
+      "sha256": "0c61a445729617e43572d2bef4378f939df0d1144d8c4240f95de96462d53f3f",
       "size": 756
     },
     {
