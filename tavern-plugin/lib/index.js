@@ -532,7 +532,7 @@ export async function apply(ctx) {
     return result.renderedText
   }
 
-  const settlementJobs = createSettlementJobs({ run: runSettlement, onSettled: onSettlementSettled })
+  const settlementJobs = createSettlementJobs({ run: runSettlementCycle, onSettled: onSettlementSettled })
   const scriptContinuity = createScriptContinuity()
   const storyTimeline = createStoryTimeline({ id: uid, now: Date.now })
   const cardPreparation = createCardPreparation({ id: function () { return uid('card') }, now: Date.now })
@@ -2578,6 +2578,7 @@ export async function apply(ctx) {
       notifyPluginTimeline(material.sessionId, 'edit', { settled: true })
     },
     runTask: runPluginTask,
+    startManualTask: ({ gameId, key, input }) => startPluginTask(gameId, key, input),
     publish: sessionId => sessionSignals.publish(sessionId, { kind: 'plugin-media', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
   })
   ctx.provide('tavern', pluginApi.service)
@@ -3367,6 +3368,48 @@ export async function apply(ctx) {
       }
     }
   }
+  // ---------- 插件任务：结算前后的任务、玩家手动运行的任务（docs/plugin-api.md） ----------
+  // A settlement job: plugin tasks before Tavern's settlement, the settlement, plugin tasks after it.
+  // Running inside the job, they hold the next turn back (foreground handoff waits for the job).
+  async function runSettlementCycle(chatId, signal) {
+    const state = await taskStateReader.read(chatId).catch(() => null)
+    const gameId = str(state?.sessionId)
+    const onStart = label => pluginSettlementProgress.begin(gameId, label)
+    const activity = state ? backgroundTasks.activity(state) : null
+    if (gameId && activity?.role === 'settlement' && ['pending', 'running'].includes(activity.phase)) {
+      await pluginApi.runSettlementTasks({ gameId, phase: 'before', signal, onStart })
+    }
+    await runSettlement(chatId, signal)
+    if (!gameId || signal?.aborted) return
+    // Tavern's settlement is committed by now: a plugin-task operation keeps the game busy (and stoppable).
+    await pluginApi.runSettlementTasks({ gameId, phase: 'after', signal, onStart, around: work => inPluginTaskOperation(chatId, work) })
+  }
+  async function inPluginTaskOperation(chatId, work) {
+    let taskRun = null
+    try { taskRun = await backgroundTasks.begin(await taskStateReader.read(chatId), 'plugin-task') }
+    catch (error) { console.warn('dsh-tavern: 插件任务未登记为后台任务:', str(error?.message || error)) }
+    try { await work() }
+    finally { if (taskRun) await taskRun.commit({ stateChanged: false }).catch(error => console.warn('dsh-tavern: 插件任务收尾失败:', str(error?.message || error))) }
+  }
+  const pluginTaskJobs = new Map()
+  // A manual plugin task: an exclusive background task, like the ledger; returns once started.
+  async function startPluginTask(sessionId, key, input) {
+    const chat = await taskStateReader.forSession(str(sessionId))
+    if (!chat || !['story', 'script'].includes(chat.mode)) throw new Error('当前没有游玩对话')
+    if (agentRegistry.get(chat.sessionId)?.phase?.kind === 'running' || chat.regenInProgress) throw new Error('请等待正文生成完成后再运行插件任务')
+    if (pluginTaskJobs.has(chat.id)) throw new Error('已有插件任务在运行，请等它完成')
+    await pluginApi.manualTaskFor(chat.sessionId, key, input)
+    const taskRun = await backgroundTasks.begin(chat, 'plugin-task')
+    const job = pluginApi.runManualTask({ gameId: chat.sessionId, key, input, signal: new AbortController().signal,
+      onStart: label => pluginSettlementProgress.begin(chat.sessionId, label) })
+      .catch(error => console.warn('dsh-tavern: 插件任务失败:', str(error?.message || error)))
+      .finally(async () => {
+        pluginTaskJobs.delete(chat.id)
+        await taskRun.commit({ stateChanged: false }).catch(error => console.warn('dsh-tavern: 插件任务收尾失败:', str(error?.message || error)))
+      })
+    pluginTaskJobs.set(chat.id, job)
+    return { started: true }
+  }
   async function onSettlementSettled(chatId, signal) {
     try {
       const latest = await chatPersistence.readSessionState(chatId)
@@ -3419,6 +3462,7 @@ export async function apply(ctx) {
     const activity = backgroundTasks.activity(chat)
     if (!operationId || activity.operationId !== operationId || (!activity.busy && activity.phase !== 'pending')) return view(chat, await readChatCard(chat))
     // Abort the provider request first; interrupted operations reject late commits.
+    pluginApi.stopTasks(chat.sessionId)
     backgroundAgentRunner.cancel(chat.sessionId)
     await cancelSettlement(chat.id, { wait: false })
     const stopped = await backgroundTasks.recover(chat, { operationId })
@@ -3625,6 +3669,7 @@ export async function apply(ctx) {
     store: { chatForSession, readChat, readState: taskStateReader.read, stateForSession: taskStateReader.forSession, openingStateForSession },
     tasks: backgroundTasks,
     queueBackground: queueSettlement,
+    waitBackground: chatId => Promise.all([settlementJobs.pending(chatId), pluginTaskJobs.get(chatId)]),
     prefilterWorldbook: chatId => worldbookPrefilter.start(chatId),
     cancelPrefilter: chatId => worldbookPrefilter.cancel(chatId),
     cleanupFailedTurn: async function (input) {
@@ -4337,7 +4382,8 @@ export async function apply(ctx) {
       case 'deleteGuide': return { guides: await conversationGuides.remove(args?.sessionId, args) }
       case 'getBodyEdit': return { edit: await bodyEditor.read(args && args.sessionId) }
       case 'listGamePlugins': return { plugins: await pluginApi.gamePlugins(str(args && args.sessionId)) }
-      case 'setGamePlugin': return { plugins: await pluginApi.setGamePlugin(str(args && args.sessionId), { name: args && args.name, enabled: args && args.enabled, replace: args && args.replace }) }
+      case 'setGamePlugin': return { plugins: await pluginApi.setGamePlugin(str(args && args.sessionId), { name: args && args.name, enabled: args && args.enabled, replace: args && args.replace, task: args && args.task, taskOrder: args && args.taskOrder }) }
+      case 'startPluginTask': return await startPluginTask(args && args.sessionId, args && args.key, args && args.input)
       case 'saveBodyEdit': {
         const view = await bodyEditor.save(args && args.sessionId, args)
         notifyPluginTimeline(args && args.sessionId, 'edit', { settled: true })

@@ -31,7 +31,7 @@ export function createPluginTurnReader(deps) {
   // A turn is readable once written: an earlier turn always, the latest one
   // once no settlement is pending or running for it. An edit or a rollback
   // leaves it 'idle': its text is final, no settlement is coming.
-  async function material(sessionId, turn, { requireLatest = false } = {}) {
+  async function material(sessionId, turn, { requireLatest = false, allowPending = false } = {}) {
     const game = await resolveGame(sessionId)
     if (!game) return null
     const messages = Array.isArray(game.state.messages) ? game.state.messages : []
@@ -45,11 +45,11 @@ export function createPluginTurnReader(deps) {
     if (index < 0 || (requireLatest && index !== latest)) return null
     const header = await deps.header(game.sessionId, ['settleStatus', 'macroState', 'cardPath', 'cardName'])
     if (!header) return null
-    if (index === latest && !messages[index].greeting && (!['done', 'failed', 'idle'].includes(header.settleStatus) || messages[index].mvu?.pending === true)) return null
+    if (!allowPending && index === latest && !messages[index].greeting && (!['done', 'failed', 'idle'].includes(header.settleStatus) || messages[index].mvu?.pending === true)) return null
     const target = await currentTarget(game.sessionId, turn)
     if (!target) return null
     return {
-      chatId: game.chatId, sessionId: game.sessionId, turn, index, key: target.key, sourceDigest: target.sourceDigest,
+      chatId: game.chatId, sessionId: game.sessionId, turn, index, greeting: messages[index].greeting === true, key: target.key, sourceDigest: target.sourceDigest,
       source: target.source, text: projectedSceneText(target.source, header.macroState),
       card: { path: String(header.cardPath || ''), name: String(header.cardName || '') }
     }
@@ -90,6 +90,8 @@ export function createPluginTurnReader(deps) {
     currentKey,
     readTurn: (sessionId, turn) => material(sessionId, turn),
     readLatestSettledTurn: sessionId => material(sessionId, undefined, { requireLatest: true }),
+    // The latest turn while its settlement is still to come (plugin tasks that run before it).
+    readPendingTurn: sessionId => material(sessionId, undefined, { requireLatest: true, allowPending: true }),
     readCardContext,
     readVariables
   })

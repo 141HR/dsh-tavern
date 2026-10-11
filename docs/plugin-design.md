@@ -24,7 +24,7 @@
 | 上下文 | 本轮输入、存档状态 | 固定前缀、本轮上下文（世界书、现场状态、Guide 等） | 添加：`promptSection`、`turnSection`、`worldbookSource` |
 | 生成 | 组装好的请求 | 模型原始回复 | — |
 | 回复 | 模型原始回复 | 保存的正文、显示用的正文 | 浏览器侧：正文标记、媒体渲染 |
-| 结算 | 本轮正文、存档状态 | 现场姿势、变量更新、人物设计 | 添加：`settlementSection`、`settlementTool`；替换：`replaceSettlement`（普通卡的姿势结算） |
+| 结算 | 本轮正文、存档状态 | 现场姿势、变量更新、人物设计 | 添加：`settlementSection`、`settlementTool`，以及插件自己的结算任务 `settlementTask`（结算前或后，玩家可排序、开关）；替换：`replaceSettlement`（普通卡的姿势结算） |
 | 候选 | 本轮正文、存档状态 | 下一步行动候选 | 添加：`candidateSection` |
 | 压缩 | 历史消息 | 历史摘要 | 添加：`compactionSection` |
 | 生命周期 | — | 轮次写完、回退、撤销回退、重新生成、分叉、删局 | 观察：`onTurnSettled`、`onTimelineChanged`、`onGameRemoved` |
@@ -112,6 +112,7 @@ const data = await ctx.tavern.readGameData({ gameId })
 | `promptSection`、`turnSection`、`worldbookSource` | 上下文 | 添加 |
 | `settlementSection`、`settlementTool` | 结算 | 添加 |
 | `replaceSettlement` | 结算 | 替换 |
+| `settlementTask`、`manualTask`、`startTask` | 结算、手动任务 | 添加 |
 | `candidateSection` | 候选 | 添加 |
 | `compactionSection` | 压缩 | 添加 |
 | `tavernUi.registerPanel` | 界面 | 添加 |

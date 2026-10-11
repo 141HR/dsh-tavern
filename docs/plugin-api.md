@@ -345,6 +345,58 @@ ctx.tavern.replaceSettlement({
 - **范围**：只替换普通卡的姿势结算（以及同一步里的人物设计）。使用官方 MVU 变量的卡，变量结算仍由 Tavern 负责，不会调用 `settle`。玩家关掉了所有后台结算项时，这一轮不结算，也不调用 `settle`。
 - **只有一个生效**：每个插件只能注册一次。只有一个插件注册时，它自动生效；有多个时，要玩家在「本局设置 → 插件」里选一个，选好之前都不生效，用 Tavern 自己的结算。玩家也可以在那里选回 Tavern 自己的结算。
 
+### `settlementTask({ name, title?, phase?, run })`（第 2 版）
+
+注册一个**结算任务**：每轮正文写完后，和 Tavern 自己的结算排在一起依次运行。适合记忆整理、世界推演、写作建议这类每轮都要做、有自己的提示词和流程的后台工作。
+
+```js
+ctx.tavern.settlementTask({
+  name: 'world-events',
+  title: '世界推演',          // 显示给玩家；省略时用 name
+  phase: 'after',             // 'before'：在 Tavern 自己的结算之前；'after'（默认）：之后
+  async run({ gameId, turn, textVersion, text, variables, phase, signal, runAgent }) {
+    const { text: events } = await runAgent({ prompt: '按这一轮的剧情推演各方势力的进展，列成要点：\n' + text })
+    await ctx.tavern.saveTurnData({ gameId, turn, textVersion, data: { events } })
+  },
+})
+```
+
+- **顺序**：每轮先跑所有 `before` 任务，再跑 Tavern 自己的结算，最后跑所有 `after` 任务。同一阶段的任务一个接一个运行，默认按插件名、任务名排序；玩家可以在「本局设置 → 插件」里调整先后，也可以单独关掉某个任务。
+- **下一轮会等它们跑完**：玩家发下一轮时，Tavern 先等这些任务结束，所以这一轮的产出（存进 `saveTurnData`，再用 `turnSection` 注入）一定赶得上下一轮。任务越慢，玩家等得越久。
+- **`run` 收到**：这一轮的 `gameId`、`turn`、`textVersion`、`text`、`rawText`、`card`、`variables`（同 `onTurnSettled`），以及 `phase`、`signal`、`runAgent`。`before` 任务看到的是结算前的变量；`after` 任务看到的是 Tavern 结算之后的变量，前面的任务改过变量时，后面的任务读到的是改过的。
+- **`runAgent(input)`**：等同 `runTask`，参数相同（`prompt`、`tools`），`gameId` 和 `signal` 已经替你填好。提示词、工具、流程都由插件自己决定，也可以不用它，改用 DSH 的 `llm` 服务。
+- **每个正文版本只跑一次**：同一个 `textVersion` 的同一阶段不会重复运行（例如重试结算时）。编辑正文、重新生成产生新版本后会再跑。
+- **停止与超时**：玩家点「停止后台」时 `signal` 中止，这一阶段剩下的任务不再运行，不记为错误。单个任务 5 分钟没结束按出错处理。
+- **出错**：只记进「本局设置 → 插件」的错误记录，接着跑下一个任务；不影响 Tavern 自己的结算和下一轮。
+- **进度**：运行中，后台等待提示会写明「插件「插件名 · 任务名」正在结算」，期间本局显示后台忙，候选、编辑等操作要等它结束。
+- `before` 任务运行时这一轮还没结算完：可以 `saveTurnData`，不能用 `setVariables`、`editTurn`（它们要等结算结束）。想让 Tavern 的结算用上 `before` 任务的产出，配合 `settlementSection` 把它写进结算说明。
+- 开场白不触发结算任务。
+
+### `manualTask({ name, title?, description?, input?, run })`（第 2 版）
+
+注册一个**手动任务**：游玩时状态栏的「插件任务」里出现一个按钮，玩家点了才运行。适合「整理一下记忆」「生成本章总结」这类按需的后台工作。
+
+```js
+ctx.tavern.manualTask({
+  name: 'chapter-summary',
+  title: '本章总结',
+  description: '总结到目前为止的剧情',              // 按钮的提示文字
+  input: { label: '侧重点（选填）', placeholder: '例如：人物关系' },  // 省略时直接运行，不弹输入框
+  async run({ gameId, turn, textVersion, text, variables, input, signal, runAgent }) {
+    const { text: summary } = await runAgent({ prompt: '总结本局到目前为止的剧情。侧重点：' + (input || '无') })
+    await ctx.tavern.saveGameData({ gameId, data: { summary } })
+  },
+})
+```
+
+- `run` 收到最新一轮（结算结束后的）内容，字段同结算任务；还没有正文时 `turn` 为 `null`。`input` 是玩家在输入框里填的文字（最多 4000 字，可能为空字符串）。
+- 和 Tavern 自己的手动任务（设计人物、整理台账）一样独占后台：正文生成中、后台结算或别的任务运行时不能启动；运行期间本局显示后台忙，玩家可以点「停止后台」中止，下一轮会等它结束。
+- 10 分钟没结束按出错处理；出错记进插件错误记录。
+
+### `startTask({ gameId, name, input? })`（第 2 版）
+
+替玩家启动本插件的一个手动任务，效果和玩家点按钮一样，任务开始后立即返回 `{ started: true }`。适合插件在自己的面板里放按钮。不能启动时（例如后台正忙）抛错。
+
 ### `handle(name, handler)`（第 2 版）
 
 注册一个处理函数，供插件自己的浏览器侧用 `tavernUi.callHost(name, args)` 调用，例如浏览器侧的「重画」按钮让宿主侧去生成。
@@ -392,7 +444,7 @@ ctx.tavern.onTurnSettled(async ({ gameId, turn, textVersion, variables }) => {
 
 ## 本局插件面板
 
-「本局设置 → 插件」列出本局用到的插件、各自用到了哪些阶段（观察、添加、替换），玩家可以按局关掉某个插件，选择由谁负责结算，并查看最近的插件错误。被关掉的插件在这一局不再参与提示词、结算和通知（`onTurnSettled`、`onTimelineChanged`），它的结算工具调用会被拒绝；它已经挂上的媒体和存档数据保留。
+「本局设置 → 插件」列出本局用到的插件、各自用到了哪些阶段（观察、添加、替换），玩家可以按局关掉某个插件，选择由谁负责结算，开关和排序插件的结算任务，并查看最近的插件错误。被关掉的插件在这一局不再参与提示词、结算和通知（`onTurnSettled`、`onTimelineChanged`），它的结算工具调用会被拒绝；它已经挂上的媒体和存档数据保留。
 
 ## 插件存档数据（第 2 版）
 
@@ -551,4 +603,4 @@ Tavern 尽量开放接口，并保持每个接口简单、稳定；接口按插�
 | 版本 | 变化 |
 |---|---|
 | 1 | 首个版本。 |
-| 2 | 新增 `turnSection`、`worldbookSource`、`settlementSection`、`settlementTool`：插件可以往每轮正文请求和后台结算里添加内容。新增插件存档数据（`saveTurnData`、`readTurnData`、`saveGameData`、`readGameData`）与 `onTimelineChanged`；编辑正文后重新发 `onTurnSettled`；分叉时带上插件数据和媒体项。新增第一个替换类接口 `replaceSettlement`，以及本局插件面板（按局开关、选择结算由谁负责、错误记录）。新增 `candidateSection`、`compactionSection`、`worldbookEntries`；浏览器侧新增 `registerPanel`、`registerStartGroup`（`tavernUi.apiVersion` 为 2）。`onTurnSettled`、`getTurn` 增加只读的 `variables`。新增 `getCard`、`getHistory`、`setVariables`、`editTurn`、`runTask`。新增宿主侧 `handle` 与浏览器侧 `callHost`，插件的浏览器侧可以调用自己的宿主侧。插件可放进数据目录的 `plugins/` 文件夹加载。第 1 版接口不变。 |
+| 2 | 新增 `turnSection`、`worldbookSource`、`settlementSection`、`settlementTool`：插件可以往每轮正文请求和后台结算里添加内容。新增插件存档数据（`saveTurnData`、`readTurnData`、`saveGameData`、`readGameData`）与 `onTimelineChanged`；编辑正文后重新发 `onTurnSettled`；分叉时带上插件数据和媒体项。新增第一个替换类接口 `replaceSettlement`，以及本局插件面板（按局开关、选择结算由谁负责、错误记录）。新增 `candidateSection`、`compactionSection`、`worldbookEntries`；浏览器侧新增 `registerPanel`、`registerStartGroup`（`tavernUi.apiVersion` 为 2）。`onTurnSettled`、`getTurn` 增加只读的 `variables`。新增 `getCard`、`getHistory`、`setVariables`、`editTurn`、`runTask`。新增宿主侧 `handle` 与浏览器侧 `callHost`，插件的浏览器侧可以调用自己的宿主侧。新增 `settlementTask`、`manualTask`、`startTask`：插件可以定义每轮结算前后运行的任务和玩家手动运行的任务。插件可放进数据目录的 `plugins/` 文件夹加载。第 1 版接口不变。 |

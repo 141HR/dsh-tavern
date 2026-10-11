@@ -647,3 +647,96 @@ test('tavern 服务：runTask 校验工具，模型调用的工具交给插件�
   await assert.rejects(tavern.runTask({ gameId: 'game-1', prompt: 'x', tools: [{ ...tools[0], name: 'posture_submit' }] }), /已被占用/)
   await assert.rejects(tavern.runTask({ gameId: 'game-1', prompt: ' ' }), /prompt/)
 })
+
+test('结算任务：按阶段、按玩家顺序依次运行，每个正文版本一次；可单独关掉，出错只记错误', { skip: !cordis }, async t => {
+  const started = []
+  const h = await harness(t, { data: createPluginData({ store: memoryStore() }), readPendingTurn: async () => turnMaterial(),
+    startManualTask: async input => { started.push(input); return { started: true } },
+    runTask: async input => ({ text: input.owner + ':' + input.prompt }) })
+  const ran = []
+  let agentText = ''
+  await h.root.plugin({ name: 'alpha', inject: ['tavern'], apply(ctx) {
+    ctx.tavern.settlementTask({ name: 'notes', title: '笔记', run: async input => { ran.push('alpha.notes:' + input.phase + ':' + input.textVersion); agentText = (await input.runAgent({ prompt: '记一下' })).text } })
+    ctx.tavern.settlementTask({ name: 'prepare', phase: 'before', run: async () => { ran.push('alpha.prepare') } })
+  } })
+  await h.root.plugin({ name: 'beta', inject: ['tavern'], apply(ctx) {
+    ctx.tavern.settlementTask({ name: 'broken', title: '会出错', run: async () => { ran.push('beta.broken'); throw new Error('坏了') } })
+  } })
+  await tick()
+  assert.throws(() => h.api.service.settlementTask({ name: 'x', phase: 'during', run() {} }))
+  const after = () => h.api.runSettlementTasks({ gameId: 'game-1', phase: 'after' })
+  await h.api.runSettlementTasks({ gameId: 'game-1', phase: 'before' })
+  await after()
+  assert.deepEqual(ran, ['alpha.prepare', 'alpha.notes:after:key-3', 'beta.broken'])
+  assert.equal(agentText, 'alpha:记一下', 'runAgent runs as the task\'s plugin')
+  assert.match((await h.api.gamePlugins('game-1')).errors[0].message, /坏了/)
+  await after()
+  assert.equal(ran.length, 3, 'once per text version')
+
+  const panel = await h.api.gamePlugins('game-1')
+  assert.deepEqual(panel.tasks.settlement.map(task => [task.key, task.phase, task.enabled]), [['alpha:prepare', 'before', true], ['alpha:notes', 'after', true], ['beta:broken', 'after', true]])
+  await h.api.setGamePlugin('game-1', { taskOrder: ['beta:broken', 'alpha:notes'] })
+  await h.api.setGamePlugin('game-1', { task: { key: 'alpha:prepare', enabled: false } })
+  h.setLatest(turnMaterial({ key: 'key-3b' }))
+  ran.length = 0
+  await h.api.runSettlementTasks({ gameId: 'game-1', phase: 'after' })
+  assert.deepEqual(ran, ['beta.broken', 'alpha.notes:after:key-3b'])
+  assert.equal((await h.api.gamePlugins('game-1')).tasks.settlement.find(task => task.key === 'alpha:prepare').enabled, false)
+
+  // Stopping aborts the running task and skips the rest, without recording an error.
+  const stop = new AbortController()
+  await h.root.plugin({ name: 'gamma', inject: ['tavern'], apply(ctx) {
+    ctx.tavern.settlementTask({ name: 'slow', run: ({ signal }) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('stopped')))) })
+  } })
+  await tick()
+  await h.api.setGamePlugin('game-1', { taskOrder: ['gamma:slow', 'beta:broken', 'alpha:notes'] })
+  h.setLatest(turnMaterial({ key: 'key-3c' }))
+  ran.length = 0
+  const errors = (await h.api.gamePlugins('game-1')).errors.length
+  const pending = h.api.runSettlementTasks({ gameId: 'game-1', phase: 'after', signal: stop.signal })
+  await tick()
+  assert.equal(h.api.runningTask('game-1').plugin, 'gamma')
+  stop.abort()
+  await pending
+  assert.deepEqual(ran, [])
+  assert.equal((await h.api.gamePlugins('game-1')).errors.length, errors)
+  assert.equal(h.api.runningTask('game-1'), null)
+})
+
+test('手动任务：玩家或插件启动，带输入，可停止；插件关闭或任务不存在时拒绝', { skip: !cordis }, async t => {
+  const started = []
+  const h = await harness(t, { data: createPluginData({ store: memoryStore() }), startManualTask: async input => { started.push(input); return { started: true } } })
+  const inputs = []
+  let release
+  let tavern
+  await h.root.plugin({ name: 'alpha', inject: ['tavern'], apply(ctx) {
+    tavern = ctx.tavern
+    ctx.tavern.manualTask({ name: 'summary', title: '总结', description: '总结到目前为止的剧情', input: { label: '侧重点', placeholder: '例如：人物关系' },
+      run: async input => { inputs.push(input); await new Promise(resolve => { release = resolve }) } })
+  } })
+  await tick()
+  assert.throws(() => tavern.manualTask({ name: 'bad', input: {}, run() {} }), /input/)
+  const panel = await h.api.gamePlugins('game-1')
+  assert.deepEqual(panel.tasks.manual, [{ key: 'alpha:summary', plugin: 'alpha', title: '总结', description: '总结到目前为止的剧情', input: { label: '侧重点', placeholder: '例如：人物关系' } }])
+  assert.deepEqual(await tavern.startTask({ gameId: 'game-1', name: 'summary', input: '人物' }), { started: true })
+  assert.deepEqual(started, [{ gameId: 'game-1', key: 'alpha:summary', input: '人物' }])
+
+  const done = h.api.runManualTask({ gameId: 'game-1', key: 'alpha:summary', input: '  人物关系  ' })
+  await tick()
+  assert.equal(inputs[0].input, '人物关系')
+  assert.equal(inputs[0].turn, 3)
+  assert.equal((await h.api.gamePlugins('game-1')).tasks.running.title, '总结')
+  await assert.rejects(h.api.manualTaskFor('game-1', 'alpha:summary'), /正在运行/)
+  release()
+  assert.equal(await done, true)
+
+  const stopped = h.api.runManualTask({ gameId: 'game-1', key: 'alpha:summary' })
+  await tick()
+  assert.equal(h.api.stopTasks('game-1'), true)
+  assert.equal(await stopped, false)
+  assert.equal((await h.api.gamePlugins('game-1')).errors.length, 0)
+
+  await assert.rejects(h.api.manualTaskFor('game-1', 'alpha:nothing'), /没有这个插件任务/)
+  await h.api.setGamePlugin('game-1', { name: 'alpha', enabled: false })
+  await assert.rejects(h.api.manualTaskFor('game-1', 'alpha:summary'), /关闭了插件/)
+})

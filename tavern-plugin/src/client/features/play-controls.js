@@ -407,6 +407,7 @@
 							}) : h("div", { className: "dsh-tavern-status-empty" }, "点击“设计人物”，按你的要求创建或补充档案。")
 						)
 					),
+					h(TavernPluginTasks, { sessionId: props.sessionId, activity: view.activity, busy: running || view.activity?.busy || view.activity?.phase === "pending" }),
 					h(TavernLedger, { sessionId: props.sessionId, ledger: view.ledger, ledgerTask: view.ledgerTask, busy: running || view.activity?.busy }),
 					h("section", { className: "dsh-tavern-status-section" },
 						h("div", { className: "dsh-tavern-status-label" }, "人物姿势"),
@@ -878,6 +879,14 @@
             }
             if (!data || (!data.plugins.length && !data.errors.length)) return error ? h("p", { role: "alert" }, "插件信息读取失败：" + error) : null;
             const usesText = uses => uses.map(item => item.stage + "·" + item.mode).join("、");
+            const settlementTasks = data.tasks ? data.tasks.settlement : [];
+            // Swap with the neighbour in the same phase; the whole order is saved, so it holds for new tasks too.
+            function moveTask(index, step) {
+                const order = settlementTasks.map(task => task.key);
+                [order[index], order[index + step]] = [order[index + step], order[index]];
+                void change({ taskOrder: order });
+            }
+            const canMove = (index, step) => settlementTasks[index + step]?.phase === settlementTasks[index].phase;
             return h("section", { className: "dsh-local-section dsh-tavern-game-plugins" }, h("h3", null, "插件"),
                 h("p", { className: "dsh-local-help" }, "本局用到的第三方插件。关掉后，它不再参与本局的提示词、结算和通知；已经挂上的内容保留。"),
                 data.plugins.map(plugin => h("label", { key: plugin.name, className: "dsh-tavern-background-task" },
@@ -892,12 +901,61 @@
                     h("p", { className: info.conflict ? "dsh-local-warning" : "dsh-local-help" }, info.conflict
                         ? "有多个插件都要接管" + info.label + "，请在这里选一个；选好之前用 Tavern 自己的" + info.label + "。"
                         : "当前：" + (info.active ? "插件 " + info.active : "Tavern 自己的" + info.label) + "。插件出错时自动改用 Tavern 自己的。"))),
+                settlementTasks.length ? h("div", { className: "dsh-local-field" },
+                    h("p", { className: "dsh-local-help" }, "插件的结算任务：每轮在 Tavern 自己的结算之前或之后依次运行，下一轮会等它们跑完。可以单独关掉，或调整先后。"),
+                    settlementTasks.map((task, index) => h("div", { key: task.key, className: "dsh-tavern-background-task" },
+                        h("span", null, task.title, h("span", { className: "dsh-tavern-settings-desc" }, task.phaseLabel + " · 插件 " + task.plugin)),
+                        h("span", { className: "dsh-tavern-plugin-task-controls" },
+                            h("button", { type: "button", className: "dsh-tavern-btn", "aria-label": "上移 " + task.title, disabled: busy || !canMove(index, -1), onClick: () => moveTask(index, -1) }, "↑"),
+                            h("button", { type: "button", className: "dsh-tavern-btn", "aria-label": "下移 " + task.title, disabled: busy || !canMove(index, 1), onClick: () => moveTask(index, 1) }, "↓"),
+                            h("input", { type: "checkbox", role: "switch", "aria-label": "在本局启用结算任务 " + task.title, checked: task.enabled, disabled: busy, onChange: event => change({ task: { key: task.key, enabled: event.target.checked } }) }))))) : null,
                 data.errors.length ? h("details", { className: "dsh-tavern-game-plugin-errors" },
                     h("summary", null, "最近的插件错误（" + data.errors.length + "）"),
                     data.errors.map((item, index) => h("p", { key: index, className: "dsh-tavern-settings-desc" },
                         new Date(item.at).toLocaleTimeString() + " · " + item.plugin + " · " + item.stage + "：" + item.message)),
                     h("button", { type: "button", className: "dsh-tavern-btn", onClick: load }, "刷新")) : null,
                 error ? h("p", { role: "alert" }, "保存失败：" + error) : null);
+        }
+
+        // Manual plugin tasks (tavern.manualTask): one button each, run as an exclusive background task.
+        function TavernPluginTasks(props) {
+            const h = React.createElement;
+            const [tasks, setTasks] = React.useState(null);
+            const [starting, setStarting] = React.useState("");
+            const [error, setError] = React.useState("");
+            const running = Boolean(props.activity?.busy && props.activity.role === "plugin-task");
+            const load = React.useCallback(async function () {
+                try { setTasks((await rpc("listGamePlugins", {}, props.sessionId)).plugins?.tasks || null); }
+                catch (_) { /* The game's own controls stay usable. */ }
+            }, [props.sessionId]);
+            React.useEffect(function () { void load(); }, [load, running]);
+            React.useEffect(function () {
+                if (!running) return;
+                const timer = setInterval(() => { liveTavernView.invalidate(props.sessionId); void load(); }, 2000);
+                return () => clearInterval(timer);
+            }, [props.sessionId, running, load]);
+            if (!tasks || !tasks.manual.length) return null;
+            async function start(task, input) {
+                await rpc("startPluginTask", { key: task.key, input }, props.sessionId);
+                liveTavernView.invalidate(props.sessionId);
+                await load();
+            }
+            async function run(task) {
+                if (task.input) {
+                    await askTavernText({ title: task.title, description: task.input.label, placeholder: task.input.placeholder, allowEmpty: true, maxLength: 4000, confirmLabel: "开始", onSubmit: input => start(task, input) });
+                    return;
+                }
+                setStarting(task.key); setError("");
+                try { await start(task); }
+                catch (err) { setError(String(err.message || err)); }
+                finally { setStarting(""); }
+            }
+            return h("section", { className: "dsh-tavern-status-section" },
+                h("div", { className: "dsh-tavern-status-label" }, "插件任务"),
+                tasks.running ? h("div", { className: "dsh-tavern-status-empty", role: "status" }, "正在运行：" + tasks.running.title + "（插件 " + tasks.running.plugin + "）") : null,
+                h("div", { className: "dsh-tavern-plugin-tasks" }, tasks.manual.map(task => h("button", { key: task.key, type: "button", className: "dsh-tavern-btn",
+                    title: task.description || "插件 " + task.plugin, disabled: props.busy || running || Boolean(starting), onClick: () => void run(task) }, starting === task.key ? "启动中…" : task.title))),
+                error ? h("div", { className: "dsh-card-error", role: "alert" }, error) : null);
         }
 
         function TavernConversationSettingsTab(props) {

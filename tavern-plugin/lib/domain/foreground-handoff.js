@@ -29,6 +29,8 @@ export function createForegroundHandoff(options = {}) {
     if (chat !== undefined && activity.role === 'settlement' && (activity.phase === 'pending' || activity.phase === 'running')) {
       await queueBackground(chat.id)
     }
+    // Plugin tasks of the last turn (or one the player started) finish before the next turn.
+    if (chat !== undefined) await options.waitBackground?.(chat.id)
     // An unfinished prefilter is optional: sending cancels it instead of waiting.
     if (chat !== undefined) await options.cancelPrefilter?.(chat.id)
     // A greeting is already story text. Direct typing may bypass candidate
