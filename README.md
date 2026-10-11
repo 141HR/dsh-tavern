@@ -92,8 +92,7 @@
 
 | 插件                                                                           | 作用                                 |
 | ---------------------------------------------------------------------------- | ---------------------------------- |
-| [dsh-rphub-image](https://github.com/flizzywine/dsh-tavern/discussions/157)  | RP-Hub 生图，NAI 4.5 / 5，正文里的图片边下载边显示 |
-| [dsh-tavern-comfy](https://github.com/weixinlll/dsh-tavern-comfy)            | 本地 ComfyUI 生图，每轮自动配图，插在对应段落之后      |
+| [dsh-tavern-image](https://github.com/weixinlll/dsh-tavern-image)            | 剧情自动配图，支持 ComfyUI、NovelAI、Gemini 等多平台，带人物库 |
 | [dsh-card-updater](https://github.com/flizzywine/dsh-tavern/discussions/149) | 卡片更新器，作者发布新版时提醒你                   |
 | [dsh-wrongbook](https://github.com/flizzywine/dsh-tavern/discussions/150)    | 错题库，按人物卡记下调试踩过的坑                   |
 | [动态世界书生成](https://github.com/flizzywine/dsh-tavern/discussions/147)          | 后台结算时生成世界书条目                       |
