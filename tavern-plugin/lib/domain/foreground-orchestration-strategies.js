@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { inputAttachments, projectPlayerContent } from './player-input-content.js'
 import { resolveRuntimePresetMacros } from './runtime-presets.js'
 import { createEphemeralCompatibilityRequest, isCompatibilityConversationRequest } from './compatibility-request.js'
@@ -266,6 +266,16 @@ export function createNativePlayOrchestrationStrategy(options) {
   const enteredFronts = new Map()
   // Front texts of the step being prepared, only to label the request evidence.
   const frontTexts = new Map()
+  // Per-session dice seed: drawn on a turn's first step, so every step of one turn rolls
+  // the same and a new turn or regeneration rolls again.
+  const presetSeeds = new Map()
+  function presetSeed(sessionId, turn, step) {
+    const current = presetSeeds.get(sessionId)
+    if (step > 1 && current && current.turn === turn) return current.seed
+    const seed = randomBytes(16).toString('hex')
+    presetSeeds.set(sessionId, { turn, seed })
+    return seed
+  }
 
   async function prepareStep(input) {
     const sessionId = input.sessionId
@@ -277,7 +287,8 @@ export function createNativePlayOrchestrationStrategy(options) {
     let agentMessages = visibleMessages
     const rawSnapshot = mode === 'story' || mode === 'script' ? await options.resolvePreset(input.chat) : null
     // Render the three phases together; the persisted preset and prior messages stay authoritative.
-    const snapshot = resolveRuntimePresetMacros(rawSnapshot, { charName: input.chat?.cardName, macroState: input.chat?.macroState }).snapshot
+    const randomSeed = rawSnapshot ? presetSeed(sessionId, Math.max(0, Number(payload.turn) || 0), Math.max(1, Number(payload.step) || 1)) : undefined
+    const snapshot = resolveRuntimePresetMacros(rawSnapshot, { charName: input.chat?.cardName, macroState: input.chat?.macroState, randomSeed }).snapshot
     if (mode === 'story' || mode === 'script') {
       if (Number(payload.step) === 1 && typeof options.synchronizeTail === 'function') {
         await options.synchronizeTail({ sessionId, chat: input.chat, payload })

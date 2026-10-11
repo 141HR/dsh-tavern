@@ -233,3 +233,27 @@ test('请求证据标出系统消息中的预设前段，供请求上下文界�
   assert.deepEqual(request.messages[0].content, system.content, '发给模型的内容不变')
   assert.equal(system.source.sections, undefined, '轨迹中的消息不被修改')
 })
+
+test('预设后段骰子同一轮各步一致，新一轮或重新生成重新抽', async () => {
+  const backs = []
+  const run = strategies({ nativePlay: {
+    async modeFor() { return 'story' },
+    filterMessages(messages) { return messages },
+    async resolvePreset() { return { back: { entries: [{ id: 'b', role: 'system', content: '骰子 {{roll::1d1000000}}' }] } } },
+    async prepareTurn() { return { frame: { userInput: { projectedText: '输入' } } } },
+    appendFrame(input) { return { messages: input.messages, receipt: {} } },
+    recordFrame() {}, async visibleTools() { return [] },
+    modePrompt() { return '正文任务' }, controlledToolNames: new Set()
+  } })
+  const stepOf = async (turn, step) => {
+    const incoming = [userMessage('新输入')]
+    await run.value.prepareStep({ sessionId: 'native', payload: { turn, step, messages: incoming }, decision: { kind: 'enter', messages: incoming }, chat: run.chats.get('native') })
+    const request = run.value.projectRequest({ sessionId: 'native', system: 's', messages: incoming })
+    backs.push(request.messages.at(-1).content[0].text.match(/骰子 (\d+)/)[1])
+    run.value.clearRequestState('native')
+  }
+  await stepOf(1, 1); await stepOf(1, 2); await stepOf(1, 1); await stepOf(2, 1)
+  assert.equal(backs[0], backs[1], '同一轮后续步骤沿用结果')
+  assert.notEqual(backs[1], backs[2], '同一轮重新开始（重新生成）重新抽')
+  assert.notEqual(backs[2], backs[3], '下一轮重新抽')
+})
