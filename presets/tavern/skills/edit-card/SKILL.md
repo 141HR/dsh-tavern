@@ -12,6 +12,7 @@ description: "修改已有的人物卡：设定、开场、文风、世界书、
 人物卡就是一份文件，按需要选顺手的方式改：
 
 - 定位：不确定要改的内容在哪，或要改多处时，先用 `tavern_search_card` 一次搜遍全卡（标准字段、开场、世界书标题/关键词/正文、正则、脚本），按返回的位置读取和修改，不必写脚本翻 JSON。
+- 改名、统一措辞等同一段文字要改多处时：`tavern_replace_card_text` 一次替换全卡并保存，结果列出每处位置和全卡剩余处数；只改部分位置时用 `pointers` 限定。
 - 标准字段（描述、性格、开场、示例对话等）：`tavern_update_card` 的 `fields`，不用处理 JSON 转义。
 - 扩展字段（正则、脚本、MVU 面板等）：`tavern_update_card` 的 `rawOperations`，按 JSON Pointer 设置或删除。
 - 世界书条目：`tavern_update_worldbook`。条目字段用 `comment`、`content`、`primaryKeys`、`enabled`、`constant` 等。
