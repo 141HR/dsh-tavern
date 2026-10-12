@@ -5,7 +5,7 @@ import { restoredSurfaceSeqs } from './surface-restoration.js'
 import { sessionEvents, surfaceReplacementRange } from './session-events.js'
 import { createSurfaceOwnership, planSurfaceRecovery, planSurfaceRange, SurfaceRecoveryError, OWNED } from './surface-recovery.js'
 import { randomUUID } from 'node:crypto'
-import { inputKind, isNewTurnInput, isNewPlayerInput } from './session-turn-input.js'
+import { inputKind, isTurnInput, isNewTurnInput, isNewPlayerInput } from './session-turn-input.js'
 
 function object(value) {
   return value !== null && typeof value === 'object' ? value : null
@@ -277,7 +277,9 @@ export function locateRollbackSurface(input) {
   for (let index = nodes.length - 1; index >= 0; index -= 1) {
     const event = eventAt(events, nodes[index])
     if (event?.type === 'user/message' && event.data?.source?.kind === 'plugin' && ['compact', 'dsh-compaction-basic'].includes(event.data.source.plugin)) return null
-    if (event && event.type === 'user/message' && !isForegroundContext(event) && !isRollbackUserTombstone(event)) {
+    // The round starts at its input: messages other plugins or card scripts add
+    // around it belong to the round and go with it, never stand in for it.
+    if (event && event.type === 'user/message' && (isTurnInput(event.data) || event.data?.source?.kind !== 'plugin') && !isRollbackUserTombstone(event)) {
       userIndex = index
       break
     }

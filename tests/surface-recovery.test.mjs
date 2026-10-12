@@ -83,3 +83,17 @@ test('旧正文与重新生成之间夹着别处写入的消息（如卡片脚�
   appendSessionEvent(other, 'turn/end', { turn: 6, reason: { kind: 'completed' } })
   assert.throws(() => planRegenerationSurface({ events: sessionEvents(other), nodes: other.surface.nodes, oldAssistantSeq: first.seq, eventStart: start }), /归属不一致/)
 })
+
+test('卡片脚本在正文后写入的消息不会让这一轮无法回退，也不会被当成本轮输入', async () => {
+  const { locateRollbackSurface } = await import('../tavern-plugin/lib/domain/rollback-surface.js')
+  const session = Session.create('rollback-helper')
+  appendSessionEvent(session, 'turn/start', { turn: 1 })
+  const input = appendSessionEvent(session, 'user/message', user('input-1'), { surfaceOp: 'append' })
+  const reply = appendSessionEvent(session, 'assistant/message', body('reply-1', 1), { surfaceOp: 'append' })
+  appendSessionEvent(session, 'turn/end', { turn: 1, reason: { kind: 'completed' } })
+  const script = appendSessionEvent(session, 'user/message', user('script-message', 'dsh-tavern-helper'), { surfaceOp: 'append' })
+  const target = locateRollbackSurface({ events: sessionEvents(session), nodes: session.surface.nodes })
+  assert.equal(target.userSeq, input.seq)
+  assert.equal(target.assistantSeq, reply.seq)
+  assert.deepEqual(target.shadowedSeqs, [input.seq, reply.seq, script.seq])
+})
