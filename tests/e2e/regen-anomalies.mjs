@@ -114,3 +114,92 @@ export async function regenAnomalyChecks({ page, step, savedChat, output, report
   await probe('连续两次重新生成', async () => 'first → ' + await regen('雨夜重写'))
   await writeFile(join(output, 'regen-anomalies.json'), JSON.stringify({ results, stopLabels: report.stopLabels }, null, 2))
 }
+
+// Fold the native surface from the saved session log: what the model actually sees.
+function nativeRounds(events) {
+  const nodes = []
+  for (const event of events) {
+    const op = event.surfaceOp
+    if (op === 'append') nodes.push(event.seq)
+    else if (op && typeof op === 'object' && op.op === 'replace') {
+      const start = nodes.indexOf(op.startSeq ?? op.start), end = nodes.indexOf(op.endSeq ?? op.end)
+      if (start >= 0 && end >= start) nodes.splice(start, end - start + 1, event.seq)
+    }
+  }
+  const bySeq = new Map(events.map(event => [event.seq, event]))
+  return nodes.map(seq => bySeq.get(seq)).filter(event => event?.type === 'assistant/message' && event.data?.message?.source?.kind === 'model'
+    && (event.data.message.content || []).some(block => block.type === 'text' && block.text.trim()))
+    .map(event => ({ seq: event.seq, turn: event.data.turn, text: event.data.message.content.filter(block => block.type === 'text').map(block => block.text).join('').slice(0, 30) }))
+}
+
+// A card whose permanent input rule changes the saved player input, so Tavern
+// rewrites the native input node to match. Plays, regenerates, rolls back and
+// edits, then checks the story save and the native surface still agree.
+export async function regenTemplateChecks({ page, step, savedChat, output, report, root }) {
+  const { readFile, readdir } = await import('node:fs/promises')
+  const { parseSessionLog } = await import('../../tavern-plugin/lib/domain/legacy-session-migration.js')
+  const composer = () => page.getByRole('textbox', { name: /发消息|Message/ })
+  const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
+  const rpcErrors = []
+  page.on('response', async response => {
+    if (!response.url().includes('/api/dsh-tavern/')) return
+    try { const body = await response.json(); if (body && body.ok === false) rpcErrors.push(new URL(response.url()).pathname.split('/').pop() + ': ' + String(body.error || '').slice(0, 200)) } catch {}
+  })
+  async function events(sessionId) {
+    const dir = join(root, 'profile-data/tavern/sessions')
+    for (const file of await readdir(dir, { recursive: true })) if (file.endsWith('session.v3.jsonl.zstd')) {
+      const parsed = parseSessionLog(await readFile(join(dir, file)))
+      if (parsed.header.id === sessionId) return parsed.events
+    }
+    return []
+  }
+  const trace = []
+  report.regenTemplate = trace
+  async function check(label) {
+    await pause(1500)
+    const chat = await savedChat()
+    const story = chat.messages.filter(m => m.role === 'assistant' && !m.greeting).map(m => ({ turn: m.turn, text: String(m.sourceText ?? m.text ?? '').slice(0, 30) }))
+    const native = nativeRounds(await events(chat.sessionId)).filter(round => round.turn > 1 || !/欢迎/.test(round.text))
+    const entry = { label, errors: rpcErrors.splice(0), storyRounds: story.length, nativeRounds: native.length, regen: Boolean(chat.regenInProgress),
+      aligned: story.length === native.length && story.every((round, index) => native[index]?.text === round.text) }
+    if (!entry.aligned) Object.assign(entry, { story, native })
+    trace.push(entry)
+    console.log('   ' + JSON.stringify(entry))
+  }
+  async function send(text) {
+    const before = (await savedChat()).messages.length
+    await composer().fill(text); await composer().press('Enter')
+    for (let i = 0; i < 120 && (await savedChat()).messages.length <= before; i++) await pause(500)
+    await page.getByText('后台结算已完成').last().waitFor({ timeout: 30000 }).catch(() => {})
+  }
+  async function regen(guidance) {
+    await page.getByRole('button', { name: '重新生成正文', exact: true }).filter({ visible: true }).last().click()
+    await page.getByPlaceholder('指导意见（可选）：例如“写得更长，侧重心理描写”').fill(guidance)
+    await page.getByRole('button', { name: '生成并替换正文', exact: true }).click()
+    for (let i = 0; i < 90; i++) { await pause(500); const chat = await savedChat(); if (!chat.regenInProgress && i > 4) break }
+    await page.getByText('后台结算已完成').last().waitFor({ timeout: 30000 }).catch(() => {})
+  }
+  async function more(item) {
+    await page.getByRole('button', { name: '更多 ▾', exact: true }).click()
+    await page.getByRole('menuitem', { name: item }).click()
+  }
+  const run = (name, action) => step('模板输入：' + name, async () => { try { await action() } catch (error) { rpcErrors.push('step: ' + error.message.split('\n')[0]) } await check(name) })
+  await run('第一轮（输入被规则改写）', () => send('领取任务奖励 ZZ1'))
+  await run('重新生成第一轮', () => regen('雨夜重写'))
+  await run('第二轮', () => send('再次领取奖励 ZZ2'))
+  await run('重新生成第二轮', () => regen('雨夜重写'))
+  await run('第三轮', () => send('第三次 ZZ3'))
+  await run('回退第三轮', () => more(/回退第.*轮|回退本轮/))
+  await run('回退后发新一轮', () => send('换个说法 ZZ4'))
+  await run('编辑正文', async () => {
+    await more('编辑正文')
+    const editor = page.getByRole('region', { name: '编辑正文' })
+    await editor.getByRole('textbox', { name: '正文文本 1' }).fill('手工编辑的正文。')
+    await editor.getByRole('button', { name: '保存', exact: true }).click()
+    await editor.waitFor({ state: 'hidden' })
+  })
+  await run('编辑后发新一轮', () => send('再来 ZZ5'))
+  await run('重新生成最新一轮', () => regen('雨夜重写'))
+  await run('刷新页面后再重新生成', async () => { await page.reload({ waitUntil: 'domcontentloaded' }); await pause(3000); await regen('雨夜重写') })
+  await writeFile(join(output, 'regen-template.json'), JSON.stringify(trace, null, 2))
+}
