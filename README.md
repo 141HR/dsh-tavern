@@ -187,7 +187,7 @@ curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | D
 
 - **[GitHub Discussions](https://github.com/flizzywine/dsh-tavern/discussions)**：任何人都可以直接发帖。
 
-本项目没有 QQ 群、微信群或其他群聊。
+本项目没有官方的 QQ 群、微信群或其他群聊。想建群的朋友可以在 Discussions 发帖招呼大家，但我不会加入。
 
 反馈故障时，可从对话顶部的“日志”下载执行记录；分享前请检查其中的对话和附件隐私。
 
