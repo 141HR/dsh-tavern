@@ -11,6 +11,7 @@ import { registerUserProfileTools } from './tools/user-profile.js'
 import { registerSkillTools } from './tools/skills.js'
 import { registerCardReadingTools } from './tools/card-reading.js'
 import { createCardValidationCheck } from './tools/card-validation-check.js'
+import { createSkillGatedTools } from './domain/skill-gated-tools.js'
 import { registerPlayChatTool } from './tools/play-chat.js'
 import { registerScriptTool } from './tools/script.js'
 import { registerWorldbookTools } from './tools/worldbook.js'
@@ -4726,6 +4727,7 @@ export async function apply(ctx) {
     })
   }
 
+  const skillGatedTools = createSkillGatedTools()
   const controlledToolNames = new Set(['tavern_read_variables', ...CARD_MEMORY_TOOLS, 'bash', 'pwsh', ...dshFileToolNames, 'skill', 'tavern_read_skill_reference', 'web_search', 'tavern_save_skill', ...cordisToolNames, 'tavern_user_profile_read', 'tavern_user_profile_save', 'tavern_user_profile_confirm', 'tavern_read_card', 'tavern_read_card_raw', 'tavern_search_card', 'tavern_replace_card_text', 'tavern_read_play_chat', 'tavern_read_script', 'tavern_recall_history', 'worldbook_search', 'tavern_read_worldbook', 'tavern_update_worldbook', 'tavern_read_preset', 'tavern_update_preset', 'tavern_read_regex_library', 'tavern_copy_card', 'tavern_update_card', 'tavern_restore_card', 'tavern_validate_card', 'tavern_test_response'])
   const foregroundStrategies = createForegroundOrchestrationStrategies({
     compatibility: {
@@ -4783,7 +4785,10 @@ export async function apply(ctx) {
           }
         }))
       },
-      visibleTools: async function (sessionId) { return await turnOrchestrator.visibleTools(sessionId) },
+      visibleTools: async function (sessionId) {
+        const names = await turnOrchestrator.visibleTools(sessionId)
+        return skillGatedTools(names, sessionStore.get(sessionId) || agentRegistry.get(sessionId)?.session)
+      },
       cardSystemPrompt: function () { return runtimePrompt('card-system') },
       cardReferencePrompt: function () { return runtimePrompt('card-reference') },
       workspaceContext: function (cwd, projection) { return resourceWorkspaceContext(cwd, projection, runtimePrompt('card-workspace')) },
