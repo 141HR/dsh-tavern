@@ -15,6 +15,11 @@
 
 自动执行：启动酒馆 → 选择角色卡 → 新开一局 → 发消息玩一轮 → 检查正文、金币和人物姿势 → 刷新页面 → 确认同一局的数据仍然保留 → 生成 4+1 候选项并选择行动 → 再玩一轮 → 重新生成正文 → 编辑正文并刷新 → 回退并刷新 → 撤销回退 → Guide 添加/删除 → 重新结算变量 → 导出纯对话 → 切换本局预设并继续游玩。
 
+## 改卡真实消耗
+
+`TAVERN_E2E_CARD_EDIT_SOURCE=/本地/人物卡.json TAVERN_E2E_TIMEOUT_MS=120000 node tests/e2e/gameplay.mjs --real-card-edit`
+复制指定人物卡到隔离 Profile，用 `~/.dsh-tavern` 已配置的真实模型在卡片工作台完成一次改卡任务，把步数、每步及合计 token（未缓存输入、缓存命中、输出）写入 `card-edit-usage.json`。可用 `TAVERN_E2E_CARD_EDIT_TASK`、`TAVERN_E2E_CARD_EDIT_MODEL`、`TAVERN_E2E_CARD_EDIT_EFFORT` 调整。会产生真实模型费用；步数随模型波动，对比时多跑几次。
+
 ## 运行
 
 安装项目依赖并准备 Chromium：

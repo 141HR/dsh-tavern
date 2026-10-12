@@ -5,6 +5,7 @@ import { createConversationState } from '../../tavern-plugin/lib/domain/conversa
 import { settlementPerformanceChecks, settlementPerformanceInitialVariables } from './settlement-performance.mjs'
 import {setupRealVariables,realVariableLookupChecks} from './real-variable-lookup.mjs'
 import { setupRealCharacterDesign, realCharacterDesignChecks } from './real-character-design.mjs'
+import { setupRealCardEdit, realCardEditChecks } from './real-card-edit.mjs'
 import { incrementalMvuChecks } from './mvu-incremental.mjs'
 import {openingUpdateChecks} from './opening-update.mjs'
 import { backgroundLifecycleChecks } from './background-lifecycle.mjs'
@@ -169,6 +170,7 @@ try {
     } }))
   })
   if(process.argv.includes('--real-variables')) {report.scope='real isolated DSH + Chromium + configured live model';report.model=await setupRealVariables({root,profile,data,runtimeHome:join(homedir(),'.dsh-tavern')})}
+  if(process.argv.includes('--real-card-edit')) {report.scope='real isolated DSH + Chromium + configured live model';report.model=await setupRealCardEdit({root,profile,data,runtimeHome:join(homedir(),'.dsh-tavern')})}
   if(process.argv.includes('--real-character-design')) {report.scope='real isolated DSH + Chromium + configured live model';report.model=await setupRealCharacterDesign({root,profile,data,runtimeHome:join(homedir(),'.dsh-tavern')})}
   await step('启动真实 DSH 与酒馆', async () => {
     async function launchServer() {
@@ -415,6 +417,8 @@ try {
     })
   } else if (helperApiScenario) {
     await helperApiChecks({ page, step, savedChat, output, report })
+  } else if (process.argv.includes('--real-card-edit')) {
+    await realCardEditChecks({page,step,root,data,output,report})
   } else if (process.argv.includes('--real-character-design')) {
     await realCharacterDesignChecks({page,step,savedChat,root,data,output,report})
   } else if (process.argv.includes('--real-variables')) {
