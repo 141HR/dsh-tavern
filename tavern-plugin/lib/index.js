@@ -96,6 +96,7 @@ import { createHelperGenerationTasks } from './domain/helper-generation-tasks.js
 import { createBodyEditor } from './domain/body-editor.js'
 import { appendHelperUserSessionContext } from './domain/helper-user-session-context.js'
 import { userMessageForTurn, requestIdForTurn } from './domain/session-turn-input.js'
+import { uncommittedRounds } from './domain/uncommitted-rounds.js'
 import { sessionOpeningDescriptor, prepareSessionOpening } from './domain/session-opening.js'
 import { scriptPromptScanText } from './domain/tavern-script-prompts.js'
 import { createOpeningPreparation } from './domain/opening-preparation.js'
@@ -4470,11 +4471,13 @@ export async function apply(ctx) {
       case 'setGamePlugin': return { plugins: await pluginApi.setGamePlugin(str(args && args.sessionId), { name: args && args.name, enabled: args && args.enabled, replace: args && args.replace, task: args && args.task, taskOrder: args && args.taskOrder }) }
       case 'startPluginTask': return await startPluginTask(args && args.sessionId, args && args.key, args && args.input)
       case 'saveBodyEdit': {
+        await adoptUncommittedRounds(args && args.sessionId)
         const view = await bodyEditor.save(args && args.sessionId, args)
         notifyPluginTimeline(args && args.sessionId, 'edit', { settled: true })
         return { view }
       }
       case 'regenBody': {
+        await adoptUncommittedRounds(args && args.sessionId)
         const view = await regenBody(args && args.chatId, args && args.guidance, args && args.sessionId)
         notifyPluginTimeline(args && args.sessionId, 'regenerate')
         return { view }
@@ -4515,6 +4518,7 @@ export async function apply(ctx) {
         return { view }
       }
       case 'rollbackTurn': {
+        await adoptUncommittedRounds(args && args.sessionId)
         const view = await rollbackTurn(args && args.sessionId, args && args.chatId, args && args.expectedTurn)
         notifyPluginTimeline(args && args.sessionId, 'rollback', { turn: args && args.expectedTurn })
         return { view }
@@ -4596,6 +4600,27 @@ export async function apply(ctx) {
   function isTurnInput(message) {
     const source = message && message.source
     return source && (source.kind === 'user' || (source.kind === 'plugin' && (source.plugin === 'dsh-tavern-regen' || source.plugin === 'dsh-tavern-replay')))
+  }
+
+  // Heal a save that missed a completed round (#196): record it with its own
+  // request id before anything acts on "the latest round". Never blocks the action.
+  async function adoptUncommittedRounds(sessionId) {
+    try {
+      sessionId = str(sessionId)
+      const session = sessionId && (sessionStore.get(sessionId) || agentRegistry.get(sessionId)?.session)
+      if (!session) return 0
+      const header = await chatHeaderForSession(sessionId, ['nativeCommits', 'suppressedDshTurns', 'regeneratedDshTurns'])
+      if (!header || !['story', 'script'].includes(header.mode || 'story')) return 0
+      const rounds = uncommittedRounds(session, header)
+      for (const round of rounds) {
+        await turnOrchestrator.finalize({ sessionId, turn: round.turn, requestId: round.requestId, userText: round.userText, userContent: round.userContent, assistantText: round.assistantText })
+        console.warn('dsh-tavern: 第 ' + round.turn + ' 轮已完成但未写入存档，已补记')
+      }
+      return rounds.length
+    } catch (error) {
+      console.warn('dsh-tavern: 补记漏写的轮次失败：' + str(error?.message || error))
+      return 0
+    }
   }
 
   function activeTurnOf(exec) {
@@ -4821,6 +4846,7 @@ export async function apply(ctx) {
     readChatCard,
     replaceAssistantReply,
     requestIdForTurn,
+    adoptUncommittedRounds,
     runtimePrompt,
     sessionStore,
     turnOrchestrator,

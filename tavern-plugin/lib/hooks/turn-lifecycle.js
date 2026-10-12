@@ -6,6 +6,7 @@ import { synchronizeBodyEdits } from '../domain/body-editor.js'
 import { synchronizeTemplateHistory } from '../domain/template-history.js'
 
 export function registerTurnLifecycleHooks({
+  adoptUncommittedRounds,
   backgroundAgentRunner,
   hookChatForSession,
   clearRuntimePresetRequestState,
@@ -55,6 +56,8 @@ export function registerTurnLifecycleHooks({
       })
       throw new Error(message)
     }
+    // An earlier round the save missed goes in first, so the story keeps its order.
+    await adoptUncommittedRounds?.(sessionId)
     const saved = await foregroundHandoff.finalize({
       sessionId,
       turn: payload.turn,

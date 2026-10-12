@@ -41,3 +41,26 @@ test('重新生成时模板改写同步落在本次尝试中，不会被当成�
   const plan = planRegenerationSurface({ events: sessionEvents(session), nodes: session.surface.nodes, oldAssistantSeq: old.seq, eventStart })
   assert.equal(plan.finalAssistantSeq, fresh.seq)
 })
+
+test('找出模型看过、存档却没记下的已完成轮次；回退、失败、重新生成的轮次不算（#196 自愈）', async () => {
+  const { uncommittedRounds } = await import('../tavern-plugin/lib/domain/uncommitted-rounds.js')
+  const { replaceSessionSurface } = await import('../tavern-plugin/lib/domain/session-surface-mutations.js')
+  const session = Session.create('uncommitted')
+  const round = (turn, text, rpcId, reason = 'completed') => {
+    appendSessionEvent(session, 'turn/start', { turn })
+    appendSessionEvent(session, 'user/message', input('in-' + turn, text, rpcId), { surfaceOp: 'append' })
+    const out = appendSessionEvent(session, 'assistant/message', reply('out-' + turn, turn, text + '的回复'), { surfaceOp: 'append' })
+    appendSessionEvent(session, 'turn/end', { turn, reason: { kind: reason } })
+    return out
+  }
+  round(1, '第一轮', 'rpc-1')
+  round(2, '第二轮', 'rpc-2')
+  round(3, '失败的一轮', 'rpc-3', 'error')
+  round(4, '漏记的一轮', 'rpc-4')
+  const rolled = round(5, '已回退的一轮', 'rpc-5')
+  replaceSessionSurface(session, 'assistant/message', { turn: 5, step: 1, message: { id: 'tomb', role: 'assistant', content: [], source: { kind: 'model', provider: 'test', model: 'test' } } }, { start: rolled.seq, end: rolled.seq, sourceEventSeqs: [rolled.seq] })
+  round(6, '重新生成的合成轮', 'rpc-6')
+  const header = { nativeCommits: { 1: { turn: 1 }, 2: { turn: 2 } }, suppressedDshTurns: [6] }
+  assert.deepEqual(uncommittedRounds(session, header).map(item => [item.turn, item.requestId, item.userText, item.assistantText]), [[4, 'rpc-4', '漏记的一轮', '漏记的一轮的回复']])
+  assert.deepEqual(uncommittedRounds(session, { nativeCommits: {} }), [], 'saves without commit records are left alone')
+})

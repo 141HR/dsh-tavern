@@ -394,3 +394,18 @@ for (const mode of ['story', 'script']) test(mode + ' 缺少人物卡绑定时�
   await assert.rejects(run.orchestrator.prepare({ sessionId: 'session-1', turn: 1, userText: '继续' }), /缺少人物卡绑定/)
   assert.equal(run.plannerCalls.length, 0)
 })
+
+test('漏写的一轮可以按它自己的请求号补记进存档（#196 自愈）', async () => {
+  const run = harness('story')
+  await run.orchestrator.prepare({ sessionId: 'session-1', turn: 2, requestId: 'rpc-1', userText: '推开窗' })
+  await run.orchestrator.finalize({ sessionId: 'session-1', turn: 2, requestId: 'rpc-1', userText: '推开窗', assistantText: '雨水扑进房间。' })
+  await run.orchestrator.prepare({ sessionId: 'session-1', turn: 3, requestId: 'rpc-2', userText: '关上窗' })
+  // The old bug: the turn read an earlier input's request id and was dropped as a duplicate.
+  const dropped = await run.orchestrator.finalize({ sessionId: 'session-1', turn: 3, requestId: 'rpc-1', userText: '推开窗', assistantText: '窗关上了。' })
+  assert.equal(dropped.duplicate, true)
+  assert.equal(run.chat().messages.length, 2)
+  const adopted = await run.orchestrator.finalize({ sessionId: 'session-1', turn: 3, requestId: 'rpc-2', userText: '关上窗', assistantText: '窗关上了。' })
+  assert.notEqual(adopted.duplicate, true)
+  assert.deepEqual(run.chat().messages.map(message => message.text), ['推开窗', '雨水扑进房间。', '关上窗', '窗关上了。'])
+  assert.equal(Number(run.chat().messages.at(-1).turn), 3)
+})
