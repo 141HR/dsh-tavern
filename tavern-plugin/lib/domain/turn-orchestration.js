@@ -762,9 +762,16 @@ export function createTurnOrchestrator(options) {
       return { saved: true, mode, changed, chatId: chat.id, cardName: savedCard.name }
     }
 
-    const operation = Object.values(timeline.inspect({ chat }).operations).find(function (item) {
+    let operation = Object.values(timeline.inspect({ chat }).operations).find(function (item) {
       return item.kind === 'body' && item.status === 'running' && Number(item.turn) === turn
     })
+    // Adopting a round the save missed (#196): its own operation is long gone,
+    // so record it the way a fresh turn would have begun.
+    if (operation === undefined && input.adopt === true) {
+      const begun = timeline.apply({ chat, intent: { kind: 'body.begin', turn, userText } })
+      chat = begun.chat
+      operation = chat.timeline.operations[begun.value.operationId]
+    }
     if (operation === undefined) throw new Error('找不到本轮正文 operation，请重新生成本轮正文')
     const before = {
       posture: chat.posture || '',
@@ -812,16 +819,23 @@ export function createTurnOrchestrator(options) {
           // Where this round entered the native session; see round-anchor.js.
           ...(validAnchor(input.nativeAnchor) && input.nativeAnchor.turn === turn ? { nativeAnchor: { ...input.nativeAnchor } } : {})
         }
+        // An adopted round (#196) is recorded long after it ran: it keeps the
+        // variables it started from and is not settled now, which would wait on
+        // the turn that is about to start. Later rounds settle as usual.
+        const adopted = input.adopt === true
         if (usesOfficialMvu(draft)) Object.assign(assistantMessage, {
           swipeId: 0,
           swipes: [str(reply.projectionText)],
           variables: [clone(previousMvuVariables || {})],
-          mvu: { pending: true, modified: false, diagnostics: [], events: [] }
+          mvu: adopted ? { pending: false, modified: false, diagnostics: [{ message: '这一轮补记自模型上下文，当时的变量变化未结算' }], events: [] }
+            : { pending: true, modified: false, diagnostics: [], events: [] }
         })
         bindSceneWorldbook(assistantMessage, rememberedFrame(chat, operation.id)?.source?.sceneWorldbook || operation.sceneWorldbook)
         draft.messages.push(assistantMessage)
-        draft.settleStatus = 'pending'
-        draft.settleError = null
+        if (!adopted) {
+          draft.settleStatus = 'pending'
+          draft.settleError = null
+        }
         draft.foregroundError = null
         draft.presentationWarnings = Array.isArray(reply.warnings) ? clone(reply.warnings) : []
         rememberCommit(draft, turn, { mode, userText, requestId, scriptReference }, before, now)

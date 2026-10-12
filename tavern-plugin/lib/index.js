@@ -3746,6 +3746,7 @@ export async function apply(ctx) {
     waitBackground: chatId => Promise.all([settlementJobs.pending(chatId), pluginTaskJobs.get(chatId)]),
     prefilterWorldbook: chatId => worldbookPrefilter.start(chatId),
     cancelPrefilter: chatId => worldbookPrefilter.cancel(chatId),
+    waitReconcile: async sessionId => { await reconciling.get(str(sessionId))?.catch(() => {}) },
     clearFailedTurns: async function (sessionId) {
       const mode = await turnOrchestrator.modeFor(sessionId)
       if (mode !== 'story' && mode !== 'script') return 0
@@ -4393,6 +4394,8 @@ export async function apply(ctx) {
       }
       case 'getFullTemplateRuntimeInfo': throw new Error('提示词模板已迁移到服务端，请刷新页面');
       case 'getSession': {
+        // A save opened for the first time in this process is checked once, while nothing runs.
+        await reconcileWhenIdle(args && args.sessionId, { once: true })
         if(args?.fullView === true)templateHistoryFrom.set(args.sessionId,0)
         else if(Number.isSafeInteger(args?.historyFrom) && args.historyFrom >= 0)templateHistoryFrom.set(args.sessionId,args.historyFrom)
         return sessionViews.response(args || {})
@@ -4602,6 +4605,40 @@ export async function apply(ctx) {
     return message.content.map(function (block) { return block !== null && typeof block === 'object' && block.type === 'text' ? str(block.text) : '' }).filter(Boolean).join('\n').trim()
   }
 
+  // Reconciling writes the save: never while a turn of that session runs, where
+  // it would wait on the very turn it shares the template runtime with.
+  const reconciledSessions = new Set(), reconciling = new Map()
+  async function reconcileWhenIdle(sessionId, { once = false } = {}) {
+    sessionId = str(sessionId)
+    if (!sessionId || (once && reconciledSessions.has(sessionId))) return null
+    // Any phase but idle may be a turn being prepared; reconciling then would race it.
+    // The agent phase can still read idle while a turn's hooks run, so an open
+    // turn in the log (started, not ended) counts as busy too.
+    const busy = () => {
+      const kind = agentRegistry.get(sessionId)?.phase?.kind
+      if (kind && kind !== 'idle') return true
+      const session = sessionStore.get(sessionId) || agentRegistry.get(sessionId)?.session
+      const events = session ? sessionEvents(session) : []
+      const started = events.findLastIndex(event => event?.type === 'turn/start'), ended = events.findLastIndex(event => event?.type === 'turn/end')
+      return started > ended
+    }
+    if (busy()) {
+      const agent = agentRegistry.get(sessionId)
+      if (once || typeof agent?.whenIdle !== 'function') return null
+      await agent.whenIdle()
+      if (busy()) return null
+    }
+    // One reconcile per session at a time; concurrent view reads share it.
+    if (reconciling.has(sessionId)) return await reconciling.get(sessionId)
+    const run = reconcileStory(sessionId, { stillIdle: () => !busy() })
+    reconciling.set(sessionId, run)
+    try {
+      const report = await run
+      if (report) reconciledSessions.add(sessionId)
+      return report
+    } finally { reconciling.delete(sessionId) }
+  }
+
   // The save's latest player rounds, oldest first: enough rows to cover the native window.
   async function storyAlignmentInput(sessionId, nativeCount) {
     const fields = ['mode', 'nativeCommits', 'suppressedDshTurns', 'regeneratedDshTurns', 'regenInProgress']
@@ -4625,7 +4662,7 @@ export async function apply(ctx) {
   // acts on "the latest round" (#196): record a round the save missed, re-shadow
   // a rolled-back round the model still sees, and report what cannot be repaired.
   // Never blocks the action that asked for it.
-  async function reconcileStory(sessionId, { repair = true } = {}) {
+  async function reconcileStory(sessionId, { repair = true, stillIdle = () => true } = {}) {
     try {
       sessionId = str(sessionId)
       const session = sessionId && (sessionStore.get(sessionId) || agentRegistry.get(sessionId)?.session)
@@ -4635,8 +4672,9 @@ export async function apply(ctx) {
       const report = inspectStoryAlignment({ session, ...input })
       if (!repair || report.aligned || report.state === 'regenerating') return report
       for (const round of report.adopt) {
-        await turnOrchestrator.finalize({ sessionId, turn: round.turn, requestId: round.requestId, userText: round.userText, userContent: round.userContent, assistantText: round.assistantText, nativeAnchor: round.nativeAnchor })
-        console.warn('dsh-tavern: 第 ' + round.turn + ' 轮已完成但未写入存档，已补记')
+        if (!stillIdle()) return report
+        const adopted = await turnOrchestrator.finalize({ sessionId, turn: round.turn, requestId: round.requestId, userText: round.userText, userContent: round.userContent, assistantText: round.assistantText, nativeAnchor: round.nativeAnchor, adopt: true })
+        if (adopted?.saved && !adopted.duplicate) console.warn('dsh-tavern: 第 ' + round.turn + ' 轮已完成但未写入存档，已补记')
       }
       const shadowed = reshadowRolledBackRounds(session, new Set(report.rolledBackVisible))
       if (shadowed.length) {
@@ -4861,8 +4899,8 @@ export async function apply(ctx) {
     publishResourceWorkspace,
     readChatCard,
     replaceAssistantReply,
+    reconcileWhenIdle,
     requestIdForTurn,
-    reconcileStory,
     runtimePrompt,
     sessionStore,
     turnOrchestrator,

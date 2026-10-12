@@ -8,7 +8,7 @@ import { synchronizeBodyEdits } from '../domain/body-editor.js'
 import { synchronizeTemplateHistory } from '../domain/template-history.js'
 
 export function registerTurnLifecycleHooks({
-  reconcileStory,
+  reconcileWhenIdle,
   backgroundAgentRunner,
   hookChatForSession,
   clearRuntimePresetRequestState,
@@ -58,8 +58,6 @@ export function registerTurnLifecycleHooks({
       })
       throw new Error(message)
     }
-    // An earlier round the save missed goes in first, so the story keeps its order.
-    await reconcileStory?.(sessionId)
     const saved = await foregroundHandoff.finalize({
       sessionId,
       turn: payload.turn,
@@ -82,6 +80,9 @@ export function registerTurnLifecycleHooks({
     if (backgroundAgentRunner.owns(session.id)) return
     const reason = event.data && event.data.reason ? event.data.reason.kind : ''
     foregroundHandoff.end({ sessionId: session.id, turn: event.data && event.data.turn, reason })
+    // A turn whose record went missing (#196) is adopted before the player's next
+    // message, once the agent has gone idle; reconcile never blocks this hook.
+    setTimeout(() => { void reconcileWhenIdle?.(session.id) }, 0)
   })
 
   ctx.on('system-prompt/assemble', async function (_assembly, context, next) {
