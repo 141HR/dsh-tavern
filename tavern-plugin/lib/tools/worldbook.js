@@ -5,6 +5,21 @@ import { VALIDATION_SCHEMA, validationText } from './card-validation-check.js'
 
 const ENTRY_ALIASES = { keys: 'primaryKeys', key: 'primaryKeys', secondary_keys: 'secondaryKeys', keysecondary: 'secondaryKeys', insertion_order: 'order', title: 'comment', name: 'comment', disable: 'disable' }
 
+const HIDDEN_FIELDS = new Set(['ref', 'rawEntry', 'sourceUid', 'sourcePath', 'title', 'comment', 'content'])
+
+// The model reads entries to edit them: the prose stays verbatim, unset
+// settings and the duplicated raw source entry are left out.
+function entryText(ref, entry) {
+  const settings = {}
+  for (const [key, value] of Object.entries(entry || {})) {
+    if (HIDDEN_FIELDS.has(key) || value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) continue
+    settings[key] = value
+  }
+  return '[' + ref + '] ' + text(entry && entry.comment) + '\n设置：' + JSON.stringify(settings) + '\n正文：\n' + text(entry && entry.content)
+}
+
+function text(value) { return typeof value === 'string' ? value : (value === undefined || value === null ? '' : String(value)) }
+
 export function registerWorldbookTools({
   chatForSession,
   checkCard,
@@ -42,7 +57,7 @@ export function registerWorldbookTools({
       },
       render: function (_args, value) {
         if (!value.found) return [{ type: 'text', text: value.message }]
-        const body = value.entries.map(function (item) { return '[' + item.ref + ']\n' + JSON.stringify(item.entry, null, 2) }).join('\n\n')
+        const body = value.entries.map(function (item) { return entryText(item.ref, item.entry) }).join('\n\n')
         return [{ type: 'text', text: '世界书《' + (value.name || '未命名') + '》· 共 ' + value.total + ' 条\n\n' + body }]
       }
     },

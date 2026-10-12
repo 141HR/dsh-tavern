@@ -514,7 +514,8 @@ export function createCardPreparation(options = {}) {
     if (request.as === 'raw-section') {
       const pointer = str(request.pointer)
       const value = rawAt(rawOf(request.card), pointer)
-      const serialized = JSON.stringify(value, null, 2)
+      // Compact JSON: indentation would be resent on every later step.
+      const serialized = JSON.stringify(value)
       const text = serialized === undefined ? 'null' : serialized
       const offset = Number.isInteger(request.offset) && request.offset > 0 ? request.offset : 1
       const limit = Number.isInteger(request.limit) ? Math.max(1, Math.min(request.limit, 12000)) : 6000
