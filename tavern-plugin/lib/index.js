@@ -95,6 +95,7 @@ import { validateHelperGenerateConfig, resolveHelperGenerationPreset, helperGene
 import { createHelperGenerationTasks } from './domain/helper-generation-tasks.js'
 import { createBodyEditor } from './domain/body-editor.js'
 import { appendHelperUserSessionContext } from './domain/helper-user-session-context.js'
+import { userMessageForTurn, requestIdForTurn } from './domain/session-turn-input.js'
 import { sessionOpeningDescriptor, prepareSessionOpening } from './domain/session-opening.js'
 import { scriptPromptScanText } from './domain/tavern-script-prompts.js'
 import { createOpeningPreparation } from './domain/opening-preparation.js'
@@ -4602,42 +4603,9 @@ export async function apply(ctx) {
     return phase && phase.kind === 'running' ? Math.max(0, Number(phase.turn) || 0) : 0
   }
 
-  function turnStartIndex(session, turn) {
-    const events = sessionEvents(session)
-    for (let index = events.length - 1; index >= 0; index--) {
-      const event = events[index]
-      if (event && event.type === 'turn/start' && Number(event.data && event.data.turn) === Number(turn)) return index
-    }
-    return -1
-  }
-
-  function userMessageForTurn(session, turn) {
-    const events = sessionEvents(session)
-    const start = turnStartIndex(session, turn)
-    if (start < 0) return ''
-    for (let index = Math.max(0, start + 1); index < events.length; index++) {
-      const event = events[index]
-      if (!event || event.type !== 'user/message') continue
-      if (isTurnInput(event.data)) return event.data
-    }
-    return ''
-  }
-
   function requestIdOf(message) {
     const source = message && message.source
     return source && source.kind === 'user' ? str(source.rpcId).trim() : ''
-  }
-
-  function requestIdForTurn(session, turn) {
-    const events = sessionEvents(session)
-    const start = turnStartIndex(session, turn)
-    if (start < 0) return ''
-    for (let index = Math.max(0, start + 1); index < events.length; index++) {
-      const event = events[index]
-      if (!event || event.type !== 'user/message' || !isTurnInput(event.data)) continue
-      return requestIdOf(event.data)
-    }
-    return ''
   }
 
   function requestIdForMessages(messages) {

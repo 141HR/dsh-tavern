@@ -1,4 +1,5 @@
 import { sessionEvents } from './session-events.js'
+import { isNewPlayerInput } from './session-turn-input.js'
 import { clearRegenerationAttemptSurface, regenerationAttemptTurns, locateRegenerationSurface, applyRegenerationProjection } from './rollback-surface.js'
 
 /** Recover an uncommitted replacement from its durable pre-rollback revision. */
@@ -40,7 +41,7 @@ export function createRegenerationRecovery({ chats, sessions, timeline, isActive
           (operationId && current.regenRecovery?.id !== operationId) ||
           Number(current.tavernHelperLifecycleRevision || 0) > Number(originalChat.tavernHelperLifecycleRevision || 0) + 1) return
       const events = sessionEvents(session)
-      if (events.some(event => event.seq >= eventStart && event.type === 'user/message' && event.data?.source?.kind === 'user')) {
+      if (events.some(event => event.seq >= eventStart && isNewPlayerInput(event))) {
         throw new Error('重新生成后已有新的玩家输入，未清理或覆盖后续对话')
       }
       const abortedTurns = regenerationAttemptTurns({ events, eventStart })

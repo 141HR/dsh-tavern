@@ -5,6 +5,7 @@ import { restoredSurfaceSeqs } from './surface-restoration.js'
 import { sessionEvents, surfaceReplacementRange } from './session-events.js'
 import { createSurfaceOwnership, planSurfaceRecovery, planSurfaceRange, SurfaceRecoveryError, OWNED } from './surface-recovery.js'
 import { randomUUID } from 'node:crypto'
+import { isNewTurnInput, isNewPlayerInput } from './session-turn-input.js'
 
 function object(value) {
   return value !== null && typeof value === 'object' ? value : null
@@ -262,7 +263,8 @@ export function replayableFailedTurn(input) {
     if (!event || event.type !== 'user/message') continue
     const seq = Number(event.seq)
     if (!Number.isSafeInteger(seq) || seq <= startSeq || seq >= endSeq) continue
-    if (!isReplayableInputSource(event.data && event.data.source)) continue
+    // A template edit of an earlier input can land inside this turn; it is not its input.
+    if (!isReplayableInputSource(event.data && event.data.source) || !isNewTurnInput(event)) continue
     const userText = contentText(event.data)
     const attachments = inputAttachments(event.data?.content)
     if (userText === '' && !attachments.length) continue
@@ -414,7 +416,7 @@ function regenerationAttemptEnd(events, eventStart) {
   let started = false
   for (const event of events) {
     if (!event || event.seq < eventStart) continue
-    if (event.type === 'turn/end' || (event.type === 'user/message' && event.data?.source?.kind === 'user')) return event.seq
+    if (event.type === 'turn/end' || isNewPlayerInput(event)) return event.seq
     if (event.type === 'turn/start') {
       if (started) return event.seq
       started = true
