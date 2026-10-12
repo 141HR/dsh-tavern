@@ -77,7 +77,8 @@ export async function sceneAddChecks({ page, step, output, report, images, saved
     await page.locator('.dsh-tavern-illustration').first().getByRole('button', { name: '改提示词' }).click()
     const box = page.getByRole('textbox', { name: '画面提示词' })
     assert.match(await box.inputValue(), /tavern counter/)
-    await box.fill('一位旅人在烛光下数金币，油画质感')
+    // A long hand-written Chinese prompt (~18 KB) once hit a 16 KB request limit.
+    await box.fill('一位旅人在烛光下数金币，油画质感' + '，细节丰富'.repeat(1200))
     await page.getByRole('button', { name: '用这段重画' }).click()
     await until(() => images.prompts.length === 3)
     assert.match(images.prompts[2], /^一位旅人在烛光下数金币，油画质感/)

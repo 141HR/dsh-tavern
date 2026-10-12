@@ -312,7 +312,9 @@ export function registerTavernHttpRoutes({
             res.end()
             return
           }
-          const sceneImageBodyLimit = method === 'saveSceneImageSettings' ? 2 * 1024 * 1024 : 16384
+          // Ordinary scene-image calls carry ids and text: a hand-written prompt may be
+          // 12000 characters (36 KB of Chinese) and a gallery batch delete 500 items.
+          const sceneImageBodyLimit = method === 'saveSceneImageSettings' ? 2 * 1024 * 1024 : 256 * 1024
           const bodyChunks = []
           let bodyBytes = 0
           for await (const chunk of req) {
@@ -322,7 +324,7 @@ export function registerTavernHttpRoutes({
             if (sceneImageRoute && bodyBytes > sceneImageBodyLimit) {
               throw new Error(method === 'saveSceneImageSettings'
                 ? '无法保存生图配置：工作流与配置数据超过当前 2 MB 请求大小限制。请精简工作流后重试；这不是图片尺寸或显存不足。'
-                : '生图请求数据超过当前 16 KB 大小限制，请减少输入数据后重试；这不是图片尺寸或显存不足。')
+                : '生图请求数据超过 256 KB 大小限制，请缩短提示词或减少一次批量删除的图片后重试；这不是图片尺寸或显存不足。')
             }
             bodyChunks.push(bytes)
           }
