@@ -10,6 +10,7 @@ import { registerGameplayTools } from './tools/gameplay.js'
 import { registerUserProfileTools } from './tools/user-profile.js'
 import { registerSkillTools } from './tools/skills.js'
 import { registerCardReadingTools } from './tools/card-reading.js'
+import { createCardValidationCheck } from './tools/card-validation-check.js'
 import { registerPlayChatTool } from './tools/play-chat.js'
 import { registerScriptTool } from './tools/script.js'
 import { registerWorldbookTools } from './tools/worldbook.js'
@@ -4877,9 +4878,11 @@ export async function apply(ctx) {
 
     registerVariableReadTool({tools,defineTool,chatForSession})
 
+    const checkCard = createCardValidationCheck({ cardMemory, fileResources })
     registerCardReadingTools({
       cardMemory,
       cardPreparation,
+      checkCard,
       chatForSession,
       fileResources,
       readCard,
@@ -4910,6 +4913,7 @@ export async function apply(ctx) {
 
     registerWorldbookTools({
       chatForSession,
+      checkCard,
       readChatCard,
       str,
       tools,
@@ -4926,6 +4930,8 @@ export async function apply(ctx) {
 
     registerCardEditingTools({
       activeTurnOf,
+      chatForSession,
+      checkCard,
       restoreCurrentCard,
       str,
       tools,

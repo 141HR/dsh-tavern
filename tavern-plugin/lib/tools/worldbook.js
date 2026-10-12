@@ -1,11 +1,13 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { normalizeResourcePath, resourceKind } from '../domain/file-resources.js'
 import { WORLD_BOOK_PATCH_FIELDS } from '../domain/worldbook-resource.js'
+import { VALIDATION_SCHEMA, validationText } from './card-validation-check.js'
 
 const ENTRY_ALIASES = { keys: 'primaryKeys', key: 'primaryKeys', secondary_keys: 'secondaryKeys', keysecondary: 'secondaryKeys', insertion_order: 'order', title: 'comment', name: 'comment', disable: 'disable' }
 
 export function registerWorldbookTools({
   chatForSession,
+  checkCard,
   readChatCard,
   str,
   tools,
@@ -80,7 +82,7 @@ export function registerWorldbookTools({
 
   tools.register(defineTool({
     name: 'tavern_update_worldbook',
-    description: '仅在用户明确确认后，对世界书提交条目级最小修改。支持独立世界书和人物卡内置世界书；省略 path 时修改当前人物卡绑定的世界书。不要重写整本世界书。',
+    description: '仅在用户明确确认后，对世界书提交条目级最小修改。支持独立世界书和人物卡内置世界书；省略 path 时修改当前人物卡绑定的世界书。不要重写整本世界书。修改人物卡内置世界书时结果附带整卡格式校验，无需再调用 tavern_validate_card。',
     parameters: {
       path: { type: 'string', description: '可选的世界书路径；省略时使用当前人物卡，或填写 worldbooks/...、cards/...' },
       name: { type: 'string', description: '可选的新世界书名称' },
@@ -105,10 +107,11 @@ export function registerWorldbookTools({
           path: { type: 'string', required: true },
           name: { type: 'string', required: true },
           entryCount: { type: 'integer', required: true },
-          saved: { type: 'boolean', required: true }
+          saved: { type: 'boolean', required: true },
+          validation: VALIDATION_SCHEMA
         }
       },
-      render: function (_args, value) { return [{ type: 'text', text: '世界书《' + value.name + '》已修改并生效 · ' + value.entryCount + ' 条' }] }
+      render: function (_args, value) { return [{ type: 'text', text: '世界书《' + value.name + '》已修改并生效 · ' + value.entryCount + ' 条' + (value.validation ? '\n' + validationText(value.validation) : '') }] }
     },
     async execute(args, exec) {
       const sessionId = exec && exec.agent && exec.agent.session ? exec.agent.session.id : ''
@@ -142,7 +145,8 @@ export function registerWorldbookTools({
       if (Object.prototype.hasOwnProperty.call(args, 'name')) request.name = args.name
       if (Object.prototype.hasOwnProperty.call(args, 'description')) request.description = args.description
       const result = await worldBooks.update(source, request)
-      return { path: normalized, name: str(result.view.displayName), entryCount: Number(result.view.entryCount) || 0, saved: true }
+      const saved = { path: normalized, name: str(result.view.displayName), entryCount: Number(result.view.entryCount) || 0, saved: true }
+      return kind === 'card' ? { ...saved, validation: await checkCard(chat, normalized) } : saved
     }
   }))
 }

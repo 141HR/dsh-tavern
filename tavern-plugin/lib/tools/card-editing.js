@@ -1,7 +1,10 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { VALIDATION_SCHEMA, validationText } from './card-validation-check.js'
 
 export function registerCardEditingTools({
   activeTurnOf,
+  chatForSession,
+  checkCard,
   restoreCurrentCard,
   str,
   tools,
@@ -9,7 +12,7 @@ export function registerCardEditingTools({
 }) {
   tools.register(defineTool({
     name: 'tavern_update_card',
-    description: '仅当用户明确要求或确认修改时，立即保存最小的人物卡变更；保存后调用 tavern_validate_card 检查实际文件。path 可指定任意人物卡，省略时改当前打开的卡；无需事先挂载或引用。空白工作台会直接创建并绑定正式人物卡文件，必须同时具备角色名和玩家身份。另存为副本时先调用 tavern_copy_card，由工具保留源卡 PNG。只讨论时不要调用。',
+    description: '仅当用户明确要求或确认修改时，立即保存最小的人物卡变更；保存后自动校验磁盘文件并在结果中返回，无需再调用 tavern_validate_card；有错误时修正后再保存。path 可指定任意人物卡，省略时改当前打开的卡；无需事先挂载或引用。空白工作台会直接创建并绑定正式人物卡文件，必须同时具备角色名和玩家身份。另存为副本时先调用 tavern_copy_card，由工具保留源卡 PNG。只讨论时不要调用。',
     parameters: {
       path: { type: 'string', description: '可选的人物卡路径，如 cards/角色 v2.json；省略时修改当前打开的人物卡' },
       fields: {
@@ -51,26 +54,31 @@ export function registerCardEditingTools({
           mode: { type: 'string', required: true, enum: ['card'] },
           changed: { type: 'boolean', required: true },
           createsCard: { type: 'boolean', required: true },
-          changedFields: { type: 'array', required: true, items: { type: 'string' } }
+          changedFields: { type: 'array', required: true, items: { type: 'string' } },
+          validation: VALIDATION_SCHEMA
         }
       },
       render: function (_args, value) {
         const detail = value.changedFields.length > 0 ? '：' + value.changedFields.join('、') : ''
-        if (value.createsCard) return [{ type: 'text', text: '已创建并绑定正式人物卡' + detail }]
         const where = value.path ? '（' + value.path + '）' : ''
-        if (!value.changed) return [{ type: 'text', text: '提交内容与当前设定相同，无需改动' + where }]
-        return [{ type: 'text', text: '已保存人物卡变更' + where + detail }]
+        const check = value.validation ? '\n' + validationText(value.validation) : ''
+        if (value.createsCard) return [{ type: 'text', text: '已创建并绑定正式人物卡' + detail + check }]
+        if (!value.changed) return [{ type: 'text', text: '提交内容与当前设定相同，无需改动' + where + check }]
+        return [{ type: 'text', text: '已保存人物卡变更' + where + detail + check }]
       }
     },
     async execute(args, exec) {
       const sessionId = exec && exec.agent && exec.agent.session ? exec.agent.session.id : ''
-      return await turnOrchestrator.saveChanges({
+      const result = await turnOrchestrator.saveChanges({
         sessionId,
         turn: activeTurnOf(exec),
         path: args.path,
         fields: args.fields,
         rawOperations: args.rawOperations
       })
+      const chat = await chatForSession(sessionId)
+      const cardPath = result.path || (chat && chat.cardPath) || ''
+      return cardPath ? { ...result, validation: await checkCard(chat, cardPath) } : result
     }
   }))
 
