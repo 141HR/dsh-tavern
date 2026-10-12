@@ -69,6 +69,8 @@ export async function sceneAddChecks({ page, step, output, report, images, saved
     assert.deepEqual(audit, [{ addition: false, request: false }, { addition: true, request: true }], '新增插图的规划请求带上已有插图与用户描述')
     assert.equal(images.prompts.length, 2)
     assert.match(images.prompts[1], /gold coins on a wooden counter/)
+    // Every picture of the turn offers adding another, not only the first.
+    await page.locator('.dsh-tavern-illustration').nth(1).getByRole('button', { name: '新增插图', exact: true }).waitFor()
     await page.screenshot({ path: join(output, 'scene-add.png'), fullPage: true })
   })
   await step('改提示词：自己写的提示词原样发给生图渠道', async () => {

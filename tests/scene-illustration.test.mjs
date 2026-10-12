@@ -835,4 +835,6 @@ test('adding a picture plans a different moment in its own slot; the turn keeps 
   assert.equal((await fx.service.start('parent', 2, key, { kind: 'add', requestId: 'add-request-3' })).slot, 2, 'the freed slot, never charged, is reused')
   await until(async () => (await fx.service.status('parent', 2)).extras[1]?.status === 'succeeded')
   await assert.rejects(fx.service.start('parent', 2, 'not-a-slot-key', { kind: 'add', requestId: 'add-request-4' }), /正文版本已变化/)
+  assert.equal((await fx.service.start('parent', 2, added.key, { kind: 'add', requestId: 'add-request-5' })).slot, 3, 'any picture of the turn can add another')
+  await until(async () => (await fx.service.status('parent', 2)).extras[2]?.status === 'succeeded')
 })
