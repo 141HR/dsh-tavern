@@ -8,6 +8,7 @@ import { setupRealCharacterDesign, realCharacterDesignChecks } from './real-char
 import { setupRealCardEdit, realCardEditChecks } from './real-card-edit.mjs'
 import { startSceneImageServer, sceneAddChecks } from './scene-add.mjs'
 import { regenAnomalyChecks, regenTemplateChecks } from './regen-anomalies.mjs'
+import { brokenSaveChecks } from './broken-save.mjs'
 import { incrementalMvuChecks } from './mvu-incremental.mjs'
 import {openingUpdateChecks} from './opening-update.mjs'
 import { backgroundLifecycleChecks } from './background-lifecycle.mjs'
@@ -42,7 +43,12 @@ const cli = join(modules, '@deepseek-ai/dsh/lib/bin.js')
 const outputBase = resolve(process.env.TAVERN_E2E_OUTPUT || join(source, 'output/e2e-gameplay'))
 await mkdir(outputBase, { recursive: true })
 const output = await mkdtemp(join(outputBase, 'run-'))
-const root = await mkdtemp(join(tmpdir(), 'tavern-e2e-'))
+// A fixed home lets a saved profile-data snapshot (whose session paths embed the
+// home) be restored as is: TAVERN_E2E_HOME + TAVERN_E2E_RESTORE_DATA (a .tar.gz).
+const root = process.env.TAVERN_E2E_HOME
+  ? (await rm(process.env.TAVERN_E2E_HOME, { recursive: true, force: true }), await mkdir(process.env.TAVERN_E2E_HOME, { recursive: true }), process.env.TAVERN_E2E_HOME)
+  : await mkdtemp(join(tmpdir(), 'tavern-e2e-'))
+const restoredSave = process.env.TAVERN_E2E_RESTORE_DATA || ''
 const profile = join(root, 'profiles/tavern'), data = join(root, 'profile-data/tavern/data')
 const timeout = Number(process.env.TAVERN_E2E_TIMEOUT_MS) || 30000
 const report = { status: 'running', scope: 'real isolated DSH + Tavern + Chromium; fixed model only', steps: [] }
@@ -134,7 +140,8 @@ try {
     report.runtimeVersion = JSON.parse(await readFile(join(modules, '@deepseek-ai/dsh/package.json'), 'utf8')).version
     await mkdir(join(profile, 'node_modules'), { recursive: true })
     for (const [name, target] of Object.entries({
-      'dsh-tavern-plugin': join(source, 'tavern-plugin'),
+      // An older plugin build can produce a save its bugs damaged; the scenario then switches to this one.
+      'dsh-tavern-plugin': process.env.TAVERN_E2E_PLUGIN_SOURCE || join(source, 'tavern-plugin'),
       'dsh-tavern-remote': join(source, 'tavern-plugin/packages/dsh-tavern-remote'),
       'dsh-web-mobile': join(source, 'node_modules/dsh-web-mobile')
     })) await symlink(target, join(profile, 'node_modules', name))
@@ -176,6 +183,11 @@ try {
   if(process.argv.includes('--real-variables')) {report.scope='real isolated DSH + Chromium + configured live model';report.model=await setupRealVariables({root,profile,data,runtimeHome:join(homedir(),'.dsh-tavern')})}
   if(process.argv.includes('--real-card-edit')) {report.scope='real isolated DSH + Chromium + configured live model';report.model=await setupRealCardEdit({root,profile,data,runtimeHome:join(homedir(),'.dsh-tavern')})}
   if(process.argv.includes('--real-character-design')) {report.scope='real isolated DSH + Chromium + configured live model';report.model=await setupRealCharacterDesign({root,profile,data,runtimeHome:join(homedir(),'.dsh-tavern')})}
+  if (restoredSave) await step('放入保存的存档快照', async () => {
+    await rm(join(root, 'profile-data'), { recursive: true, force: true })
+    const { execFileSync } = await import('node:child_process')
+    execFileSync('tar', ['-xzf', restoredSave, '-C', root])
+  })
   await step('启动真实 DSH 与酒馆', async () => {
     async function launchServer() {
       const logOffset = log.length
@@ -260,7 +272,14 @@ try {
     await page.goto(url, { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'Continue', exact: true }).click()
   })
-  await step('通过界面选择角色卡并新开一局', async () => {
+  if (restoredSave) await step('打开存档中的这局游戏', async () => {
+    const history = page.locator('.dsh-tavern-history-group-toggle').filter({ hasText: 'E2E 奖励验收' })
+    await history.filter({ visible: true }).first().waitFor()
+    if (!await page.locator('.dsh-tavern-side-row-name').first().isVisible().catch(() => false)) await history.first().click()
+    await page.locator('.dsh-tavern-side-row-name').first().click()
+    await page.getByRole('textbox', { name: /发消息|Message/ }).waitFor()
+  })
+  else await step('通过界面选择角色卡并新开一局', async () => {
     await page.getByRole('button', { name: /选择人物卡.*新开游玩/ }).click()
     await page.getByText('E2E 奖励验收', { exact: true }).first().click()
     await page.getByRole('button', { name: '开始新游戏', exact: true }).click()
@@ -422,6 +441,8 @@ try {
     })
   } else if (helperApiScenario) {
     await helperApiChecks({ page, step, savedChat, output, report })
+  } else if (process.argv.includes('--broken-save')) {
+    await brokenSaveChecks({ page, step, savedChat, output, report, root, data, profile, source, restartServer })
   } else if (process.argv.includes('--regen-template')) {
     await regenTemplateChecks({ page, step, savedChat, output, report, root })
   } else if (process.argv.includes('--regen-anomalies')) {
@@ -684,7 +705,7 @@ try {
     report.nativeFormat.restart=true
   })
   // Every scenario ends with the story save agreeing with what the model sees (#196).
-  if (!['--settlement-performance', '--display-regression', '--text-colors', '--opening-only'].some(flag => process.argv.includes(flag))) await step('存档与模型上下文一致', async () => {
+  if (process.env.TAVERN_E2E_BROKEN_STOP !== '1' && !['--settlement-performance', '--display-regression', '--text-colors', '--opening-only'].some(flag => process.argv.includes(flag))) await step('存档与模型上下文一致', async () => {
     const chat = await savedChat().catch(() => null)
     if (!chat?.sessionId) return
     const result = await page.evaluate(async sessionId => (await fetch('/api/dsh-tavern/storyAlignment', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId }) })).json(), chat.sessionId)
