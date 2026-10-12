@@ -217,7 +217,9 @@ export function createSceneIllustrations(deps) {
       const selected=await deps.sceneStateForSession(sessionId,{turns:[...turns].filter(turn=>turn<=chat.sceneLatestTurn),revision:chat._storageRevision})
       return Object.values(selected.sceneTargets)
     }, config: current })
-    const shared = { enabled: current.enabled === true, profile: imageExpressionProfile(current) }
+    const latestTurn = chat.sceneTargets ? Number(chat.sceneLatestTurn) : Number(last?.turn || (last?.greeting ? 1 : 0))
+    // Only the newest round can still be drawn automatically.
+    const shared = { enabled: current.enabled === true, auto: current.enabled === true && current.auto === true && latestTurn === Number(turn), profile: imageExpressionProfile(current) }
     const referenceOf = key => ({ ...reference.capability, warning: reference.warning,
       bindings: reference.active.filter(record => record.source.key === key).map(record => ({ versionId: record.source.versionId, personId: record.person.id, name: record.person.name })),
       versions: reference.active.filter(record => record.source.key === key).map(record => record.source.versionId) })
@@ -229,6 +231,25 @@ export function createSceneIllustrations(deps) {
       extras.push({ ...present(extra, record), slot, ...shared, reference: referenceOf(extra.key) })
     }
     return { ...present(target, await readRecord(path)), ...shared, reference: referenceOf(target.key), extras, maxPictures: SCENE_EXTRA_SLOTS + 1 }
+  }
+  // 「每轮自动生图」: once a new round has settled, draw it once. Never redraws a
+  // round that already has a picture, one the player deleted, one in progress,
+  // or one whose last attempt failed or may have been charged — a failure waits
+  // for the player instead of paying again.
+  async function autoGenerate(sessionId) {
+    const quick = await config()
+    if (quick.enabled !== true || quick.auto !== true) return null
+    // Readiness needs the stored key, which only the full settings read resolves.
+    if (!(await settings()).ready) return null
+    const chat = await (deps.sceneStateForSession || deps.chatForSession)(sessionId, { turns: [] })
+    if (!chat || !['story', 'script'].includes(chat.mode || 'story')) return null
+    const latest = chat.sceneTargets ? Number(chat.sceneLatestTurn)
+      : Number([...(chat.messages || [])].reverse().find(item => item?.role === 'assistant')?.turn || 0)
+    // The opening is the card's own text; rounds start at turn 2.
+    if (!(latest >= 2)) return null
+    const state = await status(sessionId, latest)
+    if (!state.key || state.status !== 'idle' || state.versions.length || state.hasDeletedImages || state.recovery === 'save' || state.outcome === 'unconfirmed') return null
+    return start(sessionId, latest, state.key, { kind: 'generate', requestId: 'auto-' + state.key.slice(0, 48) })
   }
   async function setReference(sessionId, turn, key, versionId, consent, enabled = true, personId) {
     const { chat, target, path } = await resolve(sessionId, turn, undefined, key)
@@ -809,7 +830,7 @@ export function createSceneIllustrations(deps) {
     }
     return results
   }
-  return { settings, configure, readArtistPreview: setup.readArtistPreview, testConnection: connection.test, listModels: connection.models, testGenerate, status, start, cancel, retrySave, readImage, exportImages, isAgentSession, undoAgentTurn, removeImage, setReference, history, readStoredImage, removeStoredImages,
+  return { settings, configure, readArtistPreview: setup.readArtistPreview, testConnection: connection.test, listModels: connection.models, testGenerate, status, start, autoGenerate, cancel, retrySave, readImage, exportImages, isAgentSession, undoAgentTurn, removeImage, setReference, history, readStoredImage, removeStoredImages,
     async dispose() { for (const job of jobs.values()) job.controller.abort(); await Promise.allSettled([...jobs.values()].map(job => job.promise)); imageHosts.delete(ownerId); imageAborters.delete(ownerId) }
   }
 }

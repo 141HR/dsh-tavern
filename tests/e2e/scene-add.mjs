@@ -107,4 +107,18 @@ export async function sceneAddChecks({ page, step, output, report, images, saved
     assert.equal(images.prompts.length, 3, '删除不会请求图片')
     report.sceneAdd = { prompts: images.prompts.length }
   })
+  await step('每轮自动生图：打开后新一轮结算完自动画一张，只画一次', async () => {
+    const before = images.prompts.length
+    const pictures = await page.locator('.dsh-tavern-illustration img').count()
+    await rpc('saveSceneImageSettings', { provider: 'openai', auto: true })
+    const composer = page.getByRole('textbox', { name: /发消息|Message/ })
+    await composer.fill('再次领取奖励')
+    await composer.press('Enter')
+    await page.getByText('你再次领取了奖励，金币累计二十枚。', { exact: true }).filter({ visible: true }).first().waitFor()
+    await page.waitForFunction(count => document.querySelectorAll('.dsh-tavern-illustration img').length > count, pictures, { timeout: 60000 })
+    await new Promise(resolve => setTimeout(resolve, 3000))
+    assert.equal(images.prompts.length, before + 1, '自动生图每轮只请求一次')
+    await page.screenshot({ path: join(output, 'scene-auto.png'), fullPage: true })
+    await rpc('saveSceneImageSettings', { provider: 'openai', auto: false })
+  })
 }

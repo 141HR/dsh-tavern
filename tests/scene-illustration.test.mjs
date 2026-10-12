@@ -838,3 +838,29 @@ test('adding a picture plans a different moment in its own slot; the turn keeps 
   assert.equal((await fx.service.start('parent', 2, added.key, { kind: 'add', requestId: 'add-request-5' })).slot, 3, 'any picture of the turn can add another')
   await until(async () => (await fx.service.status('parent', 2)).extras[2]?.status === 'succeeded')
 })
+
+test('每轮自动生图：默认关闭；打开后结算完的新一轮自动画一张，已有图、删过、失败或可能已计费的轮次不再自动画', async t => {
+  let calls = 0, fail = false
+  const fx = await fixture(t, { generate: async () => { calls++; if (fail) throw new Error('渠道暂时不可用'); return { data: png, mediaType: 'image/png' } } })
+  assert.equal((await fx.service.settings()).auto, false)
+  assert.equal(await fx.service.autoGenerate('parent'), null, 'off by default')
+  await fx.service.configure({ auto: true })
+  assert.equal((await fx.service.settings()).auto, true)
+  await fx.service.autoGenerate('parent')
+  await until(async () => (await fx.service.status('parent', 2)).status === 'succeeded')
+  assert.equal(calls, 1)
+  assert.equal(await fx.service.autoGenerate('parent'), null, 'a round with a picture is not drawn again')
+  const picture = (await fx.service.status('parent', 2)).versions[0]
+  await fx.service.removeImage('parent', 2, sceneTarget(fx.chat(), 2).key, picture.id)
+  assert.equal(await fx.service.autoGenerate('parent'), null, 'a picture the player deleted is not redrawn')
+  // A new swipe is a new round body: drawn once; a failure waits for the player.
+  fx.setChat({ ...fx.chat(), messages: fx.chat().messages.map(message => message.role === 'assistant' ? { ...message, swipeId: 1 } : message) })
+  fail = true
+  await fx.service.autoGenerate('parent')
+  await until(async () => (await fx.service.status('parent', 2)).status === 'failed')
+  const before = calls
+  assert.equal(await fx.service.autoGenerate('parent'), null)
+  assert.equal(calls, before)
+  await fx.service.configure({ auto: false })
+  assert.equal((await fx.service.settings()).auto, false)
+})
