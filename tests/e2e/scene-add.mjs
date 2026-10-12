@@ -32,7 +32,7 @@ export async function startSceneImageServer() {
   return { baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', prompts, close: () => new Promise(resolve => server.close(resolve)) }
 }
 
-export async function sceneAddChecks({ page, step, output, report, images }) {
+export async function sceneAddChecks({ page, step, output, report, images, savedChat }) {
   async function rpc(method, args) {
     return page.evaluate(async ({ method, args }) => {
       const response = await fetch('/api/dsh-tavern/' + method, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(args) })
@@ -47,6 +47,8 @@ export async function sceneAddChecks({ page, step, output, report, images }) {
     await composer.fill('领取任务奖励')
     await composer.press('Enter')
     await page.getByText('你获得了十枚金币。', { exact: false }).filter({ visible: true }).first().waitFor()
+    // Pictures are refused while the reply is still finishing; wait for settlement.
+    await page.getByText(/变量已更新/).filter({ visible: true }).first().waitFor()
     await rpc('saveSceneImageSettings', { provider: 'openai', baseURL: images.baseURL, model: 'e2e-image', size: '1024x1024', apiKey: 'e2e-image-key' })
     await rpc('saveSceneImageSettings', { provider: 'openai', enabled: true })
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('dsh-tavern-image-settings-changed')))
@@ -66,6 +68,19 @@ export async function sceneAddChecks({ page, step, output, report, images }) {
     assert.equal(images.prompts.length, 2)
     assert.match(images.prompts[1], /gold coins on a wooden counter/)
     await page.screenshot({ path: join(output, 'scene-add.png'), fullPage: true })
+  })
+  await step('画廊与导出都包含新增的插图', async () => {
+    await page.getByRole('tab', { name: '画廊' }).or(page.getByText('画廊', { exact: true })).first().click()
+    await page.locator('.dsh-tavern-gallery-shot img').nth(1).waitFor()
+    assert.equal(await page.locator('.dsh-tavern-gallery-turn').count(), 1, '同一轮的插图在画廊同一行')
+    assert.equal(await page.locator('.dsh-tavern-gallery-shot').count(), 2)
+    await page.screenshot({ path: join(output, 'scene-add-gallery.png'), fullPage: true })
+    await page.getByRole('tab', { name: 'Chat' }).or(page.getByText('Chat', { exact: true })).first().click()
+    const { id: chatId } = await savedChat()
+    const exported = await rpc('exportConversation', { chatId })
+    const zip = Buffer.from(exported.base64 || '', 'base64').toString('latin1')
+    assert.equal(exported.images, 2, '导出带上两张插图')
+    assert.ok(zip.includes('images/001.png') && zip.includes('images/001-2.png'))
   })
   await step('刷新后两张插图保留，删除新增的一张不影响第一张', async () => {
     await page.reload({ waitUntil: 'domcontentloaded' })

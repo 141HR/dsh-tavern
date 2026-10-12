@@ -141,15 +141,19 @@ export function createConversationMarkdownExport(chat, options = {}) {
       if (text !== '') sections.push(text.split('\n').map(line => line === '' ? '>' : '> ' + line).join('\n'))
     } else if (message.role === 'assistant') {
       const text = exportMessageText(message.text, { legacyPresentation: true })
-      // An image is a path, or { path, anchor }: placed after the anchor's paragraph as in play, else after the text.
+      // An image is a path, { path, anchor }, or a list of them (pictures added to the
+      // turn): each placed after its anchor's paragraph as in play, else after the text.
       const entry = images.get(storyTurn(message))
-      const image = typeof entry === 'string' ? { path: entry, anchor: '' } : entry
-      if (text === '' && !image) continue
-      if (!image) { sections.push(text); continue }
-      const markdown = '![第 ' + storyTurn(message) + ' 轮配图](' + encodeURI(image.path) + ')'
-      const at = image.anchor ? pluginAnchorInsertion(text, image.anchor) : -1
-      sections.push(at < 0 || at >= text.length ? [text, markdown].filter(Boolean).join('\n\n')
-        : text.slice(0, at).trimEnd() + '\n\n' + markdown + '\n\n' + text.slice(at).trimStart())
+      const pictures = (Array.isArray(entry) ? entry : entry ? [entry] : []).map(item => typeof item === 'string' ? { path: item, anchor: '' } : item)
+      if (text === '' && !pictures.length) continue
+      if (!pictures.length) { sections.push(text); continue }
+      const markdown = image => '![第 ' + storyTurn(message) + ' 轮配图](' + encodeURI(image.path) + ')'
+      const placed = pictures.map((image, order) => ({ image, order, at: image.anchor ? pluginAnchorInsertion(text, image.anchor) : -1 }))
+      const inline = placed.filter(item => item.at >= 0 && item.at < text.length).sort((a, b) => b.at - a.at || b.order - a.order)
+      let body = text
+      for (const item of inline) body = body.slice(0, item.at).trimEnd() + '\n\n' + markdown(item.image) + '\n\n' + body.slice(item.at).trimStart()
+      const trailing = placed.filter(item => !inline.includes(item)).map(item => markdown(item.image))
+      sections.push([body, ...trailing].filter(Boolean).join('\n\n'))
     }
   }
   return {

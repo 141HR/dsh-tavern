@@ -421,7 +421,7 @@ try {
     await helperApiChecks({ page, step, savedChat, output, report })
   } else if (process.argv.includes('--scene-add')) {
     const images = await startSceneImageServer()
-    try { await sceneAddChecks({ page, step, output, report, images }) } finally { await images.close() }
+    try { await sceneAddChecks({ page, step, output, report, images, savedChat }) } finally { await images.close() }
   } else if (process.argv.includes('--real-card-edit')) {
     await realCardEditChecks({page,step,root,data,output,report})
   } else if (process.argv.includes('--real-character-design')) {

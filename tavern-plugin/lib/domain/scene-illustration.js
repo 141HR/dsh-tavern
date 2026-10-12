@@ -725,19 +725,22 @@ export function createSceneIllustrations(deps) {
     const result = await deps.runAgent({ sessionId, task: 'image', persistent: true, persistentSessionId: agentSessionId, undoLastTask: true, selection, messages: [] })
     return { undone: result?.undone === true }
   }
-  // The picture a reader sees for each turn (its latest version); turns without one are skipped.
+  // The pictures a reader sees for each turn: each slot's latest version at its newest
+  // anchor, the same pictures and places play shows by default. Turns without one are skipped.
   async function exportImages(sessionId, turns) {
     const images = []
     for (const turn of turns) {
-      try {
-        const { path } = await resolve(sessionId, turn)
-        // One picture per turn: the newest version, at the newest anchor, the same picture and place play shows by default.
-        const versions = versionsOf(await deps.store.readJson(path)), version = versions.at(-1)
-        if (!version?.attachment) continue
-        const image = await deps.attachments().readImage(version.attachment)
-        const anchor = versions.findLast(item => item.anchor)?.anchor || ''
-        images.push({ turn: Number(turn), mediaType: String(image.mediaType || version.attachment.mediaType || ""), data: image.data, anchor })
-      } catch { /* A missing picture must not block exporting the story. */ }
+      let resolved
+      try { resolved = await resolve(sessionId, turn) } catch { continue }
+      for (let slot = 0; slot <= SCENE_EXTRA_SLOTS; slot++) {
+        try {
+          const versions = versionsOf(await deps.store.readJson(pathFor(resolved.chat.id, sceneSlotKey(resolved.target.key, slot)))), version = versions.at(-1)
+          if (!version?.attachment) continue
+          const image = await deps.attachments().readImage(version.attachment)
+          const anchor = versions.findLast(item => item.anchor)?.anchor || ''
+          images.push({ turn: Number(turn), slot, mediaType: String(image.mediaType || version.attachment.mediaType || ""), data: image.data, anchor })
+        } catch { /* A missing picture must not block exporting the story. */ }
+      }
     }
     return images
   }
