@@ -64,6 +64,19 @@ export function apply(ctx) {
         return
       }
       const latestInput = JSON.stringify(input.messages.slice(input.messages.findLastIndex(message => message.role === 'assistant') + 1))
+      // Slow reply: streams for ~20 s so the player can press stop mid-reply.
+      if (!tools.has('mvu_submit_update') && !tools.has('candidate_submit_choices') && !tools.has('posture_submit')
+        && latestInput.includes('E2E_SLOW')) {
+        yield { type: 'block-start', index: 0, blockType: 'text' }
+        for (let i = 0; i < 40; i++) {
+          if (input.signal?.aborted) { yield { type: 'finish', reason: { kind: 'aborted', failure: { message: 'aborted', code: 'ABORTED' } } }; return }
+          yield { type: 'text-delta', index: 0, text: (i ? '' : '<content>\n') + '雨一直下，' }
+          await new Promise(resolve => { const timer = setTimeout(resolve, 500); input.signal?.addEventListener('abort', () => { clearTimeout(timer); resolve() }, { once: true }) })
+        }
+        yield { type: 'block-end', index: 0, block: { type: 'text', text: '<content>\n' + '雨一直下，'.repeat(40) } }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+        return
+      }
       // Mid-stream filter: part of the body already streamed, then the provider cuts it off.
       if (!tools.has('mvu_submit_update') && !tools.has('candidate_submit_choices') && !tools.has('posture_submit')
         && latestInput.includes('E2E_FILTER_MIDSTREAM')) {

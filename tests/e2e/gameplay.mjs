@@ -7,6 +7,7 @@ import {setupRealVariables,realVariableLookupChecks} from './real-variable-looku
 import { setupRealCharacterDesign, realCharacterDesignChecks } from './real-character-design.mjs'
 import { setupRealCardEdit, realCardEditChecks } from './real-card-edit.mjs'
 import { startSceneImageServer, sceneAddChecks } from './scene-add.mjs'
+import { regenAnomalyChecks } from './regen-anomalies.mjs'
 import { incrementalMvuChecks } from './mvu-incremental.mjs'
 import {openingUpdateChecks} from './opening-update.mjs'
 import { backgroundLifecycleChecks } from './background-lifecycle.mjs'
@@ -419,6 +420,8 @@ try {
     })
   } else if (helperApiScenario) {
     await helperApiChecks({ page, step, savedChat, output, report })
+  } else if (process.argv.includes('--regen-anomalies')) {
+    await regenAnomalyChecks({ page, step, savedChat, output, report, serverLog: () => log })
   } else if (process.argv.includes('--scene-add')) {
     const images = await startSceneImageServer()
     try { await sceneAddChecks({ page, step, output, report, images, savedChat }) } finally { await images.close() }
