@@ -45,7 +45,9 @@ export async function realCardEditChecks({ page, step, root, data, output, repor
     assert.ok(chat, '卡片工作台对话未创建')
     const composer = page.getByRole('textbox', { name: /发消息|Message/ })
     await composer.waitFor()
-    await composer.fill('【卡片任务：修改人物卡】\n\n【目标人物卡】\n@"cards/edit-target.json"\n\n' + task)
+    // Same draft the "修改卡" task builds (src/client/main.js), so the edit-card skill loads.
+    const editPrompt = (await readFile(new URL('../../tavern-plugin/prompts/card-task-edit.md', import.meta.url), 'utf8')).trim()
+    await composer.fill(editPrompt.replace('/edit-card', '/edit-card\n\n目标卡：@"cards/edit-target.json"') + '\n\n' + task)
     await composer.press('Enter')
     const started = Date.now()
     let list = [], tick = Date.now()
@@ -59,14 +61,15 @@ export async function realCardEditChecks({ page, step, root, data, output, repor
     const steps = list.filter(event => event.type === 'assistant/message' && event.data?.usage).map(event => ({ step: event.data.step, ...event.data.usage }))
     const sum = key => steps.reduce((total, item) => total + (Number(item[key]) || 0), 0)
     const tools = list.filter(event => event.type === 'tool/call').map(event => event.data.name)
+    const calls = list.filter(event => event.type === 'tool/call').map(event => ({ name: event.data.name, arguments: String(event.data.arguments || '').slice(0, 600) }))
     const finalText = list.filter(event => event.type === 'assistant/message').at(-1)?.data?.message?.content?.filter(item => item.type === 'text').map(item => item.text).join('\n')
     report.cardEdit = {
       task, seconds: Math.round((Date.now() - started) / 1000), steps: steps.length,
       firstStepPromptTokens: steps[0] ? (steps[0].inputTokens || 0) + (steps[0].cacheReadTokens || 0) : 0,
       inputTokens: sum('inputTokens'), cacheReadTokens: sum('cacheReadTokens'), outputTokens: sum('outputTokens'), reasoningTokens: sum('reasoningTokens'), totalTokens: sum('totalTokens'),
-      tools, finalText, perStep: steps
+      tools, finalText, perStep: steps, calls
     }
     await writeFile(join(output, 'card-edit-usage.json'), JSON.stringify(report.cardEdit, null, 2))
-    console.log(JSON.stringify({ ...report.cardEdit, perStep: undefined, finalText: String(finalText).slice(0, 300) }, null, 2))
+    console.log(JSON.stringify({ ...report.cardEdit, perStep: undefined, calls: undefined, finalText: String(finalText).slice(0, 300) }, null, 2))
   })
 }

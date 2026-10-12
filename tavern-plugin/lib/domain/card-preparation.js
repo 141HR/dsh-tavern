@@ -562,6 +562,7 @@ export function createCardPreparation(options = {}) {
     project,
     update,
     present,
+    raw: rawOf,
     textFields: TEXT_FIELDS
   })
 }
