@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { Session } from './fixtures/dsh-session-host.mjs'
 import { sessionEvents } from '../tavern-plugin/lib/domain/session-events.js'
-import { CARD_REFERENCE_WORLDBOOK_LIMIT, createForegroundOrchestrationStrategies, createNativePlayOrchestrationStrategy, createCompatibilityOrchestrationStrategy } from '../tavern-plugin/lib/domain/foreground-orchestration-strategies.js'
+import { CARD_REFERENCE_SECTION_LIMIT, CARD_REFERENCE_WORLDBOOK_LIMIT, createForegroundOrchestrationStrategies, createNativePlayOrchestrationStrategy, createCompatibilityOrchestrationStrategy } from '../tavern-plugin/lib/domain/foreground-orchestration-strategies.js'
 import { ensureSessionStablePrefix, sessionStablePrefixSections } from '../tavern-plugin/lib/domain/session-stable-prefix.js'
 import { ensureSessionSeedTrajectory } from '../tavern-plugin/lib/domain/session-seed-trajectory.js'
 
@@ -197,6 +197,22 @@ test('卡片 Agent 参考资料只预载较短的常驻世界书，超长时改�
   assert.match(long, /^【常驻世界书】\n共约 8001 字，超过预载上限/)
   assert.match(long, /tavern_read_worldbook/)
   assert.doesNotMatch(long, /长长/)
+})
+
+test('卡片 Agent 参考资料中超长的人物卡设定与系统提示改为按字段读取提示', async () => {
+  const run = strategies({ nativePlay: { async modeFor() { return 'card' }, async visibleTools() { return [] }, cardReferencePrompt() { return '参考说明' }, workspaceContext() { return '' }, controlledToolNames: new Set() } })
+  const long = '长'.repeat(CARD_REFERENCE_SECTION_LIMIT)
+  const assembly = await run.value.assembleSystemPrompt({ sections: [], contexts: [], tools: [] }, {
+    sessionId: 'native', chat: { mode: 'card' }, cwd: '/w',
+    fixedSystemSections: [
+      { name: 'tavern:character-card', text: '【故事设定 · 人物卡】\n名字: 甲\n\n设定: ' + long },
+      { name: 'tavern:card-system-prompt', text: '【人物卡系统提示】\n' + long }
+    ]
+  })
+  const [, card, system] = assembly.sections
+  assert.match(card.text, /^【故事设定 · 人物卡】\n名字: 甲\n人物卡设定共约 \d+ 字，超过预载上限.*tavern_read_card/)
+  assert.match(system.text, /^【人物卡系统提示】\n共约 \d+ 字.*system_prompt/)
+  assert.doesNotMatch(card.text + system.text, /长长/)
 })
 
 for (const sessionId of ['native']) test('regeneration gates ordinary and stale inputs before preparation: '+sessionId,async()=>{

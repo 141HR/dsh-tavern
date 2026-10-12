@@ -7,14 +7,24 @@ import { markRequestHandled, requestHandledBy } from './request-lineage.js'
 
 const CARD_REFERENCE_SECTIONS = new Set(['tavern:character-card', 'tavern:card-system-prompt', 'tavern:constant-worldbook'])
 // The card Agent resends its system prompt on every tool step and reads live
-// files anyway; a large card's constant worldbook would dominate each request.
+// files anyway; a large card's reference material would dominate each request.
 export const CARD_REFERENCE_WORLDBOOK_LIMIT = 8000
+export const CARD_REFERENCE_SECTION_LIMIT = 8000
 
 function cardReferenceSection(section) {
-  if (section.name !== 'tavern:constant-worldbook') return section
-  const chars = Array.from(str(section.text).replace(/^【常驻世界书】\n?/, '').trim()).length
-  if (chars <= CARD_REFERENCE_WORLDBOOK_LIMIT) return section
-  return { name: section.name, text: '【常驻世界书】\n共约 ' + chars + ' 字，超过预载上限，未放入参考资料。需要时用 tavern_read_worldbook 按关键词或编号读取相关条目。' }
+  const text = str(section.text)
+  if (section.name === 'tavern:constant-worldbook') {
+    const chars = Array.from(text.replace(/^【常驻世界书】\n?/, '').trim()).length
+    if (chars <= CARD_REFERENCE_WORLDBOOK_LIMIT) return section
+    return { name: section.name, text: '【常驻世界书】\n共约 ' + chars + ' 字，超过预载上限，未放入参考资料。需要时用 tavern_read_worldbook 按关键词或编号读取相关条目。' }
+  }
+  const chars = Array.from(text).length
+  if (chars <= CARD_REFERENCE_SECTION_LIMIT) return section
+  const [title, name] = text.split('\n')
+  if (section.name === 'tavern:character-card') {
+    return { name: section.name, text: title + '\n' + (/^名字: /.test(name || '') ? name + '\n' : '') + '人物卡设定共约 ' + chars + ' 字，超过预载上限，未放入参考资料。需要时用 tavern_read_card 按字段读取。' }
+  }
+  return { name: section.name, text: title + '\n共约 ' + chars + ' 字，超过预载上限，未放入参考资料。需要时用 tavern_read_card 读取 system_prompt 字段。' }
 }
 
 function str(value) {
