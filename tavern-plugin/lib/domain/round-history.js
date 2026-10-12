@@ -9,7 +9,7 @@ import { createRegenerationRecovery } from './regeneration-recovery.js'
 import { isDeepStrictEqual } from 'node:util'
 import { createScopedMessages, isScopedMessages } from './scoped-messages.js'
 import { diffJson } from './json-mutation.js'
-import { rollbackAvailability, clearFailedTurnSurface, locateRegenerationSurface, planRegenerationSurface, failedTurnReplayAvailability, replayableFailedTurn } from './rollback-surface.js'
+import { rollbackAvailability, clearFailedTurnSurface, locateRegenerationSurface, planRegenerationSurface, regenerationProjection, applyRegenerationProjection, failedTurnReplayAvailability, replayableFailedTurn } from './rollback-surface.js'
 import { assertRegenerationSourceCurrent, replaceLastRound } from './last-round-replacement.js'
 import { diagnosticIdentity, regenerationTargetDiagnostic } from './regeneration-diagnostics.js'
 
@@ -219,7 +219,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
       }
       const latestMsgs = latest.messages || []
       if (latestMsgs.length < rolledMessageCount + 2) {
-        throw new Error('重新生成流程未产生新的用户/助手回合')
+        throw new Error('这次重新生成没有完成（可能被内容审核拦截或已停止），正文保持原样，可以再试一次')
       }
       const regeneratedUser = latestMsgs[latestMsgs.length - 2]
       const newAssistant = latestMsgs[latestMsgs.length - 1]
@@ -233,11 +233,8 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
       }
       const replacement = planRegenerationSurface({ events: sessionEvents(session), nodes: session.surface.nodes,
         oldAssistantSeq: oldSeq, eventStart })
-      const projection = {
-        data: { turn: oldTurn, step: 1, message: { id: 'tavern-regen:' + operationId,
-          role: 'assistant', content: [{ type: 'text', text: body }], source: oldSource } },
-        range: { start: replacement.start, end: replacement.end, sourceEventSeqs: [...replacement.shadowedSeqs] }
-      }
+      const projection = regenerationProjection(replacement, { turn: oldTurn, step: 1, message: { id: 'tavern-regen:' + operationId,
+        role: 'assistant', content: [{ type: 'text', text: body }], source: oldSource } }, operationId)
       // The persisted intent must only reference events already on disk.
       if (typeof sessions.flush === 'function') await sessions.flush(session)
       committedChat = await updateChat(latest.id, function (current) {
@@ -397,7 +394,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
       const latest = await chats.readRecent(chat.id)
       if (latest === undefined) throw new Error('聊天不存在: ' + chat.id)
       const latestMsgs = latest.messages
-      if (latestMsgs.length < rolledMessageCount + 2) throw new Error('重新生成流程未产生新的用户/助手回合')
+      if (latestMsgs.length < rolledMessageCount + 2) throw new Error('这次重新生成没有完成（可能被内容审核拦截或已停止），正文保持原样，可以再试一次')
       const regeneratedUser = latestMsgs[latestMsgs.length - 2]
       const newAssistant = latestMsgs[latestMsgs.length - 1]
       if (regeneratedUser === null || typeof regeneratedUser !== 'object' || regeneratedUser.role !== 'user' ||
@@ -407,11 +404,8 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
       body = str(newAssistant.text).trim()
       if (body === '') throw new Error('重新生成失败：模型返回空文本')
       const replacement = planRegenerationSurface({ events: sessionEvents(session), nodes: session.surface.nodes, oldAssistantSeq: oldSeq, eventStart })
-      const projection = {
-        data: { turn: oldTurn, step: 1, message: { id: 'tavern-regen:' + operationId,
-          role: 'assistant', content: [{ type: 'text', text: body }], source: oldSource } },
-        range: { start: replacement.start, end: replacement.end, sourceEventSeqs: [...replacement.shadowedSeqs] }
-      }
+      const projection = regenerationProjection(replacement, { turn: oldTurn, step: 1, message: { id: 'tavern-regen:' + operationId,
+        role: 'assistant', content: [{ type: 'text', text: body }], source: oldSource } }, operationId)
       if (typeof sessions.flush === 'function') await sessions.flush(session)
       if (latest.regenRecovery?.id !== operationId) throw new Error('重新生成操作已失效')
       // 2) The original floors around the new round. Floors changed since the
@@ -472,7 +466,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     if (saved?.phase !== 'committed' || saved.id !== operationId || saved.sessionId !== session.id || !saved.projection) {
       return await regenerationRecovery.complete({ chatId: chat.id, session, operationId }) || chat
     }
-    replaceSessionSurface(session, 'assistant/message', saved.projection.data, saved.projection.range)
+    applyRegenerationProjection(session, saved.projection)
     if (typeof sessions.flush === 'function') await sessions.flush(session)
     const head = await chats.patch(chat.id, chat._storageRevision, [{ op: 'delete', path: ['regenRecovery'] }, { op: 'delete', path: ['regenInProgress'] }], { source: 'foreground.regen-projected' })
     if (head) {

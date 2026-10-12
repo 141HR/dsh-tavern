@@ -352,16 +352,48 @@ export function planRegenerationSurface(input) {
 
   const failed = turnIntervals(events).filter(interval => interval.failed && interval.end < eventStart)
   const residue = ownership.classify(event => failed.some(interval => event.seq > interval.start && event.seq < interval.end))
-  const range = planSurfaceRange({ nodes, start: oldAssistantSeq, end: finalAssistantSeq,
-    accepts: seq => seq === oldAssistantSeq || attempt(seq) === OWNED || residue(seq) === OWNED ||
-      isRollbackUserTombstone(ownership.eventAt(seq)) || isRollbackAssistantTombstone(ownership.eventAt(seq), events),
-    message: '重新生成消息归属不一致，无法安全清理' })
+  const accepts = seq => seq === oldAssistantSeq || attempt(seq) === OWNED || residue(seq) === OWNED ||
+    isRollbackUserTombstone(ownership.eventAt(seq)) || isRollbackAssistantTombstone(ownership.eventAt(seq), events)
+  const between = nodes.slice(oldAssistantIndex, nodes.indexOf(finalAssistantSeq) + 1).map(Number)
+  // Messages written between the old reply and this attempt by something else
+  // (a card script's chat message, a context refresh) are not ours to remove.
+  // Leave them where they are and replace our own runs around them; refusing
+  // would make this round impossible to regenerate for good. Story replies of
+  // another round are never stepped over.
+  const foreign = between.filter(seq => !accepts(seq))
+  const story = foreign.find(seq => ownership.eventAt(seq)?.type === 'assistant/message' && modelSourceOf(ownership.eventAt(seq)) !== null)
+  if (story !== undefined) throw new SurfaceRecoveryError('重新生成消息归属不一致，无法安全清理', story)
+  const runs = []
+  for (const seq of between) {
+    if (foreign.includes(seq)) { if (runs.at(-1)?.length) runs.push([]); continue }
+    if (!runs.length) runs.push([])
+    runs.at(-1).push(seq)
+  }
+  const [main, ...rest] = runs.filter(run => run.length).map(run => planSurfaceRange({ nodes, start: run[0], end: run.at(-1), accepts, message: '重新生成消息归属不一致，无法安全清理' }))
   // Replacing a saved round is never allowed to consume or precede newer story.
   if (nodes.slice(nodes.indexOf(finalAssistantSeq) + 1).some(seq =>
     !isRollbackUserTombstone(ownership.eventAt(seq)) && !isRollbackAssistantTombstone(ownership.eventAt(seq), events))) {
     throw new SurfaceRecoveryError('重新生成后已有新的消息，无法安全清理')
   }
-  return Object.freeze({ ...range, finalAssistantSeq })
+  return Object.freeze({ ...main, finalAssistantSeq, cleanups: Object.freeze(rest) })
+}
+
+/** The committed body replaces the old reply; later runs of the attempt become empty markers. */
+export function regenerationProjection(replacement, data, operationId) {
+  return {
+    data,
+    range: { start: replacement.start, end: replacement.end, sourceEventSeqs: [...replacement.shadowedSeqs] },
+    cleanups: (replacement.cleanups || []).map((run, index) => ({
+      data: { id: 'tavern-regen-cleanup:' + operationId + ':' + index, role: 'user', content: [], source: { kind: 'plugin', plugin: 'dsh-tavern-regeneration-abort' } },
+      range: { start: run.start, end: run.end, sourceEventSeqs: [...run.shadowedSeqs] }
+    }))
+  }
+}
+
+/** Idempotent: each replacement reuses its id and sources, so a retry after a crash writes nothing twice. */
+export function applyRegenerationProjection(session, projection) {
+  replaceSessionSurface(session, 'assistant/message', projection.data, projection.range)
+  for (const cleanup of projection.cleanups || []) replaceSessionSurface(session, 'user/message', cleanup.data, cleanup.range)
 }
 
 function turnIntervals(events) {

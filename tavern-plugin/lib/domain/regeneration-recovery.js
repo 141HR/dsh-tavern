@@ -1,6 +1,5 @@
-import { replaceSessionSurface } from './session-surface-mutations.js'
 import { sessionEvents } from './session-events.js'
-import { clearRegenerationAttemptSurface, regenerationAttemptTurns, locateRegenerationSurface } from './rollback-surface.js'
+import { clearRegenerationAttemptSurface, regenerationAttemptTurns, locateRegenerationSurface, applyRegenerationProjection } from './rollback-surface.js'
 
 /** Recover an uncommitted replacement from its durable pre-rollback revision. */
 export function createRegenerationRecovery({ chats, sessions, timeline, isActive }) {
@@ -66,7 +65,7 @@ export function createRegenerationRecovery({ chats, sessions, timeline, isActive
       if (saved.sessionId !== session.id) throw new Error('重新生成恢复会话不匹配')
       const projection = saved.projection
       if (!projection) throw new Error('重新生成缺少已提交正文的投影记录')
-      replaceSessionSurface(session, 'assistant/message', projection.data, projection.range)
+      applyRegenerationProjection(session, projection)
       if (typeof sessions.flush === 'function') await sessions.flush(session)
       delete current.regenRecovery
       delete current.regenInProgress
