@@ -18,7 +18,7 @@ class Launcher : Form {
  // build.ps1 rewrites both payload values for the payload it embeds; the defaults here are the last published payload.
  const string PayloadSha256="a272f20b3f1f5b15d2b8b05d22259e7e97597f47dfc01ee79291e34479d5cea4";
  // Bump the suffix for any embedded runtime/bootstrap change; never patch a running installation.
- const string Version="a272f20b3f1f5b15-setup7";
+ const string Version="a272f20b3f1f5b15-setup8";
  // Must match TAVERN_APP_ID in tavern-portable.js: shortcut and windows share one taskbar identity.
  const string AppUserModelId="ai.deepseek.dsh.tavern";
  Label label=new Label(), activity=new Label(); ProgressBar bar=new ProgressBar();
