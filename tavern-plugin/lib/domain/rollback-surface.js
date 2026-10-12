@@ -329,6 +329,27 @@ export function locateRollbackSurface(input) {
   })
 }
 
+/**
+ * Rounds the save already rolled back but the model still sees (the native
+ * shadow was lost before it was saved): shadow them again, newest first, the
+ * same way a rollback does. Stops at the first round that is not one of them.
+ */
+export function reshadowRolledBackRounds(session, turns) {
+  const done = []
+  for (;;) {
+    let target
+    try { target = locateRollbackSurface({ events: sessionEvents(session), nodes: session.surface?.nodes || [] }) }
+    catch (error) { if (error instanceof SurfaceRecoveryError) break; throw error }
+    if (!target || !turns.has(target.turn) || done.includes(target.turn)) break
+    replaceSessionSurface(session, 'assistant/message', {
+      turn: target.turn, step: target.step,
+      message: { id: 'tavern-rollback-repair:' + target.turn + ':' + target.assistantSeq, role: 'assistant', content: [], source: target.source }
+    }, { start: target.userSeq, end: target.endSeq, sourceEventSeqs: [...target.shadowedSeqs] })
+    done.push(target.turn)
+  }
+  return done
+}
+
 export function planRegenerationSurface(input) {
   const events = Array.isArray(input && input.events) ? input.events : []
   const nodes = Array.isArray(input && input.nodes) ? input.nodes : []

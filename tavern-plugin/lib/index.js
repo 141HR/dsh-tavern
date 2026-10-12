@@ -96,7 +96,7 @@ import { createHelperGenerationTasks } from './domain/helper-generation-tasks.js
 import { createBodyEditor } from './domain/body-editor.js'
 import { appendHelperUserSessionContext } from './domain/helper-user-session-context.js'
 import { userMessageForTurn, requestIdForTurn, requestIdForMessages } from './domain/session-turn-input.js'
-import { uncommittedRounds } from './domain/uncommitted-rounds.js'
+import { inspectStoryAlignment, nativeStoryTurns } from './domain/story-alignment.js'
 import { sessionOpeningDescriptor, prepareSessionOpening } from './domain/session-opening.js'
 import { scriptPromptScanText } from './domain/tavern-script-prompts.js'
 import { createOpeningPreparation } from './domain/opening-preparation.js'
@@ -166,7 +166,7 @@ import { createPlayChatDebugReference, readPlayChatDebugTurn } from './domain/pl
 import { createPhoneChat } from './domain/phone-chat.js'
 import { createPresetLibrary } from './domain/preset-library.js'
 import { createForegroundOrchestrationStrategies } from './domain/foreground-orchestration-strategies.js'
-import { clearFailedTurnSurface, rollbackAvailability } from './domain/rollback-surface.js'
+import { clearFailedTurnSurface, rollbackAvailability, reshadowRolledBackRounds } from './domain/rollback-surface.js'
 import { assistantResultForTurn } from './domain/session-turn-result.js'
 import { forkTurnsByMessageId as forkTargetsFromSession } from './domain/conversation-fork-targets.js'
 import { createTavernRetryLimiter } from './domain/tavern-retry-limiter.js'
@@ -4473,13 +4473,13 @@ export async function apply(ctx) {
       case 'setGamePlugin': return { plugins: await pluginApi.setGamePlugin(str(args && args.sessionId), { name: args && args.name, enabled: args && args.enabled, replace: args && args.replace, task: args && args.task, taskOrder: args && args.taskOrder }) }
       case 'startPluginTask': return await startPluginTask(args && args.sessionId, args && args.key, args && args.input)
       case 'saveBodyEdit': {
-        await adoptUncommittedRounds(args && args.sessionId)
+        await reconcileStory(args && args.sessionId)
         const view = await bodyEditor.save(args && args.sessionId, args)
         notifyPluginTimeline(args && args.sessionId, 'edit', { settled: true })
         return { view }
       }
       case 'regenBody': {
-        await adoptUncommittedRounds(args && args.sessionId)
+        await reconcileStory(args && args.sessionId)
         const view = await regenBody(args && args.chatId, args && args.guidance, args && args.sessionId)
         notifyPluginTimeline(args && args.sessionId, 'regenerate')
         return { view }
@@ -4519,8 +4519,10 @@ export async function apply(ctx) {
         notifyPluginTimeline(args && args.sessionId, 'undo-rollback', { settled: true })
         return { view }
       }
+      // Diagnostics and tests: does the save agree with what the model sees? Read-only.
+      case 'storyAlignment': return { alignment: await reconcileStory(args && args.sessionId, { repair: false }) }
       case 'rollbackTurn': {
-        await adoptUncommittedRounds(args && args.sessionId)
+        await reconcileStory(args && args.sessionId)
         const view = await rollbackTurn(args && args.sessionId, args && args.chatId, args && args.expectedTurn)
         notifyPluginTimeline(args && args.sessionId, 'rollback', { turn: args && args.expectedTurn })
         return { view }
@@ -4599,24 +4601,52 @@ export async function apply(ctx) {
     return message.content.map(function (block) { return block !== null && typeof block === 'object' && block.type === 'text' ? str(block.text) : '' }).filter(Boolean).join('\n').trim()
   }
 
-  // Heal a save that missed a completed round (#196): record it with its own
-  // request id before anything acts on "the latest round". Never blocks the action.
-  async function adoptUncommittedRounds(sessionId) {
+  // The save's latest player rounds, oldest first: enough rows to cover the native window.
+  async function storyAlignmentInput(sessionId, nativeCount) {
+    const fields = ['mode', 'nativeCommits', 'suppressedDshTurns', 'regeneratedDshTurns', 'regenInProgress']
+    const head = await chatSliceForSession(sessionId, [], fields)
+    let header, rows
+    if (head?.chat) {
+      const total = Number(head.messageCount) || 0, want = Math.min(total, nativeCount * 3 + 20)
+      const selected = want ? await chatSliceForSession(sessionId, Array.from({ length: want }, (_, index) => total - want + index), []) : null
+      header = head.chat
+      rows = selected?.chat?.messages || []
+    } else {
+      header = await chatForSession(sessionId)
+      rows = header?.messages || []
+    }
+    if (!header) return null
+    return { header, storyTurns: rows.filter(message => message?.role === 'assistant' && !message.greeting).map(message => Number(message.turn)) }
+  }
+
+  // Bring the save and the native session back into agreement before anything
+  // acts on "the latest round" (#196): record a round the save missed, re-shadow
+  // a rolled-back round the model still sees, and report what cannot be repaired.
+  // Never blocks the action that asked for it.
+  async function reconcileStory(sessionId, { repair = true } = {}) {
     try {
       sessionId = str(sessionId)
       const session = sessionId && (sessionStore.get(sessionId) || agentRegistry.get(sessionId)?.session)
-      if (!session) return 0
-      const header = await chatHeaderForSession(sessionId, ['nativeCommits', 'suppressedDshTurns', 'regeneratedDshTurns'])
-      if (!header || !['story', 'script'].includes(header.mode || 'story')) return 0
-      const rounds = uncommittedRounds(session, header)
-      for (const round of rounds) {
+      if (!session) return null
+      const input = await storyAlignmentInput(sessionId, nativeStoryTurns(session).length)
+      if (!input || !['story', 'script'].includes(input.header.mode || 'story')) return null
+      const report = inspectStoryAlignment({ session, ...input })
+      if (!repair || report.aligned || report.state === 'regenerating') return report
+      for (const round of report.adopt) {
         await turnOrchestrator.finalize({ sessionId, turn: round.turn, requestId: round.requestId, userText: round.userText, userContent: round.userContent, assistantText: round.assistantText })
         console.warn('dsh-tavern: 第 ' + round.turn + ' 轮已完成但未写入存档，已补记')
       }
-      return rounds.length
+      const shadowed = reshadowRolledBackRounds(session, new Set(report.rolledBackVisible))
+      if (shadowed.length) {
+        await sessionStore.flush(session)
+        console.warn('dsh-tavern: 第 ' + shadowed.join('、') + ' 轮已回退但模型仍能看到，已重新隐藏')
+      }
+      const after = inspectStoryAlignment({ session, ...(await storyAlignmentInput(sessionId, nativeStoryTurns(session).length)) })
+      if (after.state === 'mismatch') console.warn('dsh-tavern: 存档与模型上下文的轮次不一致，未自动修复：' + JSON.stringify(after.mismatch))
+      return after
     } catch (error) {
-      console.warn('dsh-tavern: 补记漏写的轮次失败：' + str(error?.message || error))
-      return 0
+      console.warn('dsh-tavern: 存档与模型上下文核对失败：' + str(error?.message || error))
+      return null
     }
   }
 
@@ -4830,7 +4860,7 @@ export async function apply(ctx) {
     readChatCard,
     replaceAssistantReply,
     requestIdForTurn,
-    adoptUncommittedRounds,
+    reconcileStory,
     runtimePrompt,
     sessionStore,
     turnOrchestrator,

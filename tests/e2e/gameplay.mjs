@@ -683,6 +683,15 @@ try {
     await assertNativeStorage()
     report.nativeFormat.restart=true
   })
+  // Every scenario ends with the story save agreeing with what the model sees (#196).
+  if (!['--settlement-performance', '--display-regression', '--text-colors', '--opening-only'].some(flag => process.argv.includes(flag))) await step('存档与模型上下文一致', async () => {
+    const chat = await savedChat().catch(() => null)
+    if (!chat?.sessionId) return
+    const result = await page.evaluate(async sessionId => (await fetch('/api/dsh-tavern/storyAlignment', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId }) })).json(), chat.sessionId)
+    report.storyAlignment = result.alignment ?? result
+    assert.ok(result.ok !== false, '核对接口失败：' + JSON.stringify(result))
+    assert.ok(!result.alignment || result.alignment.aligned, '存档与模型上下文不一致：' + JSON.stringify(result.alignment))
+  })
   assert.deepEqual(errors, [], '整个验收不得出现未捕获浏览器异常')
   assert.doesNotMatch(log, /服务端模板进程异常|Unsupported or expired template RPC/, '验收期间模板子进程不得异常退出')
   report.status = 'passed'
