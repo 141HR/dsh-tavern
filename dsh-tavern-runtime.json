@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "37cfb4e6bcf32e8a4ac467749b75b4d7a3038b13",
-  "releaseSequence": 596,
+  "revision": "74c6f65ecab6714072ae341773d3b373866e41bd",
+  "releaseSequence": 597,
   "version": "2.6.0",
   "files": [
     {
@@ -846,8 +846,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/foreground-orchestration-strategies.js",
-      "sha256": "d9430aa1c0542ae9b262dfb2ffd06b6f6468d8046440a0092f1b495070f9471e",
-      "size": 25451
+      "sha256": "bd16f25785e804f28ce98f99e883bee9e2e835815d057c0f6ee197458ee96446",
+      "size": 25488
     },
     {
       "path": "tavern-plugin/lib/domain/foreground-variable-changes.js",
@@ -1276,8 +1276,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/regeneration-recovery.js",
-      "sha256": "9df34915efaa8e5279616acdd91eb044494ecce7ccc578527fa496af78d20da0",
-      "size": 6255
+      "sha256": "c2ef0decdac87063159588f78eca84f32173f191c4eb1a9a760eb31a97cecc70",
+      "size": 6330
     },
     {
       "path": "tavern-plugin/lib/domain/regex-library.js",
@@ -1331,13 +1331,13 @@
     },
     {
       "path": "tavern-plugin/lib/domain/rollback-surface.js",
-      "sha256": "759214c68f45a76545d66c04d356b854061d347911e0a10a5747ab9003fd565e",
-      "size": 28178
+      "sha256": "bd6186a60f1bc684513d9126965ca135feb95299422b2d63ab47e3b160c391d6",
+      "size": 30534
     },
     {
       "path": "tavern-plugin/lib/domain/round-history.js",
-      "sha256": "bc4c1130bddee8a5618585754c6dfd1aa8419a2e7495eef43c68b4e72d92f67f",
-      "size": 70617
+      "sha256": "041e43a1ac04b1141f042a4083ab55765cec8cb553b3d383f6421c95a1ce70fa",
+      "size": 70574
     },
     {
       "path": "tavern-plugin/lib/domain/runtime-content-projection.js",
@@ -1560,9 +1560,14 @@
       "size": 6881
     },
     {
+      "path": "tavern-plugin/lib/domain/session-turn-input.js",
+      "sha256": "918e64e69f65027831d05913f54785686814d4dac54bc91019247c1ce69da47c",
+      "size": 3688
+    },
+    {
       "path": "tavern-plugin/lib/domain/session-turn-result.js",
-      "sha256": "70441636c932daaf334cd50a6fcd1f7999425a7433039b93ef46690230550ded",
-      "size": 1573
+      "sha256": "79328482c9f2a930fd338fa255bc7d3be95538e3241a5e973c8ccfbe13f00313",
+      "size": 1358
     },
     {
       "path": "tavern-plugin/lib/domain/session-variable-directory.js",
@@ -1845,6 +1850,11 @@
       "size": 47236
     },
     {
+      "path": "tavern-plugin/lib/domain/uncommitted-rounds.js",
+      "sha256": "23b4681171c20f53c8f427557e14eb1a8a45eba578ea16592f54f5fcdf97c848",
+      "size": 2402
+    },
+    {
       "path": "tavern-plugin/lib/domain/user-extensions.js",
       "sha256": "bd01950f29da9541fb8fead14f77a172180851039c3aca425a7138bae1a9948c",
       "size": 822
@@ -1981,8 +1991,8 @@
     },
     {
       "path": "tavern-plugin/lib/hooks/turn-lifecycle.js",
-      "sha256": "8f6c33bb8b7867b0190197c22a4202209f0715fb9c0a6b40b4ebbf2283128c70",
-      "size": 5238
+      "sha256": "287656ac6efdb5c41320b197186c8410ed0fc4eeec4a32b4dae4b72702f967af",
+      "size": 5395
     },
     {
       "path": "tavern-plugin/lib/http/routes.js",
@@ -1991,8 +2001,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "354f67d2e05208a4f836ec48369d57dfef4a3d369a0de6a5e529d12b03a50c31",
-      "size": 313973
+      "sha256": "5018e18c8cadd570b558b4b811e7e46e4b7f56dbcc750c3a01293d8672990976",
+      "size": 313991
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
