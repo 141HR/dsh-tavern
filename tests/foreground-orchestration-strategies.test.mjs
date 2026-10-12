@@ -160,6 +160,16 @@ test('新版 DSH 文件工具只向卡片 Agent 开放，不泄漏给正文 Agen
   assert.deepEqual(await assembledToolNames('story'), ['tavern_recall_history'])
 })
 
+test('新旧两代文件编辑工具同时存在时，只给模型新版，省去重复的旧编辑器 schema', async () => {
+  async function names(available) {
+    const run = strategies({ nativePlay: { async modeFor() { return 'card' }, async visibleTools() { return available }, workspaceContext() { return '' }, controlledToolNames: new Set(available) } })
+    const assembly = await run.value.assembleSystemPrompt({ sections: [], contexts: [], tools: available.map(name => ({ name })) }, { sessionId: 'native', chat: { mode: 'card' }, cwd: '/w' })
+    return assembly.tools.map(tool => tool.name)
+  }
+  assert.deepEqual(await names(['str_replace_editor', 'read', 'edit', 'write']), ['read', 'edit', 'write'])
+  assert.deepEqual(await names(['str_replace_editor']), ['str_replace_editor'])
+})
+
 test('卡片 Agent 参考资料只预载较短的常驻世界书，超长时改为按需读取提示', async () => {
   async function worldbookSection(text) {
     const run = strategies({
