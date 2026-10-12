@@ -799,3 +799,40 @@ test('history lists pictures across games by chat id, reads and removes them wit
   assert.equal(record.deletedVersions.length, 1)
   assert.equal((await fx.service.history())[0].versions.length, 1)
 })
+
+test('adding a picture plans a different moment in its own slot; the turn keeps both, failures can be dismissed', async t => {
+  const requests = []
+  let fail = false
+  const fx = await fixture(t, {
+    runAgent: async input => { requests.push(JSON.parse(input.messages[0].content[0].text)); if (fail) throw new Error('文字模型暂时不可用'); await submitPlanCall(input, { arguments: { plan: { ...planFixture('rain drops on glass, close-up'), description: '雨滴特写' + requests.length } } }); return {} }
+  })
+  const key = sceneTarget(fx.chat(), 2).key
+  await fx.service.start('parent', 2, key)
+  await until(async () => (await fx.service.status('parent', 2)).status === 'succeeded')
+  assert.equal(requests[0].addition, undefined)
+  const added = await fx.service.start('parent', 2, key, { kind: 'add', instruction: '画窗上的雨滴', requestId: 'add-request-1' })
+  assert.equal(added.slot, 1)
+  assert.notEqual(added.key, key)
+  // A repeated click with the same request id stays on its slot instead of buying another picture.
+  assert.equal((await fx.service.start('parent', 2, key, { kind: 'add', instruction: '画窗上的雨滴', requestId: 'add-request-1' })).key, added.key)
+  const both = await until(async () => { const state = await fx.service.status('parent', 2); return state.extras[0]?.status === 'succeeded' && state })
+  assert.equal(requests.length, 2)
+  assert.equal(requests[1].addition.request, '画窗上的雨滴')
+  assert.deepEqual(requests[1].addition.existing.map(item => item.description), ['雨滴特写1'])
+  assert.equal(both.versions.length, 1, 'the first picture is untouched')
+  assert.deepEqual(both.extras.map(extra => [extra.slot, extra.key, extra.versions.length, extra.addRequest]), [[1, added.key, 1, '画窗上的雨滴']])
+  assert.equal(both.maxPictures, 6)
+  // The added slot is addressed by its own key for reading, repainting and deleting.
+  assert.ok((await fx.service.readImage('parent', 2, added.key, both.extras[0].versions[0].id)).data)
+  fail = true
+  const failed = await fx.service.start('parent', 2, key, { kind: 'add', instruction: '', requestId: 'add-request-2' })
+  assert.equal(failed.slot, 2)
+  const shown = await until(async () => { const state = await fx.service.status('parent', 2); return state.extras[1]?.status === 'failed' && state })
+  assert.equal(shown.extras[1].versions.length, 0)
+  await fx.service.removeImage('parent', 2, failed.key, '')
+  assert.equal((await fx.service.status('parent', 2)).extras.length, 1, 'a dismissed failure frees its slot')
+  fail = false
+  assert.equal((await fx.service.start('parent', 2, key, { kind: 'add', requestId: 'add-request-3' })).slot, 2, 'the freed slot, never charged, is reused')
+  await until(async () => (await fx.service.status('parent', 2)).extras[1]?.status === 'succeeded')
+  await assert.rejects(fx.service.start('parent', 2, 'not-a-slot-key', { kind: 'add', requestId: 'add-request-4' }), /正文版本已变化/)
+})

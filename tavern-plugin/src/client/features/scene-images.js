@@ -28,7 +28,8 @@
                             if (missingRetries++ < 5) timer = window.setTimeout(refresh, 1500);
                         } else {
                             missingRetries = 0;
-                            if (result.illustration.status === "running") timer = window.setTimeout(refresh, 1500);
+                            // Added pictures run in their own slots while the first stays finished.
+                            if (result.illustration.status === "running" || (result.illustration.extras || []).some(function (extra) { return extra.status === "running"; })) timer = window.setTimeout(refresh, 1500);
                         }
 					} catch (e) {
 						if (active && requested === revision) setState(function (previous) { return Object.assign({}, previous || { status: "unavailable", versions: [] }, { error: String(e.message || e) }); });

@@ -1,6 +1,7 @@
 import { postureForContext } from './posture-context.js'
 import { createHash, randomUUID } from 'node:crypto'
 import { projectAgentContent } from './runtime-content-projection.js'
+import { SCENE_EXTRA_SLOTS, sceneSlotKey } from './scene-slots.js'
 import { createImageGenerationModule } from '../../packages/dsh-image-gen/src/module.js'
 import { createModuleSceneImageSettings } from './scene-image-module-settings.js'
 import { channelSettings, channelReady, imageExpressionProfile, imageExpressionGuidance } from './scene-image-channels.js'
@@ -31,6 +32,15 @@ function ownerIsLive(record, path) {
 function versionsOf(record) {
   if (Array.isArray(record?.versions)) return record.versions
   return record?.attachment ? [{ id: record.requestId || 'legacy', requestId: record.requestId, attachment: record.attachment, prompt: record.prompt, model: record.model, createdAt: record.completedAt || record.createdAt, plan: record.plan }] : []
+}
+
+function slotTarget(target, slot) {
+  return slot ? { ...target, key: sceneSlotKey(target.key, slot), slot, baseKey: target.key } : target
+}
+function slotOf(target, key) {
+  if (!key || key === target.key) return 0
+  for (let slot = 1; slot <= SCENE_EXTRA_SLOTS; slot++) if (sceneSlotKey(target.key, slot) === key) return slot
+  return -1
 }
 
 export function sceneTarget(chat, turn) {
@@ -111,7 +121,7 @@ function sceneSources(chat, target, snapshot, sinceTurn = target.turn) {
     remaining -= source.text.length + 2
     sources.push(source)
   }
-  for (const item of [...lineage].reverse()) if (item.key !== target.key && item.turn > sinceTurn) add('history-' + item.key.slice(0, 16), item.turn, projectedSceneText(item.source, chat.macroState))
+  for (const item of [...lineage].reverse()) if (item.key !== (target.baseKey || target.key) && item.turn > sinceTurn) add('history-' + item.key.slice(0, 16), item.turn, projectedSceneText(item.source, chat.macroState))
   return { lineage, sources, omitted, stateAudit: snapshot.state?.omitted || [] }
 }
 
@@ -154,10 +164,14 @@ export function createSceneIllustrations(deps) {
     return chat?.sceneTargets && Number(entry.turn)!==Number(turn)
       ? deps.sceneStateForSession(sessionId,{turns:[Number(turn)],revision:chat._storageRevision}) : chat
   }
-  async function resolve(sessionId, turn, readChat = id => deps.chatForSession(id)) {
+  // `key` selects one of the turn's picture slots; an unknown key keeps the
+  // turn's own target so callers report that the story version changed.
+  async function resolve(sessionId, turn, readChat = id => deps.chatForSession(id), key) {
     const chat = await readChat(sessionId, turn)
-    const target = sceneTarget(chat, turn)
-    return { chat, target, path: pathFor(chat.id, target.key) }
+    const base = sceneTarget(chat, turn)
+    const slot = slotOf(base, key)
+    const target = slot > 0 ? slotTarget(base, slot) : base
+    return { chat, target, base, path: pathFor(chat.id, target.key) }
   }
   async function readRecord(path) {
     const record = await deps.store.readJson(path)
@@ -203,13 +217,21 @@ export function createSceneIllustrations(deps) {
       const selected=await deps.sceneStateForSession(sessionId,{turns:[...turns].filter(turn=>turn<=chat.sceneLatestTurn),revision:chat._storageRevision})
       return Object.values(selected.sceneTargets)
     }, config: current })
-    return { ...present(target, await readRecord(path)), enabled: current.enabled === true, profile: imageExpressionProfile(current),
-      reference: { ...reference.capability, warning: reference.warning,
-        bindings: reference.active.filter(record => record.source.key === target.key).map(record => ({ versionId: record.source.versionId, personId: record.person.id, name: record.person.name })),
-        versions: reference.active.filter(record => record.source.key === target.key).map(record => record.source.versionId) } }
+    const shared = { enabled: current.enabled === true, profile: imageExpressionProfile(current) }
+    const referenceOf = key => ({ ...reference.capability, warning: reference.warning,
+      bindings: reference.active.filter(record => record.source.key === key).map(record => ({ versionId: record.source.versionId, personId: record.person.id, name: record.person.name })),
+      versions: reference.active.filter(record => record.source.key === key).map(record => record.source.versionId) })
+    // Added pictures of this turn; a slot left without pictures or a task is free again.
+    const extras = []
+    for (let slot = 1; slot <= SCENE_EXTRA_SLOTS; slot++) {
+      const extra = slotTarget(target, slot), record = await readRecord(pathFor(chat.id, extra.key))
+      if (!record || !versionsOf(record).length && record.status === 'idle' && record.recovery !== 'save') continue
+      extras.push({ ...present(extra, record), slot, ...shared, reference: referenceOf(extra.key) })
+    }
+    return { ...present(target, await readRecord(path)), ...shared, reference: referenceOf(target.key), extras, maxPictures: SCENE_EXTRA_SLOTS + 1 }
   }
   async function setReference(sessionId, turn, key, versionId, consent, enabled = true, personId) {
-    const { chat, target, path } = await resolve(sessionId, turn)
+    const { chat, target, path } = await resolve(sessionId, turn, undefined, key)
     if (key !== target.key) throw new Error('正文版本已变化，请刷新后选择参考图')
     const active = await config()
     const version = versionsOf(await readRecord(path)).find(item => item.id === versionId)
@@ -263,7 +285,7 @@ export function createSceneIllustrations(deps) {
     await logAttempt(failed)
   }
   async function cancel(sessionId, turn, key, requestId) {
-    const { target, path } = await resolve(sessionId, turn)
+    const { target, path } = await resolve(sessionId, turn, undefined, key)
     if (target.key !== key) throw new Error('正文版本已变化，请返回原版本取消任务')
     await readRecord(path)
     const record = await deps.store.updateJson(path, current => {
@@ -275,21 +297,57 @@ export function createSceneIllustrations(deps) {
     await logAttempt(record, 'cancel-requested')
     return present(target, record)
   }
+  const requestSlots = new Map()
+  // The first slot nobody is using: never one holding pictures, a running task,
+  // an image awaiting save, or a result that may already have been paid for.
+  async function freeSlot(chat, base) {
+    for (let slot = 1; slot <= SCENE_EXTRA_SLOTS; slot++) {
+      const target = slotTarget(base, slot), path = pathFor(chat.id, target.key)
+      const record = await readRecord(path)
+      if (!record || !versionsOf(record).length && record.status !== 'running' && record.recovery !== 'save' && !needsPurchaseConfirmation(record)) return { target, path }
+    }
+    throw new Error('这一轮最多 ' + (SCENE_EXTRA_SLOTS + 1) + ' 张插图；可先删除不要的插图')
+  }
+  // The turn's other pictures, so the added one picks a different moment.
+  async function additionInput(chat, base, target, request) {
+    const existing = []
+    for (let slot = 0; slot <= SCENE_EXTRA_SLOTS; slot++) {
+      if (slot === target.slot) continue
+      const plan = versionsOf(await deps.store.readJson(pathFor(chat.id, sceneSlotKey(base.key, slot)))).at(-1)?.plan
+      if (plan) existing.push({ description: plan.description || '', moment: plan.moment || 'end', anchor: plan.anchor || '' })
+    }
+    return { instruction: '这一轮正文已有插图（existing）。这是新增的一张：选一个与它们不同的时刻或场景，anchor 也不要与它们相同；人物外貌照常保持一致。' + (request ? 'request 是用户对这张图的要求，优先遵从。' : ''),
+      existing, ...(request ? { request } : {}) }
+  }
   async function start(sessionId, turn, expectedKey, options = {}) {
-    const kind = options.kind || 'generate'
+    const adding = options.kind === 'add'
+    const kind = adding ? 'generate' : options.kind || 'generate'
     if (!['generate', 'replan', 'repaint', 'adjust', 'prompt'].includes(kind)) throw new Error('未知生图操作')
     // A 'prompt' repaint carries the user's own picture prompt in place of an instruction.
-    const instruction = String((kind === 'prompt' ? options.prompt : options.instruction) ?? '').trim()
+    // Adding a picture carries the user's optional wish for the new scene instead.
+    const instruction = adding ? '' : String((kind === 'prompt' ? options.prompt : options.instruction) ?? '').trim()
+    const addRequest = adding ? String(options.instruction ?? '').trim() : ''
+    if (addRequest.length > 2000) throw new Error('新增插图的描述须在 2000 字符以内')
     if (kind === 'adjust' && (!instruction || instruction.length > 2000)) throw new Error('调整要求须为 1–2000 字符')
     if (kind === 'prompt' && (!instruction || instruction.length > 12000)) throw new Error('提示词须为 1–12000 字符')
     const requestId = options.requestId === undefined ? randomUUID() : options.requestId
     if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(requestId)) throw new Error('生图请求标识不合法')
-    const { chat, target, path } = await resolve(sessionId, turn)
-    if (expectedKey !== target.key) throw new Error('正文版本已变化，请刷新后生图')
+    const resolved = await resolve(sessionId, turn, undefined, expectedKey)
+    if (expectedKey !== resolved.target.key) throw new Error('正文版本已变化，请刷新后生图')
+    const { chat, base } = resolved
+    let { target, path } = resolved
+    if (adding) {
+      // A repeated click with the same request id returns to the slot it claimed.
+      ({ target, path } = requestSlots.get(chat.id + ':' + requestId) || await freeSlot(chat, base))
+      requestSlots.set(chat.id + ':' + requestId, { target, path })
+      if (requestSlots.size > 200) requestSlots.delete(requestSlots.keys().next().value)
+    }
     if (starts.has(path)) return starts.get(path)
     const starting = (async () => {
       const existing = await readRecord(path)
       if (existing?.recovery === 'save') throw new Error('图片已生成，请先重试保存；不会再次请求图片渠道')
+      // Retrying an added picture keeps the user's wish for that scene.
+      const sceneRequest = target.slot ? (adding ? addRequest : String(existing?.addRequest || '')) : ''
       const { active, apiKey } = await capture()
       if (active.enabled !== true) throw new Error('场景生图未开启：请到 设置 → 场景生图 打开「开启场景生图」')
       if (await deps.isRunning?.(sessionId)) throw new Error('请等待当前正文生成完成后再生图')
@@ -344,6 +402,7 @@ export function createSceneIllustrations(deps) {
           target, sources: material.sources, people: prepared.input.characters })
         if (references.metadata.available) prepared.input.references = references.metadata
         if (prepared.saved) prepared.saved = await plans.snapshot(chat.id, prepared.saved)
+        if (target.slot) prepared.input = { ...prepared.input, addition: await additionInput(chat, base, target, sceneRequest) }
         if (kind === 'replan') {
           // Rethinking runs in the game's shared Agent: the turn's text is already known there, only the new request is added.
           const rejected = (versionsOf(existing).find(item => item.id === options.versionId) || versionsOf(existing).at(-1))?.plan
@@ -366,7 +425,7 @@ export function createSceneIllustrations(deps) {
         if (Object.hasOwn(current?.requests || {}, requestId) || kind === 'generate' && current?.status === 'succeeded' || current?.status === 'running' && ownerIsLive(current, path)) return current
         checkPurchaseConfirmation(current, options)
         claimed = true
-        return { key: target.key, turn: target.turn, status: 'running', outcome: providerTask ? 'unconfirmed' : 'not_requested', stage: prepared.saved ? 'generating' : 'planning', kind, instruction, baseVersionId: options.versionId || '', createdAt: Date.now(), requestId, ownerId, ownerPid: process.pid, error: '', ...(providerTask ? { providerTask } : {}),
+        return { key: target.key, turn: target.turn, ...(target.slot ? { slot: target.slot, addRequest: sceneRequest } : {}), status: 'running', outcome: providerTask ? 'unconfirmed' : 'not_requested', stage: prepared.saved ? 'generating' : 'planning', kind, instruction, baseVersionId: options.versionId || '', createdAt: Date.now(), requestId, ownerId, ownerPid: process.pid, error: '', ...(providerTask ? { providerTask } : {}),
           ...(!adjustment && !prepared.saved ? { draftBinding, planDraft: current?.draftBinding === draftBinding ? current.planDraft : undefined } : {}),
           versions: versionsOf(current), deletedVersions: current?.deletedVersions || [], requests: { ...current?.requests, [requestId]: { status: 'running', ...(options.confirmNewRequestId ? { confirmedReplacementOf: options.confirmNewRequestId } : {}) } } }
       })
@@ -521,7 +580,7 @@ export function createSceneIllustrations(deps) {
               try {
                 controller.signal.throwIfAborted()
                 const current = await deps.chatForSession(input.sessionId)
-                if (!current || sceneTarget(current, target.turn).key !== target.key) throw new Error('目标正文已变化，不能提交旧方案')
+                if (!current || sceneTarget(current, target.turn).key !== (target.baseKey || target.key)) throw new Error('目标正文已变化，不能提交旧方案')
                 const args = readImageToolArguments(call)
                 if (input.adjustment) {
                   if (call.name !== SCENE_ADJUSTMENT_TOOL.name) throw new Error('参数内容错误：请调用 submit_image_adjustment')
@@ -584,7 +643,7 @@ export function createSceneIllustrations(deps) {
     try { await pendingImages.remove(path, record.requestId) } catch { deps.onStorageError?.() }
   }
   async function retrySave(sessionId, turn, key, requestId) {
-    const { target, path } = await resolve(sessionId, turn)
+    const { target, path } = await resolve(sessionId, turn, undefined, key)
     if (target.key !== key) throw new Error('正文版本已变化，请返回原版本重试保存')
     if (starts.has(path)) { await starts.get(path); return retrySave(sessionId, turn, key, requestId) }
     const starting = (async () => {
@@ -616,7 +675,7 @@ export function createSceneIllustrations(deps) {
     try { return await starting } finally { starts.delete(path) }
   }
   async function readImage(sessionId, turn, key, versionId) {
-    const { target, path } = await resolve(sessionId, turn)
+    const { target, path } = await resolve(sessionId, turn, undefined, key)
     if (target.key !== key) throw new Error('图片不属于当前正文版本')
     const record = await readRecord(path)
     const versions = versionsOf(record)
@@ -696,8 +755,13 @@ export function createSceneIllustrations(deps) {
     })
   }
   async function removeImage(sessionId, turn, key, versionId) {
-    const { target, path } = await resolve(sessionId, turn)
+    const { target, path } = await resolve(sessionId, turn, undefined, key)
     if (target.key !== key) throw new Error('正文版本已变化')
+    // An added picture that failed before producing anything is simply dismissed.
+    if (!versionId && target.slot) return present(target, await deps.store.updateJson(path, record => {
+      if (record?.status === 'running' || record?.recovery === 'save' || versionsOf(record).length) throw new Error('这张插图还在生成或已有图片，不能直接移除')
+      return { ...record, status: 'idle', error: '' }
+    }))
     return present(target, await detachVersion(path, versionId))
   }
   // History spans every game, including deleted ones whose session no longer resolves,

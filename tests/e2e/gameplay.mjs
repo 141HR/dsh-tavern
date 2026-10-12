@@ -6,6 +6,7 @@ import { settlementPerformanceChecks, settlementPerformanceInitialVariables } fr
 import {setupRealVariables,realVariableLookupChecks} from './real-variable-lookup.mjs'
 import { setupRealCharacterDesign, realCharacterDesignChecks } from './real-character-design.mjs'
 import { setupRealCardEdit, realCardEditChecks } from './real-card-edit.mjs'
+import { startSceneImageServer, sceneAddChecks } from './scene-add.mjs'
 import { incrementalMvuChecks } from './mvu-incremental.mjs'
 import {openingUpdateChecks} from './opening-update.mjs'
 import { backgroundLifecycleChecks } from './background-lifecycle.mjs'
@@ -187,6 +188,7 @@ try {
           TAVERN_E2E_BACKGROUND_DIR: (process.argv.includes('--background-lifecycle') || process.argv.includes('--background-failure')) ? output : '',
           TAVERN_E2E_REQUEST_AUDIT: join(output, 'preset-requests.jsonl'),
           TAVERN_E2E_MEMORY_AUDIT: process.argv.includes('--card-memory') ? join(output, 'memory-requests.jsonl') : '',
+          TAVERN_E2E_SCENE_AUDIT: process.argv.includes('--scene-add') ? join(output, 'scene-requests.jsonl') : '',
           TAVERN_E2E_LLM_MODULE: join(modules, '@deepseek-ai/dsh-llm/lib/index.js'),
           TAVERN_E2E_WRONG_GOLD: process.env.TAVERN_E2E_WRONG_GOLD || '' }, stdio: ['ignore', 'pipe', 'pipe']
       })
@@ -417,6 +419,9 @@ try {
     })
   } else if (helperApiScenario) {
     await helperApiChecks({ page, step, savedChat, output, report })
+  } else if (process.argv.includes('--scene-add')) {
+    const images = await startSceneImageServer()
+    try { await sceneAddChecks({ page, step, output, report, images }) } finally { await images.close() }
   } else if (process.argv.includes('--real-card-edit')) {
     await realCardEditChecks({page,step,root,data,output,report})
   } else if (process.argv.includes('--real-character-design')) {
