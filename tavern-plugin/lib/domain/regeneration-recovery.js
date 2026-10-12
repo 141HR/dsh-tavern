@@ -1,5 +1,5 @@
 import { sessionEvents } from './session-events.js'
-import { inputKind, isNewTurnInput, isNewPlayerInput } from './session-turn-input.js'
+import { inputKind, isNewTurnInput, storyPlayerInputs } from './session-turn-input.js'
 import { clearRegenerationAttemptSurface, regenerationAttemptTurns, locateRegenerationSurface, applyRegenerationProjection } from './rollback-surface.js'
 
 /** Recover an uncommitted replacement from its durable pre-rollback revision. */
@@ -40,7 +40,9 @@ export function createRegenerationRecovery({ chats, sessions, timeline, isActive
           (operationId && current.regenRecovery?.id !== operationId) ||
           Number(current.tavernHelperLifecycleRevision || 0) > Number(originalChat.tavernHelperLifecycleRevision || 0) + 1) return
       const events = sessionEvents(session)
-      if (events.some(event => event.seq >= eventStart && isNewPlayerInput(event))) {
+      // A send rejected while the marker was set failed its own turn; only real
+      // story after the attempt stops the cleanup, or recovery would never succeed.
+      if (storyPlayerInputs(events, eventStart).length) {
         throw new Error('重新生成后已有新的玩家输入，未清理或覆盖后续对话')
       }
       const abortedTurns = regenerationAttemptTurns({ events, eventStart })

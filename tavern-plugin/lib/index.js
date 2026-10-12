@@ -4367,6 +4367,8 @@ export async function apply(ctx) {
           const chat = await chatForSession(sessionId)
           if (!chat || !['story', 'script'].includes(chat.mode || 'story') || chat.requestMode === 'sillytavern') throw new Error('仅支持当前游玩会话')
           if ((await sessionActivity(sessionId))?.busy || agentRegistry.get(sessionId)?.phase?.kind === 'running') throw new Error('请等待当前生成和后台任务完成后再应用人物卡')
+          // Applying the card restarts the card scripts; a regeneration left in progress could then never be restored.
+          if (chat.regenInProgress) throw new Error('上一次正文重新生成尚未完成：请先点「重新生成正文」完成或恢复它，再应用人物卡')
           const card = await readCard(chat.cardPath)
           if (!card) throw new Error('人物卡不存在')
           const patch = await playCardSnapshots.replacement(chat, card, args.digest)

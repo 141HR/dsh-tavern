@@ -458,7 +458,7 @@ export function createForegroundOrchestrationStrategies(options) {
       const saved = input.chat.regenRecovery
       if (saved?.phase === 'committed' || inputs.length !== 1 || !isRegenerationInput(inputs[0]) ||
           (saved?.id && inputs[0].source.regenerationId !== saved.id)) {
-        throw new Error('正文重新生成尚未完成，请先完成或恢复后再发送消息')
+        throw new Error('上一次正文重新生成尚未完成：请点「重新生成正文」完成或恢复它，再发送消息')
       }
     }
     return await select(input.chat).prepareStep(input)

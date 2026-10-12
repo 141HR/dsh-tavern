@@ -67,3 +67,18 @@ export function userMessageForTurn(session, turn) {
 export function requestIdForTurn(session, turn) {
   return requestIdOf(userMessageForTurn(session, turn))
 }
+
+/** Player inputs that are still story: those of a failed or rejected turn are
+ * residue the failed-turn cleanup removes, and never block recovery. */
+export function storyPlayerInputs(events, from = 0) {
+  const failed = new Set(events.filter(event => event?.type === 'turn/end' && ['error', 'aborted'].includes(event.data?.reason?.kind)).map(event => Number(event.data.turn)))
+  const found = []
+  let turn = 0
+  for (const event of events) {
+    if (event?.type === 'turn/start') turn = Number(event.data?.turn) || 0
+    // An input after a turn ended belongs to the next turn, not the failed one.
+    else if (event?.type === 'turn/end') turn = 0
+    else if (event && event.seq >= from && isNewPlayerInput(event) && !failed.has(turn)) found.push(event)
+  }
+  return found
+}
