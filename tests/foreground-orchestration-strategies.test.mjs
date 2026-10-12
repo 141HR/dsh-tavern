@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { Session } from './fixtures/dsh-session-host.mjs'
 import { sessionEvents } from '../tavern-plugin/lib/domain/session-events.js'
-import { createForegroundOrchestrationStrategies, createNativePlayOrchestrationStrategy, createCompatibilityOrchestrationStrategy } from '../tavern-plugin/lib/domain/foreground-orchestration-strategies.js'
+import { CARD_REFERENCE_WORLDBOOK_LIMIT, createForegroundOrchestrationStrategies, createNativePlayOrchestrationStrategy, createCompatibilityOrchestrationStrategy } from '../tavern-plugin/lib/domain/foreground-orchestration-strategies.js'
 import { ensureSessionStablePrefix, sessionStablePrefixSections } from '../tavern-plugin/lib/domain/session-stable-prefix.js'
 import { ensureSessionSeedTrajectory } from '../tavern-plugin/lib/domain/session-seed-trajectory.js'
 
@@ -158,6 +158,35 @@ test('新版 DSH 文件工具只向卡片 Agent 开放，不泄漏给正文 Agen
 
   assert.deepEqual(await assembledToolNames('card'), ['read', 'write', 'edit', 'read_image'])
   assert.deepEqual(await assembledToolNames('story'), ['tavern_recall_history'])
+})
+
+test('卡片 Agent 参考资料只预载较短的常驻世界书，超长时改为按需读取提示', async () => {
+  async function worldbookSection(text) {
+    const run = strategies({
+      nativePlay: {
+        async modeFor() { return 'card' },
+        async visibleTools() { return [] },
+        cardReferencePrompt() { return '参考说明' },
+        workspaceContext() { return '' },
+        controlledToolNames: new Set()
+      }
+    })
+    const assembly = await run.value.assembleSystemPrompt({ sections: [], contexts: [], tools: [] }, {
+      sessionId: 'native', chat: { mode: 'card' }, cwd: '/workspace',
+      fixedSystemSections: [
+        { name: 'tavern:character-card', text: '【故事设定 · 人物卡】\n名字: 甲' },
+        { name: 'tavern:constant-worldbook', text: '【常驻世界书】\n' + text }
+      ]
+    })
+    assert.deepEqual(assembly.sections.map(section => section.name), ['tavern:card-reference', 'tavern:character-card', 'tavern:constant-worldbook'])
+    return assembly.sections[2].text
+  }
+
+  assert.equal(await worldbookSection('短条目'), '【常驻世界书】\n短条目')
+  const long = await worldbookSection('长'.repeat(CARD_REFERENCE_WORLDBOOK_LIMIT + 1))
+  assert.match(long, /^【常驻世界书】\n共约 8001 字，超过预载上限/)
+  assert.match(long, /tavern_read_worldbook/)
+  assert.doesNotMatch(long, /长长/)
 })
 
 for (const sessionId of ['native']) test('regeneration gates ordinary and stale inputs before preparation: '+sessionId,async()=>{

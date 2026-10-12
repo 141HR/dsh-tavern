@@ -6,6 +6,16 @@ import { projectRuntimePresetRequest } from './runtime-preset-lifecycle.js'
 import { markRequestHandled, requestHandledBy } from './request-lineage.js'
 
 const CARD_REFERENCE_SECTIONS = new Set(['tavern:character-card', 'tavern:card-system-prompt', 'tavern:constant-worldbook'])
+// The card Agent resends its system prompt on every tool step and reads live
+// files anyway; a large card's constant worldbook would dominate each request.
+export const CARD_REFERENCE_WORLDBOOK_LIMIT = 8000
+
+function cardReferenceSection(section) {
+  if (section.name !== 'tavern:constant-worldbook') return section
+  const chars = Array.from(str(section.text).replace(/^【常驻世界书】\n?/, '').trim()).length
+  if (chars <= CARD_REFERENCE_WORLDBOOK_LIMIT) return section
+  return { name: section.name, text: '【常驻世界书】\n共约 ' + chars + ' 字，超过预载上限，未放入参考资料。需要时用 tavern_read_worldbook 按关键词或编号读取相关条目。' }
+}
 
 function str(value) {
   return typeof value === 'string' ? value : (value === undefined || value === null ? '' : String(value))
@@ -397,7 +407,7 @@ export function createNativePlayOrchestrationStrategy(options) {
       if (reference.length) {
         const note = typeof options.cardReferencePrompt === 'function' ? options.cardReferencePrompt().trim() : ''
         if (note) sections.push({ name: 'tavern:card-reference', text: note })
-        sections.push(...reference)
+        sections.push(...reference.map(cardReferenceSection))
       }
       const workspace = options.workspaceContext(input.cwd, input.workspaceProjection)
       if (workspace !== '') sections.push({ name: 'tavern:resource-workspace', text: workspace })
