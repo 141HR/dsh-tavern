@@ -5,7 +5,7 @@ import { restoredSurfaceSeqs } from './surface-restoration.js'
 import { sessionEvents, surfaceReplacementRange } from './session-events.js'
 import { createSurfaceOwnership, planSurfaceRecovery, planSurfaceRange, SurfaceRecoveryError, OWNED } from './surface-recovery.js'
 import { randomUUID } from 'node:crypto'
-import { isNewTurnInput, isNewPlayerInput } from './session-turn-input.js'
+import { inputKind, isNewTurnInput, isNewPlayerInput } from './session-turn-input.js'
 
 function object(value) {
   return value !== null && typeof value === 'object' ? value : null
@@ -34,10 +34,7 @@ function contentText(value) {
 // Native user messages and legacy replay attempts qualify; regeneration inputs
 // do not — they carry synthetic guidance text and belong to regenerate recovery.
 function isReplayableInputSource(source) {
-  const value = object(source)
-  if (!value) return false
-  if (value.kind === 'user') return true
-  return value.kind === 'plugin' && value.plugin === 'dsh-tavern-replay'
+  return ['player', 'replay'].includes(inputKind({ source: object(source) }))
 }
 
 // The host chat UI turns a user/message into an input row only when its source

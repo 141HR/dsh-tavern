@@ -1,11 +1,21 @@
 import { sessionEvents } from './session-events.js'
 
+// The one place that decides which message is a turn's input. Readers that
+// guessed this separately drifted apart, and one of them took a template edit
+// of an earlier input for a new turn's input (#196).
+
 function str(value) { return typeof value === 'string' ? value : (value === undefined || value === null ? '' : String(value)) }
 
-export function isTurnInput(message) {
+/** Who sent an input: the player, a regenerate attempt, a legacy failed-turn replay, or nobody. */
+export function inputKind(message) {
   const source = message && message.source
-  return Boolean(source && (source.kind === 'user' || (source.kind === 'plugin' && (source.plugin === 'dsh-tavern-regen' || source.plugin === 'dsh-tavern-replay'))))
+  if (!source) return null
+  if (source.kind === 'user') return 'player'
+  if (source.kind !== 'plugin') return null
+  return source.plugin === 'dsh-tavern-regen' ? 'regenerate' : source.plugin === 'dsh-tavern-replay' ? 'replay' : null
 }
+
+export function isTurnInput(message) { return inputKind(message) !== null }
 
 /** A message the player (or a regenerate/replay) sent. Replacements rewrite an
  * earlier message in place — a template edit keeps the original source and
@@ -16,10 +26,25 @@ export function isNewTurnInput(event) {
 
 /** A new message typed by the player, which ends any earlier regenerate attempt. */
 export function isNewPlayerInput(event) {
-  return isNewTurnInput(event) && event.data?.source?.kind === 'user'
+  return isNewTurnInput(event) && inputKind(event.data) === 'player'
 }
 
-function turnStartIndex(events, turn) {
+/** The DSH request id of a player's message; synthetic inputs have none. */
+export function requestIdOf(message) {
+  return inputKind(message) === 'player' ? str(message.source.rpcId).trim() : ''
+}
+
+/** Provider request messages are already in surface order: the input is the last one. */
+export function requestIdForMessages(messages) {
+  const list = Array.isArray(messages) ? messages : []
+  for (let index = list.length - 1; index >= 0; index--) {
+    if (isTurnInput(list[index])) return requestIdOf(list[index])
+  }
+  return ''
+}
+
+/** Index of the latest turn/start event of this turn, or -1. */
+export function turnStartIndex(events, turn) {
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]
     if (event && event.type === 'turn/start' && Number(event.data && event.data.turn) === Number(turn)) return index
@@ -27,7 +52,7 @@ function turnStartIndex(events, turn) {
   return -1
 }
 
-/** The player input that started this turn. */
+/** The input that started this turn, from the session log in event order. */
 export function userMessageForTurn(session, turn) {
   const events = sessionEvents(session)
   const start = turnStartIndex(events, turn)
@@ -40,7 +65,5 @@ export function userMessageForTurn(session, turn) {
 }
 
 export function requestIdForTurn(session, turn) {
-  const message = userMessageForTurn(session, turn)
-  const source = message && message.source
-  return source && source.kind === 'user' ? str(source.rpcId).trim() : ''
+  return requestIdOf(userMessageForTurn(session, turn))
 }

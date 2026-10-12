@@ -4,6 +4,7 @@ import { resolveRuntimePresetMacros } from './runtime-presets.js'
 import { createEphemeralCompatibilityRequest, isCompatibilityConversationRequest } from './compatibility-request.js'
 import { projectRuntimePresetRequest } from './runtime-preset-lifecycle.js'
 import { markRequestHandled, requestHandledBy } from './request-lineage.js'
+import { inputKind } from './session-turn-input.js'
 
 const CARD_REFERENCE_SECTIONS = new Set(['tavern:character-card', 'tavern:card-system-prompt', 'tavern:constant-worldbook'])
 // The card Agent resends its system prompt on every tool step and reads live
@@ -38,9 +39,10 @@ function contentText(message) {
     .join('\n')
 }
 
+// A provider request carries the player's input or a regenerate attempt;
+// legacy replay inputs are resent as the player's own message and never appear here.
 function isTurnInput(message) {
-  const source = message && message.source
-  return source && (source.kind === 'user' || (source.kind === 'plugin' && source.plugin === 'dsh-tavern-regen'))
+  return ['player', 'regenerate'].includes(inputKind(message))
 }
 
 function userTextOf(messages) {
@@ -61,13 +63,11 @@ function replaceTurnInput(messages, text) {
 }
 
 function isRegenerationInput(message) {
-  const source = message && message.source
-  return source && source.kind === 'plugin' && source.plugin === 'dsh-tavern-regen'
+  return inputKind(message) === 'regenerate'
 }
 
 function isOriginalPlayerInput(message) {
-  const source = message && message.source
-  return message && message.role === 'user' && source && source.kind === 'user'
+  return Boolean(message && message.role === 'user' && inputKind(message) === 'player')
 }
 
 /**

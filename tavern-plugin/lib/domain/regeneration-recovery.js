@@ -1,5 +1,5 @@
 import { sessionEvents } from './session-events.js'
-import { isNewPlayerInput } from './session-turn-input.js'
+import { inputKind, isNewTurnInput, isNewPlayerInput } from './session-turn-input.js'
 import { clearRegenerationAttemptSurface, regenerationAttemptTurns, locateRegenerationSurface, applyRegenerationProjection } from './rollback-surface.js'
 
 /** Recover an uncommitted replacement from its durable pre-rollback revision. */
@@ -28,8 +28,7 @@ export function createRegenerationRecovery({ chats, sessions, timeline, isActive
     const assistant = before.messages?.findLast(message => message.role === 'assistant' && !message.greeting)
     const target = locateRegenerationSurface({ events, nodes: session.surface?.nodes || [], turn: assistant?.turn })
     if (!target) throw new Error('找不到原正文的原生消息，未修改当前对话')
-    const attempt = events.find(event => event.seq > target.assistantSeq && event.type === 'user/message' &&
-      event.data?.source?.plugin === 'dsh-tavern-regen')
+    const attempt = events.find(event => event.seq > target.assistantSeq && isNewTurnInput(event) && inputKind(event.data) === 'regenerate')
     return attempt ? attempt.seq : events.length
   }
 

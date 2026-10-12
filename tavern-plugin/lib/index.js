@@ -95,7 +95,7 @@ import { validateHelperGenerateConfig, resolveHelperGenerationPreset, helperGene
 import { createHelperGenerationTasks } from './domain/helper-generation-tasks.js'
 import { createBodyEditor } from './domain/body-editor.js'
 import { appendHelperUserSessionContext } from './domain/helper-user-session-context.js'
-import { userMessageForTurn, requestIdForTurn } from './domain/session-turn-input.js'
+import { userMessageForTurn, requestIdForTurn, requestIdForMessages } from './domain/session-turn-input.js'
 import { uncommittedRounds } from './domain/uncommitted-rounds.js'
 import { sessionOpeningDescriptor, prepareSessionOpening } from './domain/session-opening.js'
 import { scriptPromptScanText } from './domain/tavern-script-prompts.js'
@@ -4597,11 +4597,6 @@ export async function apply(ctx) {
     return message.content.map(function (block) { return block !== null && typeof block === 'object' && block.type === 'text' ? str(block.text) : '' }).filter(Boolean).join('\n').trim()
   }
 
-  function isTurnInput(message) {
-    const source = message && message.source
-    return source && (source.kind === 'user' || (source.kind === 'plugin' && (source.plugin === 'dsh-tavern-regen' || source.plugin === 'dsh-tavern-replay')))
-  }
-
   // Heal a save that missed a completed round (#196): record it with its own
   // request id before anything acts on "the latest round". Never blocks the action.
   async function adoptUncommittedRounds(sessionId) {
@@ -4626,19 +4621,6 @@ export async function apply(ctx) {
   function activeTurnOf(exec) {
     const phase = exec && exec.agent ? exec.agent.phase : null
     return phase && phase.kind === 'running' ? Math.max(0, Number(phase.turn) || 0) : 0
-  }
-
-  function requestIdOf(message) {
-    const source = message && message.source
-    return source && source.kind === 'user' ? str(source.rpcId).trim() : ''
-  }
-
-  function requestIdForMessages(messages) {
-    const list = Array.isArray(messages) ? messages : []
-    for (let index = list.length - 1; index >= 0; index--) {
-      if (isTurnInput(list[index])) return requestIdOf(list[index])
-    }
-    return ''
   }
 
   function replaceAssistantReply(session, result, bodyText) {
