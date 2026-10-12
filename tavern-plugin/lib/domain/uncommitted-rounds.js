@@ -1,6 +1,7 @@
 import { sessionEvents } from './session-events.js'
 import { assistantResultForTurn } from './session-turn-result.js'
-import { userMessageForTurn } from './session-turn-input.js'
+import { inputEventForTurn } from './session-turn-input.js'
+import { roundAnchor } from './round-anchor.js'
 
 function contentText(message) {
   return (Array.isArray(message?.content) ? message.content : []).filter(block => block?.type === 'text').map(block => String(block.text ?? '')).join('\n').trim()
@@ -26,12 +27,12 @@ export function uncommittedRounds(session, header = {}) {
     if (event?.type !== 'turn/end') continue
     const turn = Number(event.data?.turn)
     if (!(turn > latest) || skipped.has(turn) || ['error', 'aborted'].includes(event.data?.reason?.kind)) continue
-    const input = userMessageForTurn(session, turn)
+    const inputEvent = inputEventForTurn(session, turn), input = inputEvent?.data
     if (!input || input.source?.kind !== 'user') continue
     const reply = assistantResultForTurn(session, turn)
     // The reply must still be what the model sees: a rolled-back round is tombstoned.
     if (!reply || reply.text === '' || !nodes.has(Number(reply.event.seq))) continue
-    rounds.push({ turn, requestId: String(input.source.rpcId ?? '').trim(), userText: contentText(input), userContent: input.content || [], assistantText: reply.text })
+    rounds.push({ turn, requestId: String(input.source.rpcId ?? '').trim(), userText: contentText(input), userContent: input.content || [], assistantText: reply.text, nativeAnchor: roundAnchor(turn, inputEvent, reply.event) })
   }
   return rounds.sort((left, right) => left.turn - right.turn)
 }

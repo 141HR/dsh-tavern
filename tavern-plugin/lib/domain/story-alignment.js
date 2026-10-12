@@ -1,5 +1,6 @@
 import { sessionEvents } from './session-events.js'
 import { uncommittedRounds } from './uncommitted-rounds.js'
+import { createRoundAnchorResolver, validAnchor } from './round-anchor.js'
 
 // The story save and the native session are two records of one game. Every
 // regenerate, rollback and edit writes both; an interruption between the two
@@ -38,8 +39,8 @@ export function nativeStoryTurns(session) {
  * it may be only the latest part of a long save. The native side may be
  * shorter than the save after compaction, so only its window is compared.
  */
-export function inspectStoryAlignment({ session, header = {}, storyTurns = [] }) {
-  if (header.regenInProgress) return { aligned: false, state: 'regenerating', adopt: [], rolledBackVisible: [], mismatch: null }
+export function inspectStoryAlignment({ session, header = {}, storyTurns = [], storyAnchors = [] }) {
+  if (header.regenInProgress) return { aligned: false, state: 'regenerating', adopt: [], rolledBackVisible: [], mismatch: null, anchors: { checked: 0, lost: [] } }
   const native = nativeStoryTurns(session)
   const suppressed = new Set((Array.isArray(header.suppressedDshTurns) ? header.suppressedDshTurns : []).map(Number))
   const adopt = uncommittedRounds(session, header)
@@ -50,5 +51,10 @@ export function inspectStoryAlignment({ session, header = {}, storyTurns = [] })
   const tail = storyTurns.slice(Math.max(0, storyTurns.length - expected.length))
   const matches = expected.length === tail.length && expected.every((turn, index) => turn === tail[index])
   const mismatch = matches ? null : { native: expected.slice(-12), story: storyTurns.slice(-12) }
-  return { aligned: matches && !adopt.length && !rolledBackVisible.length, state: matches ? 'ok' : 'mismatch', adopt, rolledBackVisible, mismatch }
+  // Anchored rounds must still be somewhere on the surface (shadowed or compacted is fine).
+  const resolve = createRoundAnchorResolver({ events: sessionEvents(session), nodes: session.surface?.nodes || [] })
+  const anchored = storyAnchors.filter(validAnchor)
+  const lostAnchors = anchored.filter(anchor => resolve(anchor)?.reply === null).map(anchor => anchor.turn)
+  return { aligned: matches && !adopt.length && !rolledBackVisible.length && !lostAnchors.length, state: matches ? 'ok' : 'mismatch', adopt, rolledBackVisible, mismatch,
+    anchors: { checked: anchored.length, lost: lostAnchors } }
 }

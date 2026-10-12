@@ -52,16 +52,20 @@ export function turnStartIndex(events, turn) {
   return -1
 }
 
-/** The input that started this turn, from the session log in event order. */
-export function userMessageForTurn(session, turn) {
+/** The input event that started this turn, from the session log in event order. */
+export function inputEventForTurn(session, turn) {
   const events = sessionEvents(session)
   const start = turnStartIndex(events, turn)
-  if (start < 0) return ''
+  if (start < 0) return null
   for (let index = start + 1; index < events.length; index++) {
     const event = events[index]
-    if (isNewTurnInput(event)) return event.data
+    if (isNewTurnInput(event)) return event
   }
-  return ''
+  return null
+}
+
+export function userMessageForTurn(session, turn) {
+  return inputEventForTurn(session, turn)?.data || ''
 }
 
 export function requestIdForTurn(session, turn) {

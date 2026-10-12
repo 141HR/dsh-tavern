@@ -6,6 +6,7 @@ import { sessionEvents, surfaceReplacementRange } from './session-events.js'
 import { createSurfaceOwnership, planSurfaceRecovery, planSurfaceRange, SurfaceRecoveryError, OWNED } from './surface-recovery.js'
 import { randomUUID } from 'node:crypto'
 import { inputKind, isTurnInput, isNewTurnInput, isNewPlayerInput } from './session-turn-input.js'
+import { resolveRoundAnchor } from './round-anchor.js'
 
 function object(value) {
   return value !== null && typeof value === 'object' ? value : null
@@ -274,7 +275,11 @@ export function locateRollbackSurface(input) {
   const events = Array.isArray(input && input.events) ? input.events : []
   const nodes = Array.isArray(input && input.nodes) ? input.nodes : []
   let userIndex = -1
-  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+  // An anchored round says where its input is; no scan, no guess (round-anchor.js).
+  const anchored = resolveRoundAnchor({ events, nodes }, input && input.anchor)
+  const anchoredInput = anchored && anchored.input !== null ? eventAt(events, anchored.input) : null
+  if (anchoredInput?.type === 'user/message' && isTurnInput(anchoredInput.data)) userIndex = nodes.indexOf(anchored.input)
+  for (let index = nodes.length - 1; userIndex < 0 && index >= 0; index -= 1) {
     const event = eventAt(events, nodes[index])
     if (event?.type === 'user/message' && event.data?.source?.kind === 'plugin' && ['compact', 'dsh-compaction-basic'].includes(event.data.source.plugin)) return null
     // The round starts at its input: messages other plugins or card scripts add
@@ -566,9 +571,9 @@ function planRollbackAvailability(chat, { events = [], nodes = [] } = {}) {
   const unclearedTurns = unclearedFailedTail(chat, events, nodes)
   const failedTurns = [...new Set([...pendingFailedSurfaceTurns({ events, nodes, suppressed: chat.suppressedDshTurns || [] }), ...unclearedTurns])].sort((a, b) => a - b)
   if (failedTurns.length) return { canRollback: true, canClearIncompleteReply: true, failedTurns, unclearedTurns, target: null, reason: '' }
-  const target = locateRollbackSurface({ events, nodes })
   const messages = Array.isArray(chat.messages) ? chat.messages : []
   const latest = messages.findLast(message => message?.role === 'assistant' && message.greeting !== true)
+  const target = locateRollbackSurface({ events, nodes, anchor: latest?.nativeAnchor })
   if (isRescuedHistoryMessage(chat, latest)) return { canRollback: false, canClearIncompleteReply: false, failedTurns, target: null, reason: '存档救援导入的历史不可回退，请发送新消息继续' }
   const turn = Number(latest?.turn)
   const matches = target && (!(turn > 0) || target.turn === turn || target.turn === Number(chat.regeneratedDshTurns?.[String(turn)]))

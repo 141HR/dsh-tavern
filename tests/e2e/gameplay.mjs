@@ -691,6 +691,8 @@ try {
     report.storyAlignment = result.alignment ?? result
     assert.ok(result.ok !== false, '核对接口失败：' + JSON.stringify(result))
     assert.ok(!result.alignment || result.alignment.aligned, '存档与模型上下文不一致：' + JSON.stringify(result.alignment))
+    // Rounds played in this run record where they entered the native session.
+    if (result.alignment) assert.ok(result.alignment.anchors.checked > 0 || !chat.messages.some(row => row.role === 'assistant' && !row.greeting), '新回合应记录原生锚点')
   })
   assert.deepEqual(errors, [], '整个验收不得出现未捕获浏览器异常')
   assert.doesNotMatch(log, /服务端模板进程异常|Unsupported or expired template RPC/, '验收期间模板子进程不得异常退出')

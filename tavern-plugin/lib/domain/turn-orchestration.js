@@ -1,4 +1,5 @@
 import { captureChatHeader } from './chat-persistence.js'
+import { validAnchor } from './round-anchor.js'
 import { CARD_MEMORY_TOOLS } from '../../packages/dsh-tavern-card-memory/index.js'
 import { inputAttachments } from './player-input-content.js'
 import { resolveRuntimePresetMacros } from './runtime-presets.js'
@@ -807,7 +808,9 @@ export function createTurnOrchestrator(options) {
           projectionWarnings: Array.isArray(reply.warnings) ? clone(reply.warnings) : [],
           ts: now(),
           native: true,
-          turn: turn
+          turn: turn,
+          // Where this round entered the native session; see round-anchor.js.
+          ...(validAnchor(input.nativeAnchor) && input.nativeAnchor.turn === turn ? { nativeAnchor: { ...input.nativeAnchor } } : {})
         }
         if (usesOfficialMvu(draft)) Object.assign(assistantMessage, {
           swipeId: 0,

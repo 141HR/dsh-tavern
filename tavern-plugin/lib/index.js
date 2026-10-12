@@ -4616,7 +4616,8 @@ export async function apply(ctx) {
       rows = header?.messages || []
     }
     if (!header) return null
-    return { header, storyTurns: rows.filter(message => message?.role === 'assistant' && !message.greeting).map(message => Number(message.turn)) }
+    const story = rows.filter(message => message?.role === 'assistant' && !message.greeting)
+    return { header, storyTurns: story.map(message => Number(message.turn)), storyAnchors: story.map(message => message.nativeAnchor).filter(Boolean) }
   }
 
   // Bring the save and the native session back into agreement before anything
@@ -4633,7 +4634,7 @@ export async function apply(ctx) {
       const report = inspectStoryAlignment({ session, ...input })
       if (!repair || report.aligned || report.state === 'regenerating') return report
       for (const round of report.adopt) {
-        await turnOrchestrator.finalize({ sessionId, turn: round.turn, requestId: round.requestId, userText: round.userText, userContent: round.userContent, assistantText: round.assistantText })
+        await turnOrchestrator.finalize({ sessionId, turn: round.turn, requestId: round.requestId, userText: round.userText, userContent: round.userContent, assistantText: round.assistantText, nativeAnchor: round.nativeAnchor })
         console.warn('dsh-tavern: 第 ' + round.turn + ' 轮已完成但未写入存档，已补记')
       }
       const shadowed = reshadowRolledBackRounds(session, new Set(report.rolledBackVisible))

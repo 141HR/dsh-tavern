@@ -1,4 +1,6 @@
 import { assistantResultForTurn } from '../domain/session-turn-result.js'
+import { inputEventForTurn } from '../domain/session-turn-input.js'
+import { roundAnchor } from '../domain/round-anchor.js'
 import { inputAttachments } from '../domain/player-input-content.js'
 import { prependSystemInstruction } from '../domain/system-append.js'
 import { sessionStablePrefixSections, withCurrentWorldbook } from '../domain/session-stable-prefix.js'
@@ -64,7 +66,8 @@ export function registerTurnLifecycleHooks({
       requestId,
       userText,
       userContent,
-      assistantText: assistant === null ? '' : assistant.text
+      assistantText: assistant === null ? '' : assistant.text,
+      nativeAnchor: roundAnchor(payload.turn, inputEventForTurn(session, payload.turn), assistant.event)
     })
     if (saved.reply) replaceAssistantReply(session, assistant, saved.reply.sessionText)
   })
