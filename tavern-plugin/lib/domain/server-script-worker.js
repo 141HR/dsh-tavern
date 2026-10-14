@@ -114,7 +114,7 @@ function createHeadlessFrame(hostWindow, virtualConsole) {
     get(target, key) {
       if (key === 'postMessage' || typeof key === 'symbol') return target[key]
       // Trusted card mode runs the sandbox same-origin with the host page.
-      if (!element.sandbox) { const value = Reflect.get(hostWindow, key, hostWindow); return typeof value === 'function' && /\[native code\]/.test(Function.prototype.toString.call(value)) && !/^[A-Z]/.test(String(key)) ? value.bind(hostWindow) : value }
+      if (!element.sandbox) { const value = Reflect.get(hostWindow, key, hostWindow); return typeof value === 'function' && !Object.prototype.hasOwnProperty.call(hostWindow, key) && !/^[A-Z]/.test(String(key)) ? value.bind(hostWindow) : value }
       const DOMException = child?.window?.DOMException || globalThis.DOMException
       throw new DOMException('Blocked a frame from accessing a cross-origin frame.', 'SecurityError')
     }
