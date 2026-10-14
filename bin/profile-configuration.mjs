@@ -53,9 +53,12 @@ export function mergeProfileManifest({ source, current = {}, pluginPath, dataRoo
   delete currentTavern.cliPocketEnabled
   // Pocket includes mobile-nav itself. Select one layout owner per host,
   // including old/manual installs, so upgrades cannot reintroduce both.
+  // CLI ships without Pocket; a personal Profile may opt back in with
+  // `dshTavern.cliPocket: true`, which then manages it like Desktop.
+  const pocketHost = host === 'desktop' || (host === 'cli' && currentTavern.cliPocket === true)
   const excludedMobileBundles = host === 'android'
     ? ['dsh-pocket', '@dsh-external/dsh-mobile-nav']
-    : ['dsh-web-mobile', '@dsh-external/dsh-mobile-nav', ...(host !== 'desktop' ? ['dsh-pocket'] : [])]
+    : ['dsh-web-mobile', '@dsh-external/dsh-mobile-nav', ...(pocketHost ? [] : ['dsh-pocket'])]
   const sourceBundles = uniqueStrings(sourceProfile.bundles)
     .map(name => host !== 'android' && name === 'dsh-web-mobile' ? 'dsh-pocket' : name)
     .filter(name => !excludedMobileBundles.includes(name))

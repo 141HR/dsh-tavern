@@ -90,6 +90,21 @@ for (const host of ['desktop', 'android', 'cli']) {
   }
 }
 
+test('CLI 个人 Profile 可用 cliPocket 选回 Pocket，并随源码版本升级', async () => {
+  const source = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+  const options = { source, pluginPath: '/app/tavern-plugin', dataRoot: '/data', host: 'cli' }
+  const current = { dependencies: { 'dsh-pocket': '0.0.1' }, dshTavern: { cliPocket: true } }
+  const next = mergeProfileManifest({ ...options, current })
+  assert.equal(next.dependencies['dsh-pocket'], source.devDependencies['dsh-pocket'])
+  assert.equal(next.dsh.profile.bundles.filter(name => name === 'dsh-pocket').length, 1)
+  assert.equal(next.dsh.profile.bundles.includes('dsh-web-mobile'), false)
+  assert.equal(next.dshTavern.cliPocket, true)
+  assert.deepEqual(mergeProfileManifest({ ...options, current: next }), next)
+  const off = mergeProfileManifest({ ...options, current: { ...next, dshTavern: { ...next.dshTavern, cliPocket: false } } })
+  assert.equal(off.dependencies['dsh-pocket'], undefined)
+  assert.equal(off.dsh.profile.bundles.includes('dsh-pocket'), false)
+})
+
 test('首次迁移按 YAML 结构移除旧项目配置并保留用户覆盖', () => {
   const current = `# 用户排版可以不同
 - config:
