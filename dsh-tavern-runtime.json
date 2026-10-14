@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "b609a1c69e19bac0ef7764aaeffc5c1a0ea25e6c",
-  "releaseSequence": 604,
+  "revision": "798a0b5bd51b622013318c566844356413ef2273",
+  "releaseSequence": 605,
   "version": "2.6.0",
   "files": [
     {
@@ -731,13 +731,13 @@
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-fork-point.js",
-      "sha256": "7e66cb1edfc5dfa62399445fde1a2681534805cab453f7086a36cdc7d9ea82f5",
-      "size": 3399
+      "sha256": "31101cd4f0071907bd93b4255cc2d5ebc944ed08ee1115e64d521cad5a70b648",
+      "size": 3620
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-fork-targets.js",
-      "sha256": "a28ade9c5927c18eefa09190b2e61fa9cd0b4afc20d8ecfc176c413a867c19cb",
-      "size": 1918
+      "sha256": "58a37f273b95946ec9b6b83290ce6a204a0034b9f9e9ea44ca3161644346ef8c",
+      "size": 2282
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-fork.js",
@@ -766,8 +766,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-retention.js",
-      "sha256": "d9e7af2141a76f0030a5057565b7cde9007540b574c77326501967c6ec374053",
-      "size": 1822
+      "sha256": "428c1287bdad6ffb9b204edac6bd3e25b79db5f81bc7a731cece02fa5e76d9aa",
+      "size": 2286
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-state.js",
@@ -901,8 +901,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/game-save.js",
-      "sha256": "cbc81b128678fdc40991c5150c11a50ed5321ef39b18b63aaf50c3ebd9d7765c",
-      "size": 9194
+      "sha256": "ed194a31e66397a39fec8693336139923c160ba89350f5b7d1708eaca9e61e0c",
+      "size": 9386
     },
     {
       "path": "tavern-plugin/lib/domain/gameplay-settled-turn.js",
@@ -1181,8 +1181,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/play-card-snapshots.js",
-      "sha256": "906337c112d6e2e1586121b0fa54f150cf9cdcf63e872f32d8f56ddd48952dbf",
-      "size": 11741
+      "sha256": "6f8e6889eaa3ca85781d49a91360817a27f3a6aba11600c25618f6d1d655369b",
+      "size": 11744
     },
     {
       "path": "tavern-plugin/lib/domain/play-chat-debug.js",
@@ -1371,8 +1371,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/save-maintenance.js",
-      "sha256": "ca7c94ec77d0b2b4560a53082b57ef710bab4960469ae713884d80f93f3e9b96",
-      "size": 5890
+      "sha256": "691a19fa9b5f46e3ec13a1aaf043bb97516e81503af5d3d092858b86d6a1e759",
+      "size": 6091
     },
     {
       "path": "tavern-plugin/lib/domain/scene-character-designs.js",
@@ -1491,8 +1491,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/scene-worldbook.js",
-      "sha256": "541d1e3a3d347792bdb9215dc13756a34d196d0a63db3277206cd78f4241304f",
-      "size": 6107
+      "sha256": "7c45c5b6f0ee3a46d4a498a52bc7569d36983fd84d4314a1324244fa3abc3cd5",
+      "size": 10084
     },
     {
       "path": "tavern-plugin/lib/domain/scoped-messages.js",
@@ -1871,8 +1871,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/turn-orchestration.js",
-      "sha256": "c8c32386710132e180e782507f8b88daa40563bf730973c83f78d1a9c4e23174",
-      "size": 48372
+      "sha256": "c18dcdd90d05394e3ffc85eaa3de3725f932c56647a681677305e69bef264c35",
+      "size": 48406
     },
     {
       "path": "tavern-plugin/lib/domain/uncommitted-rounds.js",
@@ -2026,8 +2026,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "138ee5301b8e98000c21db19dc9c36ebfd404170947d5748d6cc0a5e1a6636a4",
-      "size": 321297
+      "sha256": "095a0d097fa89099cdbc335cbd1345fe310fd39cd853548f2ae439014436ae1e",
+      "size": 321448
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
