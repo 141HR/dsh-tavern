@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "revision": "1011d6c5b69e07eb04beb5dab65ff9215658375f",
-  "releaseSequence": 611,
-  "version": "2.6.0",
+  "revision": "dfd34e9f4238cd1913227ecd59ed609e57b3c240",
+  "releaseSequence": 612,
+  "version": "2.7.0",
   "files": [
     {
       "path": "bin/application-update.mjs",
@@ -261,7 +261,7 @@
     },
     {
       "path": "package.json",
-      "sha256": "3b928f038d371308979bddfa246f0f2c7f5f4f4f02f283ffe5c249ba80a20ef2",
+      "sha256": "96c29339e01fa1f7cf0660a8b0d05813dfd727beba6b2f8113a370d4017326f9",
       "size": 3820
     },
     {
@@ -766,8 +766,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-retention.js",
-      "sha256": "428c1287bdad6ffb9b204edac6bd3e25b79db5f81bc7a731cece02fa5e76d9aa",
-      "size": 2286
+      "sha256": "0a809f0c4419343be89c033067ade46069babecf958101d0e14158a5922dcf37",
+      "size": 2425
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-state.js",
@@ -3821,7 +3821,7 @@
     },
     {
       "path": "tavern-plugin/package.json",
-      "sha256": "b23710e2ef14a715242e2243bccfc45112de030dd239e5aba0f8e82e15d1ffc6",
+      "sha256": "00202c27b714caf7fa91cbe2f32ddbc5286cec4fce32b1d6d98b3aecba3c113f",
       "size": 1638
     },
     {
