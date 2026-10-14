@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "f2055e85580f343ef18b750b6ba27d9e7f428b5d",
-  "releaseSequence": 607,
+  "revision": "0d086d2e8c376914f53f9d072c91fd8f68de499c",
+  "releaseSequence": 608,
   "version": "2.6.0",
   "files": [
     {
@@ -1521,8 +1521,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/server-script-executor.js",
-      "sha256": "7cb9b64137f1b25d0b39a20883f991d62dc6d47dc353701983d535b8d45ee3c9",
-      "size": 8396
+      "sha256": "6d429e81d0217f02e29687cba8e3df8241fe4398857e06f9e8104b92ee3b4488",
+      "size": 8992
     },
     {
       "path": "tavern-plugin/lib/domain/server-script-worker.js",
@@ -2036,8 +2036,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "b6fdbfe96d4fe0161d2bacb8cf9313b4851b15bb812000444e2e862544e9b2f1",
-      "size": 323381
+      "sha256": "2bcacbd98e6051972cc2ed85c0aa11bfde3d8d4a826147ff25bf0c9356f301e1",
+      "size": 323482
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
