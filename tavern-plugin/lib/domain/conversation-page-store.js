@@ -438,6 +438,79 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
   })
   return {removed}
  }
+ // Record packs keep every record they were written with; once some of those
+ // records are swept, the rest still pin the whole file. Rewrite packs that are
+ // mostly dead (or nearly empty) into fresh ones holding only live records, and
+ // atomically repoint each record's link. Same record-pack format as writes.
+ async function repack(dir,cutoff){
+  const packs=path.join(dir,'blocks','.packs')
+  let names=[]
+  try{names=await readdir(packs)}catch(error){if(error.code!=='ENOENT')throw error}
+  const live=[],stale=[]
+  for(const name of names){
+   if(!name.endsWith('.json'))continue
+   const file=path.join(packs,name),info=await stat(file)
+   if(info.mtimeMs>cutoff)continue
+   let pack
+   try{pack=JSON.parse(await readFile(file,'utf8'))}catch{continue}
+   if(pack?.kind!=='record-pack-v1'||!Array.isArray(pack.records))continue
+   const records=[];let liveBytes=0,allBytes=0
+   for(const [ref,value] of pack.records){
+    const size=JSON.stringify([ref,value]).length;allBytes+=size
+    let same=false
+    try{same=(await stat(blobPath(dir,ref))).ino===info.ino}catch(error){if(error.code!=='ENOENT')throw error}
+    if(same){records.push({ref,value});liveBytes+=size}
+   }
+   if(records.length&&liveBytes>allBytes*0.8&&records.length>=16)continue
+   stale.push({file,size:info.size,ino:info.ino})
+   live.push(...records)
+  }
+  if(!stale.length)return {packs:0,bytes:0}
+  let group=[],groupBytes=64
+  const groups=[]
+  for(const entry of live){
+   const size=Buffer.byteLength(JSON.stringify([entry.ref,entry.value]))+1
+   if(group.length&&(groupBytes+size>64*1024||group.length>=128)){groups.push(group);group=[];groupBytes=64}
+   group.push(entry);groupBytes+=size
+  }
+  if(group.length)groups.push(group)
+  const directories=new Set([packs])
+  let written=0
+  // A lone record (or a filesystem without hard links) gets an ordinary block file.
+  async function standalone(entry){
+   const target=blobPath(dir,entry.ref),staging=target+'.repack-'+randomUUID(),bytes=JSON.stringify({kind:'record',value:entry.value})
+   let handle
+   try{handle=await open(staging,'wx');await handle.writeFile(bytes);await handle.sync();await handle.close();handle=null
+    await rename(staging,target)}finally{if(handle)await handle.close();await rm(staging,{force:true})}
+   written+=Buffer.byteLength(bytes);directories.add(path.dirname(target))
+  }
+  for(const group of groups){
+   if(group.length===1){await standalone(group[0]);continue}
+   const bytes=JSON.stringify({kind:'record-pack-v1',records:group.map(entry=>[entry.ref,entry.value])})
+   const target=path.join(packs,hash(bytes)+'.json'),staging=target+'.staging-'+randomUUID()
+   let handle
+   try{handle=await open(staging,'wx');await handle.writeFile(bytes);await handle.sync();await handle.close();handle=null
+    await rename(staging,target)}finally{if(handle)await handle.close();await rm(staging,{force:true})}
+   written+=Buffer.byteLength(bytes)
+   for(const entry of group){
+    const destination=blobPath(dir,entry.ref),temporary=destination+'.relink-'+randomUUID()
+    try{await linkFile(target,temporary);await rename(temporary,destination);directories.add(path.dirname(destination))}
+    catch(error){
+     if(!['EXDEV','EPERM','EACCES','ENOTSUP','EOPNOTSUPP','ENOSYS','EMLINK'].includes(error.code))throw error
+     await standalone(entry)
+    }finally{await rm(temporary,{force:true})}
+   }
+  }
+  for(const directory of directories)await syncDirectory(directory)
+  let freed=0
+  for(const pack of stale){
+   const info=await stat(pack.file).catch(()=>null)
+   // Only once nothing links to the old inode any more.
+   if(info&&info.ino===pack.ino&&info.nlink===1){freed+=pack.size;await rm(pack.file,{force:true})}
+  }
+  await syncDirectory(packs)
+  return {packs:stale.length,bytes:Math.max(0,freed-written)}
+ }
  // Delete blocks unreachable from the current head. Old heads stay reachable
  // only through keyed records the caller retains (`retainEntry(key)`, e.g.
  // 'chat-revision:N'); previousHeadId links are never followed. Any 64-hex
@@ -520,7 +593,8 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
    }
    let bytes=0
    for(const entry of inodes.values())if(entry.removed>=entry.nlink)bytes+=entry.size
-   result={reachable:marked.size,kept,removed,bytes}
+   const repacked=dryRun?{packs:0,bytes:0}:await repack(dir,cutoff)
+   result={reachable:marked.size,kept,removed,bytes:bytes+repacked.bytes,repackedPacks:repacked.packs}
    return undefined
   })
   return result

@@ -71,3 +71,15 @@ test('retention follows checkpoints, undo, regeneration recovery and forks trans
  const retained=await retainedRevisions(chat,read,forks.get('a'))
  assert.deepEqual([...retained].sort((x,y)=>x-y),[2,4,6,7,9,10,11])
 })
+
+test('compaction rewrites record packs that hold swept records, keeping every live record readable', async t => {
+ const {store,persistence,reopen}=await fixture(t)
+ const rows=n=>Array.from({length:40},(_,i)=>({role:'assistant',text:'行'+i+'-'+n,variables:[{stat_data:{gold:n,note:'x'.repeat(200)+i}}]}))
+ await persistence.write({id:'a',messages:rows(0)})
+ for(let i=1;i<=6;i++)await persistence.patch('a',i,rows(i).map((row,index)=>({op:'set',path:['messages',index],value:row})))
+ const current=await persistence.read('a')
+ const result=await store.compact('a',{keepRecent:1,graceMs:0})
+ assert.ok(result.repackedPacks>0)
+ const fresh=reopen()
+ assert.deepEqual(await fresh.read('a'),current)
+})
