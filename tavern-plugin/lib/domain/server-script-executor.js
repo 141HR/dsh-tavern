@@ -24,7 +24,7 @@ const ALLOWED_METHODS = new Set([
 ])
 const ALLOWED_GET = /^\/api\/dsh-tavern\/(?:vendor\/|client-assets\/|remote-assets\/|static-assets|helper-history|session-resource|plugin-assets\/)/
 
-export function createServerScriptExecutor({ handle, subscribeSignals, idleMs = 30 * 60 * 1000, maxSessions = 2, logger = console }) {
+export function createServerScriptExecutor({ handle, subscribeSignals, idleMs = 10 * 60 * 1000, maxSessions = 3, logger = console }) {
   const records = new Map()
   function stop(sessionId) {
     const record = records.get(sessionId)
@@ -40,7 +40,7 @@ export function createServerScriptExecutor({ handle, subscribeSignals, idleMs = 
     record.idle.unref?.()
   }
   async function answer(record, message) {
-    const reply = data => { if (record.child.connected) record.child.send({ type: 'fetch-result', id: message.id, ...data }) }
+    const reply = data => { if (record.child.connected) record.child.send({ type: 'fetch-result', id: message.id, ...data }, () => {}) }
     try {
       const path = String(message.path || '')
       const pathname = new URL(path, 'http://x').pathname
@@ -85,7 +85,9 @@ export function createServerScriptExecutor({ handle, subscribeSignals, idleMs = 
   function ensure(sessionId) {
     const id = String(sessionId || '')
     if (!id || records.has(id)) return
-    while (records.size >= maxSessions) stop(records.keys().next().value)
+    // At capacity, leave this game to its page (or let it wait for a slot):
+    // evicting would let retained pages of other games restart theirs in a loop.
+    if (records.size >= maxSessions) return
     const modules = dirname(dirname(require.resolve('jsdom/package.json')))
     const plugin = fileURLToPath(new URL('../../', import.meta.url))
     const permissionFlag = process.allowedNodeEnvironmentFlags.has('--permission') ? '--permission' : '--experimental-permission'
@@ -96,7 +98,7 @@ export function createServerScriptExecutor({ handle, subscribeSignals, idleMs = 
     })
     const record = { sessionId: id, child, idle: null, stderr: '', stopSignals: () => {} }
     records.set(id, record)
-    record.stopSignals = subscribeSignals(id, signal => { if (child.connected) child.send({ type: 'signal', signal: { ...signal, snapshot: undefined } }) })
+    record.stopSignals = subscribeSignals(id, signal => { if (child.connected) child.send({ type: 'signal', signal: { ...signal, snapshot: undefined } }, () => {}) })
     child.stderr.setEncoding('utf8')
     child.stderr.on('data', chunk => { record.stderr = (record.stderr + chunk).slice(-8192) })
     child.on('message', message => {
@@ -105,6 +107,8 @@ export function createServerScriptExecutor({ handle, subscribeSignals, idleMs = 
       else if (message.type === 'started') logger.log('dsh-tavern: 服务端卡脚本运行时已启动', id)
       else if (message.type === 'failed') logger.error('dsh-tavern: 服务端卡脚本运行时启动失败', message.error)
     })
+    // A killed or crashed child must never take the Tavern service down with it.
+    child.on('error', error => logger.warn('dsh-tavern: 服务端卡脚本运行时进程错误', id, String(error?.message || error)))
     child.on('exit', (code, signal) => {
       if (records.get(id) === record) {
         records.delete(id)
@@ -114,7 +118,7 @@ export function createServerScriptExecutor({ handle, subscribeSignals, idleMs = 
       }
     })
     touch(record)
-    child.send({ type: 'start', sessionId: id })
+    child.send({ type: 'start', sessionId: id }, () => {})
   }
   return Object.freeze({
     ensure, stop,
