@@ -118,7 +118,7 @@ ${body}
 }
 
 /**
- * request: { variables, openings, rules, panel }. Omitted parts keep what the
+ * request: { variables, openings, rules, panel, remove }. Omitted parts keep what the
  * card already has. Returns ordinary Tavern saves plus a summary.
  */
 export function planMvuApply(raw, request = {}) {
@@ -129,6 +129,19 @@ export function planMvuApply(raw, request = {}) {
   if (request.variables !== undefined && !object(request.variables)) throw new Error('variables 必须是对象')
   if (openings.length > greetings.length) throw new Error('openings 有 ' + openings.length + ' 项，但这张卡只有 ' + greetings.length + ' 个开场（first_mes + alternate_greetings）')
   openings.forEach((item, index) => { if (item !== null && item !== undefined && !object(item)) throw new Error('openings[' + index + '] 必须是对象或 null') })
+  const remove = object(request.remove) ? request.remove : {}
+
+  // Old status protocol: one pattern cleans every opening.
+  let cleaned = 0
+  const bodies = greetings.map(text => {
+    if (!str(remove.fromOpenings)) return text
+    let pattern
+    try { pattern = new RegExp(str(remove.fromOpenings), 'g') } catch (error) { throw new Error('remove.fromOpenings 不是有效正则：' + error.message) }
+    const next = text.replace(pattern, '')
+    if (next !== text) cleaned++
+    return next
+  })
+  if (str(remove.fromOpenings) && !cleaned) throw new Error('remove.fromOpenings 在所有开场里都没有匹配，未保存')
 
   // Openings: replace any old <initvar>/marker, append the new ones.
   const touchOpenings = object(request.variables) || openings.some(object)
@@ -139,17 +152,16 @@ export function planMvuApply(raw, request = {}) {
   })
   const fields = {}
   if (touchOpenings) {
-    const next = greetings.map((text, index) => text.replace(INITVAR_BLOCK, '').replace(MARKER, '').replace(/\s+$/, '')
+    const next = bodies.map((text, index) => text.replace(INITVAR_BLOCK, '').replace(MARKER, '').replace(/\s+$/, '')
       + '\n\n<initvar>\n' + stateJson(states[index]) + '\n</initvar>\n\n<mvu-status/>')
     if (next[0] !== greetings[0]) fields.first_mes = next[0]
     if (next.slice(1).some((text, index) => text !== greetings[index + 1])) fields.alternate_greetings = next.slice(1)
   } else {
-    const missing = greetings.flatMap((text, index) => /<mvu-status\s*\/>/i.test(text) ? [] : [index])
-    if (missing.length && greetings.some(text => /<initvar>/i.test(text))) {
-      const next = greetings.map((text, index) => missing.includes(index) ? text.replace(/\s+$/, '') + '\n\n<mvu-status/>' : text)
-      if (missing.includes(0)) fields.first_mes = next[0]
-      if (missing.some(index => index > 0)) fields.alternate_greetings = next.slice(1)
-    }
+    const missing = bodies.flatMap((text, index) => /<mvu-status\s*\/>/i.test(text) ? [] : [index])
+    const next = missing.length && bodies.some(text => /<initvar>/i.test(text))
+      ? bodies.map((text, index) => missing.includes(index) ? text.replace(/\s+$/, '') + '\n\n<mvu-status/>' : text) : bodies
+    if (next[0] !== greetings[0]) fields.first_mes = next[0]
+    if (next.slice(1).some((text, index) => text !== greetings[index + 1])) fields.alternate_greetings = next.slice(1)
   }
 
   // Worldbook: one rules entry, one disabled default-values entry.
@@ -167,9 +179,24 @@ export function planMvuApply(raw, request = {}) {
     upsert('mvu_update', '状态更新规则', { content: rules.includes('mvu_submit_update') ? rules : rules + '\n\n' + UPDATE_TAIL, enabled: true, constant: true })
   }
   if (object(request.variables)) upsert('initvar', '状态初值', { content: stateJson(states[0]), enabled: false, constant: false })
+  // Deletions go last, highest index first, so earlier refs stay valid.
+  const dropEntries = [...new Set((Array.isArray(remove.entries) ? remove.entries : []).map(ref => {
+    const index = Number(str(ref).replace(/^entry:/, ''))
+    if (!Number.isInteger(index) || index < 0 || index >= entries.length) throw new Error('remove.entries 里的条目不存在：' + ref)
+    if (/^\s*\[(?:mvu_update|initvar)\]/i.test(commentOf(entries[index]))) throw new Error('不能删除 MVU 自己的条目：' + ref)
+    return index
+  }))].sort((a, b) => b - a)
+  for (const index of dropEntries) worldbook.push({ op: 'delete', ref: 'entry:' + index })
 
   // Regex scripts: the panel view and the prompt-side marker removal.
   const scripts = Array.isArray(data.extensions?.regex_scripts) ? data.extensions.regex_scripts : []
+  const dropRegex = new Set((Array.isArray(remove.regex) ? remove.regex : []).map(item => {
+    const key = str(item).replace(/^.*\/regex_scripts\//, '')
+    const index = /^\d+$/.test(key) && Number(key) < scripts.length ? Number(key) : scripts.findIndex(rule => str(rule?.id) === key)
+    if (index < 0) throw new Error('remove.regex 里的正则不存在：' + item)
+    if ([STATUS_VIEW_ID, HIDE_MARKER_ID].includes(scripts[index]?.id)) throw new Error('不能删除 MVU 自己的正则：' + item)
+    return index
+  }))
   const viewIndex = scripts.findIndex(rule => rule?.id === STATUS_VIEW_ID)
   const panel = request.panel
   let html, panelSource = 'kept'
@@ -183,6 +210,7 @@ export function planMvuApply(raw, request = {}) {
     trimStrings: [], placement: [2], disabled: false, markdownOnly: true, promptOnly: false, runOnEdit: true, substituteRegex: 0
   }
   if (view) viewIndex >= 0 ? (nextScripts[viewIndex] = view) : nextScripts.push(view)
+  for (const index of [...dropRegex].sort((a, b) => b - a)) nextScripts.splice(index, 1)
   if (!scripts.some(rule => rule?.id === HIDE_MARKER_ID)) nextScripts.push({
     id: HIDE_MARKER_ID, scriptName: '隐藏模型历史中的状态入口', findRegex: '/\\n*<mvu-status\\s*\\/>/g', replaceString: '',
     trimStrings: [], placement: [2], disabled: false, markdownOnly: false, promptOnly: true, runOnEdit: true, substituteRegex: 0
@@ -195,7 +223,8 @@ export function planMvuApply(raw, request = {}) {
       openings: touchOpenings ? greetings.length : 0,
       variables: leafPaths(states[0]),
       rules: request.rules === undefined ? 'kept' : find('mvu_update') >= 0 ? 'updated' : 'added',
-      panel: panelSource
+      panel: panelSource,
+      removed: { openings: cleaned, entries: dropEntries.length, regex: dropRegex.size }
     }
   }
 }
@@ -210,6 +239,7 @@ const FLAGS = [
   ['HTML', /<html|<div|<style|<details/i]
 ]
 const flagsOf = (...parts) => { const text = parts.map(str).join('\n'); return FLAGS.filter(([, pattern]) => pattern.test(text)).map(([name]) => name) }
+const tail = (text, size) => { const flat = str(text).replace(/\s+/g, ' ').trim(); return flat.length > size ? '…' + flat.slice(-size) : flat }
 const brief = (text, size = 80) => { const flat = str(text).replace(/\s+/g, ' ').trim(); return flat.length > size ? flat.slice(0, size) + '…' : flat }
 
 export function surveyMvuCard(raw) {
@@ -222,7 +252,7 @@ export function surveyMvuCard(raw) {
     name: str(data.name), base,
     fields: Object.fromEntries(['description', 'personality', 'scenario', 'system_prompt', 'post_history_instructions', 'mes_example'].map(key => [key, { chars: str(data[key]).length, flags: flagsOf(data[key]) }])),
     openings: greetings.map((text, index) => ({
-      index, pointer: base + (index ? '/alternate_greetings/' + (index - 1) : '/first_mes'), chars: text.length, start: brief(text),
+      index, pointer: base + (index ? '/alternate_greetings/' + (index - 1) : '/first_mes'), chars: text.length, start: brief(text), end: tail(text.replace(/<initvar>[\s\S]*?<\/initvar>|<mvu-status\s*\/>/gi, ''), 120),
       initvar: /<initvar>/i.test(text), marker: /<mvu-status\s*\/>/i.test(text), flags: flagsOf(text.replace(/<initvar>[\s\S]*?<\/initvar>/gi, ''))
     })),
     variables: leafPaths(states.find(object) || {}),
@@ -240,10 +270,11 @@ export function surveyMvuCard(raw) {
 
 export function surveyText(survey) {
   const flags = list => list.length ? ' [' + list.join('/') + ']' : ''
-  const lines = ['《' + survey.name + '》字段位于 ' + (survey.base || '根') + '；方括号为程序按关键词标出的可能相关处，需要你读原文判断']
+  const lines = ['《' + survey.name + '》卡片文件里内容在 raw 下，字段位于 raw' + survey.base + '（下文路径都是 Tavern 工具用的 JSON Pointer，从 raw 起算）；meta 是酒馆元数据，不用改',
+    '方括号为程序按关键词标出的可能相关处，需要你读原文判断']
   lines.push('设定字段：' + Object.entries(survey.fields).filter(([, v]) => v.chars).map(([k, v]) => k + ' ' + v.chars + '字' + flags(v.flags)).join('；'))
   lines.push('开场 ' + survey.openings.length + ' 个：')
-  for (const item of survey.openings) lines.push('- ' + item.pointer + ' · ' + item.chars + '字' + (item.initvar ? ' · 有<initvar>' : '') + (item.marker ? ' · 有<mvu-status/>' : '') + flags(item.flags) + ' · ' + item.start)
+  for (const item of survey.openings) lines.push('- ' + item.pointer + ' · ' + item.chars + '字' + (item.initvar ? ' · 有<initvar>' : '') + (item.marker ? ' · 有<mvu-status/>' : '') + flags(item.flags) + ' · 开头：' + item.start + (item.chars > 160 ? ' · 结尾：' + item.end : ''))
   if (survey.variables.length) lines.push('现有变量：' + survey.variables.join('、'))
   lines.push('内置世界书 ' + survey.worldbook.length + ' 条：')
   for (const item of survey.worldbook) lines.push('- ' + item.ref + ' ' + (item.title || '（无标题）') + ' · ' + (item.enabled ? (item.constant ? '常驻' : '关键词 ' + item.keys.join(',')) : '禁用') + ' · ' + item.chars + '字' + flags(item.flags))

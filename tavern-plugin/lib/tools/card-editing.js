@@ -174,12 +174,21 @@ export function registerCardEditingTools({
 
   tools.register(defineTool({
     name: 'tavern_apply_mvu',
-    description: '把 MVU 结构一次写进人物卡并保存：你给出变量、各开场的不同值、更新规则和面板，工具负责机械部分——在每个开场末尾写入 <initvar>（自动加 $meta.strictSet，替换旧的）和 <mvu-status/>，新增或更新世界书 [mvu_update]（常驻，自动补提交说明）与 [initvar]（禁用）条目，新增或更新状态面板正则和隐藏入口正则；开场正文和其他内容不动。省略的部分保持卡里现有内容，可反复调用只改其中一部分。保存后自动校验，结果就是已保存的内容，无需再读文件核对。之后仍可用其他工具细调。',
+    description: '把 MVU 结构一次写进人物卡并保存：你给出变量、各开场的不同值、更新规则和面板，工具负责机械部分——在每个开场末尾写入 <initvar>（自动加 $meta.strictSet，替换旧的）和 <mvu-status/>，新增或更新世界书 [mvu_update]（常驻，自动补提交说明）与 [initvar]（禁用）条目，新增或更新状态面板正则和隐藏入口正则；可用 remove 在同一次保存里删掉开场里的旧状态块、旧状态说明条目和旧正则；其他内容不动。省略的部分保持卡里现有内容，可反复调用只改其中一部分。保存后自动校验，结果就是已保存的内容，无需再读文件核对。之后仍可用其他工具细调。',
     parameters: {
       path: { type: 'string', description: '可选的人物卡路径；省略时改当前人物卡' },
       variables: { type: 'json', description: '变量默认初值对象（stat_data 结构），各开场共用；省略时保留各开场现有初值' },
       openings: { type: 'array', items: { type: 'json' }, description: '可选，按开场顺序（first_mes、alternate_greetings…）给出与默认值不同的字段，只写不同的部分，深合并到 variables；某个开场无差异写 null' },
       rules: { type: 'string', description: '[mvu_update] 规则正文：每个字段在什么剧情事实下怎么变；省略时保留现有规则' },
+      remove: {
+        type: 'object', additionalProperties: false,
+        description: '可选，同一次保存里清理旧状态协议',
+        properties: {
+          fromOpenings: { type: 'string', description: 'JavaScript 正则源码，从每个开场删除匹配内容（如旧状态块 "\\n*<状态>[\\s\\S]*?</状态>"）；都不匹配时报错不保存' },
+          entries: { type: 'array', items: { type: 'string' }, description: '要删除的内置世界书条目编号，如 entry:3' },
+          regex: { type: 'array', items: { type: 'string' }, description: '要删除的正则：序号、JSON Pointer 或 id' }
+        }
+      },
       panel: {
         type: 'object', additionalProperties: false,
         description: '状态面板。给 html 用你写的完整 HTML（美元符号照常写，工具会转义）；不给 html 时按 title/sections/accent 生成标准面板；省略整个 panel 时保留已有面板，没有则按变量自动生成',
@@ -208,6 +217,8 @@ export function registerCardEditingTools({
           variables: { type: 'array', required: true, items: { type: 'string' } },
           rules: { type: 'string', required: true },
           panel: { type: 'string', required: true },
+          removed: { type: 'object', required: true, additionalProperties: false, properties: {
+            openings: { type: 'integer', required: true }, entries: { type: 'integer', required: true }, regex: { type: 'integer', required: true } } },
           validation: VALIDATION_SCHEMA
         }
       },
@@ -215,6 +226,8 @@ export function registerCardEditingTools({
         const words = { kept: '保留', updated: '已更新', added: '已新增', custom: '使用你写的 HTML', generated: '已生成标准面板' }
         const lines = ['已写入 MVU（' + value.path + '）：' + (value.openings ? value.openings + ' 个开场的初值' : '开场初值未改') + '；规则' + words[value.rules] + '；面板' + words[value.panel],
           '变量：' + value.variables.join('、')]
+        const removed = value.removed
+        if (removed.openings || removed.entries || removed.regex) lines.push('已清理旧协议：' + [removed.openings && removed.openings + ' 个开场', removed.entries && removed.entries + ' 条世界书', removed.regex && removed.regex + ' 条正则'].filter(Boolean).join('、'))
         if (value.validation) lines.push(validationText(value.validation))
         return [{ type: 'text', text: lines.join('\n') }]
       }
