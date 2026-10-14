@@ -370,7 +370,8 @@ body.dsh-tavern-shell-active span:has(.dsh-tavern-hero-lockup) + span { display:
 .dsh-tavern-timeout-banner button { flex: none; border: 1px solid color-mix(in srgb, var(--dsh-tavern-accent) 40%, transparent); border-radius: 7px; padding: 4px 8px; background: transparent; color: var(--dsh-tavern-accent); cursor: pointer; }
 .dsh-tavern-choice-error { padding: 5px; color: #c45f5f; font-size: 12px; }
 .dsh-tavern-question { width: 100%; max-width: var(--dsh-composer-card-max-width, 780px); box-sizing: border-box; margin: 0 auto; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 14px; background: var(--dsw-specific-tip, var(--dsw-specific-sidebar-fill)); box-shadow: var(--dsw-shadow-lv1); }
-.dsh-tavern-question.dsh-tavern-candidate-question { width: calc(100% - 32px); max-width: min(680px, var(--dsh-composer-card-max-width, 780px)); }
+/* Inset from the composer card below so the stacked edges do not nearly-but-not-quite line up. */
+.dsh-tavern-question:is(.dsh-tavern-candidate-question, .dsh-tavern-regen) { width: calc(100% - 32px); max-width: calc(min(680px, var(--dsh-composer-card-max-width, 780px)) - 24px); }
 .dsh-tavern-question.collapsed { padding: 9px 12px; box-shadow: none; }
 .dsh-tavern-question-head { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; font-weight: 750; cursor: pointer; }
 .dsh-tavern-question.collapsed .dsh-tavern-question-head { margin-bottom: 0; }
