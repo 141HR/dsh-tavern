@@ -19,7 +19,7 @@ const ALLOWED_METHODS = new Set([
   'updateTavernHelperPrompts', 'updateTavernHelperVariables', 'updateTavernHelperMessages', 'createTavernHelperMessages',
   'getTavernHelperWorldbook', 'replaceTavernHelperWorldbook', 'loadTavernWorldInfo',
   'generateTavernHelper', 'generateTavernHelperRaw', 'stopTavernHelperGeneration', 'stopAllTavernHelperGeneration',
-  'recordMvuRuntimeDiagnostic', 'recordTavernCompatibilityCalls',
+  'recordMvuRuntimeDiagnostic', 'recordTavernCompatibilityCalls', 'saveTavernExtensionSettings', 'saveTavernWorldInfo', 'saveTavernChatData',
   'getFullPromptTemplateState', 'releaseFullTemplateRuntime', 'heartbeatFullTemplateRuntime', 'claimFullTemplateWork', 'completeFullTemplateWork'
 ])
 const ALLOWED_GET = /^\/api\/dsh-tavern\/(?:vendor\/|client-assets\/|remote-assets\/|static-assets|helper-history|session-resource|plugin-assets\/)/
@@ -44,6 +44,8 @@ export function createServerScriptExecutor({ handle, subscribeSignals, idleMs = 
     try {
       const path = String(message.path || '')
       const pathname = new URL(path, 'http://x').pathname
+      // SillyTavern feature probe served outside /api/dsh-tavern.
+      if (pathname === '/version') { reply({ status: 200, headers: { 'content-type': 'application/json' }, body: Buffer.from(JSON.stringify({ pkgVersion: '1.12.14' })).toString('base64') }); return }
       const method = pathname.slice('/api/dsh-tavern/'.length)
       if (message.method === 'POST' ? !ALLOWED_METHODS.has(method) : !(message.method === 'GET' && ALLOWED_GET.test(pathname))) {
         logger.warn('dsh-tavern: 服务端卡脚本运行时请求被拒绝', message.method, pathname)

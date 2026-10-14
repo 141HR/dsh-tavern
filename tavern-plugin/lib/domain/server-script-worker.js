@@ -107,7 +107,6 @@ function createHeadlessFrame(hostWindow, virtualConsole) {
   // The real sandbox is cross-origin: anything but postMessage is a SecurityError.
   const proxyParent = new Proxy({
     postMessage(data) {
-      log('log', 'DEBUG child->parent', data?.type, data?.method || data?.name || '', data?.level === 'error' ? data.message : '')
       const copy = structuredClone(data)
       setTimeout(() => hostWindow.dispatchEvent(messageEvent(hostWindow, copy, child && child.window)), 0)
     }
@@ -134,7 +133,6 @@ function createHeadlessFrame(hostWindow, virtualConsole) {
     Object.defineProperty(w, 'parent', { value: proxyParent, configurable: true })
     try { Object.defineProperty(w, 'top', { value: proxyParent, configurable: true }) } catch {}
     w.postMessage = function (data) {
-      log('log', 'DEBUG parent->child', data?.type, data?.name || '')
       const copy = structuredClone(data)
       setTimeout(() => w.dispatchEvent(messageEvent(w, copy, proxyParent)), 0)
     }

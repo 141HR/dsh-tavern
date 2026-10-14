@@ -690,6 +690,27 @@ try {
   if (process.argv.includes('--card-update')) await cardUpdateChecks({page,step,savedChat,data,output,report})
   if (process.argv.includes('--sidebar') || process.argv.includes('--sidebar-only')) await sidebarUpgrade({ page, step, savedChat, output, report })
   }
+  if (process.argv.includes('--server-scripts')) await step('关闭页面后，变量重新结算仍由服务端完成', async () => {
+    const chat = await savedChat()
+    const latest = chat.messages.filter(message => message.role === 'assistant' && !message.greeting).at(-1)
+    const origin = new URL(page.url()).origin
+    await page.goto('about:blank')
+    const started = Date.now(), claims = () => log.split('服务端卡脚本运行时领取事件').length - 1, claimedBefore = claims()
+    const response = await context.request.post(origin + '/api/dsh-tavern/retryMvuSettlement', { data: { sessionId: chat.sessionId, turn: latest.turn, guidance: 'E2E 修正金币为四十' } })
+    const result = await response.json()
+    assert.ok(result.ok, result.error)
+    let settled
+    while (Date.now() - started < timeout) {
+      settled = (await savedChat()).messages.filter(message => message.role === 'assistant' && !message.greeting).at(-1)
+      if (claims() > claimedBefore && settled.mvu?.receipt?.status === 'updated' && JSON.stringify(settled.mvu) !== JSON.stringify(latest.mvu)) break
+      await pause(250)
+    }
+    assert.ok(claims() > claimedBefore, '无页面时服务端运行时应领取结算事件')
+    assert.equal(settled.mvu.receipt.status, 'updated', '无页面时服务端应完成结算')
+    assert.notDeepEqual(settled.mvu, latest.mvu)
+    report.serverScripts = { pageClosed: true, settleMs: Date.now() - started, receipt: settled.mvu.receipt.status }
+    await page.goto(origin + '/', { waitUntil: 'domcontentloaded' })
+  })
   if((process.argv.includes('--native-format')||process.argv.includes('--migrate-native')) && !process.argv.includes('--opening-only'))await step('服务重启后打开同一原生存档并核对当前变量',async()=>{
     const before=await savedChat()
     await restartServer()
