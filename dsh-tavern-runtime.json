@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "c622c608ba98b395c367270c3ca461b45f652ab3",
-  "releaseSequence": 610,
+  "revision": "1011d6c5b69e07eb04beb5dab65ff9215658375f",
+  "releaseSequence": 611,
   "version": "2.6.0",
   "files": [
     {
@@ -321,13 +321,13 @@
     },
     {
       "path": "presets/tavern/skills/card-to-mvu/references/mvu-format.md",
-      "sha256": "416010bfb60617d7b920322883df31a8e26d87a6539d0412ba24fbe704f936cc",
-      "size": 5323
+      "sha256": "4b79f6a7ff25ec82c5af6b42e92f7c40e8c3aed665d4d4abb342ccb62ad5a862",
+      "size": 5500
     },
     {
       "path": "presets/tavern/skills/card-to-mvu/SKILL.md",
-      "sha256": "22d29778144c9af8a070ea709a8546b34463616715a5b1be06179402edeff8af",
-      "size": 1796
+      "sha256": "1b82a877e752d3e3cbb659dd1e026d7998aa4d6fd4cc711f8bc2aa3b472ae802",
+      "size": 2547
     },
     {
       "path": "presets/tavern/skills/create-card/SKILL.md",
@@ -606,8 +606,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/card-preparation.js",
-      "sha256": "7251dbd81eaefa71a7f183dfb06cb63130c354ea99eb33aa5e8015a25f2e0f1b",
-      "size": 27129
+      "sha256": "387c6b57d8441496a806ffa80e55c287aa0468bd651a3d6d9e92dd442259a064",
+      "size": 27554
     },
     {
       "path": "tavern-plugin/lib/domain/card-reading.js",
@@ -1093,6 +1093,11 @@
       "path": "tavern-plugin/lib/domain/mvu-background-settlement.js",
       "sha256": "ef01960f9fdeca65e3f883bd6a0e49d7f437eb17a95cca7ce2505348c58bb508",
       "size": 37803
+    },
+    {
+      "path": "tavern-plugin/lib/domain/mvu-card-apply.js",
+      "sha256": "dba52b50eef49d856303818024364e6916bf19b4fe790882a1c73d13a927768e",
+      "size": 19561
     },
     {
       "path": "tavern-plugin/lib/domain/mvu-card-check.js",
@@ -1881,8 +1886,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/turn-orchestration.js",
-      "sha256": "c18dcdd90d05394e3ffc85eaa3de3725f932c56647a681677305e69bef264c35",
-      "size": 48406
+      "sha256": "82ca67428cd49a6789f0948020cbd8f6c6097571ed14633acd6aad73a7a1df4a",
+      "size": 48449
     },
     {
       "path": "tavern-plugin/lib/domain/uncommitted-rounds.js",
@@ -2036,8 +2041,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "b8e49a042731f626d357bcb45cf62e2dad1ae0085340a8a899a548496f84f5ec",
-      "size": 324499
+      "sha256": "883aa45c42b27889df44c698e3236a24d67b6b42ad30303d33285d036717ec86",
+      "size": 324542
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -2066,8 +2071,8 @@
     },
     {
       "path": "tavern-plugin/lib/tools/card-editing.js",
-      "sha256": "af247a62be9132f5c7ec02a941601f9c6358448ef936529836758a2fddc3c0ad",
-      "size": 10947
+      "sha256": "4c231aac1043742a4a78d6d5bc72e2b2e2c8e0fa343f6ff04308d7d53ea5d391",
+      "size": 18830
     },
     {
       "path": "tavern-plugin/lib/tools/card-reading.js",
