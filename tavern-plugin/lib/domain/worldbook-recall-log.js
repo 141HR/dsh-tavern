@@ -8,9 +8,25 @@ export function compactRecallDiagnostics(entries = []) {
 const labels = { semantic: '筛选原型未保留', selected: '已选中', keywords: '关键词条件不满足', cooldown: '十轮冷却中', 'screened-cooldown': '筛选排除后十轮冷却中', group: '包含组竞争未入选', budget: '超过 token 预算', limit: '旧版本条目数量上限', 'recursion-delay': '尚未到递归等级', 'recursion-excluded': '禁止递归触发', disabled: '已禁用', empty: '正文为空', 'mvu-update': '由 MVU 规则链处理' }
 export function describeRecallEntries(entries) { return entries.map(entry => ({ ...entry, reasonLabel: labels[entry.reason] || entry.reason })) }
 
+// Recall audits are debugging evidence; only recent turns keep their detail.
+export const WORLDBOOK_RECALL_KEEP_TURNS = 10
+
 /** Independent per-operation records. Neither prompt text nor chat snapshots carry the full audit. */
 export function createWorldbookRecallLog({ store, now = Date.now }) {
   const base = chatId => 'worldbook-recalls/' + segment(chatId) + '/'
+  // Drops index rows (and files) of turns older than the window.
+  async function retain(chatId) {
+    let dropped = []
+    await store.updateJson(base(chatId) + 'index.json', previous => {
+      const records = previous?.records || []
+      const latest = records.reduce((max, record) => Math.max(max, Number(record.turn) || 0), 0)
+      const cutoff = latest - WORLDBOOK_RECALL_KEEP_TURNS
+      dropped = records.filter(record => (Number(record.turn) || 0) <= cutoff)
+      return dropped.length ? { version: 1, records: records.filter(record => !dropped.includes(record)) } : previous
+    })
+    for (const record of dropped) await store.remove(record.path)
+    return { pruned: dropped.length }
+  }
   async function record({ chat, frame, log }) {
     const path = base(chat.id) + segment(frame.operationId) + '.json'
     const value = { version: 1, status: 'prepared', createdAt: now(), chatId: chat.id, sessionId: chat.sessionId,
@@ -20,6 +36,7 @@ export function createWorldbookRecallLog({ store, now = Date.now }) {
       const records = (previous?.records || []).filter(record => record.operationId !== frame.operationId)
       return { version: 1, records: [...records, { path, turn: frame.turn, operationId: frame.operationId, branchId: frame.branchId, createdAt: value.createdAt }] }
     })
+    await retain(chat.id)
     return path
   }
   async function read(chat, turn) {
@@ -41,5 +58,5 @@ export function createWorldbookRecallLog({ store, now = Date.now }) {
     await store.updateJson(path, log => log ? { ...log, status: 'requested', requestedAt: now(), requestIds: [...new Set([...(log.requestIds || []), requestId])],
       outputs: log.outputs.map(output => ({ ...output, requestContainsText: output.location === 'foreground' ? requestText.includes(output.text) : null })) } : log)
   }
-  return { record, read, requested }
+  return { record, read, requested, prune: retain }
 }

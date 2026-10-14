@@ -1,5 +1,5 @@
 import {createHash, randomUUID} from 'node:crypto'
-import {mkdir, open, readFile, rename, rm, link} from 'node:fs/promises'
+import {mkdir, open, readFile, readdir, rename, rm, link, stat} from 'node:fs/promises'
 import path from 'node:path'
 import {createDurableFilePromotion} from '../durable-file-promotion.js'
 
@@ -400,5 +400,90 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
   }
   return Object.fromEntries(entries)
  }
- return Object.freeze({create,commit,readHead,openConversation,readHistoryPage,readState,writeRecord,writeRecords,readRecord,readEntries})
+ // Delete blocks unreachable from the current head. Old heads stay reachable
+ // only through keyed records the caller retains (`retainEntry(key)`, e.g.
+ // 'chat-revision:N'); previousHeadId links are never followed. Any 64-hex
+ // string inside a reachable value that names an existing block is retained
+ // too, so opaque record references are kept conservatively. Blocks younger
+ // than graceMs are kept for in-flight commits and pinned readers.
+ async function sweep(id,{retainEntry=()=>true,graceMs=10*60*1000,dryRun=false,now=Date.now()}={}){
+  const dir=directory(id),blocks=path.join(dir,'blocks'),HEX=/^[a-f0-9]{64}$/
+  let result
+  await promotion.update(path.join(dir,'head.json'),async pointer=>{
+   if(pointer===undefined)throw Error('Conversation not found')
+   const reference=JSON.parse(pointer)
+   if(reference.format!==FORMAT)throw Error('Unsupported conversation format')
+   const marked=new Set(),queue=[[reference.headId,true]]
+   async function load(ref,required){
+    let bytes
+    try{bytes=await readFile(blobPath(dir,ref),'utf8')}catch(error){
+     if(error.code==='ENOENT'&&!required)return undefined
+     throw error
+    }
+    return decodeBlock(dir,ref,bytes)
+   }
+   function scan(value,optional){
+    if(typeof value==='string'){if(HEX.test(value)&&!marked.has(value))optional.push(value);return}
+    if(Array.isArray(value)){for(const item of value)scan(item,optional);return}
+    if(record(value))for(const item of Object.values(value))scan(item,optional)
+   }
+   while(queue.length){
+    const [ref,required]=queue.pop()
+    if(marked.has(ref))continue
+    const value=await load(ref,required)
+    if(value===undefined)continue
+    marked.add(ref)
+    const strong=[],optional=[]
+    if(value.kind==='head'){for(const key of ['root','stateId','metadataId','recordRoot'])if(value[key])strong.push(value[key])}
+    else if(value.kind==='index')strong.push(...value.children.filter(Boolean))
+    else if(value.kind==='entries')strong.push(...Object.values(value.children).filter(Boolean))
+    else if(value.kind==='entry'){
+     // A dropped entry keeps its small value record, so lookups still resolve
+     // and fail cleanly on the missing head instead of on the index.
+     if(retainEntry(value.key))strong.push(value.valueRef)
+     else marked.add(value.valueRef)
+    }
+    else scan(value,optional)
+    for(const next of strong)queue.push([next,true])
+    for(const next of optional)queue.push([next,false])
+   }
+   // Packed records are hard links to one pack inode; space returns only
+   // when every link, including the pack's own, is gone.
+   let removed=0,kept=0
+   const cutoff=now-graceMs,inodes=new Map()
+   async function remove(file,info){
+    const key=info.dev+':'+info.ino,entry=inodes.get(key)||{nlink:info.nlink,size:info.size,removed:0}
+    entry.removed++;inodes.set(key,entry);removed++
+    if(!dryRun)await rm(file,{force:true})
+   }
+   let shards=[]
+   try{shards=await readdir(blocks)}catch(error){if(error.code!=='ENOENT')throw error}
+   for(const shard of shards){
+    if(!/^[a-f0-9]{2}$/.test(shard))continue
+    for(const name of await readdir(path.join(blocks,shard))){
+     const file=path.join(blocks,shard,name),ref=name.slice(0,-5)
+     if(!name.endsWith('.json')||!HEX.test(ref))continue
+     if(marked.has(ref)){kept++;continue}
+     const info=await stat(file)
+     if(info.mtimeMs>cutoff){kept++;continue}
+     await remove(file,info)
+    }
+   }
+   const packs=path.join(blocks,'.packs')
+   let packNames=[]
+   try{packNames=await readdir(packs)}catch(error){if(error.code!=='ENOENT')throw error}
+   for(const name of packNames){
+    if(!name.endsWith('.json'))continue
+    const file=path.join(packs,name),info=await stat(file),entry=inodes.get(info.dev+':'+info.ino)
+    // Removed links already lowered nlink on disk; count against the first stat.
+    if((entry?.nlink??info.nlink)-(entry?.removed??0)===1&&info.mtimeMs<=cutoff)await remove(file,info)
+   }
+   let bytes=0
+   for(const entry of inodes.values())if(entry.removed>=entry.nlink)bytes+=entry.size
+   result={reachable:marked.size,kept,removed,bytes}
+   return undefined
+  })
+  return result
+ }
+ return Object.freeze({create,commit,readHead,openConversation,readHistoryPage,readState,writeRecord,writeRecords,readRecord,readEntries,sweep})
 }

@@ -97,7 +97,11 @@ export function createNativeConversationStorage({dataRoot,onIO}){
   if(revision!==Infinity&&revision!==view.state.chatRevision){
    const ref=(await pages.readEntries(id,['chat-revision:'+revision],{snapshotId:view.snapshotCursor.snapshotId}))['chat-revision:'+revision]
    if(!ref)throw failure('DSH_TAVERN_REVISION_NOT_FOUND','Native Chat revision not found: '+revision)
-   view=await head(id,ref)
+   try{view=await head(id,ref)}catch(error){
+    // compact() drops unretained revision heads but keeps their index entries.
+    if(error.code==='ENOENT')throw failure('DSH_TAVERN_REVISION_NOT_FOUND','Native Chat revision was compacted: '+revision)
+    throw error
+   }
   }
   return view
  }
@@ -632,5 +636,26 @@ export function createNativeConversationStorage({dataRoot,onIO}){
    records:[['chat-revision:'+stored.revision,view.snapshotCursor.snapshotId],['chat-change:'+next._storageRevision,changeRef]]},{assertCurrent})
   return result(next,await head(id))
  }
- return Object.freeze({patch,read,readWindow,readSettlementBase,readChangedSlice,readRevisionMetadata,readHelperContext,readSlice,readSessionState,readDisplayRuntimeState,readSceneImageState,version,create,write})
+ // Physically drop revisions nothing can reach any more. `retain(revision)`
+ // names the revisions rollback, undo, recovery and forks still need; the
+ // newest keepRecent revisions also stay for in-flight work.
+ // Only the header fields that decide which old revisions must stay readable.
+ async function readRetentionHeader(id,revision=Infinity){
+  const view=await headAtRevision(id,revision)
+  if(!view)return null
+  const header=await selectedHeader(id,view,['timeline','rollbackUndo','regenRecovery','forkedFrom','regenInProgress'])
+  return {...header,id,_storageRevision:view.state.chatRevision,legacyInitialRevision:view.metadata.settings?.legacyInitialRevision}
+ }
+ async function compact(id,{retain=()=>false,keepRecent=64,graceMs,dryRun}={}){
+  const view=await head(id)
+  if(!view)return null
+  const current=view.state.chatRevision
+  return pages.sweep(id,{graceMs,dryRun,retainEntry:key=>{
+   const match=/^chat-revision:(\d+)$/.exec(key)
+   if(!match)return true
+   const revision=Number(match[1])
+   return revision>current-keepRecent||retain(revision)
+  }})
+ }
+ return Object.freeze({compact,readRetentionHeader,patch,read,readWindow,readSettlementBase,readChangedSlice,readRevisionMetadata,readHelperContext,readSlice,readSessionState,readDisplayRuntimeState,readSceneImageState,version,create,write})
 }

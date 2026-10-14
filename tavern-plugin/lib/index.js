@@ -163,6 +163,7 @@ import { POSTURE_SUBMIT_TOOL, POSTURE_SUBMIT_TOOL_NAME, lastSubmittedPosture, no
 import { TAVERN_COMPATIBILITY_CAPABILITIES, createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
 import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics, sanitizeModuleFailure, sanitizeMvuLoadDiagnostic, redactMvuLoadError } from './domain/mvu-diagnostics.js'
 import { createPlayChatDebugReference, readPlayChatDebugTurn } from './domain/play-chat-debug.js'
+import { createSaveMaintenance } from './domain/save-maintenance.js'
 import { createDisplayRuntimeStore, displayRuntimeReceipt } from './domain/display-runtime-store.js'
 import { createPhoneChat } from './domain/phone-chat.js'
 import { createPresetLibrary } from './domain/preset-library.js'
@@ -195,7 +196,7 @@ import { readZipEntries, writeZipEntries } from './domain/zip-entries.js'
 import { createGameFootprint } from './domain/game-footprint.js'
 import { buildGameSave, collectSaveRevisions, readGameSave } from './domain/game-save.js'
 import { readFileSync } from 'node:fs'
-import { rm } from 'node:fs/promises'
+import { readdir, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 
 const TAVERN_PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
@@ -427,7 +428,8 @@ export async function apply(ctx) {
     writeJson: async function (path, value) { return await profileData.writeJson(path, value) },
     updateJson: async function (path, updater) { return await profileData.updateJson(path, updater) },
     writeText: async function (path, text) { return await profileData.writeBytes(path, Buffer.from(text, 'utf8')) },
-    remove: async function (path) { return await profileData.remove(path) }
+    remove: async function (path) { return await profileData.remove(path) },
+    size: path => profileData.size(path)
   })
   // A single SKILL.md arrives as text; a skill folder arrives as a ZIP. Only UTF-8 Markdown is read.
   function skillImportFiles(args) {
@@ -964,6 +966,44 @@ export async function apply(ctx) {
     readSlice: chatPersistence.readSlice, readState: chatPersistence.readSessionState,
     headerForSession: chatHeaderForSession, stateForSession: sessionStateForSession
   })
+  async function directorySize(target) {
+    const info = await stat(target).catch(() => null)
+    if (!info) return 0
+    if (!info.isDirectory()) return info.size
+    let total = 0
+    for (const name of await readdir(target).catch(() => [])) total += await directorySize(path.join(target, name))
+    return total
+  }
+  const saveMaintenance = createSaveMaintenance({
+    chats: chatJournalStore, requestLog: modelRequestLog, recallLog: worldbookRecallLog, store: profileData,
+    listChatIds: async () => [...new Set((await readdir(path.join(dataRoot, 'chats'), { withFileTypes: true }).catch(() => []))
+      .map(entry => entry.isDirectory() ? entry.name : entry.name.endsWith('.json') ? entry.name.slice(0, -5) : '')
+      .filter(id => id.startsWith('chat-') && !deletedChatIds.has(id)))],
+    removeOrphans: async known => {
+      // A game listed in the index keeps its logs even if its save is missing.
+      for (const row of (await profileData.readJson('index.json').catch(() => null))?.chats || []) if (row?.id) known.add(String(row.id))
+      let bytes = 0
+      for (const folder of ['model-requests', 'worldbook-recalls', 'display-runtime']) {
+        const base = path.join(dataRoot, folder)
+        for (const entry of await readdir(base, { withFileTypes: true }).catch(() => [])) {
+          const id = entry.isDirectory() ? entry.name : entry.name.replace(/\.json$/, '')
+          if (!id.startsWith('chat-') || known.has(id)) continue
+          bytes += await directorySize(path.join(base, entry.name))
+          await rm(path.join(base, entry.name), { recursive: true, force: true })
+        }
+      }
+      return bytes
+    },
+    isIdle: async chatId => {
+      if (deletedChatIds.has(chatId)) return false
+      const state = await taskStateReader.read(chatId).catch(() => null)
+      if (!state || state.regenInProgress) return false
+      if (agentRegistry.get(state.sessionId)?.phase?.kind === 'running') return false
+      const activity = backgroundTasks.activity(state)
+      return !activity.busy && !['pending', 'running'].includes(activity.phase)
+    }
+  })
+  ctx.effect(() => { saveMaintenance.start(); return () => saveMaintenance.dispose() }, 'dsh-tavern: save maintenance')
   const historyRecall = createHistoryRecall()
   const foregroundRecallScopes = new WeakMap()
   async function recallHistoryForSession(sessionId, args, scope, audience) {
@@ -2399,6 +2439,7 @@ export async function apply(ctx) {
     fork.forkedFrom = { ...fork.forkedFrom, chatId: source.id, sessionId: source.sessionId, storageRevision: source._storageRevision,
       stateChatId: state.id, stateRevision: state._storageRevision, turn, atSeq }
     await conversationRegistry.publish(fork)
+    await saveMaintenance.recordFork(fork).catch(error => console.warn('dsh-tavern: 记录分叉来源失败', str(error?.message || error)))
     await forkPluginState(source, state, fork, turn)
     return conversationForkReceipt(fork, { lastTurn: turn, messageCount: fork.messages.length })
   }
@@ -3506,6 +3547,7 @@ export async function apply(ctx) {
     try {
       const latest = await chatPersistence.readSessionState(chatId)
       if (!signal.aborted && latest) {
+        saveMaintenance.schedule(chatId)
         void mvuSettlementReconciler.wake(latest.sessionId)
         void candidateWorldbookPreparation.warm(latest.sessionId)
         void worldbookPrefilter.start(chatId)
