@@ -621,7 +621,7 @@ try {
     })
     await step('重新生成最新正文', async () => {
       await page.getByRole('button', { name: '重新生成正文', exact: true }).click()
-      await page.getByPlaceholder('指导意见（可选）：例如“写得更长，侧重心理描写”').fill('雨夜重写')
+      await page.getByPlaceholder('指导意见（可选）').fill('雨夜重写')
       await page.getByRole('button', { name: '生成并替换正文', exact: true }).click()
       await page.getByText('雨夜里，你重新领取了奖励。', { exact: true }).filter({ visible: true }).first().waitFor()
       await page.frameLocator('.dsh-tavern-status-runtime iframe:not([aria-hidden="true"])').locator('#e2e-gold').filter({ hasText: /^金币：30$/ }).waitFor()
