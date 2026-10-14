@@ -261,7 +261,7 @@ export async function apply(ctx) {
   const compactionTimers = new Map()
   const compactionAbort = new AbortController()
   const sessionSignals = createSessionSignalTransport()
-  let serverScripts = null
+  let serverScripts = null, tavernHttpHandle = null
   function queueAutoCompaction(sessionId) {
     if (!autoCompaction || compactionAbort.signal.aborted || compactionTimers.has(sessionId)) return
     const timer = setTimeout(async () => {
@@ -4634,8 +4634,9 @@ export async function apply(ctx) {
     }
   }))
 
-  const tavernHttp = registerTavernHttpRoutes({
+  registerTavernHttpRoutes({
     ctx,
+    exposeHandler: handle => { tavernHttpHandle = handle },
     pluginAssets: createPluginAssets({ pluginsDir: userPluginPaths(dataRoot).plugins }),
     dispatch,
     fileResources,
@@ -4653,10 +4654,12 @@ export async function apply(ctx) {
   })
   if (process.env.DSH_TAVERN_SERVER_SCRIPTS === '1') {
     serverScripts = createServerScriptExecutor({
-      handle: (req, res) => tavernHttp.handle(req, res),
+      handle: (req, res) => tavernHttpHandle(req, res),
       // Keep the runtime through a whole settlement, not just one dispatched event.
       busy: async sessionId => {
         if (tavernScriptDispatch.status(sessionId)?.busy === true) return true
+        // A reply still being written settles next: keep the runtime for it.
+        if (agentRegistry.get(sessionId)?.phase?.kind === 'running') return true
         const state = await taskStateReader.forSession(sessionId).catch(() => null)
         const activity = state ? backgroundTasks.activity(state) : null
         return Boolean(activity && (activity.busy || activity.phase === 'pending' || activity.phase === 'running'))

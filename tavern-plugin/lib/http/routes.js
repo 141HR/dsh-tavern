@@ -25,6 +25,7 @@ export function registerTavernHttpRoutes({
   str,
   tavernRemoteAssets,
   tavernStaticResources,
+  exposeHandler,
 }) {
   const webServer = ctx.get('webServer')
   if (webServer !== undefined) {
@@ -50,7 +51,7 @@ export function registerTavernHttpRoutes({
     }), 'dsh-tavern: web route')
   }
   // In-process callers (the server script runtime) share these exact routes.
-  return { handle: handleTavernRequest }
+  exposeHandler?.(handleTavernRequest)
 
   async function handleTavernRequest(req, res) {
       {

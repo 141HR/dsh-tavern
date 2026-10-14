@@ -691,9 +691,20 @@ try {
   if (process.argv.includes('--sidebar') || process.argv.includes('--sidebar-only')) await sidebarUpgrade({ page, step, savedChat, output, report })
   }
   if (process.argv.includes('--deferred-resettle')) await step('页面关闭时发起重新结算，重新打开页面后完成', async () => {
+    const origin = new URL(page.url()).origin
+    if (process.env.TAVERN_E2E_WARM_RETRY_FIRST === '1') {
+      // A completed retry first advances the story revision, as in the server scenario.
+      const before = await savedChat(), turn = before.messages.filter(message => message.role === 'assistant' && !message.greeting).at(-1)
+      assert.ok((await (await context.request.post(origin + '/api/dsh-tavern/retryMvuSettlement', { data: { sessionId: before.sessionId, turn: turn.turn, guidance: 'E2E 修正金币为四十' } })).json()).ok)
+      const warmStarted = Date.now()
+      while (Date.now() - warmStarted < 30000) {
+        const row = (await savedChat()).messages.filter(message => message.role === 'assistant' && !message.greeting).at(-1)
+        if (!row.mvu?.pending && row.mvu?.receipt?.diagnosticId !== turn.mvu?.receipt?.diagnosticId) break
+        await pause(250)
+      }
+    }
     const chat = await savedChat()
     const latest = chat.messages.filter(message => message.role === 'assistant' && !message.greeting).at(-1)
-    const origin = new URL(page.url()).origin
     await page.goto('about:blank')
     await pause(15000)
     const result = await (await context.request.post(origin + '/api/dsh-tavern/retryMvuSettlement', { data: { sessionId: chat.sessionId, turn: latest.turn, guidance: 'E2E 修正金币为四十' } })).json()
