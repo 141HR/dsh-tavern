@@ -307,6 +307,12 @@ export function createTavernPluginApi(deps) {
       return data
     },
 
+    // The picture of the game's character card, as a URL a page can show.
+    async getCardImage({ gameId } = {}) {
+      const game = await requireGame(gameId)
+      return (await deps.readCardImage?.(game.sessionId)) ?? null
+    },
+
     // Settled turns from..to (at most 50), each with the player's input and the shown text.
     async getHistory({ gameId, from, to } = {}) {
       const game = await requireGame(gameId)

@@ -2686,6 +2686,12 @@ export async function apply(ctx) {
     ...pluginTurns,
     backgroundModel: async sessionId => backgroundModelSelection(await backgroundConfigForSession(sessionId)),
     readCard: readPluginCard,
+    readCardImage: async sessionId => {
+      const header = await chatHeaderForSession(sessionId, ['cardPath'])
+      const cardPath = str(header?.cardPath)
+      if (!cardPath || !await fileResources.hasCardImage(cardPath).catch(() => false)) return null
+      return { url: '/api/dsh-tavern/card-image?path=' + encodeURIComponent(cardPath), mediaType: 'image/png' }
+    },
     readHistory: readPluginHistory,
     readActivity: async sessionId => {
       const chat = await taskStateReader.forSession(sessionId)
