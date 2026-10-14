@@ -7,6 +7,11 @@ import {createDurableFilePromotion} from '../durable-file-promotion.js'
 // Only the small head pointer is mutable. Readers pin immutable snapshots;
 // append/point edits copy a bounded page and its radix-tree path.
 const PAGE_SIZE=64, FANOUT=32, FORMAT=1
+// Head pointer format. 2: blocks may live in block packs (any block kind,
+// several per file); older releases refuse it cleanly instead of misreading.
+const POINTER_FORMAT=2
+const readablePointer=format=>format===1||format===POINTER_FORMAT
+const PACK_BYTES=64*1024, PACK_ENTRIES=256
 const hash=value=>createHash('sha256').update(value).digest('hex')
 const copy=value=>JSON.parse(JSON.stringify(value))
 const record=value=>value!==null&&typeof value==='object'&&!Array.isArray(value)
@@ -36,13 +41,14 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
   }
   let pack
   try{pack=JSON.parse(bytes)}catch{throw Error('Immutable block checksum mismatch')}
-  if(pack?.kind!=='record-pack-v1'||!Array.isArray(pack.records)||pack.records.length>128)throw Error('Immutable block checksum mismatch')
+  const blockPack=pack?.kind==='block-pack-v1'
+  if(!blockPack&&pack?.kind!=='record-pack-v1'||!Array.isArray(pack.records)||pack.records.length>PACK_ENTRIES)throw Error('Immutable block checksum mismatch')
   const entries=[],seen=new Set()
   for(const entry of pack.records){
    if(!Array.isArray(entry)||entry.length!==2||seen.has(entry[0]))throw Error('Immutable pack checksum mismatch')
-   const [ref,value]=entry,record={kind:'record',value},encoded=JSON.stringify(record)
+   const [ref,value]=entry,block=blockPack?value:{kind:'record',value},encoded=JSON.stringify(block)
    if(hash(encoded)!==ref)throw Error('Immutable pack checksum mismatch')
-   seen.add(ref);entries.push([ref,record,Buffer.byteLength(encoded)*2+128])
+   seen.add(ref);entries.push([ref,block,Buffer.byteLength(encoded)*2+128])
   }
   if(!seen.has(id))throw Error('Immutable pack is missing requested block')
   for(const entry of entries)cachePacked(dir,...entry)
@@ -111,7 +117,7 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
   const bytes=await promotion.read(path.join(dir,'head.json'))
   if(bytes===undefined)return undefined
   const pointer=JSON.parse(bytes)
-  if(pointer.format!==FORMAT)throw Error('Unsupported conversation format')
+  if(!readablePointer(pointer.format))throw Error('Unsupported conversation format')
   return {head:validateHead(await read(pointer.headId,'head'),id),headId:pointer.headId}
  }
  async function leaf(read,root,height,page){
@@ -177,7 +183,7 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
    result={revision:1,snapshotId:headId}
    await verifyBeforePublish?.(headId)
    assertCurrent?.()
-   return JSON.stringify({format:FORMAT,headId})
+   return JSON.stringify({format:POINTER_FORMAT,headId})
   })
   return result
  }
@@ -192,29 +198,14 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
    if(kind&&value.kind!==kind)throw Error('Invalid block type')
    return value
   }
-  async function flush(){
-   const values=[...pending.values()],directories=new Set();let index=0
-   const results=await Promise.allSettled(Array.from({length:Math.min(8,values.length)},async()=>{
-    while(index<values.length)await writeBlock(dir,values[index++],directories)
-   }))
-   const failure=results.find(result=>result.status==='rejected')
-   if(failure)throw failure.reason
-   const leaves=[...directories].filter(value=>value!==dir&&value!==path.join(dir,'blocks'))
-   let directoryIndex=0
-   const synced=await Promise.allSettled(Array.from({length:Math.min(8,leaves.length)},async()=>{
-    while(directoryIndex<leaves.length)await syncDirectory(leaves[directoryIndex++])
-   }))
-   const syncFailure=synced.find(result=>result.status==='rejected')
-   if(syncFailure)throw syncFailure.reason
-   if(directories.size){await syncDirectory(path.join(dir,'blocks'));await syncDirectory(dir)}
-  }
+  async function flush(){await writePacked(dir,[...pending.values()])}
   if(!integer(change.expectedRevision,1)||!Array.isArray(change.append??[])||!(change.append??[]).every(record)
     ||!Array.isArray(change.edits??[])||(Object.hasOwn(change,'state')&&!record(change.state)))throw Error('Invalid commit')
   let result
   await promotion.update(path.join(dir,'head.json'),async pointer=>{
    if(pointer===undefined)throw conflict()
    const reference=JSON.parse(pointer)
-   if(reference.format!==FORMAT)throw Error('Unsupported conversation format')
+   if(!readablePointer(reference.format))throw Error('Unsupported conversation format')
    const head=validateHead(await read(reference.headId,'head'),id)
    if(head.revision!==change.expectedRevision)throw conflict()
    if(!integer(head.revision+1,1))throw Error('Revision overflow')
@@ -258,7 +249,7 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
    result={revision:next.revision,snapshotId:headId}
    await flush()
    assertCurrent?.()
-   return JSON.stringify({format:FORMAT,headId})
+   return JSON.stringify({format:POINTER_FORMAT,headId})
   })
   return result
  }
@@ -318,11 +309,19 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
  // Independent immutable blocks may be flushed concurrently. All files and
  // directory entries are durable before this returns and BEFORE head publication.
  async function writeRecords(id,values){
-  const dir=directory(id),records=copy(values),directories=new Set(),refs=new Array(records.length)
+  return writePacked(directory(id),copy(values).map(value=>({kind:'record',value})))
+ }
+ // Durably store blocks, several per pack file. Each block keeps its own path
+ // as a hard link to its pack, so lookups need no index; filesystems without
+ // hard links fall back to one file per block. Everything (files and
+ // directory entries) is synced before this returns, i.e. before any head
+ // naming these blocks is published.
+ async function writePacked(dir,blocks){
+  const directories=new Set(),refs=new Array(blocks.length)
   const entries=new Map(),groups=[]
-  for(let i=0;i<records.length;i++){
-   const bytes=JSON.stringify({kind:'record',value:records[i]}),ref=hash(bytes)
-   refs[i]=ref;entries.set(ref,{ref,value:records[i],bytes})
+  for(let i=0;i<blocks.length;i++){
+   const bytes=JSON.stringify(blocks[i]),ref=hash(bytes)
+   refs[i]=ref;entries.set(ref,{ref,block:blocks[i],bytes})
   }
   let group=[],groupBytes=64
   for(const entry of entries.values()){
@@ -332,40 +331,37 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
    directories.add(parent);directories.add(path.join(dir,'blocks'));directories.add(dir)
    if(existing!==undefined){
     if(JSON.stringify(decodeBlock(dir,entry.ref,existing))!==entry.bytes)throw Error('Immutable block corruption')
-    onIO({kind:'read',type:'record',bytes:Buffer.byteLength(existing),reason:'deduplication'})
+    onIO({kind:'read',type:entry.block.kind,bytes:Buffer.byteLength(existing),reason:'deduplication'})
     continue
    }
-   const size=Buffer.byteLength(JSON.stringify([entry.ref,entry.value]))+1
-   if(group.length&&(groupBytes+size>64*1024||group.length>=128)){groups.push(group);group=[];groupBytes=64}
+   const size=Buffer.byteLength(entry.bytes)+70
+   if(group.length&&(groupBytes+size>PACK_BYTES||group.length>=PACK_ENTRIES)){groups.push(group);group=[];groupBytes=64}
    group.push(entry);groupBytes+=size
   }
   if(group.length)groups.push(group)
   const packDirectory=path.join(dir,'blocks','.packs')
   if(groups.some(group=>group.length>1)){await mkdir(packDirectory,{recursive:true});directories.add(packDirectory)}
-  // Hard links provide direct hash lookup without a growing pack index. Each
-  // pack inode is synced once; all link directories are synced before the head.
-  // Filesystems without hard links keep the original durable block layout.
   let index=0
   const workers=Array.from({length:Math.min(8,groups.length)},async()=>{
    while(index<groups.length){
     const group=groups[index++]
-    if(group.length===1){await writeBlock(dir,{kind:'record',value:group[0].value},directories);continue}
-    const bytes=JSON.stringify({kind:'record-pack-v1',records:group.map(entry=>[entry.ref,entry.value])})
+    if(group.length===1){await writeBlock(dir,group[0].block,directories);continue}
+    const bytes=JSON.stringify({kind:'block-pack-v1',records:group.map(entry=>[entry.ref,entry.block])})
     const target=path.join(packDirectory,hash(bytes)+'.json'),staging=target+'.staging-'+randomUUID()
     let handle
     try{
      handle=await open(staging,'wx');await handle.writeFile(bytes);await handle.sync();await handle.close();handle=null
      await rename(staging,target)
-     onIO({kind:'write',type:'record-pack',bytes:Buffer.byteLength(bytes)})
+     onIO({kind:'write',type:'block-pack',bytes:Buffer.byteLength(bytes)})
      for(const entry of group){
       const destination=blobPath(dir,entry.ref)
       await mkdir(path.dirname(destination),{recursive:true})
-      try{await linkFile(target,destination);onIO({kind:'link',type:'record',bytes:0})}
+      try{await linkFile(target,destination);onIO({kind:'link',type:entry.block.kind,bytes:0})}
       catch(error){
        if(error.code==='EEXIST'){
         if(JSON.stringify(decodeBlock(dir,entry.ref,await readFile(destination,'utf8')))!==entry.bytes)throw Error('Immutable block corruption')
        }else if(['EXDEV','EPERM','EACCES','ENOTSUP','EOPNOTSUPP','ENOSYS','EMLINK'].includes(error.code)){
-        await writeBlock(dir,{kind:'record',value:entry.value},directories)
+        await writeBlock(dir,entry.block,directories)
        }else throw error
       }
      }
@@ -411,7 +407,7 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
   await promotion.update(path.join(dir,'head.json'),async pointer=>{
    if(pointer===undefined)throw conflict()
    const reference=JSON.parse(pointer)
-   if(reference.format!==FORMAT)throw Error('Unsupported conversation format')
+   if(!readablePointer(reference.format))throw Error('Unsupported conversation format')
    const head=validateHead(await read(reference.headId,'head'),id)
    if(!head.recordRoot)return undefined
    const entries=[]
@@ -430,75 +426,83 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
    const next={...head,revision:head.revision+1,previousHeadId:reference.headId}
    if(recordRoot)next.recordRoot=recordRoot;else delete next.recordRoot
    const headId=await write(next)
-   const directories=new Set()
-   for(const value of pending.values())await writeBlock(dir,value,directories)
-   for(const target of [...directories].filter(value=>value!==dir&&value!==path.join(dir,'blocks')))await syncDirectory(target)
-   if(directories.size){await syncDirectory(path.join(dir,'blocks'));await syncDirectory(dir)}
-   return JSON.stringify({format:FORMAT,headId})
+   await writePacked(dir,[...pending.values()])
+   return JSON.stringify({format:POINTER_FORMAT,headId})
   })
   return {removed}
  }
- // Record packs keep every record they were written with; once some of those
- // records are swept, the rest still pin the whole file. Rewrite packs that are
- // mostly dead (or nearly empty) into fresh ones holding only live records, and
- // atomically repoint each record's link. Same record-pack format as writes.
+ // A pack keeps every block it was written with; once some are swept, the
+ // rest still pin the whole file. Rewrite packs that are mostly dead (or
+ // nearly empty), together with loose one-file blocks, into fresh block packs
+ // holding only live blocks, and atomically repoint each block's link.
  async function repack(dir,cutoff){
-  const packs=path.join(dir,'blocks','.packs')
+  const packs=path.join(dir,'blocks','.packs'),HEX=/^[a-f0-9]{64}$/
+  const live=new Map(),stale=[]
   let names=[]
   try{names=await readdir(packs)}catch(error){if(error.code!=='ENOENT')throw error}
-  const live=[],stale=[]
   for(const name of names){
    if(!name.endsWith('.json'))continue
    const file=path.join(packs,name),info=await stat(file)
    if(info.mtimeMs>cutoff)continue
    let pack
    try{pack=JSON.parse(await readFile(file,'utf8'))}catch{continue}
-   if(pack?.kind!=='record-pack-v1'||!Array.isArray(pack.records))continue
-   const records=[];let liveBytes=0,allBytes=0
+   if(!['record-pack-v1','block-pack-v1'].includes(pack?.kind)||!Array.isArray(pack.records))continue
+   const blocks=[];let liveBytes=0,allBytes=0
    for(const [ref,value] of pack.records){
-    const size=JSON.stringify([ref,value]).length;allBytes+=size
+    const block=pack.kind==='block-pack-v1'?value:{kind:'record',value},size=JSON.stringify(block).length
+    allBytes+=size
     let same=false
     try{same=(await stat(blobPath(dir,ref))).ino===info.ino}catch(error){if(error.code!=='ENOENT')throw error}
-    if(same){records.push({ref,value});liveBytes+=size}
+    if(same){blocks.push([ref,block]);liveBytes+=size}
    }
-   if(records.length&&liveBytes>allBytes*0.8&&records.length>=16)continue
+   if(blocks.length>=16&&liveBytes>allBytes*0.8)continue
    stale.push({file,size:info.size,ino:info.ino})
-   live.push(...records)
+   for(const [ref,block] of blocks)live.set(ref,block)
   }
-  if(!stale.length)return {packs:0,bytes:0}
-  let group=[],groupBytes=64
-  const groups=[]
-  for(const entry of live){
-   const size=Buffer.byteLength(JSON.stringify([entry.ref,entry.value]))+1
-   if(group.length&&(groupBytes+size>64*1024||group.length>=128)){groups.push(group);group=[];groupBytes=64}
+  // Loose blocks: one small file each, most of it filesystem slack.
+  const loose=[]
+  let shards=[]
+  try{shards=await readdir(path.join(dir,'blocks'))}catch(error){if(error.code!=='ENOENT')throw error}
+  for(const shard of shards){
+   if(!/^[a-f0-9]{2}$/.test(shard))continue
+   for(const name of await readdir(path.join(dir,'blocks',shard))){
+    const ref=name.slice(0,-5)
+    if(!name.endsWith('.json')||!HEX.test(ref)||live.has(ref))continue
+    const file=path.join(dir,'blocks',shard,name),info=await stat(file)
+    if(info.nlink!==1||info.mtimeMs>cutoff)continue
+    loose.push({ref,file,size:info.size})
+   }
+  }
+  if(loose.length>=16||stale.length)for(const item of loose){
+   const bytes=await readFile(item.file,'utf8')
+   if(hash(bytes)===item.ref)live.set(item.ref,JSON.parse(bytes))
+  }
+  if(!stale.length&&loose.length<16)return {packs:0,bytes:0}
+  const entries=[...live.entries()]
+  if(entries.length<2)return {packs:0,bytes:0}
+  let written=0,group=[],groupBytes=64
+  const groups=[],directories=new Set([packs])
+  for(const entry of entries){
+   const size=Buffer.byteLength(JSON.stringify(entry[1]))+70
+   if(group.length&&(groupBytes+size>PACK_BYTES||group.length>=PACK_ENTRIES)){groups.push(group);group=[];groupBytes=64}
    group.push(entry);groupBytes+=size
   }
   if(group.length)groups.push(group)
-  const directories=new Set([packs])
-  let written=0
-  // A lone record (or a filesystem without hard links) gets an ordinary block file.
-  async function standalone(entry){
-   const target=blobPath(dir,entry.ref),staging=target+'.repack-'+randomUUID(),bytes=JSON.stringify({kind:'record',value:entry.value})
-   let handle
-   try{handle=await open(staging,'wx');await handle.writeFile(bytes);await handle.sync();await handle.close();handle=null
-    await rename(staging,target)}finally{if(handle)await handle.close();await rm(staging,{force:true})}
-   written+=Buffer.byteLength(bytes);directories.add(path.dirname(target))
-  }
+  await mkdir(packs,{recursive:true})
   for(const group of groups){
-   if(group.length===1){await standalone(group[0]);continue}
-   const bytes=JSON.stringify({kind:'record-pack-v1',records:group.map(entry=>[entry.ref,entry.value])})
+   if(group.length===1)continue
+   const bytes=JSON.stringify({kind:'block-pack-v1',records:group})
    const target=path.join(packs,hash(bytes)+'.json'),staging=target+'.staging-'+randomUUID()
    let handle
    try{handle=await open(staging,'wx');await handle.writeFile(bytes);await handle.sync();await handle.close();handle=null
     await rename(staging,target)}finally{if(handle)await handle.close();await rm(staging,{force:true})}
    written+=Buffer.byteLength(bytes)
-   for(const entry of group){
-    const destination=blobPath(dir,entry.ref),temporary=destination+'.relink-'+randomUUID()
+   for(const [ref] of group){
+    const destination=blobPath(dir,ref),temporary=destination+'.relink-'+randomUUID()
+    // Without hard links the block keeps its current, still valid file.
     try{await linkFile(target,temporary);await rename(temporary,destination);directories.add(path.dirname(destination))}
-    catch(error){
-     if(!['EXDEV','EPERM','EACCES','ENOTSUP','EOPNOTSUPP','ENOSYS','EMLINK'].includes(error.code))throw error
-     await standalone(entry)
-    }finally{await rm(temporary,{force:true})}
+    catch(error){if(!['EXDEV','EPERM','EACCES','ENOTSUP','EOPNOTSUPP','ENOSYS','EMLINK'].includes(error.code))throw error}
+    finally{await rm(temporary,{force:true})}
    }
   }
   for(const directory of directories)await syncDirectory(directory)
@@ -508,6 +512,8 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
    // Only once nothing links to the old inode any more.
    if(info&&info.ino===pack.ino&&info.nlink===1){freed+=pack.size;await rm(pack.file,{force:true})}
   }
+  // A replaced loose file is gone with its last link; count its bytes.
+  for(const item of loose)if((await stat(item.file).catch(()=>null))?.nlink>1)freed+=item.size
   await syncDirectory(packs)
   return {packs:stale.length,bytes:Math.max(0,freed-written)}
  }
@@ -523,7 +529,7 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
   await promotion.update(path.join(dir,'head.json'),async pointer=>{
    if(pointer===undefined)throw Error('Conversation not found')
    const reference=JSON.parse(pointer)
-   if(reference.format!==FORMAT)throw Error('Unsupported conversation format')
+   if(!readablePointer(reference.format))throw Error('Unsupported conversation format')
    const marked=new Set(),queue=[[reference.headId,true]]
    async function load(ref,required){
     let bytes
