@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "de7a1109899c78007b26eb71f32d038d0842d1b6",
-  "releaseSequence": 613,
+  "revision": "09701afe7e97c9dde08671820c15469a0c2d885a",
+  "releaseSequence": 614,
   "version": "2.7.0",
   "files": [
     {
@@ -700,6 +700,11 @@
       "size": 449
     },
     {
+      "path": "tavern-plugin/lib/domain/compaction-checkpoint.js",
+      "sha256": "726b9a5c38e99ba600bbe3598d12da743ccb205b2a2c24fcd7a555119d06789e",
+      "size": 416
+    },
+    {
       "path": "tavern-plugin/lib/domain/compaction-failure.js",
       "sha256": "3c7ce65a9bea6d902a7c5c40413aa0365adc3461590c15150124c5e9552eac69",
       "size": 2058
@@ -1346,8 +1351,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/rollback-surface.js",
-      "sha256": "3a7bda7f054c8db2426f164033b41461ec0d1baf3a78fc02becf14ca1a99637d",
-      "size": 32044
+      "sha256": "b3c99719ac4c05b1a3bccb0753f26365ae3fa504af27afc020d8014a1a1ab0ae",
+      "size": 31996
     },
     {
       "path": "tavern-plugin/lib/domain/round-anchor.js",
@@ -1861,8 +1866,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/template-history.js",
-      "sha256": "1d98ab3e28ca54ac84f279fea11430f94f25c8334c183d8a731f50a6dfd14521",
-      "size": 6274
+      "sha256": "90d2afd0335276590a3777dce3ceb1aaee0260e1a0cb38eb37533b2209f0632a",
+      "size": 7497
     },
     {
       "path": "tavern-plugin/lib/domain/template-message.js",
