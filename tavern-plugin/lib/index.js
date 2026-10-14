@@ -163,6 +163,7 @@ import { POSTURE_SUBMIT_TOOL, POSTURE_SUBMIT_TOOL_NAME, lastSubmittedPosture, no
 import { TAVERN_COMPATIBILITY_CAPABILITIES, createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
 import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics, sanitizeModuleFailure, sanitizeMvuLoadDiagnostic, redactMvuLoadError } from './domain/mvu-diagnostics.js'
 import { createPlayChatDebugReference, readPlayChatDebugTurn } from './domain/play-chat-debug.js'
+import { createDisplayRuntimeStore, displayRuntimeReceipt } from './domain/display-runtime-store.js'
 import { createPhoneChat } from './domain/phone-chat.js'
 import { createPresetLibrary } from './domain/preset-library.js'
 import { createForegroundOrchestrationStrategies } from './domain/foreground-orchestration-strategies.js'
@@ -295,6 +296,7 @@ export async function apply(ctx) {
   const cardMemory = createCardMemory({ dataRoot })
   const stablePrefixStorage = createSessionStablePrefixStorage(dataRoot + '/session-prefixes')
   const profileData = createProfileDataStore({ dataRoot })
+  const displayRuntimeStore = createDisplayRuntimeStore({ store: profileData })
   const gameFootprint = createGameFootprint({ dataRoot })
   const deletedSessionIds = new Set()
   try { const removed = await gameFootprint.processDeferredDeletions(); if (removed) console.log('dsh-tavern: 已清理已删除游戏的原生会话', removed) }
@@ -1282,6 +1284,7 @@ export async function apply(ctx) {
     deletedChatIds.add(chatId)
     await pluginMedia.removeChat(chatId).catch(() => console.warn('dsh-tavern: 插件媒体记录清理失败', chatId))
     await pluginData.removeChat(chatId).catch(() => console.warn('dsh-tavern: 插件数据清理失败', chatId))
+    await displayRuntimeStore.remove(chatId).catch(() => {})
     pluginApi.gameRemoved(footprint?.foregroundSessionId || chat?.sessionId)
     if (footprint) {
       deletedSessionIds.add(footprint.foregroundSessionId)
@@ -1575,8 +1578,16 @@ export async function apply(ctx) {
       presetDiagnostics = { ...createPresetDiagnostics(chat, cardDiagnostics.extensions || {}),
         error: '远程正则解析失败，ordered 保留解析前配置。' }
     }
-    const exported = await createMvuDiagnosticExport({ presetDiagnostics, cardDiagnostics, performanceDiagnostics: { ...performanceDiagnostics.read(), requests: requestPerformance.read(), replyProjection: incrementalReplyView.stats() }, updateDiagnostics: applicationUpdater.diagnostics(), sessionId, backgroundSessionIds, displayDiagnostics: { version: 1, frames: (chat.messages || []).filter(message => message.displayRuntime).slice(-20).flatMap(message => (message.displayRuntime.frames || []).map(frame => ({ turn: message.turn, partIndex: frame.partIndex, panelId: frame.panelId, placement: frame.placement, capturedAt: frame.capturedAt, console: frame.console, errors: frame.errors, network: frame.network }))) }, apiDiagnostics: await apiDiagnostics.read(sessionId).catch(() => null), compatibilityDiagnostics: compatibilityDiagnostic, store: mvuDiagnostics, sceneDiagnostics: imageDiagnostic, sessions: sessionStore, persistence: ctx.get('sessionPersistence'), query: ctx.get('sessionQuery'), attachments: ctx.get('attachments'), environment: { templateRuntime: await fullTemplateRuntime.inspect(sessionId), mvu: OFFICIAL_MVU_VERSION, mvuAsset: inspectOfficialMvuAsset(), runtime: { hostCompatibility, sessionPatch: sessionPatch.view(), generation: runtimeGeneration, platform: process.platform, arch: process.arch, nodeVersion: process.version } } })
+    const exported = await createMvuDiagnosticExport({ presetDiagnostics, cardDiagnostics, performanceDiagnostics: { ...performanceDiagnostics.read(), requests: requestPerformance.read(), replyProjection: incrementalReplyView.stats() }, updateDiagnostics: applicationUpdater.diagnostics(), sessionId, backgroundSessionIds, displayDiagnostics: { version: 1, frames: await displayDiagnosticFrames(chat) }, apiDiagnostics: await apiDiagnostics.read(sessionId).catch(() => null), compatibilityDiagnostics: compatibilityDiagnostic, store: mvuDiagnostics, sceneDiagnostics: imageDiagnostic, sessions: sessionStore, persistence: ctx.get('sessionPersistence'), query: ctx.get('sessionQuery'), attachments: ctx.get('attachments'), environment: { templateRuntime: await fullTemplateRuntime.inspect(sessionId), mvu: OFFICIAL_MVU_VERSION, mvuAsset: inspectOfficialMvuAsset(), runtime: { hostCompatibility, sessionPatch: sessionPatch.view(), generation: runtimeGeneration, platform: process.platform, arch: process.arch, nodeVersion: process.version } } })
     return { filename: exported.filename, base64: exported.buffer.toString('base64') }
+  }
+  // Captures from the diagnostics store, falling back to ones old saves kept inline.
+  async function displayDiagnosticFrames(chat) {
+    const stored = await displayRuntimeStore.recent(chat.id).catch(() => ({}))
+    return (chat.messages || []).filter(message => message.displayRuntime).slice(-20).flatMap(message => {
+      const runtime = message.displayRuntime.version === 2 ? stored[String(message.turn)] : message.displayRuntime
+      return (runtime?.frames || []).map(frame => ({ turn: message.turn, partIndex: frame.partIndex, panelId: frame.panelId, placement: frame.placement, capturedAt: frame.capturedAt, console: frame.console, errors: frame.errors, network: frame.network }))
+    })
   }
   async function attachPlayChatDebug(targetSessionId, sourceSessionId, turn) {
     const editorChat = await chatForSession(str(targetSessionId))
@@ -1679,14 +1690,20 @@ export async function apply(ctx) {
       if (chat.messageIndex < 0) throw new Error('游玩记录中不存在第 ' + turn + ' 轮回复')
       const index = Math.max(0, Math.min(100, Number(partIndex) || 0))
       let capture = sanitizeDisplayRuntime(runtime)
-      const existingRuntime = chat.displayRuntime && typeof chat.displayRuntime === 'object' ? chat.displayRuntime : null
-      const sourceActivityAt = Math.max(0, Number(existingRuntime && existingRuntime.sourceActivityAt) || Number(chat.updatedAt) || 0)
+      // Full captures live outside the save; old saves still carry them inline.
+      // The save keeps a receipt per panel, merged under its own CAS so
+      // concurrent panels cannot drop each other. A reply without a receipt yet
+      // (new, or rolled back and regenerated) starts its stored captures over.
+      const receipt = chat.displayRuntime && typeof chat.displayRuntime === 'object' ? chat.displayRuntime : null
+      const inline = receipt && receipt.version !== 2 ? receipt : null
+      const stored = receipt ? (await displayRuntimeStore.read(chat.id, turn)) || inline : null
+      const sourceActivityAt = Math.max(0, Number(stored && stored.sourceActivityAt) || Number(chat.updatedAt) || 0)
       const latestTurn = chat.latestTurn
       capture.captureKind = turn === latestTurn && Date.now() - sourceActivityAt < 300000 ? 'live' : 'replay'
-      const current = existingRuntime || { frames: [] }
-      const currentFrames = Array.isArray(current.frames) ? current.frames : []
-      const existingFrame = currentFrames.find(function (item) { return Number(item && item.partIndex) === index && str(item.panelId) === capture.panelId })
-      if (existingFrame && existingFrame.mvuViewUsed === true) capture.mvuViewUsed = true
+      const samePanel = function (item) { return Number(item && item.partIndex) === index && str(item.panelId) === capture.panelId }
+      const receiptFrames = receipt && Array.isArray(receipt.frames) ? receipt.frames : []
+      const existingFrame = (stored && Array.isArray(stored.frames) ? stored.frames : []).find(samePanel)
+      if (receiptFrames.find(samePanel)?.mvuViewUsed === true || (existingFrame && existingFrame.mvuViewUsed === true)) capture.mvuViewUsed = true
       if (existingFrame && capture.mvuViewUsed === true && capture.dom === '' && capture.console.length === 0 && capture.network.length === 0 && capture.errors.length === 0) {
         capture = Object.assign({}, existingFrame, {
           capturedAt: capture.capturedAt,
@@ -1694,11 +1711,13 @@ export async function apply(ctx) {
           mvuViewUsed: true
         })
       }
-      if (existingFrame && sameDisplayRuntimeCapture(existingFrame, capture)) return { captured: false, turn, partIndex: index, captureKind: capture.captureKind }
-      const frames = currentFrames.filter(function (item) { return Number(item && item.partIndex) !== index || str(item.panelId) !== capture.panelId })
-      frames.push(Object.assign({ partIndex: index }, capture))
-      const changes = [{ op: 'set', path: ['messages', chat.messageIndex, 'displayRuntime'],
-        value: { version: 1, sourceActivityAt, frames: frames.sort(function (a, b) { return a.partIndex - b.partIndex }) } }]
+      const frame = Object.assign({ partIndex: index }, capture)
+      const nextReceipt = displayRuntimeReceipt(receiptFrames.filter(function (item) { return !samePanel(item) }).concat([frame]))
+      const receiptChanged = JSON.stringify(receipt) !== JSON.stringify(nextReceipt)
+      if (existingFrame && sameDisplayRuntimeCapture(existingFrame, capture) && !receiptChanged) return { captured: false, turn, partIndex: index, captureKind: capture.captureKind }
+      await displayRuntimeStore.mergeFrame(chat.id, turn, frame, { reset: !receipt, sourceActivityAt, seed: inline && Array.isArray(inline.frames) ? inline.frames : [] })
+      if (!receiptChanged) return { captured: true, turn, partIndex: index, captureKind: capture.captureKind }
+      const changes = [{ op: 'set', path: ['messages', chat.messageIndex, 'displayRuntime'], value: nextReceipt }]
       // Diagnostic captures preserve a valid undo point, never revive a stale one.
       if (chat.rollbackUndo?.ready && chat.rollbackUndo.storageRevision === chat._storageRevision) {
         changes.push({ op: 'set', path: ['rollbackUndo', 'storageRevision'], value: chat._storageRevision + 1 })
@@ -4957,6 +4976,7 @@ export async function apply(ctx) {
       str,
       tools,
       worldbookRecallLog,
+      displayRuntimeStore,
     })
 
     registerScriptTool({
