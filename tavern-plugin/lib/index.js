@@ -164,6 +164,7 @@ import { TAVERN_COMPATIBILITY_CAPABILITIES, createTavernCompatibilityDiagnosticS
 import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics, sanitizeModuleFailure, sanitizeMvuLoadDiagnostic, redactMvuLoadError } from './domain/mvu-diagnostics.js'
 import { createPlayChatDebugReference, readPlayChatDebugTurn } from './domain/play-chat-debug.js'
 import { createSaveMaintenance } from './domain/save-maintenance.js'
+import { createServerScriptExecutor } from './domain/server-script-executor.js'
 import { createDisplayRuntimeStore, displayRuntimeReceipt } from './domain/display-runtime-store.js'
 import { createPhoneChat } from './domain/phone-chat.js'
 import { createPresetLibrary } from './domain/preset-library.js'
@@ -260,6 +261,7 @@ export async function apply(ctx) {
   const compactionTimers = new Map()
   const compactionAbort = new AbortController()
   const sessionSignals = createSessionSignalTransport()
+  let serverScripts = null
   function queueAutoCompaction(sessionId) {
     if (!autoCompaction || compactionAbort.signal.aborted || compactionTimers.has(sessionId)) return
     const timer = setTimeout(async () => {
@@ -273,7 +275,8 @@ export async function apply(ctx) {
   }
   ctx.effect(() => () => { compactionAbort.abort(); for (const timer of compactionTimers.values()) clearTimeout(timer) })
 	const tavernScriptDispatch = createTavernScriptDispatch({
-    publishSignal: function (sessionId, signal) { sessionSignals.publish(sessionId, signal) }
+    publishSignal: function (sessionId, signal) { sessionSignals.publish(sessionId, signal) },
+    priority: runtimeId => serverScripts && String(runtimeId).startsWith('server-') ? 1 : 0
   })
   async function promptTemplateRuntime(sessionId) { return fullTemplateRuntime.forSession(sessionId) }
   const commands = ctx.get('commands')
@@ -3554,6 +3557,8 @@ export async function apply(ctx) {
     isReady: function (sessionId, chat) {
       if (pendingMvuSettlementState(chat)?.prepared) return true
       const state = tavernScriptDispatch.status(sessionId)
+      // EXPERIMENT: with no page open, run the card scripts on the server.
+      if (state.ready !== true && !state.initializationError) serverScripts?.ensure(sessionId)
       return state.ready === true || Boolean(state.initializationError)
     },
     resume: chatId => queueSettlement(chatId),
@@ -4363,7 +4368,12 @@ export async function apply(ctx) {
       case 'saveTavernWorldInfo': return await tavernScriptHostAdapter.saveWorldInfo(args && args.sessionId, args && args.name, args && args.worldInfo, args && args.expectedWorldInfo)
       case 'getTavernHelperWorldbook': return await tavernScriptHostAdapter.getWorldbook(args && args.sessionId, args && args.name)
       case 'replaceTavernHelperWorldbook': return await tavernScriptHostAdapter.replaceWorldbook(args && args.sessionId, args && args.name, args && args.entries, args && args.expectedEntries)
-	  case 'claimTavernScriptWork': return tavernScriptHostAdapter.claimWork(args && args.sessionId, args && args.runtimeId, args && args.ready, args && args.initializationError, args && args.contextBaseline)
+	  case 'claimTavernScriptWork': {
+	    if (serverScripts && !String(args?.runtimeId || '').startsWith('server-')) serverScripts.ensure(args?.sessionId)
+	    const claimed = await tavernScriptHostAdapter.claimWork(args && args.sessionId, args && args.runtimeId, args && args.ready, args && args.initializationError, args && args.contextBaseline)
+	    if (claimed?.event && String(args?.runtimeId || '').startsWith('server-')) console.log('dsh-tavern: 服务端卡脚本运行时领取事件', claimed.event.name, claimed.event.id)
+	    return claimed
+	  }
 	  case 'startTavernScriptWork': return tavernScriptHostAdapter.startWork(args && args.sessionId, args && args.eventId, args && args.leaseToken, args && args.runtimeId)
 	  case 'getTavernScriptWorkState': return tavernScriptHostAdapter.workState(args && args.sessionId, args && args.eventId, args && args.leaseToken, args && args.runtimeId, args && args.keepAlive)
 	  case 'heartbeatTavernScriptRuntime': return tavernScriptHostAdapter.heartbeatRuntime(args && args.sessionId, args && args.runtimeId, args && args.ready, args && args.initializationError)
@@ -4622,7 +4632,7 @@ export async function apply(ctx) {
     }
   }))
 
-  registerTavernHttpRoutes({
+  const tavernHttp = registerTavernHttpRoutes({
     ctx,
     pluginAssets: createPluginAssets({ pluginsDir: userPluginPaths(dataRoot).plugins }),
     dispatch,
@@ -4639,6 +4649,13 @@ export async function apply(ctx) {
     tavernRemoteAssets,
     tavernStaticResources,
   })
+  if (process.env.DSH_TAVERN_SERVER_SCRIPTS === '1') {
+    serverScripts = createServerScriptExecutor({
+      handle: (req, res) => tavernHttp.handle(req, res),
+      subscribeSignals: (sessionId, listener) => sessionSignals.subscribe(sessionId, [], listener)
+    })
+    ctx.effect(() => () => serverScripts?.dispose(), 'dsh-tavern: server script runtime')
+  }
 
   function contentText(message) {
     if (message === null || typeof message !== 'object' || !Array.isArray(message.content)) return ''
