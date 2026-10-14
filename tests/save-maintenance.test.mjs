@@ -77,3 +77,13 @@ test('规则整理：保存增长到设定的版本数后，结算后立即整�
  await maintenance.maintainChat('a')
  assert.equal(files.get('save-maintenance.json').compacted.a,11)
 })
+
+test('只保留最近 N 轮的分叉历史：更早的检查点版本被清理，最近的与撤销点保留', async t => {
+ const {retainedRevisions}=await import('../tavern-plugin/lib/domain/conversation-retention.js')
+ const states={}
+ for(let turn=1;turn<=8;turn++)states[turn*10]={id:'a',_storageRevision:turn*10,timeline:{checkpoints:turn>1?[{turn:turn-1,beforeRevision:(turn-1)*10}]:[]}}
+ const chat={id:'a',_storageRevision:100,timeline:{checkpoints:[{turn:7,beforeRevision:70},{turn:8,beforeRevision:80}]},rollbackUndo:{beforeRevision:15}}
+ const read=async(id,revision)=>states[revision]
+ assert.deepEqual([...await retainedRevisions(chat,read,[])].sort((a,b)=>a-b),[10,15,20,30,40,50,60,70,80])
+ assert.deepEqual([...await retainedRevisions(chat,read,[],{keepTurns:3})].sort((a,b)=>a-b),[15,60,70,80])
+})

@@ -1,4 +1,5 @@
 import { retainedRevisions } from './conversation-retention.js'
+import { FORK_HISTORY_TURNS } from './conversation-fork-targets.js'
 
 const STATE_PATH = 'save-maintenance.json'
 
@@ -6,13 +7,14 @@ const STATE_PATH = 'save-maintenance.json'
  * Keeps saves small without touching anything play or story export reads:
  * old revisions nothing can reach any more, pre-migration journal files once
  * no kept revision predates the migration, and debugging logs (model request
- * bodies, worldbook recall audits) outside their recent windows. A rule, not
+ * bodies, worldbook recall audits) outside their recent windows. History for
+ * forking from an earlier turn is kept for the latest `keepTurns` turns. A rule, not
  * a timer: after a settlement, a game whose save grew by `everyRevisions`
  * revisions since its last pass is tidied right away if it is idle.
  */
 export function createSaveMaintenance({
   chats, listChatIds, requestLog, recallLog, isIdle, store,
-  keepRecent = 8, everyRevisions = 50, graceMs, logger = console
+  keepRecent = 8, keepTurns = FORK_HISTORY_TURNS, everyRevisions = 50, graceMs, logger = console
 }) {
   let state = null
   let disposed = false
@@ -68,7 +70,7 @@ export function createSaveMaintenance({
     if (!head) return { ...result, status: 'legacy-format' }
     if (head.regenInProgress) return { ...result, status: 'busy' }
     if (state.compacted[chatId] === head._storageRevision) return { ...result, status: 'unchanged' }
-    const retain = await retainedRevisions(head, (id, revision) => chats.readRetentionHeader(id, revision), forkRevisionsOf(chatId))
+    const retain = await retainedRevisions(head, (id, revision) => chats.readRetentionHeader(id, revision), forkRevisionsOf(chatId), { keepTurns })
     if (!(await isIdle(chatId))) return { ...result, status: 'busy' }
     // Incremental reads back to the last few rollback points stay fast.
     const recentCheckpoints = (head.timeline?.checkpoints || []).slice(-3).map(item => Number(item?.beforeRevision)).filter(Number.isSafeInteger)
