@@ -339,11 +339,11 @@ export async function apply(ctx) {
   const sceneWorldbooks = TAVERN_RELEASE_CAPABILITIES.sceneImages ? createSceneWorldbooks({ store: profileData }) : null
   const imageHostDiagnostic = createSceneImageHostLogger(ctx.logger)
   const sceneDiagnostics = TAVERN_RELEASE_CAPABILITIES.sceneImages ? createSceneImageDiagnostics(profileData, { onDiagnostic: imageHostDiagnostic }) : null
-  async function captureSceneWorldbook(chat, card, preparedBook) {
+  async function captureSceneWorldbook(chat, card, preparedBook, turn) {
     if (sceneWorldbooks === null) return null
     try {
       const worldBook = preparedBook === undefined ? await worldBooks.bound(chat.cardPath, card, chat) : preparedBook
-      return await sceneWorldbooks.capture({ worldBook, chat, card })
+      return await sceneWorldbooks.capture({ worldBook, chat, card, turn })
     } catch (_error) {
       console.warn('dsh-tavern: 场景世界书快照保存失败，正文继续；不会用后来的世界书补历史。')
       return null
@@ -1302,6 +1302,7 @@ export async function apply(ctx) {
     await pluginMedia.removeChat(chatId).catch(() => console.warn('dsh-tavern: 插件媒体记录清理失败', chatId))
     await pluginData.removeChat(chatId).catch(() => console.warn('dsh-tavern: 插件数据清理失败', chatId))
     await displayRuntimeStore.remove(chatId).catch(() => {})
+    await sceneWorldbooks?.forgetChat(chatId).catch(() => {})
     pluginApi.gameRemoved(footprint?.foregroundSessionId || chat?.sessionId)
     if (footprint) {
       deletedSessionIds.add(footprint.foregroundSessionId)
@@ -2417,6 +2418,7 @@ export async function apply(ctx) {
       stateChatId: state.id, stateRevision: state._storageRevision, turn, atSeq }
     await conversationRegistry.publish(fork)
     await saveMaintenance.recordFork(fork).catch(error => console.warn('dsh-tavern: 记录分叉来源失败', str(error?.message || error)))
+    await sceneWorldbooks?.copyRefs(state.id, fork.id, turn).catch(() => {})
     await forkPluginState(source, state, fork, turn)
     return conversationForkReceipt(fork, { lastTurn: turn, messageCount: fork.messages.length })
   }
