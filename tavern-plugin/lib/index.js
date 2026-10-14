@@ -4652,7 +4652,8 @@ export async function apply(ctx) {
     tavernRemoteAssets,
     tavernStaticResources,
   })
-  if (process.env.DSH_TAVERN_SERVER_SCRIPTS === '1') {
+  // Card scripts run on the server by default; DSH_TAVERN_SERVER_SCRIPTS=0 leaves them to the page.
+  if (process.env.DSH_TAVERN_SERVER_SCRIPTS !== '0') {
     serverScripts = createServerScriptExecutor({
       handle: (req, res) => tavernHttpHandle(req, res),
       // Keep the runtime through a whole settlement, not just one dispatched event.

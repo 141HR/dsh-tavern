@@ -28,7 +28,15 @@ const ALLOWED_GET = /^\/api\/dsh-tavern\/(?:vendor\/|client-assets\/|remote-asse
 // shows its game in the foreground or a settlement waits for it, and stops
 // shortly after both end. Switching back starts it again.
 export function createServerScriptExecutor({ handle, subscribeSignals, busy = () => false, lingerMs = 30 * 1000, maxSessions = 4, logger = console, now = Date.now }) {
-  const records = new Map()
+  const records = new Map(), retryAfter = new Map()
+  let failures = 0, disabled = false
+  function failed(id) {
+    retryAfter.set(id, now() + 5 * 60 * 1000)
+    if (++failures >= 3 && !disabled) {
+      disabled = true
+      logger.warn('dsh-tavern: 服务端卡脚本运行时多次失败，本次运行改由页面执行卡脚本')
+    }
+  }
   function stop(sessionId) {
     const record = records.get(sessionId)
     if (!record) return
@@ -97,6 +105,9 @@ export function createServerScriptExecutor({ handle, subscribeSignals, busy = ()
     if (!id) return
     const existing = records.get(id)
     if (existing) { existing.demandedAt = now(); return }
+    // A host that cannot run the headless runtime keeps the page path: after
+    // repeated failures stop trying instead of respawning on every claim.
+    if (disabled || now() < (retryAfter.get(id) || 0)) return
     // At capacity, leave this game to its page (or let it wait for a slot):
     // evicting would let retained pages of other games restart theirs in a loop.
     if (records.size >= maxSessions) return
@@ -116,8 +127,8 @@ export function createServerScriptExecutor({ handle, subscribeSignals, busy = ()
     child.on('message', message => {
       if (message.type === 'fetch') void answer(record, message)
       else if (message.type === 'log') logger[message.level === 'error' ? 'error' : message.level === 'warn' ? 'warn' : 'log']('dsh-tavern[server-scripts ' + id.slice(0, 8) + ']', message.message)
-      else if (message.type === 'started') logger.log('dsh-tavern: 服务端卡脚本运行时已启动', id)
-      else if (message.type === 'failed') logger.error('dsh-tavern: 服务端卡脚本运行时启动失败', message.error)
+      else if (message.type === 'started') { failures = 0; logger.log('dsh-tavern: 服务端卡脚本运行时已启动', id) }
+      else if (message.type === 'failed') { logger.error('dsh-tavern: 服务端卡脚本运行时启动失败', message.error); stop(id); failed(id) }
     })
     // A killed or crashed child must never take the Tavern service down with it.
     child.on('error', error => logger.warn('dsh-tavern: 服务端卡脚本运行时进程错误', id, String(error?.message || error)))
@@ -126,6 +137,7 @@ export function createServerScriptExecutor({ handle, subscribeSignals, busy = ()
         records.delete(id)
         record.stopSignals()
         logger.warn('dsh-tavern: 服务端卡脚本运行时退出', id, code, signal, record.stderr.slice(-2000))
+        failed(id)
       }
     })
     child.send({ type: 'start', sessionId: id }, () => {})
