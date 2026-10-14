@@ -9114,7 +9114,7 @@ function bindTavernFontZoom(node, win) {
 					// A ready viewer cannot advertise settlement readiness: promotion
 					// rebuilds the sandbox with the official core before accepting work.
 					const inspection = ownershipKnown && !active ? { scripts: [] } : currentRuntime.inspect();
-					const result = await invokeWithDeadline("claimTavernScriptWork", currentLease, inspection, {contextBaseline: inspection.contextBaseline || {workContextVersion:1,full:true}});
+					const result = await invokeWithDeadline("claimTavernScriptWork", currentLease, inspection, {contextBaseline: inspection.contextBaseline || {workContextVersion:1,full:true}, foreground: foreground});
 					if (lease !== currentLease) {
 						if (result && result.active) releaseLease(currentLease);
 						return;

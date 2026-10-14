@@ -3557,8 +3557,9 @@ export async function apply(ctx) {
     isReady: function (sessionId, chat) {
       if (pendingMvuSettlementState(chat)?.prepared) return true
       const state = tavernScriptDispatch.status(sessionId)
-      // EXPERIMENT: with no page open, run the card scripts on the server.
-      if (state.ready !== true && !state.initializationError) serverScripts?.ensure(sessionId)
+      // EXPERIMENT: a waiting settlement keeps its server runtime alive (or
+      // starts one) until it finishes, even with no page showing the game.
+      serverScripts?.demand(sessionId)
       return state.ready === true || Boolean(state.initializationError)
     },
     resume: chatId => queueSettlement(chatId),
@@ -4369,7 +4370,8 @@ export async function apply(ctx) {
       case 'getTavernHelperWorldbook': return await tavernScriptHostAdapter.getWorldbook(args && args.sessionId, args && args.name)
       case 'replaceTavernHelperWorldbook': return await tavernScriptHostAdapter.replaceWorldbook(args && args.sessionId, args && args.name, args && args.entries, args && args.expectedEntries)
 	  case 'claimTavernScriptWork': {
-	    if (serverScripts && !String(args?.runtimeId || '').startsWith('server-')) serverScripts.ensure(args?.sessionId)
+	    // The game a page is showing runs on the server; background games do not.
+	    if (serverScripts && args?.foreground === true && !String(args?.runtimeId || '').startsWith('server-')) serverScripts.demand(args?.sessionId)
 	    const claimed = await tavernScriptHostAdapter.claimWork(args && args.sessionId, args && args.runtimeId, args && args.ready, args && args.initializationError, args && args.contextBaseline)
 	    if (claimed?.event && String(args?.runtimeId || '').startsWith('server-')) console.log('dsh-tavern: 服务端卡脚本运行时领取事件', claimed.event.name, claimed.event.id)
 	    return claimed
@@ -4652,6 +4654,13 @@ export async function apply(ctx) {
   if (process.env.DSH_TAVERN_SERVER_SCRIPTS === '1') {
     serverScripts = createServerScriptExecutor({
       handle: (req, res) => tavernHttp.handle(req, res),
+      // Keep the runtime through a whole settlement, not just one dispatched event.
+      busy: async sessionId => {
+        if (tavernScriptDispatch.status(sessionId)?.busy === true) return true
+        const state = await taskStateReader.forSession(sessionId).catch(() => null)
+        const activity = state ? backgroundTasks.activity(state) : null
+        return Boolean(activity && (activity.busy || activity.phase === 'pending' || activity.phase === 'running'))
+      },
       subscribeSignals: (sessionId, listener) => sessionSignals.subscribe(sessionId, [], listener)
     })
     ctx.effect(() => () => serverScripts?.dispose(), 'dsh-tavern: server script runtime')

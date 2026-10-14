@@ -24,21 +24,32 @@ const ALLOWED_METHODS = new Set([
 ])
 const ALLOWED_GET = /^\/api\/dsh-tavern\/(?:vendor\/|client-assets\/|remote-assets\/|static-assets|helper-history|session-resource|plugin-assets\/)/
 
-export function createServerScriptExecutor({ handle, subscribeSignals, idleMs = 10 * 60 * 1000, maxSessions = 3, logger = console }) {
+// Like a page, only the game being played runs: a runtime lives while a page
+// shows its game in the foreground or a settlement waits for it, and stops
+// shortly after both end. Switching back starts it again.
+export function createServerScriptExecutor({ handle, subscribeSignals, busy = () => false, lingerMs = 30 * 1000, maxSessions = 4, logger = console, now = Date.now }) {
   const records = new Map()
   function stop(sessionId) {
     const record = records.get(sessionId)
     if (!record) return
     records.delete(sessionId)
-    clearTimeout(record.idle)
     record.stopSignals()
     record.child.kill('SIGKILL')
+    logger.log('dsh-tavern: 服务端卡脚本运行时已停止', sessionId)
   }
-  function touch(record) {
-    clearTimeout(record.idle)
-    record.idle = setTimeout(() => stop(record.sessionId), idleMs)
-    record.idle.unref?.()
-  }
+  let reaping = false
+  const reaper = setInterval(async () => {
+    if (reaping) return
+    reaping = true
+    try {
+      for (const record of [...records.values()]) {
+        if (now() - record.demandedAt <= lingerMs) continue
+        if (await Promise.resolve(busy(record.sessionId)).catch(() => true)) continue
+        if (records.get(record.sessionId) === record && now() - record.demandedAt > lingerMs) stop(record.sessionId)
+      }
+    } finally { reaping = false }
+  }, Math.max(1000, Math.floor(lingerMs / 3)))
+  reaper.unref?.()
   async function answer(record, message) {
     const reply = data => { if (record.child.connected) record.child.send({ type: 'fetch-result', id: message.id, ...data }, () => {}) }
     try {
@@ -75,16 +86,17 @@ export function createServerScriptExecutor({ handle, subscribeSignals, idleMs = 
         }
         Promise.resolve(handle(req, res)).catch(reject)
       })
-      touch(record)
       const plain = Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), String(value)]))
       reply({ status, headers: plain, body: Buffer.concat(chunks).toString('base64') })
     } catch (error) {
       reply({ error: String(error?.message || error) })
     }
   }
-  function ensure(sessionId) {
+  function demand(sessionId) {
     const id = String(sessionId || '')
-    if (!id || records.has(id)) return
+    if (!id) return
+    const existing = records.get(id)
+    if (existing) { existing.demandedAt = now(); return }
     // At capacity, leave this game to its page (or let it wait for a slot):
     // evicting would let retained pages of other games restart theirs in a loop.
     if (records.size >= maxSessions) return
@@ -96,7 +108,7 @@ export function createServerScriptExecutor({ handle, subscribeSignals, idleMs = 
       execArgv: ['--experimental-vm-modules', '--no-warnings', permissionFlag, '--allow-fs-read=' + plugin, '--allow-fs-read=' + modules, '--max-old-space-size=1024'],
       stdio: ['ignore', 'ignore', 'pipe', 'ipc'], serialization: 'advanced', windowsHide: true
     })
-    const record = { sessionId: id, child, idle: null, stderr: '', stopSignals: () => {} }
+    const record = { sessionId: id, child, demandedAt: now(), stderr: '', stopSignals: () => {} }
     records.set(id, record)
     record.stopSignals = subscribeSignals(id, signal => { if (child.connected) child.send({ type: 'signal', signal: { ...signal, snapshot: undefined } }, () => {}) })
     child.stderr.setEncoding('utf8')
@@ -113,16 +125,14 @@ export function createServerScriptExecutor({ handle, subscribeSignals, idleMs = 
       if (records.get(id) === record) {
         records.delete(id)
         record.stopSignals()
-        clearTimeout(record.idle)
         logger.warn('dsh-tavern: 服务端卡脚本运行时退出', id, code, signal, record.stderr.slice(-2000))
       }
     })
-    touch(record)
     child.send({ type: 'start', sessionId: id }, () => {})
   }
   return Object.freeze({
-    ensure, stop,
+    demand, stop,
     has: sessionId => records.has(String(sessionId || '')),
-    dispose() { for (const id of [...records.keys()]) stop(id) }
+    dispose() { clearInterval(reaper); for (const id of [...records.keys()]) stop(id) }
   })
 }
