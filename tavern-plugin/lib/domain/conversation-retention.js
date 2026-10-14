@@ -27,7 +27,9 @@ export async function retainedRevisions(chat, readRevision, forkRevisions = [], 
   while (pending.length) {
     const state = pending.pop()
     for (const checkpoint of state?.timeline?.checkpoints || []) {
-      if (Number(checkpoint?.turn) > oldestTurn) await follow(Number(checkpoint?.beforeRevision))
+      // A checkpoint without a readable turn is kept: never drop what cannot be placed.
+      const turn = Number(checkpoint?.turn)
+      if (!Number.isFinite(turn) || turn > oldestTurn) await follow(Number(checkpoint?.beforeRevision))
     }
     await follow(Number(state?.rollbackUndo?.beforeRevision))
     await follow(Number(state?.regenRecovery?.beforeRevision))
