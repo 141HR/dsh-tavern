@@ -726,27 +726,44 @@ try {
     report.deferredResettle = { ms: Date.now() - started, pending: settled.mvu?.pending === true, receipt: settled.mvu?.receipt?.status }
     assert.ok(!settled.mvu?.pending, '重新打开页面后等待中的结算应完成')
   })
-  if (process.argv.includes('--server-scripts')) await step('关闭页面后，变量重新结算仍由服务端完成', async () => {
+  if (process.argv.includes('--server-scripts')) await step('页面在前台时由页面执行；切到后台或关页后由服务端完成结算', async () => {
+    const claims = () => log.split('服务端卡脚本运行时领取事件').length - 1
+    const starts = () => log.split('服务端卡脚本运行时已启动').length - 1
+    assert.equal(claims(), 0, '页面在前台时不应由服务端执行')
+    assert.equal(starts(), 0, '页面在前台时不应启动服务端运行时')
     const chat = await savedChat()
     const latest = chat.messages.filter(message => message.role === 'assistant' && !message.greeting).at(-1)
     const origin = new URL(page.url()).origin
-    await page.goto('about:blank')
-    const started = Date.now(), claims = () => log.split('服务端卡脚本运行时领取事件').length - 1, claimedBefore = claims()
-    const response = await context.request.post(origin + '/api/dsh-tavern/retryMvuSettlement', { data: { sessionId: chat.sessionId, turn: latest.turn, guidance: 'E2E 修正金币为四十' } })
-    const result = await response.json()
-    assert.ok(result.ok, result.error)
-    let settled
-    while (Date.now() - started < timeout) {
-      settled = (await savedChat()).messages.filter(message => message.role === 'assistant' && !message.greeting).at(-1)
-      if (claims() > claimedBefore && settled.mvu?.receipt?.status === 'updated' && JSON.stringify(settled.mvu) !== JSON.stringify(latest.mvu)) break
-      await pause(250)
+    const resettle = async (before, label) => {
+      const begun = Date.now(), claimedBefore = claims()
+      const result = await (await context.request.post(origin + '/api/dsh-tavern/retryMvuSettlement', { data: { sessionId: chat.sessionId, turn: latest.turn, guidance: 'E2E 修正金币为四十' } })).json()
+      assert.ok(result.ok, result.error)
+      let row
+      while (Date.now() - begun < 90000) {
+        row = (await savedChat()).messages.filter(message => message.role === 'assistant' && !message.greeting).at(-1)
+        if (claims() > claimedBefore && row.mvu?.receipt?.status === 'updated' && row.mvu?.receipt?.diagnosticId !== before?.receipt?.diagnosticId) break
+        await pause(250)
+      }
+      assert.ok(claims() > claimedBefore, label + '：应由服务端领取结算事件')
+      assert.equal(row.mvu.receipt.status, 'updated', label + '：应完成结算')
+      return { row, ms: Date.now() - begun }
     }
-    assert.ok(claims() > claimedBefore, '无页面时服务端运行时应领取结算事件')
-    assert.equal(settled.mvu.receipt.status, 'updated', '无页面时服务端应完成结算')
-    assert.notDeepEqual(settled.mvu, latest.mvu)
-    report.serverScripts = { pageClosed: true, settleMs: Date.now() - started, receipt: settled.mvu.receipt.status }
+    // A hidden tab hands its game to the server once its last visible report ages out.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    const hiddenDeadline = Date.now() + 60000
+    while (starts() === 0 && Date.now() < hiddenDeadline) await pause(500)
+    assert.ok(starts() > 0, '页面切到后台后应启动服务端运行时')
+    await pause(30000)
+    const hidden = await resettle(latest.mvu, '页面在后台')
+    await page.goto('about:blank')
+    const closed = await resettle(hidden.row.mvu, '页面关闭')
+    report.serverScripts = { hiddenSettleMs: hidden.ms, closedSettleMs: closed.ms }
+    let settled = closed.row
     // Nobody plays this game now: its runtime stops, and a waiting settlement starts it again.
-    const stopDeadline = Date.now() + 60000
+    const stopDeadline = Date.now() + 90000
     while (!log.includes('服务端卡脚本运行时已停止') && Date.now() < stopDeadline) await pause(500)
     assert.ok(log.includes('服务端卡脚本运行时已停止'), '无人游玩时服务端运行时应停止')
     const startsBefore = log.split('服务端卡脚本运行时已启动').length, coldStarted = Date.now(), coldBefore = claims(), mvuBefore = settled.mvu

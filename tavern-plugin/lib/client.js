@@ -8942,6 +8942,14 @@ function bindTavernFontZoom(node, win) {
 			let foreground = true;
 			let runtime = null;
 			let lease = null;
+			// A visible desktop page executes card scripts itself; a hidden page
+			// or a phone lets the server run them (the page keeps its card UI).
+			const mobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(String(hostWindow.navigator && hostWindow.navigator.userAgent || ""));
+			function pageActive() {
+				const documentState = hostWindow.document && hostWindow.document.visibilityState;
+				return foreground && !mobileDevice && documentState !== "hidden";
+			}
+			let stopVisibility = null;
 			let workStop = null;
 				let heartbeatTimer = null;
 				let claimRetryTimer = null;
@@ -8992,6 +9000,8 @@ function bindTavernFontZoom(node, win) {
 				workStop = null;
 				if (heartbeatTimer !== null) stopHeartbeat(heartbeatTimer);
 				heartbeatTimer = null;
+				if (stopVisibility) stopVisibility();
+				stopVisibility = null;
 				if (runtime) runtime.dispose();
 				runtime = null;
 				if (options && options.onMvuLoadState) options.onMvuLoadState(null);
@@ -9114,7 +9124,7 @@ function bindTavernFontZoom(node, win) {
 					// A ready viewer cannot advertise settlement readiness: promotion
 					// rebuilds the sandbox with the official core before accepting work.
 					const inspection = ownershipKnown && !active ? { scripts: [] } : currentRuntime.inspect();
-					const result = await invokeWithDeadline("claimTavernScriptWork", currentLease, inspection, {contextBaseline: inspection.contextBaseline || {workContextVersion:1,full:true}, foreground: foreground});
+					const result = await invokeWithDeadline("claimTavernScriptWork", currentLease, inspection, {contextBaseline: inspection.contextBaseline || {workContextVersion:1,full:true}, foreground: foreground, pageActive: pageActive()});
 					if (lease !== currentLease) {
 						if (result && result.active) releaseLease(currentLease);
 						return;
@@ -9152,11 +9162,16 @@ function bindTavernFontZoom(node, win) {
 				currentRuntime.sync(nextSessionId, runtimeView(view));
 				// Claim also renews the lease and recovers work when its signal was lost.
 				if (heartbeatTimer === null && startHeartbeat) heartbeatTimer = startHeartbeat(function () { void claimWork(); }, heartbeatIntervalMs);
+				if (stopVisibility === null && hostWindow.document && typeof hostWindow.document.addEventListener === "function") {
+					const onVisibility = function () { void claimWork(); };
+					hostWindow.document.addEventListener("visibilitychange", onVisibility);
+					stopVisibility = function () { hostWindow.document.removeEventListener("visibilitychange", onVisibility); };
+				}
 				void claimWork();
 			}
 			return Object.freeze({
 				sync: sync, dispose: dispose,
-                setForeground: function (value) { foreground = value; if (runtime && runtime.setForeground) runtime.setForeground(value); },
+                setForeground: function (value) { const changed = foreground !== value; foreground = value; if (runtime && runtime.setForeground) runtime.setForeground(value); if (changed && lease) void claimWork(); },
 				retryMvuLoad: function () { return Boolean(runtime && active && runtime.retryMvuLoad()); },
 				triggerButton: function (scriptId, name) {
 					if (!runtime || !ownershipKnown) return Promise.reject(new Error("人物卡脚本尚未加载完成"));

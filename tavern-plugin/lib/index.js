@@ -262,6 +262,9 @@ export async function apply(ctx) {
   const compactionAbort = new AbortController()
   const sessionSignals = createSessionSignalTransport()
   let serverScripts = null, tavernHttpHandle = null
+  // Sessions whose page last reported being visible, in front, on a desktop.
+  const pagesInFront = new Map()
+  const pageInFront = sessionId => Date.now() - (pagesInFront.get(String(sessionId || '')) || 0) < 25000
   function queueAutoCompaction(sessionId) {
     if (!autoCompaction || compactionAbort.signal.aborted || compactionTimers.has(sessionId)) return
     const timer = setTimeout(async () => {
@@ -276,7 +279,10 @@ export async function apply(ctx) {
   ctx.effect(() => () => { compactionAbort.abort(); for (const timer of compactionTimers.values()) clearTimeout(timer) })
 	const tavernScriptDispatch = createTavernScriptDispatch({
     publishSignal: function (sessionId, signal) { sessionSignals.publish(sessionId, signal) },
-    priority: runtimeId => serverScripts && String(runtimeId).startsWith('server-') ? 1 : 0
+    // A page in front of the player executes card scripts itself; otherwise
+    // (closed, hidden, or a phone) the server runtime takes over.
+    priority: (runtimeId, sessionId) => !serverScripts ? 0
+      : String(runtimeId).startsWith('server-') ? (pageInFront(sessionId) ? 0 : 1) : (pageInFront(sessionId) ? 1 : 0)
   })
   async function promptTemplateRuntime(sessionId) { return fullTemplateRuntime.forSession(sessionId) }
   const commands = ctx.get('commands')
@@ -3557,9 +3563,9 @@ export async function apply(ctx) {
     isReady: function (sessionId, chat) {
       if (pendingMvuSettlementState(chat)?.prepared) return true
       const state = tavernScriptDispatch.status(sessionId)
-      // EXPERIMENT: a waiting settlement keeps its server runtime alive (or
-      // starts one) until it finishes, even with no page showing the game.
-      serverScripts?.demand(sessionId)
+      // A waiting settlement with no page in front keeps (or starts) the
+      // server runtime until it finishes.
+      if (serverScripts && !pageInFront(sessionId)) serverScripts.demand(sessionId)
       return state.ready === true || Boolean(state.initializationError)
     },
     resume: chatId => queueSettlement(chatId),
@@ -4370,8 +4376,12 @@ export async function apply(ctx) {
       case 'getTavernHelperWorldbook': return await tavernScriptHostAdapter.getWorldbook(args && args.sessionId, args && args.name)
       case 'replaceTavernHelperWorldbook': return await tavernScriptHostAdapter.replaceWorldbook(args && args.sessionId, args && args.name, args && args.entries, args && args.expectedEntries)
 	  case 'claimTavernScriptWork': {
-	    // The game a page is showing runs on the server; background games do not.
-	    if (serverScripts && args?.foreground === true && !String(args?.runtimeId || '').startsWith('server-')) serverScripts.demand(args?.sessionId)
+	    // A visible desktop page runs its game's card scripts; a hidden one or a
+	    // phone hands them to the server. Background games run nowhere.
+	    if (serverScripts && args?.foreground === true && !String(args?.runtimeId || '').startsWith('server-')) {
+	      if (args?.pageActive === true) pagesInFront.set(String(args.sessionId || ''), Date.now())
+	      else serverScripts.demand(args?.sessionId)
+	    }
 	    const claimed = await tavernScriptHostAdapter.claimWork(args && args.sessionId, args && args.runtimeId, args && args.ready, args && args.initializationError, args && args.contextBaseline)
 	    if (claimed?.event && String(args?.runtimeId || '').startsWith('server-')) console.log('dsh-tavern: 服务端卡脚本运行时领取事件', claimed.event.name, claimed.event.id)
 	    return claimed

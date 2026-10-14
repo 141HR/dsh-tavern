@@ -77,10 +77,10 @@ export function createTavernScriptDispatch(options = {}) {
     const owner = str(runtimeId)
     if (id === '' || owner === '') return false
     const current = presence.get(id)
-    // A higher-priority runtime (the server executor) takes over an idle
-    // session from a page; a page never displaces it.
+    // A higher-priority runtime takes over an idle session (priority may
+    // depend on the session: the page in front of the player, else the server).
     if (current && current.owner !== owner && now() - current.seenAt <= presenceTtlMs
-      && !(priority(owner) > priority(current.owner) && !records.has(id))) return false
+      && !(priority(owner, id) > priority(current.owner, id) && !records.has(id))) return false
     const wasReady = Boolean(current && current.owner === owner && now() - current.seenAt <= presenceTtlMs && current.ready === true)
     const error = redactDiagnostic(str(initializationError).slice(0, 4000)).trim()
     ready = ready === true && error === ''
