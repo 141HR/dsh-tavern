@@ -90,7 +90,9 @@ export async function realCardEditChecks({ page, step, root, data, output, repor
       // The converted copy: any new card besides the source.
       const cards = (await readdir(join(data, 'resources/cards'))).filter(name => name.endsWith('.json') && name !== 'edit-target.json')
       report.cardEdit.mvuResult = await Promise.all(cards.map(async name => {
-        const file = JSON.parse(await readFile(join(data, 'resources/cards', name), 'utf8'))
+        const text = await readFile(join(data, 'resources/cards', name), 'utf8')
+        await writeFile(join(output, 'result-' + name), text)
+        const file = JSON.parse(text)
         const card = (file.raw || file).data || file.raw || file
         const checked = checkMvuCard(card)
         const regex = card.extensions?.regex_scripts || []
