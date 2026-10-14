@@ -96,7 +96,6 @@
 | [dsh-card-updater](https://github.com/flizzywine/dsh-tavern/discussions/149) | 卡片更新器，作者发布新版时提醒你                   |
 | [dsh-wrongbook](https://github.com/flizzywine/dsh-tavern/discussions/150)    | 错题库，按人物卡记下调试踩过的坑                   |
 | [动态世界书生成](https://github.com/flizzywine/dsh-tavern/discussions/147)          | 后台结算时生成世界书条目                       |
-| [SQLite V2](https://github.com/flizzywine/dsh-tavern/discussions/156)        | SQLite 存档，回退时清掉被回退的内容              |
 
 以上均为社区作者开发，更多插件见[讨论区的 Show and tell](https://github.com/flizzywine/dsh-tavern/discussions/categories/show-and-tell)。
 
