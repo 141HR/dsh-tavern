@@ -27,7 +27,9 @@ test('compaction drops unretained revisions and keeps current and retained ones 
  const dry=await store.compact('a',{retain:r=>r===5,keepRecent:2,graceMs:0,dryRun:true})
  assert.ok(dry.removed>0)
  const result=await store.compact('a',{retain:r=>r===5,keepRecent:2,graceMs:0})
- assert.equal(result.removed,dry.removed)
+ // Index keys of dropped revisions go too, so their pointer blocks are freed as well.
+ assert.ok(result.indexKeysRemoved>0)
+ assert.ok(result.removed>=dry.removed)
  assert.ok(result.bytes>0)
  const fresh=reopen()
  assert.deepEqual(await fresh.read('a'),current)
@@ -37,7 +39,10 @@ test('compaction drops unretained revisions and keeps current and retained ones 
  // The compacted save keeps accepting writes, and a second pass finds nothing new.
  await persistence.patch('a',13,[{op:'set',path:['messages',0,'text'],value:big(13)}])
  assert.equal((await persistence.read('a')).messages[0].text,big(13))
- assert.equal((await store.compact('a',{retain:r=>r===5,keepRecent:20,graceMs:0})).removed,0)
+ await store.compact('a',{retain:r=>r===5,keepRecent:20,graceMs:0})
+ const again=reopen()
+ assert.equal((await again.read('a')).messages[0].text,big(13))
+ assert.deepEqual(await again.readRevision('a',5),keep)
 })
 
 test('the grace period keeps freshly written blocks',async t=>{

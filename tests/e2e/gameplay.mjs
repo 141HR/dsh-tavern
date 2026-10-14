@@ -8,6 +8,7 @@ import { setupRealCharacterDesign, realCharacterDesignChecks } from './real-char
 import { setupRealCardEdit, realCardEditChecks } from './real-card-edit.mjs'
 import { startSceneImageServer, sceneAddChecks } from './scene-add.mjs'
 import { regenAnomalyChecks, regenTemplateChecks } from './regen-anomalies.mjs'
+import { storageAuditChecks } from './storage-audit.mjs'
 import { brokenSaveChecks } from './broken-save.mjs'
 import { incrementalMvuChecks } from './mvu-incremental.mjs'
 import {openingUpdateChecks} from './opening-update.mjs'
@@ -170,10 +171,12 @@ try {
     // Deliberate continuous DOM updates: a real status card must receive new
     // variables even when it never reaches the frame's DOM-idle threshold.
     const status = '<div id="e2e-gold">金币：加载中</div><script>function refresh(){const v=getAllVariables();document.getElementById("e2e-gold").textContent="金币："+(v.stat_data?.gold??"未初始化")}refresh();setInterval(refresh,200)</script>'
+    // Storage audit: borrow a real large card's worldbook (its [initvar] entries give realistic MVU state).
+    const auditBook = process.env.TAVERN_E2E_AUDIT_CARD ? (raw => (raw.data || raw).character_book)(JSON.parse(await readFile(process.env.TAVERN_E2E_AUDIT_CARD, 'utf8')).raw || JSON.parse(await readFile(process.env.TAVERN_E2E_AUDIT_CARD, 'utf8'))) : null
     await writeFile(join(data, 'resources/cards/e2e.json'), JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: {
       name: 'E2E 奖励验收', description: '固定验收角色', first_mes: (process.argv.includes('--text-colors') ? '她说：“欢迎光临。” *窗外下着雨。*' : '欢迎领取奖励。') + (process.argv.includes('--opening-update') ? '\n<initvar>{"gold":0,"old":1}</initvar>' : '') + '\n\n<StatusPlaceHolderImpl/>',
       mes_example: '', scenario: '', personality: '',
-      character_book: { name: '验收初始变量', entries: [{ id: 1, keys: [], comment: '[initvar]初始值', content: process.argv.includes('--settlement-performance') ? JSON.stringify(settlementPerformanceInitialVariables()) : 'gold: 0', enabled: true, constant: true, insertion_order: 1 }, ...(helperApiScenario ? [{ id: 2, keys: ['金币规则'], comment: '金币规则', content: '每次领取十枚金币。', enabled: true, insertion_order: 2 }] : [])] },
+      character_book: { name: '验收初始变量', entries: [{ id: 1, keys: [], comment: '[initvar]初始值', content: process.argv.includes('--settlement-performance') || process.argv.includes('--storage-audit') ? JSON.stringify(settlementPerformanceInitialVariables()) : 'gold: 0', enabled: true, constant: true, insertion_order: 1 }, ...(auditBook ? auditBook.entries.filter(entry => !/initvar/i.test(String(entry.comment || '') + String(entry.content || '').slice(0, 200))).map((entry, index) => ({ ...entry, id: 1000 + index })) : []), ...(helperApiScenario ? [{ id: 2, keys: ['金币规则'], comment: '金币规则', content: '每次领取十枚金币。', enabled: true, insertion_order: 2 }] : [])] },
       extensions: { mvu: {}, ...(helperApiScenario ? { TavernHelper_scripts: [{ type: 'script', value: { id: 'e2e-helper-api', name: 'E2E 助手接口', enabled: true, content: helperApiScript } }] } : {}), regex_scripts: [{ id: 'e2e-status', scriptName: '金币状态', findRegex: '<StatusPlaceHolderImpl/>',
         replaceString: '```html\n' + status + '\n```', placement: [2], markdownOnly: true, disabled: false }, ...(displayScenario ? displayRegressionRules() : []),
         // A permanent player-input rule: the saved input differs from what was typed.
@@ -197,8 +200,8 @@ try {
         cwd: source, env: { ...env, DSH_HOME: root, DSH_CWD: root,
           TAVERN_E2E_COMPACTION_DIR: compactionScenario ? output : '',
           TAVERN_E2E_RECOVERY_DIR: recoveryScenario ? output : '',
-          TAVERN_E2E_PERFORMANCE_DIR: process.argv.includes('--settlement-performance') ? output : '',
-          TAVERN_PERF_HISTORY_READY: process.env.TAVERN_PERF_HISTORY_READY || '',
+          TAVERN_E2E_PERFORMANCE_DIR: process.argv.includes('--settlement-performance') || process.argv.includes('--storage-audit') ? output : '',
+          TAVERN_PERF_HISTORY_READY: process.env.TAVERN_PERF_HISTORY_READY || (process.argv.includes('--storage-audit') ? '1' : ''),
           TAVERN_PERF_BODY_REPEATS: process.env.TAVERN_PERF_BODY_REPEATS || '',
           TAVERN_E2E_BACKGROUND_DIR: (process.argv.includes('--background-lifecycle') || process.argv.includes('--background-failure')) ? output : '',
           TAVERN_E2E_REQUEST_AUDIT: join(output, 'preset-requests.jsonl'),
@@ -456,6 +459,8 @@ try {
     await realCharacterDesignChecks({page,step,savedChat,root,data,output,report})
   } else if (process.argv.includes('--real-variables')) {
     await realVariableLookupChecks({page,step,savedChat,root,output,report})
+  } else if (process.argv.includes('--storage-audit')) {
+    await storageAuditChecks({ page, step, savedChat, data, root, output, report })
   } else if (process.argv.includes('--opening-update')) {
     await openingUpdateChecks({page,step,savedChat,data,output,report,root})
   } else if (process.argv.includes('--background-failure')) {

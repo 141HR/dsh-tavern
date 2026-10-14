@@ -53,3 +53,27 @@ test('分叉引用的父局版本保留；有任务进行时不整理', async t 
  await busy.persistence.write({id:'b',mode:'story',messages:[{role:'assistant',text:big(0)}]})
  assert.equal((await busy.maintenance.maintainChat('b')).status,'busy')
 })
+
+test('规则整理：保存增长到设定的版本数后，结算后立即整理一次', async t => {
+ const root=await mkdtemp(join(tmpdir(),'save-rule-'))
+ t.after(()=>rm(root,{recursive:true,force:true}))
+ const chats=createChatJournalStore({dataRoot:root,newConversations:true})
+ const persistence=createChatPersistence({store:chats})
+ const files=new Map(),calls=[]
+ const maintenance=createSaveMaintenance({chats,store:{readJson:async p=>structuredClone(files.get(p)),writeJson:async(p,v)=>files.set(p,structuredClone(v))},
+  listChatIds:async()=>['a'],requestLog:{prune:async()=>calls.push('prune')},recallLog:{prune:async()=>{}},isIdle:async()=>true,
+  keepRecent:2,everyRevisions:5,graceMs:0,logger:{log(){},warn(){}}})
+ await persistence.write({id:'a',mode:'story',messages:[{role:'assistant',text:big(0)}]})
+ for(let i=1;i<=3;i++)await persistence.patch('a',i,[{op:'set',path:['messages',0,'text'],value:big(i)}])
+ maintenance.noteWrite('a',4)
+ await maintenance.sweep().catch(()=>{}) // drain the serial queue
+ calls.length=0
+ maintenance.noteWrite('a',4)
+ for(let i=4;i<=10;i++)await persistence.patch('a',i,[{op:'set',path:['messages',0,'text'],value:big(i)}])
+ maintenance.noteWrite('a',6)
+ await maintenance.maintainChat('a')
+ assert.deepEqual(calls,['prune'])
+ maintenance.noteWrite('a',11)
+ await maintenance.maintainChat('a')
+ assert.equal(files.get('save-maintenance.json').compacted.a,11)
+})

@@ -400,6 +400,44 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
   }
   return Object.fromEntries(entries)
  }
+ // Rewrite the keyed-record index keeping only keys the caller still needs
+ // (e.g. per-revision pointers of revisions nothing reads any more). Publishes
+ // a new head with the same messages and state; returns how many keys went.
+ async function pruneEntries(id,keep){
+  const dir=directory(id),diskRead=reader(dir),pending=new Map()
+  const write=async value=>{const ref=hash(JSON.stringify(value));pending.set(ref,value);return ref}
+  const read=async (ref,kind)=>pending.has(ref)?pending.get(ref):diskRead(ref,kind)
+  let removed=0
+  await promotion.update(path.join(dir,'head.json'),async pointer=>{
+   if(pointer===undefined)throw conflict()
+   const reference=JSON.parse(pointer)
+   if(reference.format!==FORMAT)throw Error('Unsupported conversation format')
+   const head=validateHead(await read(reference.headId,'head'),id)
+   if(!head.recordRoot)return undefined
+   const entries=[]
+   async function collect(ref,depth=0){
+    if(!ref)return
+    const node=await read(ref)
+    if(node.kind==='entry'){entries.push(node);return}
+    if(node.kind!=='entries'||depth>=64)throw Error('Invalid record index')
+    for(const child of Object.values(node.children))await collect(child,depth+1)
+   }
+   await collect(head.recordRoot)
+   const kept=entries.filter(entry=>keep(entry.key))
+   removed=entries.length-kept.length
+   if(!removed)return undefined
+   const recordRoot=kept.length?await putEntries(dir,read,null,kept.map(entry=>({key:entry.key,valueRef:entry.valueRef,route:recordKey(entry.key)})),0,write):undefined
+   const next={...head,revision:head.revision+1,previousHeadId:reference.headId}
+   if(recordRoot)next.recordRoot=recordRoot;else delete next.recordRoot
+   const headId=await write(next)
+   const directories=new Set()
+   for(const value of pending.values())await writeBlock(dir,value,directories)
+   for(const target of [...directories].filter(value=>value!==dir&&value!==path.join(dir,'blocks')))await syncDirectory(target)
+   if(directories.size){await syncDirectory(path.join(dir,'blocks'));await syncDirectory(dir)}
+   return JSON.stringify({format:FORMAT,headId})
+  })
+  return {removed}
+ }
  // Delete blocks unreachable from the current head. Old heads stay reachable
  // only through keyed records the caller retains (`retainEntry(key)`, e.g.
  // 'chat-revision:N'); previousHeadId links are never followed. Any 64-hex
@@ -434,7 +472,9 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
     if(value===undefined)continue
     marked.add(ref)
     const strong=[],optional=[]
-    if(value.kind==='head'){for(const key of ['root','stateId','metadataId','recordRoot'])if(value[key])strong.push(value[key])}
+    // Only the current head's keyed-record index is ever read; older heads are
+    // reached through it and need just their messages, state and metadata.
+    if(value.kind==='head'){for(const key of ['root','stateId','metadataId',...(ref===reference.headId?['recordRoot']:[])])if(value[key])strong.push(value[key])}
     else if(value.kind==='index')strong.push(...value.children.filter(Boolean))
     else if(value.kind==='entries')strong.push(...Object.values(value.children).filter(Boolean))
     else if(value.kind==='entry'){
@@ -485,5 +525,5 @@ export function createConversationPageStore({root,onIO=()=>{},linkFile=link}={})
   })
   return result
  }
- return Object.freeze({create,commit,readHead,openConversation,readHistoryPage,readState,writeRecord,writeRecords,readRecord,readEntries,sweep})
+ return Object.freeze({create,commit,readHead,openConversation,readHistoryPage,readState,writeRecord,writeRecords,readRecord,readEntries,sweep,pruneEntries})
 }

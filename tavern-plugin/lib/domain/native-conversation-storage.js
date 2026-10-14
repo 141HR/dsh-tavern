@@ -13,6 +13,7 @@ import {diffJson,applyJsonChangesShared} from './json-mutation.js'
 const pointer=parts=>parts.length?'/'+parts.map(part=>String(part).replace(/~/g,'~0').replace(/\//g,'~1')).join('/'):''
 const failure=(code,message)=>Object.assign(new Error(message),{code})
 const header=({messages,...value})=>value
+const CHANGE_WINDOW=64
 
 /** Native pages/current-state storage behind the existing runtime Chat API.
  * Chat is a detached projection, never an authoritative monolithic disk blob.
@@ -180,7 +181,7 @@ export function createNativeConversationStorage({dataRoot,onIO}){
   return {chat,messageCount:view.messageCount,denseMessages:true}
  }
  // Revision-bounded change records; callers of rare operations may look further back.
- async function changeCoverage(id,revision,limit=64){
+ async function changeCoverage(id,revision,limit=CHANGE_WINDOW){
   const view=await head(id)
   if(!view)return null
   const current=view.state.chatRevision
@@ -646,16 +647,22 @@ export function createNativeConversationStorage({dataRoot,onIO}){
   const header=await selectedHeader(id,view,['timeline','rollbackUndo','regenRecovery','forkedFrom','regenInProgress'])
   return {...header,id,_storageRevision:view.state.chatRevision,legacyInitialRevision:view.metadata.settings?.legacyInitialRevision}
  }
- async function compact(id,{retain=()=>false,keepRecent=64,graceMs,dryRun}={}){
+ async function compact(id,{retain=()=>false,keepRecent=64,changeFloor,graceMs,dryRun}={}){
   const view=await head(id)
   if(!view)return null
   const current=view.state.chatRevision
-  return pages.sweep(id,{graceMs,dryRun,retainEntry:key=>{
-   const match=/^chat-revision:(\d+)$/.exec(key)
-   if(!match)return true
-   const revision=Number(match[1])
-   return revision>current-keepRecent||retain(revision)
-  }})
+  const needed=key=>{
+   const revision=/^chat-revision:(\d+)$/.exec(key)
+   if(revision)return Number(revision[1])>current-keepRecent||retain(Number(revision[1]))
+   // Change records serve incremental reads over a recent window; rollback
+   // reads back to its checkpoint, so the caller may extend the window.
+   const change=/^chat-change:(\d+)$/.exec(key)
+   return !change||Number(change[1])>Math.min(current-CHANGE_WINDOW,Number.isSafeInteger(changeFloor)?changeFloor:Infinity)
+  }
+  // Drop the index keys first: one small file per revision otherwise stays forever.
+  const pruned=dryRun?{removed:0}:await pages.pruneEntries(id,needed)
+  const result=await pages.sweep(id,{graceMs,dryRun,retainEntry:needed})
+  return {...result,indexKeysRemoved:pruned.removed}
  }
  return Object.freeze({compact,readRetentionHeader,patch,read,readWindow,readSettlementBase,readChangedSlice,readRevisionMetadata,readHelperContext,readSlice,readSessionState,readDisplayRuntimeState,readSceneImageState,version,create,write})
 }

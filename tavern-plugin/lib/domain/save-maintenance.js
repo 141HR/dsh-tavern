@@ -6,17 +6,16 @@ const STATE_PATH = 'save-maintenance.json'
  * Keeps saves small without touching anything play or story export reads:
  * old revisions nothing can reach any more, pre-migration journal files once
  * no kept revision predates the migration, and debugging logs (model request
- * bodies, worldbook recall audits) outside their recent windows. Runs only
- * while a game is idle: shortly after its settlement and once after startup.
+ * bodies, worldbook recall audits) outside their recent windows. A rule, not
+ * a timer: after a settlement, a game whose save grew by `everyRevisions`
+ * revisions since its last pass is tidied right away if it is idle.
  */
 export function createSaveMaintenance({
-  chats, listChatIds, requestLog, recallLog, isIdle, store, removeOrphans = async () => 0,
-  keepRecent = 8, graceMs, delayMs = 2 * 60 * 1000, logger = console,
-  schedule = setTimeout, cancel = clearTimeout
+  chats, listChatIds, requestLog, recallLog, isIdle, store,
+  keepRecent = 8, everyRevisions = 50, graceMs, logger = console
 }) {
   let state = null
   let disposed = false
-  const timers = new Map()
   let tail = Promise.resolve()
 
   async function load() {
@@ -71,7 +70,10 @@ export function createSaveMaintenance({
     if (state.compacted[chatId] === head._storageRevision) return { ...result, status: 'unchanged' }
     const retain = await retainedRevisions(head, (id, revision) => chats.readRetentionHeader(id, revision), forkRevisionsOf(chatId))
     if (!(await isIdle(chatId))) return { ...result, status: 'busy' }
-    result.compaction = await chats.compact(chatId, { retain: revision => retain.has(revision), keepRecent, graceMs })
+    // Incremental reads back to the last few rollback points stay fast.
+    const recentCheckpoints = (head.timeline?.checkpoints || []).slice(-3).map(item => Number(item?.beforeRevision)).filter(Number.isSafeInteger)
+    const changeFloor = recentCheckpoints.length ? Math.min(...recentCheckpoints) : undefined
+    result.compaction = await chats.compact(chatId, { retain: revision => retain.has(revision), keepRecent, changeFloor, graceMs })
     const legacyFrom = Number(head.legacyInitialRevision)
     const oldestKept = Math.min(head._storageRevision - keepRecent + 1, ...retain)
     if (Number.isSafeInteger(legacyFrom) && legacyFrom > 0 && oldestKept >= legacyFrom) {
@@ -85,9 +87,7 @@ export function createSaveMaintenance({
   async function sweep() {
     await load()
     if (!state.scanned) await scanForks()
-    // Debugging logs of games that no longer exist.
-    let freed = await removeOrphans(new Set(await listChatIds())).catch(error => { logger.warn('dsh-tavern: 清理已删除游戏的日志失败', String(error?.message || error)); return 0 })
-    let chatsDone = 0
+    let freed = 0, chatsDone = 0
     for (const chatId of await listChatIds()) {
       if (disposed) break
       try {
@@ -96,34 +96,29 @@ export function createSaveMaintenance({
         if (result.status === 'done') chatsDone++
       } catch (error) { logger.warn('dsh-tavern: 存档整理失败', chatId, String(error?.message || error)) }
     }
-    if (freed > 0) logger.log('dsh-tavern: 存档整理完成', chatsDone, '局，释放约', Math.round(freed / 1048576), 'MB')
     return { freed, chats: chatsDone }
   }
 
   return Object.freeze({
-    maintainChat: chatId => serial(() => maintainChat(chatId)),
+    maintainChat: chatId => serial(async () => { await load(); if (!state.scanned) await scanForks(); return maintainChat(chatId) }),
     sweep: () => serial(sweep),
-    // Debounced: a settlement often follows a rollback or another settlement.
-    schedule(chatId) {
-      if (disposed || !chatId) return
-      cancel(timers.get(chatId))
-      const timer = schedule(() => {
-        timers.delete(chatId)
-        void serial(() => maintainChat(chatId)).catch(error => logger.warn('dsh-tavern: 存档整理失败', chatId, String(error?.message || error)))
-      }, delayMs)
-      timer?.unref?.()
-      timers.set(chatId, timer)
+    // The rule: called after each settlement with the save's revision.
+    noteWrite(chatId, revision) {
+      if (disposed || !chatId || !Number.isSafeInteger(revision)) return
+      void serial(async () => {
+        await load()
+        if (revision - (Number(state.compacted[chatId]) || 0) < everyRevisions) return
+        if (!state.scanned) await scanForks()
+        const result = await maintainChat(chatId)
+        const freed = (result.compaction?.bytes || 0) + (result.legacy?.bytes || 0)
+        if (freed > 0) logger.log('dsh-tavern: 存档整理', chatId, '释放约', Math.round(freed / 1048576), 'MB')
+      }).catch(error => logger.warn('dsh-tavern: 存档整理失败', chatId, String(error?.message || error)))
     },
     async recordFork(chat) {
       const entry = forkEntry(chat)
       if (!entry || !chat?.id) return
       await serial(async () => { await load(); state.forks[chat.id] = entry; await save() })
     },
-    start() {
-      const timer = schedule(() => { void serial(sweep).catch(error => logger.warn('dsh-tavern: 存档整理失败', String(error?.message || error))) }, delayMs)
-      timer?.unref?.()
-      timers.set('', timer)
-    },
-    dispose() { disposed = true; for (const timer of timers.values()) cancel(timer); timers.clear() }
+    dispose() { disposed = true }
   })
 }

@@ -70,3 +70,26 @@ test('conditional reference variants require current scene evidence, not old his
   const unsupported = await api.read(await api.capture({ worldBook }))
   assert.equal(read('林岚站在夜晚的车站。', unsupported).sources.length, 0)
 })
+
+test('entries are stored once across turns; an export is a verified self-contained snapshot', async t => {
+  const { store, api } = await fixture(t)
+  const first = await api.capture({ worldBook: book('黑色短发') })
+  const stored = await store.readJson('scene-images/worldbooks/' + first.digest + '.json')
+  assert.equal(stored.version, 2)
+  assert.equal(stored.entryRefs.length, 2)
+  const shared = 'scene-images/worldbook-entries/' + stored.entryRefs[1] + '.json', sharedVersion = await store.version(shared)
+  // A later turn changes one entry: the unchanged entry file is reused, not rewritten.
+  const second = await api.capture({ worldBook: book('红色长发') })
+  assert.notEqual(second.digest, first.digest)
+  assert.deepEqual((await store.readJson('scene-images/worldbooks/' + second.digest + '.json')).entryRefs[1], stored.entryRefs[1])
+  assert.equal(await store.version(shared), sharedVersion)
+  assert.match((await api.read(first)).entries[0].text, /黑色短发/)
+  // Save packages carry the complete snapshot; importing it as a plain file still verifies.
+  const bytes = await api.exportSnapshot(first.digest)
+  const other = await fixture(t)
+  await other.store.writeBytes('scene-images/worldbooks/' + first.digest + '.json', bytes)
+  assert.deepEqual(await other.api.read(first), await api.read(first))
+  // A damaged shared entry is detected, never silently replaced by current data.
+  await store.writeJson(shared, { text: '篡改' })
+  assert.match((await api.read(first)).unavailable, /校验失败/)
+})

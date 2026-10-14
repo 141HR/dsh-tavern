@@ -10,6 +10,19 @@ export function describeRecallEntries(entries) { return entries.map(entry => ({ 
 
 // Recall audits are debugging evidence; only recent turns keep their detail.
 export const WORLDBOOK_RECALL_KEEP_TURNS = 10
+// Entries that simply did not apply are most of a large worldbook; record how
+// many there were per reason instead of a full row for each.
+const ROUTINE_REASONS = new Set(['keywords', 'disabled', 'empty'])
+function slim(log) {
+  if (!log || !Array.isArray(log.entries)) return log
+  const routine = {}
+  const entries = log.entries.filter(entry => {
+    if (!ROUTINE_REASONS.has(entry?.reason)) return true
+    routine[entry.reason] = (routine[entry.reason] || 0) + 1
+    return false
+  })
+  return { ...log, entries, routineEntryCounts: routine }
+}
 
 /** Independent per-operation records. Neither prompt text nor chat snapshots carry the full audit. */
 export function createWorldbookRecallLog({ store, now = Date.now }) {
@@ -30,7 +43,7 @@ export function createWorldbookRecallLog({ store, now = Date.now }) {
   async function record({ chat, frame, log }) {
     const path = base(chat.id) + segment(frame.operationId) + '.json'
     const value = { version: 1, status: 'prepared', createdAt: now(), chatId: chat.id, sessionId: chat.sessionId,
-      turn: frame.turn, operationId: frame.operationId, frameId: frame.frameId, branchId: frame.branchId, basedOnRevision: frame.basedOnRevision, ...log }
+      turn: frame.turn, operationId: frame.operationId, frameId: frame.frameId, branchId: frame.branchId, basedOnRevision: frame.basedOnRevision, ...slim(log) }
     await store.writeJson(path, value)
     await store.updateJson(base(chat.id) + 'index.json', previous => {
       const records = (previous?.records || []).filter(record => record.operationId !== frame.operationId)

@@ -196,7 +196,7 @@ import { readZipEntries, writeZipEntries } from './domain/zip-entries.js'
 import { createGameFootprint } from './domain/game-footprint.js'
 import { buildGameSave, collectSaveRevisions, readGameSave } from './domain/game-save.js'
 import { readFileSync } from 'node:fs'
-import { readdir, rm, stat } from 'node:fs/promises'
+import { readdir, rm } from 'node:fs/promises'
 import path from 'node:path'
 
 const TAVERN_PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
@@ -966,34 +966,11 @@ export async function apply(ctx) {
     readSlice: chatPersistence.readSlice, readState: chatPersistence.readSessionState,
     headerForSession: chatHeaderForSession, stateForSession: sessionStateForSession
   })
-  async function directorySize(target) {
-    const info = await stat(target).catch(() => null)
-    if (!info) return 0
-    if (!info.isDirectory()) return info.size
-    let total = 0
-    for (const name of await readdir(target).catch(() => [])) total += await directorySize(path.join(target, name))
-    return total
-  }
   const saveMaintenance = createSaveMaintenance({
     chats: chatJournalStore, requestLog: modelRequestLog, recallLog: worldbookRecallLog, store: profileData,
     listChatIds: async () => [...new Set((await readdir(path.join(dataRoot, 'chats'), { withFileTypes: true }).catch(() => []))
       .map(entry => entry.isDirectory() ? entry.name : entry.name.endsWith('.json') ? entry.name.slice(0, -5) : '')
       .filter(id => id.startsWith('chat-') && !deletedChatIds.has(id)))],
-    removeOrphans: async known => {
-      // A game listed in the index keeps its logs even if its save is missing.
-      for (const row of (await profileData.readJson('index.json').catch(() => null))?.chats || []) if (row?.id) known.add(String(row.id))
-      let bytes = 0
-      for (const folder of ['model-requests', 'worldbook-recalls', 'display-runtime']) {
-        const base = path.join(dataRoot, folder)
-        for (const entry of await readdir(base, { withFileTypes: true }).catch(() => [])) {
-          const id = entry.isDirectory() ? entry.name : entry.name.replace(/\.json$/, '')
-          if (!id.startsWith('chat-') || known.has(id)) continue
-          bytes += await directorySize(path.join(base, entry.name))
-          await rm(path.join(base, entry.name), { recursive: true, force: true })
-        }
-      }
-      return bytes
-    },
     isIdle: async chatId => {
       if (deletedChatIds.has(chatId)) return false
       const state = await taskStateReader.read(chatId).catch(() => null)
@@ -1003,7 +980,7 @@ export async function apply(ctx) {
       return !activity.busy && !['pending', 'running'].includes(activity.phase)
     }
   })
-  ctx.effect(() => { saveMaintenance.start(); return () => saveMaintenance.dispose() }, 'dsh-tavern: save maintenance')
+  ctx.effect(() => () => saveMaintenance.dispose(), 'dsh-tavern: save maintenance')
   const historyRecall = createHistoryRecall()
   const foregroundRecallScopes = new WeakMap()
   async function recallHistoryForSession(sessionId, args, scope, audience) {
@@ -1392,7 +1369,7 @@ export async function apply(ctx) {
       const files = await gameFootprint.readSceneFiles(chat.id)
       for (const file of files) attachmentRefs(JSON.parse(file.content.toString('utf8')), media, new Set(['deletedVersions']))
       const digest = chat.sceneOpeningWorldbook?.digest
-      const book = digest ? await gameFootprint.readSceneWorldbook(digest) : null
+      const book = digest ? (sceneWorldbooks ? await sceneWorldbooks.exportSnapshot(digest) : null) ?? await gameFootprint.readSceneWorldbook(digest) : null
       scene = { files, worldbooks: book ? [{ digest, content: book }] : [], attachments: [] }
     }
     const attachments = []
@@ -3547,7 +3524,7 @@ export async function apply(ctx) {
     try {
       const latest = await chatPersistence.readSessionState(chatId)
       if (!signal.aborted && latest) {
-        saveMaintenance.schedule(chatId)
+        saveMaintenance.noteWrite(chatId, Number(latest._storageRevision))
         void mvuSettlementReconciler.wake(latest.sessionId)
         void candidateWorldbookPreparation.warm(latest.sessionId)
         void worldbookPrefilter.start(chatId)

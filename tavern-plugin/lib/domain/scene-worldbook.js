@@ -6,6 +6,9 @@ const hash = value => createHash('sha256').update(value).digest('hex')
 const digest = value => hash(JSON.stringify(value))
 const validRef = value => value?.version === 1 && /^[a-f0-9]{64}$/.test(value.digest)
 const snapshotPath = value => 'scene-images/worldbooks/' + value + '.json'
+// Entries are stored once each: a turn's snapshot only lists them. Most entries
+// repeat verbatim every turn; a large worldbook otherwise costs ~1 MB per turn.
+const entryPath = value => 'scene-images/worldbook-entries/' + value + '.json'
 const maxCharacters = 500000
 const maxEntries = 2000
 
@@ -36,21 +39,51 @@ export function createSceneWorldbooks({ store }) {
       entries.push({ ref, title, keys, text, constant: entry.constant === true, conditions })
       remaining -= size
     }
+    // The digest always covers the complete (version 1) snapshot, whichever
+    // layout stores it, so exported archives and old references stay valid.
     const value = { version: 1, entries, omitted, omittedCount }
     const id = digest(value)
-    if (!await store.version(snapshotPath(id))) await store.writeJson(snapshotPath(id), value)
+    if (!await store.version(snapshotPath(id))) {
+      const entryRefs = []
+      for (const entry of entries) {
+        const ref = digest(entry)
+        if (!await store.version(entryPath(ref))) await store.writeJson(entryPath(ref), entry)
+        entryRefs.push(ref)
+      }
+      await store.writeJson(snapshotPath(id), { version: 2, entryRefs, omitted, omittedCount })
+    }
     return { version: 1, digest: id }
+  }
+  // The complete snapshot, materialized from either layout and verified.
+  async function load(id) {
+    const stored = await store.readJson(snapshotPath(id))
+    if (!stored) return null
+    if (stored.version !== 2) return stored
+    if (!Array.isArray(stored.entryRefs)) return { invalid: true }
+    const entries = []
+    for (const ref of stored.entryRefs) {
+      const entry = /^[a-f0-9]{64}$/.test(ref) ? await store.readJson(entryPath(ref)) : null
+      if (!entry || digest(entry) !== ref) return { invalid: true }
+      entries.push(entry)
+    }
+    return { version: 1, entries, omitted: stored.omitted, omittedCount: stored.omittedCount }
   }
   async function read(ref) {
     if (!validRef(ref)) return null
-    const value = await store.readJson(snapshotPath(ref.digest))
+    const value = await load(ref.digest)
     if (!value) return { unavailable: '历史世界书快照缺失，未读取当前世界书。' }
     if (value.version !== 1 || !Array.isArray(value.entries) || digest(value) !== ref.digest) {
       return { unavailable: '历史世界书快照校验失败，未读取当前世界书。' }
     }
     return { ...value, digest: ref.digest }
   }
-  return { capture, read }
+  // Self-contained bytes for a save package (always the version 1 layout).
+  async function exportSnapshot(id) {
+    if (!/^[a-f0-9]{64}$/.test(String(id || ''))) return null
+    const value = await load(id)
+    return value && value.version === 1 && digest(value) === id ? Buffer.from(JSON.stringify(value)) : null
+  }
+  return { capture, read, exportSnapshot }
 }
 
 /** Bind only the original bodies. An edited/new swipe must not inherit an
