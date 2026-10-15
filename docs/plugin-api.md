@@ -190,7 +190,7 @@ export function apply(ctx) {
 
 ### `backgroundModel({ gameId })`
 
-返回这一局 Tavern 使用的后台模型 `{ provider, model }`，没有时为 `null`。插件可以用它通过 DSH 的 `llm` 服务做自己的规划，不必让用户再选一次模型。
+返回这一局 Tavern 使用的后台模型 `{ provider, model, reasoningEffort? }`，没有时为 `null`。`reasoningEffort` 是这局设置的后台推理强度，没设置时不含这个字段。插件可以用它通过 DSH 的 `llm` 服务做自己的规划，不必让用户再选一次模型。
 
 ### `runTask({ gameId, prompt, tools?, signal? })`（第 2 版）
 

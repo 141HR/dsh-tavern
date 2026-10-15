@@ -380,7 +380,12 @@ export function createTavernPluginApi(deps) {
 
     async backgroundModel({ gameId } = {}) {
       const selection = await deps.backgroundModel(gameIdOf(gameId))
-      return selection && selection.provider && selection.model ? { provider: String(selection.provider), model: String(selection.model) } : null
+      if (!selection || !selection.provider || !selection.model) return null
+      return {
+        provider: String(selection.provider),
+        model: String(selection.model),
+        ...(selection.reasoningEffort ? { reasoningEffort: String(selection.reasoningEffort) } : {})
+      }
     },
 
     async attach({ gameId, turn, textVersion, item } = {}) {

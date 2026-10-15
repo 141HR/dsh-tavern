@@ -96,7 +96,7 @@ async function harness(t, overrides = {}) {
       readTurn: async (sessionId, turn) => sessionId === 'game-1' && turn === latest.turn ? latest : null,
       readLatestSettledTurn: async () => latest,
       readCardContext: async () => ({ description: 'd', personality: '', scenario: '', lore: [] }),
-      backgroundModel: async () => ({ provider: 'p', model: 'm', thinking: 'high' }),
+      backgroundModel: async () => ({ provider: 'p', model: 'm', reasoningEffort: 'low', extra: 'x' }),
       publish: sessionId => published.push(sessionId),
       ...overrides
     })
@@ -165,7 +165,7 @@ test('tavern 服务：读取接口与错误隔离', { skip: !cordis }, async t =
   assert.deepEqual(await h.api.promptSections({ gameId: 'game-1' }), [], '段落出错时跳过，不影响正文')
   assert.equal((await tavern.getTurn({ gameId: 'game-1', turn: 3 })).text, '她推开门。')
   assert.equal(await tavern.getTurn({ gameId: 'game-1', turn: 9 }), null)
-  assert.deepEqual(await tavern.backgroundModel({ gameId: 'game-1' }), { provider: 'p', model: 'm' })
+  assert.deepEqual(await tavern.backgroundModel({ gameId: 'game-1' }), { provider: 'p', model: 'm', reasoningEffort: 'low' })
   assert.equal((await tavern.getCardContext({ gameId: 'game-1', turn: 3 })).description, 'd')
   await assert.rejects(tavern.getCardContext({ gameId: 'game-1', turn: 9 }), /还没写完/)
   await assert.rejects(tavern.attach({ gameId: 'game-1', turn: 3, textVersion: 'never-issued', item: { kind: 'x/y' } }), /不属于这一轮/)
