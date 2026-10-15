@@ -78,7 +78,9 @@ export const REQUIRED_SOURCE_FILES = [
   path.join('tavern-plugin', 'cordis.patch.yml'),
   path.join('tavern-plugin', 'packages', 'dsh-image-gen', 'src', 'module.js'),
   path.join('tavern-plugin', 'packages', 'dsh-image-gen', 'src', 'configuration.js'),
-  path.join('presets', 'tavern', 'preset.yml'),
+  // 0.2.0-rc.2 适配：presets/tavern/preset.yml 已随 preset 容器模型变更移除，
+  // preset 定义改由 tavern-plugin/cordis.patch.yml 的声明行承载。
+  path.join('tavern-plugin', 'lib', 'user-tools-bridge.js'),
 ]
 
 export function resolveServicePort(value, fallback = 3081) {

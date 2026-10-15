@@ -24,7 +24,8 @@
     "./client": "./lib/client.js",
     "./cordis-inspect": "./lib/cordis-inspect.js",
     "./package.json": "./package.json",
-    "./compaction": "./lib/agent-compaction.js"
+    "./compaction": "./lib/agent-compaction.js",
+    "./user-tools-bridge": "./lib/user-tools-bridge.js"
   },
   "dsh": {
     "bundle": {
