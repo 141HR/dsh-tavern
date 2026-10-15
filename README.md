@@ -1,6 +1,6 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/docs/assets/brand/dsh-tavern-lockup-on-dark.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/moyutegong/dsh-tavern/main/docs/assets/brand/dsh-tavern-lockup-on-dark.svg">
     <img src="docs/assets/brand/dsh-tavern-lockup.svg" width="360" alt="DSH 酒馆">
   </picture>
 </p>
@@ -124,7 +124,7 @@
 先安装 **[DSH Desktop 0.2.0-rc.2](https://www.deepseek.com/harness/)**，在 **设置 → 通用设置 → 打开 DSH 终端** 中运行下面的命令，完成后重启 Desktop，选择 **tavern** Profile。[图文教程 →](https://flizzywine.github.io/dsh-tavern/#a02--section-3)
 
 ```powershell
-$env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.ps1')); Invoke-Expression $tavernInstaller
+$env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://cdn.jsdelivr.net/gh/moyutegong/dsh-tavern@main/install.ps1')); Invoke-Expression $tavernInstaller
 ```
 
 **方式三：命令行**
@@ -132,7 +132,7 @@ $env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString
 需要 **Node.js 22.19+**，在 PowerShell 中运行，安装后自动打开网页，以后用 `dsh-tavern open` 打开。[详细说明 →](https://flizzywine.github.io/dsh-tavern/#a02--section-4)
 
 ```powershell
-$env:DSH_TAVERN_HOST='cli'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.ps1')); Invoke-Expression $tavernInstaller
+$env:DSH_TAVERN_HOST='cli'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://cdn.jsdelivr.net/gh/moyutegong/dsh-tavern@main/install.ps1')); Invoke-Expression $tavernInstaller
 ```
 
 ### macOS
@@ -140,7 +140,7 @@ $env:DSH_TAVERN_HOST='cli'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((Ne
 先安装 **[DSH Desktop 0.2.0-rc.2](https://www.deepseek.com/harness/)**，在 **设置 → 通用设置 → 打开 DSH 终端** 中运行：
 
 ```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | DSH_TAVERN_HOST=desktop sh
+curl -fsSL https://cdn.jsdelivr.net/gh/moyutegong/dsh-tavern@main/install.sh | DSH_TAVERN_HOST=desktop sh
 ```
 
 完成后重启 Desktop，选择 **tavern** Profile。[图文教程 →](https://flizzywine.github.io/dsh-tavern/#a02--section-3)
@@ -150,7 +150,7 @@ curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | D
 需要 **Node.js 22.19+**，在终端运行：
 
 ```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | DSH_TAVERN_HOST=cli sh
+curl -fsSL https://cdn.jsdelivr.net/gh/moyutegong/dsh-tavern@main/install.sh | DSH_TAVERN_HOST=cli sh
 ```
 
 安装后自动打开网页；以后用 `dsh-tavern open` 打开。[详细说明 →](https://flizzywine.github.io/dsh-tavern/#a02--section-4)

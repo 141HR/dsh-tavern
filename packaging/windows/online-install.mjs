@@ -39,7 +39,7 @@ async function request(url) {
 }
 // raw.githubusercontent.com is often blocked alone. After one network failure,
 // later files try jsDelivr first instead of paying the retries again.
-const fileHosts=[revision=>`https://raw.githubusercontent.com/flizzywine/dsh-tavern/${revision}/`,revision=>`https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@${revision}/`];
+const fileHosts=[revision=>`https://raw.githubusercontent.com/moyutegong/dsh-tavern/${revision}/`,revision=>`https://cdn.jsdelivr.net/gh/moyutegong/dsh-tavern@${revision}/`];
 async function fromHosts(revision,file,check=()=>{}) {
   let last;
   for(const host of [...fileHosts]) {
@@ -71,7 +71,7 @@ async function install() {
     // GitHub API names the newest commit; jsDelivr's cached branch manifest is the fallback.
     let ref=INSTALL_REF;
     try {
-      const head=JSON.parse(await request(`https://api.github.com/repos/flizzywine/dsh-tavern/commits/${encodeURIComponent(INSTALL_REF)}`));
+      const head=JSON.parse(await request(`https://api.github.com/repos/moyutegong/dsh-tavern/commits/${encodeURIComponent(INSTALL_REF)}`));
       if(!/^[a-f0-9]{40}$/.test(head.sha))throw Error('GitHub 返回的版本信息无效');
       ref=head.sha;
     } catch(e){status('GitHub 暂不可达，改用 jsDelivr 查询最新版…');}

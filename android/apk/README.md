@@ -1,7 +1,7 @@
 # 独立 Android APK
 
 APK 内置 DSHA 的 Ubuntu、Node 和 DSH 运行环境。首次启动通过联网下载
-`flizzywine/dsh-tavern` 的最新 `main`，执行仓库中的 Android 安装器。
+`moyutegong/dsh-tavern` 的最新 `main`，执行仓库中的 Android 安装器。
 用户无需输入命令。安装成功才写入完成标记，失败可点击启动重试；日志保存在
 容器的 `/root/.dsh/logs/tavern-install.log`。
 

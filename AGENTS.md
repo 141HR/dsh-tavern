@@ -20,8 +20,8 @@ GitHub Actions 会频繁向 `origin/main` 推送 `chore: publish runtime manifes
 每次推送后，Publish runtime manifest 工作流会在发布新清单后自动刷新这三个文件的缓存，并等到 CDN 返回新清单。工作流出现 “jsDelivr still serves a stale manifest” 警告时，手动刷新：
 
 ```sh
-for f in install.ps1 install.sh dsh-tavern-runtime.json; do curl -s "https://purge.jsdelivr.net/gh/flizzywine/dsh-tavern@main/$f" >/dev/null; done
-curl -s https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/dsh-tavern-runtime.json | grep revision
+for f in install.ps1 install.sh dsh-tavern-runtime.json; do curl -s "https://purge.jsdelivr.net/gh/moyutegong/dsh-tavern@main/$f" >/dev/null; done
+curl -s https://cdn.jsdelivr.net/gh/moyutegong/dsh-tavern@main/dsh-tavern-runtime.json | grep revision
 ```
 
 ## 测试
