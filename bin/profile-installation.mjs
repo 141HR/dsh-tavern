@@ -12,6 +12,7 @@ import { installCliRuntime, migrateCliHome } from './cli-runtime.mjs'
 import { extractDshVersion, assertCompatibleDshVersion, dshCompatibilityNotice } from './dsh-compatibility.mjs'
 import { patchThemeFontLimit } from './theme-font-limit.mjs'
 import { installPluginDependencies, resolveHostDependencies } from './plugin-dependencies.mjs'
+import { isAsarPath } from './desktop-host-paths.mjs'
 import { migrateLegacyTavernData, resolveTavernDataRoot } from '../tavern-plugin/lib/domain/tavern-data.js'
 import { ensureUserExtensions } from '../tavern-plugin/lib/domain/user-extensions.js'
 import { beginProfileConfigurationUpdate, loadProfileManifest, mergeProfileManifest, prepareProfilePatch, prepareProfileWorkspace, syncProfileDependencyPatches } from './profile-configuration.mjs'
@@ -300,7 +301,11 @@ async function installProfileOwned(host, { attemptId, runInstall, runDsh }) {
       assertRuntimeDependencies(SOURCE_ROOT)
       ensureSidebarDefaults()
       const [theme] = resolveHostDependencies({ dsh, host, requiredExports: { '@deepseek-ai/dsh-client-ui-theme': null } })
-      if (patchThemeFontLimit(theme.directory)) console.log('已将 DSH 原有字号上限放宽到 32px。')
+      // 0.2.0-rc.2 适配：桌面把 dsh-client-ui-theme 打进 app.asar（只读归档），纯 Node 既读不到
+      // 也改不了，字号补丁在 0.2.0 桌面上不可用。这里明确跳过并说明，而不是让
+      // patchThemeFontLimit 抛错、被下面的 catch 捕获后 rollback 整个安装。
+      if (isAsarPath(theme.directory)) console.log('0.2.0 桌面把 dsh-client-ui-theme 放在 app.asar 内（只读归档），字号上限补丁跳过；界面字号仍以宿主上限为准。')
+      else if (patchThemeFontLimit(theme.directory)) console.log('已将 DSH 原有字号上限放宽到 32px。')
       transaction.commit()
     } catch (error) {
       if (!error.unsafeToRetry) await transaction.rollback()
