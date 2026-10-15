@@ -250,10 +250,54 @@ export function resolveDshCliEntry({ dsh, env = process.env, platform = process.
   return realpathSync(path.resolve(cli.directory, bin))
 }
 
+// 0.2.0-rc.2 适配：桌面 0.2.0 的 dsh 是「Electron 可执行文件 + app.asar 内 CLI」的 shim，例如
+//   @echo off
+//   setlocal DisableDelayedExpansion
+//   set "ELECTRON_RUN_AS_NODE=1"
+//   "%~dp0..\..\..\..\DeepSeek Harness.exe" --expose-internals "%~dp0..\..\..\app.asar\dsh\node_modules\@deepseek-ai\dsh-desktop-host\lib\cli.js" %*
+// 这种形态下 shim 上方没有 @deepseek-ai/dsh npm 包（resolveDshCliEntry 会抛「无法定位当前 DSH CLI 包」），
+// 而且 app.asar 内文件纯 Node 读不了 —— 启动必须用 Electron 可执行文件 + ELECTRON_RUN_AS_NODE=1。
+// 返回 { command, entry, env }；null 表示不是这种形态，调用方按原路径（Node + 真实包布局）处理。
+export function resolveDesktopAsarCommand({ dsh, env = process.env, execPath = process.execPath, platform = process.platform } = {}) {
+  if (platform !== 'win32') return null
+  let commandFile
+  try { commandFile = resolveCommandFile(dsh, env, platform) } catch { return null }
+  let text = ''
+  try {
+    if (statSync(commandFile).size > 64 * 1024) return null
+    text = readFileSync(commandFile, 'utf8')
+  } catch { return null }
+  // 桌面 shim 里的路径写成 %~dp0..\..\..\..\DeepSeek Harness.exe（%~dp0 是该 shim 自身目录），
+  // 不展开就既拿不到 Electron 可执行文件、也解析不出 asar 入口。%dp0%/$basedir 是同类写法。
+  const shimDirectory = path.dirname(commandFile)
+  const expanded = text
+    .replace(/%~dp0%?/gi, shimDirectory + path.sep)
+    .replace(/%dp0%/gi, shimDirectory + path.sep)
+    .replace(/\$basedir/gi, shimDirectory + path.sep)
+  const parsed = /"([^"]+\.exe)"\s+--expose-internals\s+"([^"]+\.(?:c|m)?js)"/i.exec(expanded)
+  const shimExecutable = parsed?.[1]
+  let entry = parsed?.[2]
+  if (!entry) {
+    // shim 确实指向 asar，但引号形态没被上面的正则吃到：退回 0.2.0 已知的宿主 CLI 位置。
+    if (!isAsarPath(expanded)) return null
+    const electron = desktopElectronExecutable({ env, execPath, platform })
+    if (!electron) return null
+    entry = path.join(desktopResourcesRoot(electron, platform), 'app.asar', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js')
+  } else if (!isAsarPath(entry)) {
+    // shim 指向真实文件（0.1.5 的 `node <cli.js>` 等形态）：保持既有行为，不做 desktop 特殊处理。
+    return null
+  }
+  // shim 里的 exe/entry 可能是带 .. 的相对路径（%~dp0 展开而来），统一归一化。
+  entry = path.resolve(entry)
+  const command = (shimExecutable && existsSync(path.resolve(shimExecutable)) ? path.resolve(shimExecutable) : null)
+    || desktopElectronExecutable({ env, execPath, platform })
+  if (!command) return null
+  return { command, entry, env: { ELECTRON_RUN_AS_NODE: '1' } }
+}
+
 // Invoke npm through Node on Windows so private prefixes containing spaces or
 // shell metacharacters are passed as argv, never reparsed by cmd.exe.
-export function resolveNpmCliEntry({ env = process.env, platform = process.platform } = {}) {
-  const commandFile = resolveCommandFile('npm', env, platform)
+export function resolveNpmCliEntry({ env = process.env, platform = process.platform } = {}) {  const commandFile = resolveCommandFile('npm', env, platform)
   const cli = findCommandPackage('npm', commandFile)
   if (!cli) throw new Error(`无法定位 npm CLI 包：${commandFile}`)
   const manifest = JSON.parse(readFileSync(path.join(cli.directory, 'package.json'), 'utf8'))
