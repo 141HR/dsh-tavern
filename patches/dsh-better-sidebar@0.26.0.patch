@@ -1,7 +1,7 @@
 diff --git a/lib/index.js b/lib/index.js
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -3985,7 +3985,7 @@
+@@ -5700,7 +5700,7 @@
  		return {
  			header: handle.header,
  			events,
@@ -10,10 +10,11 @@ diff --git a/lib/index.js b/lib/index.js
  		};
  	} finally {
  		await handle.close();
-@@ -4112,13 +4112,21 @@
+@@ -5850,13 +5850,21 @@
  * (`ctx.connection.api`) was removed in 0.1.2-alpha.1's Remote-gateway
  * migration.
  */
+-async function threadLogEvents(ctx, childId) {
 +// DSH 0.1.5 may append end-seed markers again on resume. Only the
 +// creation boundary separates inherited context from this thread's history.
 +function threadBoundaryEvents(events, inheritedEventCount) {
@@ -21,7 +22,7 @@ diff --git a/lib/index.js b/lib/index.js
 +		|| !events.some(event => event.type === "session/end-seed" && event.seq === inheritedEventCount)) return events;
 +	return events.filter(event => event.type !== "session/end-seed" || event.seq === inheritedEventCount);
 +}
- async function threadLogEvents(ctx, childId) {
++async function threadLogEvents(ctx, childId) {
  	const agent = liveThreadAgent(ctx, childId);
 -	if (agent !== void 0) return agent.session.snapshotEvents();
 +	if (agent !== void 0) return threadBoundaryEvents(agent.session.snapshotEvents(), agent.session.inheritedEventCount ?? agent.session.header?.seedLength);
