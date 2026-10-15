@@ -1035,6 +1035,7 @@ window.__ModuleLoader__.load({
 		exports.createLiveTavernViewModule = createLiveTavernViewModule;
         exports.createSessionViewReader = createSessionViewReader;
 		exports.createSessionCompat = createSessionCompat;
+		exports.sessionListAdapters = sessionListAdapters;
 		exports.applyBodyRegenerationResult = applyBodyRegenerationResult;
 		exports.createTavernCoordinationEventModule = createTavernCoordinationEventModule;
 		exports.createTavernCoordinationConnection = createTavernCoordinationConnection;
