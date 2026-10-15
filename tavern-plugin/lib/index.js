@@ -4144,8 +4144,9 @@ export async function apply(ctx) {
         const sessionId = str(args?.sessionId)
         const background = backgroundAgentRunner.requestContext(sessionId)
         const session = sessionStore.get(sessionId) || agentRegistry.get(sessionId)?.session
-        const ownerId = background?.parentSessionId || session?.header?.parentSession || sessionId
-        const chat = await sessionStateForSession(ownerId)
+        // A forked game has a parentSession too, but its requests are filed under its own chat.
+        const own = background ? undefined : await sessionStateForSession(sessionId)
+        const chat = own || await sessionStateForSession(background?.parentSessionId || session?.header?.parentSession || sessionId)
         return { record: await modelRequestLog.latestForSession(sessionId, str(args?.knownId), chat?.id) }
       }
       case 'listSkills': return { skills: (await tavernSkills.list()).map(({ content, path, ...summary }) => summary) }

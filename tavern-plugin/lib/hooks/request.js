@@ -34,9 +34,11 @@ export function registerRequestHooks({
 
   ctx.on('agent/pre-step', async function (payload, next) {
     const sessionId = payload.agent && payload.agent.session ? payload.agent.session.id : ''
-    // Tavern drives only top-level sessions; child agents (its own background
+    // Tavern drives only game sessions; child agents (its own background
     // agents, plugin agents, DSH subagents) never get a turn frame or status.
-    if (backgroundAgentRunner.owns(sessionId) || payload.agent.session.header?.parentSession) return next()
+    // parentSession alone does not mark a child: a native fork of a game also
+    // carries it, but has its own Tavern chat.
+    if (backgroundAgentRunner.owns(sessionId) || (payload.agent.session.header?.parentSession && !await chatForSession(sessionId))) return next()
     const decision = await next()
     if (decision.kind === 'reject') return decision
     const chat = await chatForSession(sessionId)
