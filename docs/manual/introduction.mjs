@@ -122,11 +122,11 @@ export const installation = `
 
 ### 第 1 步：安装适配的 Desktop 版本
 
-1. 打开 [DSH Desktop v2.0.13 下载页](https://github.com/anywhere-labs/dsh-desktop/releases/tag/v2.0.13)。
-2. 展开页面中的 **Assets**，下载适合自己 Windows / macOS 系统和处理器的安装包，不要下载 **Source code**。
-3. 安装并打开 DSH Desktop。已经安装的用户，先确认版本是 **2.0.13**。
+1. 打开 [DSH 下载页面](https://www.deepseek.com/harness/)。
+2. 按页面提示下载适合自己 Windows / macOS 系统和处理器的安装包，不要下载 **Source code**。
+3. 安装并打开 DSH Desktop。已经安装的用户，先确认版本是 **0.2.0-rc.2**。
 
-本项目当前要求 Desktop 内置的 DSH 为 **{{dshVersion}}**，对应的 Desktop 版本是 **2.0.13**。其他版本不一定兼容，安装器检测到不匹配会停止。请使用这里指定的适配版本，不要因为提示有新版就先升级 Desktop。
+本项目当前要求 Desktop 内置的 DSH 为 **{{dshVersion}}**，对应的 Desktop 版本是 **0.2.0-rc.2**。其他版本不一定兼容，安装器检测到不匹配会停止。请使用这里指定的适配版本，不要因为提示有新版就先升级 Desktop。
 
 ### 第 2 步：从 Desktop 打开 DSH 终端
 
@@ -134,7 +134,7 @@ export const installation = `
 
 **下一步的命令就粘贴在这个窗口里，不是发到 DSH 的聊天输入框里。** 请从 Desktop 的入口打开，以便使用它提供的运行环境。
 
-下面的操作位置截图来自旧版 Desktop，供辨认入口；实际安装请使用上面指定的 **2.0.13**。
+下面的操作位置截图来自旧版 Desktop，供辨认入口；实际安装请使用上面指定的 **0.2.0-rc.2**。
 
 截图：打开终端
 
