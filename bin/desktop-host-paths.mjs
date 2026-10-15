@@ -1,4 +1,4 @@
-import { existsSync, readlinkSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync, readlinkSync, realpathSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 
@@ -12,11 +12,34 @@ export function desktopResourcesRoot(executable, platform = process.platform) {
   return platform === 'darwin' ? path.resolve(directory, '../Resources') : path.join(directory, 'resources')
 }
 
+// 桌面 0.2.0 的 dsh 是「Electron 可执行文件 + app.asar 内 CLI」的 shim，例如
+//   "%~dp0..\..\..\..\DeepSeek Harness.exe" --expose-internals "%~dp0..\..\..\app.asar\dsh\..."
+// 脱离态（更新/安装由系统 Node 拉起、又没有 DSH_DESKTOP_* 环境变量）时，execPath 是 node.exe，
+// 只有 shim 还能指认「当前跑的是哪个 Desktop 安装」，所以把它当作最后一个可执行文件来源。
+export function desktopShimExecutable(commandFile, platform = process.platform) {
+  if (typeof commandFile !== 'string' || !commandFile) return null
+  try {
+    if (!existsSync(commandFile) || statSync(commandFile).size > 64 * 1024) return null
+    const directory = path.dirname(commandFile)
+    const text = readFileSync(commandFile, 'utf8')
+      .replace(/%~dp0%?/gi, directory + path.sep)
+      .replace(/%dp0%/gi, directory + path.sep)
+      .replace(/\$basedir/gi, directory + path.sep)
+    for (const [, quoted] of text.matchAll(/"([^"\r\n]+)"/g)) {
+      if (platform === 'darwin' ? !/\.app[\\/]Contents[\\/]MacOS[\\/]/i.test(quoted) : !/\.exe$/i.test(quoted)) continue
+      if (/[\\/](?:node|nodejs)(?:\.exe)?$/i.test(quoted)) continue
+      const resolved = path.resolve(directory, quoted)
+      if (existsSync(resolved)) return resolved
+    }
+    return null
+  } catch { return null }
+}
+
 // 0.1.5 用 DSH_DESKTOP_APP_EXECUTABLE；0.2.0 的新契约是 DSH_DESKTOP_NODE_EXECUTABLE
 // （lib/main.js 的 desktopNodeEnvironment 注入，值就是 Electron 可执行文件本身）。
 // 安装器既可能从 DSH Terminal（execPath 即 Electron exe）启动，也可能在脱离态由系统 Node 跑。
-export function desktopElectronExecutable({ env = process.env, execPath = process.execPath, platform = process.platform } = {}) {
-  for (const candidate of [env.DSH_DESKTOP_NODE_EXECUTABLE, env.DSH_DESKTOP_APP_EXECUTABLE, execPath]) {
+export function desktopElectronExecutable({ env = process.env, execPath = process.execPath, platform = process.platform, commandFile = null } = {}) {
+  for (const candidate of [env.DSH_DESKTOP_NODE_EXECUTABLE, env.DSH_DESKTOP_APP_EXECUTABLE, execPath, desktopShimExecutable(commandFile, platform)]) {
     if (!candidate) continue
     if (/[\\/](?:node|nodejs)(?:\.exe)?$/i.test(candidate)) continue
     if (existsSync(candidate)) return candidate

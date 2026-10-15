@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { desktopElectronExecutable, desktopShimExecutable } from '../bin/desktop-host-paths.mjs'
 import { resolveDesktopAsarCommand } from '../bin/plugin-dependencies.mjs'
 
 // 0.2.0-rc.2 适配：桌面 0.2.0 的 dsh.cmd 是「Electron + app.asar 内 CLI」的 shim。
@@ -76,4 +77,34 @@ test('真实 dsh.cmd 的 %~dp0 相对形态可解析（无需任何环境变量�
   assert.match(resolved.entry, /app\.asar[\\/]dsh[\\/]node_modules[\\/]@deepseek-ai[\\/]dsh-desktop-host[\\/]lib[\\/]cli\.js$/)
   assert.ok(path.isAbsolute(resolved.entry), resolved.entry)
   assert.deepEqual(resolved.env, { ELECTRON_RUN_AS_NODE: '1' })
+})
+
+// 脱离态更新（系统 Node 拉起、没有任何 DSH_DESKTOP_* 变量）曾经算出 <node>\resources\app 这种假根，
+// 报「当前 DSH 缺少必需依赖 @deepseek-ai/dsh-agent（查找位置：C:\Program Files\nodejs\resources\app）」。
+// 兜底靠 dsh shim 指认 Desktop 安装：这是那时唯一还存在的线索。
+test('脱离态系统 Node：execPath 是 node.exe 时用 dsh shim 兜底定位 Electron 可执行文件', async t => {
+  const { shim, executable } = await shimFixture(t, { body: exe => `@echo off\r\nset "ELECTRON_RUN_AS_NODE=1"\r\n"${exe}" --expose-internals "${ASAR_CLI}" %*\r\n` })
+  assert.equal(desktopShimExecutable(shim, 'win32'), executable)
+  assert.equal(desktopElectronExecutable({ env: {}, execPath: 'C:\\Program Files\\nodejs\\node.exe', platform: 'win32', commandFile: shim }), executable)
+  // 不提供 shim 时保持既有行为：系统 Node 的 execPath 绝不被当成 Desktop 可执行文件。
+  assert.equal(desktopElectronExecutable({ env: {}, execPath: 'C:\\Program Files\\nodejs\\node.exe', platform: 'win32' }), null)
+})
+
+test('%~dp0 相对形态的 shim 也能兜底（不依赖任何环境变量）', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'tavern-asar-fallback-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const bin = path.join(root, 'a', 'b', 'bin')
+  await mkdir(bin, { recursive: true })
+  const executable = path.join(root, 'DeepSeek Harness.exe')
+  await writeFile(executable, '')
+  const shim = path.join(bin, 'dsh.cmd')
+  await writeFile(shim, '@echo off\r\n"%~dp0..\\..\\..\\DeepSeek Harness.exe" --expose-internals "%~dp0..\\app.asar\\dsh\\node_modules\\@deepseek-ai\\dsh-desktop-host\\lib\\cli.js" %*\r\n')
+  assert.equal(desktopElectronExecutable({ env: {}, execPath: 'C:\\Program Files\\nodejs\\node.exe', platform: 'win32', commandFile: shim }), executable)
+})
+
+test('shim 不存在、指向 node.exe 或不含可执行文件时不猜路径', async t => {
+  const { shim } = await shimFixture(t, { body: () => '@echo off\r\nnode "C:\\real\\dsh\\lib\\bin.js" %*\r\n' })
+  assert.equal(desktopShimExecutable(path.join(path.dirname(shim), 'missing.cmd'), 'win32'), null)
+  assert.equal(desktopShimExecutable(shim, 'win32'), null)
+  assert.equal(desktopShimExecutable(null, 'win32'), null)
 })

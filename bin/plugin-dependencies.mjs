@@ -62,6 +62,12 @@ function resolveCommandFile(command, env, platform) {
   throw new Error(`无法定位当前 DSH 命令：${command}`)
 }
 
+// 脱离态的更新由系统 Node 拉起（execPath 是 node.exe），DSH_DESKTOP_* 也没有，
+// 此时 dsh shim 是唯一能指认当前 Desktop 安装位置的线索；定位失败只当"没有线索"，不抛错。
+function desktopShimCommandFile(dsh, env, platform) {
+  try { return resolveCommandFile(dsh, env, platform) } catch { return null }
+}
+
 function resolveHostAnchor({ dsh, host = 'cli', env = process.env, execPath = process.execPath, platform = process.platform }) {
   let anchor
   if (host === 'desktop') {
@@ -73,7 +79,10 @@ function resolveHostAnchor({ dsh, host = 'cli', env = process.env, execPath = pr
     } else if (env.DSH_DESKTOP_DSH_BOOTSTRAP) {
       anchor = env.DSH_DESKTOP_DSH_BOOTSTRAP.replace(/app\.asar([\\/])/, 'app.asar.unpacked$1')
     } else {
-      const executable = env.DSH_DESKTOP_APP_EXECUTABLE || execPath
+      // 系统 Node 的 execPath 本身不是 Desktop 可执行文件（会算出 <node>\resources\app 这种假根），
+      // 先按 环境变量 → execPath → dsh shim 的顺序找 Electron 可执行文件。
+      const commandFile = desktopShimCommandFile(dsh, env, platform)
+      const executable = desktopElectronExecutable({ env, execPath, platform, commandFile }) || env.DSH_DESKTOP_APP_EXECUTABLE || execPath
       const resources = platform === 'darwin'
         ? path.resolve(path.dirname(executable), '../Resources')
         : path.join(path.dirname(executable), 'resources')
@@ -137,8 +146,8 @@ for (const anchor of ${JSON.stringify(anchors)}) {
 process.stdout.write(JSON.stringify(resolved ?? { __error: lastError || '未找到可解析的宿主根' }))`
 }
 
-function resolveDesktopHostPackagesViaElectron({ env = process.env, execPath = process.execPath, platform = process.platform, requiredExports }) {
-  const electron = desktopElectronExecutable({ env, execPath, platform })
+function resolveDesktopHostPackagesViaElectron({ env = process.env, execPath = process.execPath, platform = process.platform, requiredExports, commandFile = null }) {
+  const electron = desktopElectronExecutable({ env, execPath, platform, commandFile })
   if (!electron) return null
   const resources = desktopResourcesRoot(electron, platform)
   const anchors = [
@@ -210,7 +219,7 @@ export function resolveHostDependencies({ dsh, host = 'cli', env = process.env, 
       try { return Boolean(findPackage(name, anchor)) } catch { return false }
     })
     if (!plainNodeRoot) {
-      const viaElectron = resolveDesktopHostPackagesViaElectron({ env, execPath, platform, requiredExports })
+      const viaElectron = resolveDesktopHostPackagesViaElectron({ env, execPath, platform, requiredExports, commandFile: desktopShimCommandFile(dsh, env, platform) })
       if (viaElectron) return viaElectron
     }
   }
