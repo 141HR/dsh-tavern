@@ -1132,7 +1132,9 @@
 				isPlayMode(sessionMode) && latestMessageId ? React.createElement(CandidateAction, Object.assign({}, props, { messageId: latestMessageId })) : null,
 				isPlayMode(sessionMode) && live.view && !live.view.canClearIncompleteReply ? React.createElement(TavernPluginComposerActions, { sessionId: props.sessionId, turn: imageTurn, running: running }) : null,
 				isPlayMode(sessionMode) ? React.createElement(TavernMoreActions, props) : React.createElement(TavernCompactionAction, props),
-                live.view && live.view.contextCompaction && (live.view.contextCompaction.warning || live.view.contextCompaction.operation && live.view.contextCompaction.operation.status === "running") ? h("span", { role: "status", className: "dsh-tavern-settings-desc" }, live.view.contextCompaction.warning || "正在压缩前后台上下文…") : null
+                live.view && live.view.contextCompaction && live.view.contextCompaction.operation && live.view.contextCompaction.operation.status === "running" ? h("span", { role: "status", className: "dsh-tavern-settings-desc" }, "正在压缩前后台上下文…")
+                    : live.view && live.view.contextCompaction && live.view.contextCompaction.warning ? h("span", { role: "status", className: "dsh-tavern-settings-desc" }, live.view.contextCompaction.warning,
+                        h("button", { type: "button", className: "dsh-tavern-notice-dismiss", "aria-label": "关闭压缩提示", title: "关闭", onClick: function () { rpc("dismissCompactionWarning", {}, ownerSessionId).catch(function (err) { tavernErrorHub.report("关闭压缩提示", err); }); } }, "×")) : null
 			);
 		}
 

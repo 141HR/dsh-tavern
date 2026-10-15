@@ -4496,6 +4496,14 @@ export async function apply(ctx) {
         const result = await withCompactionSession(id, async agent => (await agentCompaction(agent)).compactNow(agent, compactionAbort.signal))
         return { result: { status: 'completed', foreground: { status: 'succeeded', message: result ? '压缩完成' : '没有可压缩的历史' }, background: { status: 'skipped' } } }
       }
+      case 'dismissCompactionWarning': {
+        const chat = await sessionStateForSession(str(args && args.sessionId))
+        if (chat?.contextCompaction?.warning) await updateChat(chat.id, current => {
+          current.contextCompaction = { ...current.contextCompaction, warning: '' }
+          return current
+        }, { source: 'compaction.dismiss' })
+        return { dismissed: true }
+      }
       case 'compactionStatus': return { state: (await sessionStateForSession(args && args.sessionId))?.contextCompaction || null }
       case 'syncSession': {
         const sync = await requestPerformance.stage('candidateSync', () => candidateTasks.sync(args && args.sessionId, { requestId: args && args.requestId, kind: args && args.kind }))

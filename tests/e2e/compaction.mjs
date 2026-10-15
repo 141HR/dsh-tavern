@@ -99,6 +99,11 @@ export async function compactionChecks({ page, step, savedChat, output, report, 
       assert.deepEqual(history(await savedChat()), history(previous))
       await page.reload()
       await page.getByText(/上下文压缩未全部完成/).filter({ visible: true }).first().waitFor()
+      await page.locator('.dsh-tavern-dock-actions [role="status"]').filter({ hasText: /上下文压缩未全部完成/ }).waitFor()
+      await page.getByRole('button', { name: '关闭压缩提示' }).click()
+      await page.locator('.dsh-tavern-dock-actions [role="status"]').filter({ hasText: /上下文压缩未全部完成/ }).waitFor({ state: 'detached' })
+      assert.equal((await savedChat()).contextCompaction.warning, '', '关闭提示只清提示，不清失败记录')
+      assert.equal((await savedChat()).contextCompaction.operation.status, 'partial')
       const start = (await requests()).length
       await control({})
       const recovered = await compact()
