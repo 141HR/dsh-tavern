@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "8578f42535f37c2faf05d3976720dd71350482ba",
-  "releaseSequence": 616,
+  "revision": "851fc1597e699a3cb42b9dd21830ccb7a952f046",
+  "releaseSequence": 617,
   "version": "2.7.0",
   "files": [
     {
@@ -456,13 +456,13 @@
     },
     {
       "path": "tavern-plugin/lib/client-assets/tavern.css",
-      "sha256": "c21690ccdf9c7a5fcc98ea4692d4fe22d086cb8bf41a37223e60f6c48e5246ae",
-      "size": 258371
+      "sha256": "2ad0a66e2d77f78a5dfa7a9461119d2150158339e1b925802b27e916e2b48ff3",
+      "size": 258591
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "66fb2704c08049f5dbb67c6bef1e453888a664ac79c35ebd764b4660e341be26",
-      "size": 1697619
+      "sha256": "5bf34370f4610b4473b1b5e8d84819805183ae310bd5fb48fc0d8d8149265cd4",
+      "size": 1698282
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -691,8 +691,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/chat-session-state.js",
-      "sha256": "186725098d57a3932c6f1d5c4ddf3617b53124d3dc6b11f8306ef239fc8d92c8",
-      "size": 15075
+      "sha256": "44bdf9eb4ccafeb5d8bb757ab01f2793b498c300dd5cb90f80d5b8027df5f095",
+      "size": 15226
     },
     {
       "path": "tavern-plugin/lib/domain/chat-snapshot-worker.js",
@@ -2046,8 +2046,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "4a1ba360ab84bf80fb4c5d889848f8ea62565b844176569e48a1e76046ed66e8",
-      "size": 324699
+      "sha256": "75e803fd8d7d3f32b33274090cb08525887980a70222b6c63058192a6a1b3d96",
+      "size": 325101
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -4551,8 +4551,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/play-controls.js",
-      "sha256": "0510b33afc1428eb030d35995915d1da728338c3a19c7dffc9db1d157b69f246",
-      "size": 120696
+      "sha256": "a3a4c5ab35f8bb662348c5515c9d24d635d1864befc4c0633163d53987e1feb2",
+      "size": 121137
     },
     {
       "path": "tavern-plugin/src/client/features/plugin-extensions.js",
