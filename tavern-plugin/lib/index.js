@@ -52,7 +52,7 @@ import { createSettlementJobs } from './domain/settlement-jobs.js'
 import { createPluginSettlementProgress } from './domain/plugin-settlement-progress.js'
 import { rescueHistoryNotice } from './domain/chat-history-rescue.js'
 import { readHostCompatibility } from './domain/host-compatibility.js'
-import { installHostSessionPatch } from './domain/host-session-patch.js'
+import { installHostSessionPatch, SESSION_PATCH_VERSION } from './domain/host-session-patch.js'
 import { installHostSubprocessPatch } from './domain/host-subprocess-patch.js'
 import { migrateInstalledLegacySessions } from './domain/legacy-session-migration.js'
 import { measureForegroundPressure } from './domain/foreground-context-pressure.js'
@@ -240,8 +240,9 @@ export async function apply(ctx) {
     query: ctx.get('sessionQuery'),
   })
   if (sessionPatch.status === 'failed') console.warn('dsh-tavern: 会话补丁未安装，正文编辑、回退和重新生成不可用：' + sessionPatch.reason)
-  // 更新到 0.1.5-rc.2 后，每次启动都在对话被打开之前准备旧档。已经能打开的不改文件。补丁没装上也要做。
-  if (sessionPatch.view().hostVersion === '0.1.5-rc.2') {
+  // 更新到 SESSION_PATCH_VERSION（0.2.0-rc.2）后，每次启动都在对话被打开之前准备旧档。
+  // 已经能打开的不改文件。补丁没装上也要做。
+  if (sessionPatch.view().hostVersion === SESSION_PATCH_VERSION) {
     const open = (persistence?.tracker?.openHandles?.size || 0) + (persistence?.tracker?.writers?.size || 0)
     if (open) console.warn('dsh-tavern: 会话已经打开，旧档留到下次启动再迁移')
     else await migrateInstalledLegacySessions(resolveTavernDataRoot(), sessionPatch.loadSessionCatalog)
@@ -470,6 +471,11 @@ export async function apply(ctx) {
     return !(chat?.disabledWritingSkills || []).map(canonicalTavernSkillName).includes(skill.name)
   }
   let invalidateTavernSkills = () => {}
+  // 0.2.0-rc.2 适配：宿主已移除 sessionSkillCatalog 服务（全 asar 零命中），dsh-skill 也没有
+  // scopeFor 方法，因此这个注入在 0.2.0 永不触发、shim 不会安装（静默降级，不报错）。
+  // tavern 的 Skill 来源仍由下方 host `skills` registry 的 registerProvider 提供；冷菜单查询
+  // 在这个宿主上拿不到 session 身份，按角色过滤（enabledFor）只对活会话生效。
+  // 若宿主后续给出等价接缝，改挂到那个服务上；在此之前保留注入与模块，避免留下孤儿模块。
   ctx.inject(['sessionSkillCatalog'], scope => {
     scope.effect(() => installSkillCatalogSessionScope(scope.get('sessionSkillCatalog')))
   })
@@ -490,15 +496,16 @@ export async function apply(ctx) {
   })
 
   // ---------- profile 私有 preset ----------
-  // rc.6 启动器会固定系统 roots，因此在独立 Tavern 进程内追加 profile 自带目录。
-  // 不写入全局 `.agent-presets`，避免 Tavern 出现在普通 Web profile 的模式列表。
+  // 0.2.0-rc.2 适配：宿主不再扫描 preset 目录——agentPresets 服务改由
+  // @deepseek-ai/dsh-agent-preset-registry 提供，实例字段只有
+  // owner/definitions/generations/bindings/switches，**没有 resolvedRoots**
+  // （0.1.5 的 `agentPresets.resolvedRoots.unshift(...)` 会在这里 TypeError）。
+  // preset 定义现在是 bundle patch 里的 @deepseek-ai/dsh-agent-preset 声明行
+  // （见 tavern-plugin/cordis.patch.yml 的 preset-tavern / preset-tavern-background）。
+  // 这里只保留服务句柄，供下方 agentPresets.mount(childCtx, 'tavern-background') 按 id 挂载。
   const agentPresetsProxy = ctx.get('agentPresets')
   if (agentPresetsProxy === undefined) throw new Error('dsh-tavern: 缺少 agentPresets 服务')
   const agentPresets = agentPresetsProxy[Symbol.for('cordis.original')] || agentPresetsProxy
-  const presetSourceDir = fileURLToPath(new URL('../../presets/', import.meta.url))
-  if (!agentPresets.resolvedRoots.some(function (root) { return root.path === presetSourceDir })) {
-    agentPresets.resolvedRoots.unshift({ path: presetSourceDir, trust: 'user' })
-  }
 
   // ---------- 基础工具 ----------
   function uid(prefix) {
