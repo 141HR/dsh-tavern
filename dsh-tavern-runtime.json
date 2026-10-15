@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "f63a2e909f03a5f99b89af3437adc222d8075571",
-  "releaseSequence": 615,
+  "revision": "8578f42535f37c2faf05d3976720dd71350482ba",
+  "releaseSequence": 616,
   "version": "2.7.0",
   "files": [
     {
@@ -2031,8 +2031,8 @@
     },
     {
       "path": "tavern-plugin/lib/hooks/request.js",
-      "sha256": "1b5bca152f201168c954b8fc6d0584c11fefea21e8f43c2e6051f582ffabccd4",
-      "size": 2846
+      "sha256": "c2bcf33eb6c4c6e2ba032409b0c4d4378c10472684e534f239da272a880de7d4",
+      "size": 3006
     },
     {
       "path": "tavern-plugin/lib/hooks/turn-lifecycle.js",
@@ -2046,8 +2046,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "883aa45c42b27889df44c698e3236a24d67b6b42ad30303d33285d036717ec86",
-      "size": 324542
+      "sha256": "4a1ba360ab84bf80fb4c5d889848f8ea62565b844176569e48a1e76046ed66e8",
+      "size": 324699
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
