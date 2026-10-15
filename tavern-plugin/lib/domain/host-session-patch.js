@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
 import { join, sep } from 'node:path'
+import { hostRequireCandidates } from './host-package-resolution.js'
 
 export async function prepareExpandedPatch(runtime, options = {}) {
   const expectedVersion = options.version ?? '0.2.0-rc.2'
@@ -208,26 +209,35 @@ const PINNED_SHA256 = Object.freeze({
 // 导出给测试：宿主文件"未被打补丁改动"的断言应当跟随这份引脚表，而不是另抄一份哈希。
 export { PINNED_SHA256 }
 
-function hostRequireFrom(anchor) {
-  return createRequire(createRequire(anchor).resolve('@deepseek-ai/dsh-tools'))
-}
+// 0.2.0-rc.2 适配：一个宿主安装根里必须能解析出补丁用到的全部包，否则「解析到的宿主包与
+// 正在运行的会话存储不是同一份」只是碰运气。表里的包全部来自同一个 @deepseek-ai 目录。
+const HOST_PATCH_PACKAGES = Object.freeze([
+  '@deepseek-ai/dsh-tools',
+  '@deepseek-ai/dsh-session',
+  '@deepseek-ai/dsh-session-persistence',
+  '@deepseek-ai/dsh-session-persistence-jsonl',
+  '@deepseek-ai/dsh-session-query',
+  '@deepseek-ai/dsh-session-format-catalog',
+  '@deepseek-ai/dsh-session-format-v2-to-v3',
+  '@deepseek-ai/dsh-api-session-controller/client',
+])
 
-// The plugin file lives in this repo. The running host packages live next to
-// the dsh launcher. Pick the copy that actually constructed the live store.
-export async function defaultHostRequire(persistence) {
-  const anchors = [fileURLToPath(new URL('../../package.json', import.meta.url))]
-  if (process.argv[1]) anchors.push(process.argv[1])
-  const found = []
-  const errors = []
-  for (const anchor of anchors) {
-    try { found.push(hostRequireFrom(anchor)) }
-    catch (error) { errors.push(error) }
-  }
-  if (!found.length) throw errors.at(-1) || new Error('无法解析宿主包')
-  if (!persistence) return found[0]
-  for (const candidate of found) {
-    const loaded = await import(pathToFileURL(candidate.resolve('@deepseek-ai/dsh-session-persistence')).href)
-    if (Object.values(loaded).some(exported => typeof exported === 'function' && persistence instanceof exported)) return candidate
+// 宿主安装根按固定优先级挑选（见 host-package-resolution.js）：
+//   1. 归档宿主根 <resources>\app.asar\dsh\package.json —— 与宿主进程自己的模块加载器同源
+//      （真机日志的 service.starting.entry 就在同一棵树下），实测解析结果逐字相同、模块命名
+//      空间全等，因此补丁作用在宿主正在使用的那一份单例上；
+//   2. 启动器入口（0.1.5 的 <resources>\app 真目录布局，或 DSH_DESKTOP_DSH_BOOTSTRAP）；
+//   3. 插件自己的 node_modules —— 只在没有桌面宿主时（CLI / 测试夹具）才会命中。
+// tavern-plugin 的 node_modules 里只有 5 个 @deepseek-ai 包的 npm 副本，且缺
+// dsh-session-persistence；0.2.0 桌面下那个候选必然不完整，所以它排在最后，绝不作为回退
+// 拼出第二份 dsh-session。
+export async function defaultHostRequire(persistence, options = {}) {
+  const { resolvable } = hostRequireCandidates({ names: HOST_PATCH_PACKAGES, env: options.env, argv: options.argv })
+  if (!resolvable.length) throw new Error('无法解析宿主 DSH 包')
+  if (!persistence) return resolvable[0].require
+  for (const candidate of resolvable) {
+    const loaded = await import(pathToFileURL(candidate.require.resolve('@deepseek-ai/dsh-session-persistence')).href)
+    if (Object.values(loaded).some(exported => typeof exported === 'function' && persistence instanceof exported)) return candidate.require
   }
   throw new Error('解析到的宿主包与正在运行的会话存储不是同一份')
 }

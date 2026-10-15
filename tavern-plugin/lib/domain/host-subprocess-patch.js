@@ -37,8 +37,14 @@ export async function installHostSubprocessPatch({ hostRequire, persistence, pla
     const modified = source.replace(target, target + '\n\t\t\twindowsHide: true,')
       .replace(/\bfrom "([^"]+)"/g, (_, specifier) => 'from ' + JSON.stringify(
         specifier.startsWith('node:') ? specifier : pathToFileURL(localRequire.resolve(specifier)).href))
-    // The pinned source has static imports only. Relative helper imports must
-    // retain their original identities, including runner path resolution.
+      // 0.2.0-rc.2 适配：宿主入口在模块顶层就 `createLazyRequire("node-pty", import.meta.url)`。
+      // data: 模块里的 import.meta.url 是 data URL，createRequire 直接抛 ERR_INVALID_ARG_VALUE
+      // （真机取证：ERR_INVALID_ARG_VALUE @ data:…:1262:24）。改写成真实入口文件 URL 后 node-pty
+      // 仍按宿主同一份解析（asar 旁解包的 app.asar.unpacked），与 host-session-patch.js 同一手法。
+      .replaceAll('import.meta.url', JSON.stringify(pathToFileURL(entry).href))
+    assert.doesNotMatch(modified, /import\.meta\.url/, 'Windows subprocess patch: import.meta.url 未被改写')
+    // The pinned source has static imports plus that one lazy require. Relative helper
+    // imports must retain their original identities, including runner path resolution.
     const { default: Patched } = await import('data:text/javascript;base64,' + Buffer.from(modified).toString('base64'))
     // Another profile may have completed the same asynchronous preparation.
     record = installed.get(prototype)
