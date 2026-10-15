@@ -61,8 +61,8 @@ importers:
         specifier: 0.1.2-rc.1
         version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-typert-generator':
-        specifier: 0.1.2-rc.1
-        version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.2)
+        specifier: 0.2.0-rc.2
+        version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-typert-protocol':
         specifier: 0.1.2-rc.1
         version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.2)
@@ -362,10 +362,10 @@ packages:
       '@deepseek-ai/dsh-system-prompt': 0.2.0-rc.2
       '@deepseek-ai/dsh-user-approval': 0.2.0-rc.2
 
-  '@deepseek-ai/dsh-typert-generator@0.1.2-rc.1':
-    resolution: {integrity: sha512-F0Md0Aex2ZFdr3JJZ5LiqO0tWjJtpkJHFNECfMTLxsq3yMals4qT2PBUwMuL8nOj83t8HYrxuulzDoroOu48pA==}
+  '@deepseek-ai/dsh-typert-generator@0.2.0-rc.2':
+    resolution: {integrity: sha512-jOtAtJQ2lzcoA45k19xHavUQw0BphhLytmDKkm7TV1GBjUUw1wzy2V7aPBXxg3PZK2vgLMlbMZsWuDN2cV1kAA==}
     peerDependencies:
-      '@deepseek-ai/cordis': ^4.0.2
+      '@deepseek-ai/cordis': ~4.0.4
 
   '@deepseek-ai/dsh-typert-protocol@0.1.2-rc.1':
     resolution: {integrity: sha512-vBWD0NpriPd96ltbWaAw+iKeWFIEjiAcCWYtmqEcV1Ms+FaV02usjjm7LCmhSQhMZpBSBc7EZUX0spGlpjI1bA==}
@@ -1419,7 +1419,7 @@ snapshots:
       '@deepseek-ai/dsh-util-values': 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)
       '@deepseek-ai/schemastery': 3.18.4
 
-  '@deepseek-ai/dsh-typert-generator@0.1.2-rc.1(@deepseek-ai/cordis@4.0.2)':
+  '@deepseek-ai/dsh-typert-generator@0.2.0-rc.2(@deepseek-ai/cordis@4.0.2)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.2
       '@jridgewell/gen-mapping': 0.3.13
