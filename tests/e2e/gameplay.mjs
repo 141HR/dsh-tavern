@@ -19,6 +19,7 @@ import { surfaceRecoveryChecks } from './surface-recovery.mjs'
 import { cardVariableUpdateChecks } from './card-variable-update.mjs'
 import { cardUpdateChecks } from './card-update.mjs'
 import { sidebarUpgrade } from './sidebar-upgrade.mjs'
+import { pinPanelChecks } from './pin-panel.mjs'
 import { compactedEditedLegacySession } from '../fixtures/compacted-legacy-session.mjs'
 import { encodeMigratedSessionLog, parseSessionLog } from '../../tavern-plugin/lib/domain/legacy-session-migration.js'
 import { compactionChecks } from './compaction.mjs'
@@ -33,7 +34,8 @@ import { spawn } from 'node:child_process'
 import { chromium } from 'playwright'
 import { createChatJournalStore } from '../../tavern-plugin/lib/domain/chat-journal-store.js'
 
-const displayScenario = process.argv.includes('--display-regression')
+const pinScenario = process.argv.includes('--pin-panel')
+const displayScenario = pinScenario || process.argv.includes('--display-regression')
 const recoveryScenario = process.argv.includes('--surface-recovery')
 const helperApiScenario = process.argv.includes('--helper-api')
 const compactionScenario = process.argv.find(arg => arg.startsWith('--compaction='))?.split('=')[1]
@@ -555,6 +557,8 @@ try {
     await incrementalMvuChecks({page,step,savedChat,output,report,restartServer})
   } else if (process.argv.includes('--background-lifecycle')) {
     await backgroundLifecycleChecks({page,step,savedChat,data,output,report,restartServer})
+  } else if (pinScenario) {
+    await pinPanelChecks({page,step,output,report})
   } else if (displayScenario) {
     await displayRegressionChecks({page,step,savedChat,data,output,report,restartServer})
   } else if (compactionScenario) {

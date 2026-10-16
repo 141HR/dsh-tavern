@@ -10161,7 +10161,7 @@ function bindTavernFontZoom(node, win) {
 		// the browsing context alive; appendChild would silently reset form state.
 		function createTavernPanelRegistry() {
 			const entries = new Map(), listeners = new Set();
-			let snapshot = [], activation = 0;
+			let snapshot = [], activation = 0, reveal = null;
 			function publish() { snapshot = Array.from(entries.values()); listeners.forEach(function (fn) { fn(); }); }
 			function move(entry, target) {
 				if (!target || entry.node.parentNode === target) return;
@@ -10184,7 +10184,10 @@ function bindTavernFontZoom(node, win) {
 					if (typeof entry.home.moveBefore !== "function") throw new Error("当前浏览器不支持保留页面状态的移动，请在原消息中使用此面板。");
 					if (!pinned) move(entry, entry.home);
 					entry.pinned = pinned; if (pinned) entry.activation = ++activation; publish();
+					// The panel docks only where the status tab is mounted; bring that tab forward.
+					if (pinned && reveal) reveal(entry.sessionId);
 				},
+				onPin: function (fn) { reveal = fn; return function () { if (reveal === fn) reveal = null; }; },
 				dock: function (id, target) { const entry = entries.get(id); if (entry && entry.pinned) move(entry, target); },
 				restore: function (id) { const entry = entries.get(id); if (entry && entry.home.isConnected) move(entry, entry.home); }
 			};
@@ -12321,7 +12324,7 @@ function bindTavernFontZoom(node, win) {
 			function TavernInlineStatusRuntime(props) {
 				const state = useLiveTavernView(props.sessionId, "inline-status");
 				return state.view ? React.createElement(TavernPersistentStatusRuntime, {
-					sessionId: props.sessionId, view: state.view, executeSlash: props.executeSlash
+					sessionId: props.sessionId, view: state.view, executeSlash: props.executeSlash, panels: "status"
 				}) : null;
 			}
             function TavernPreparedScriptMessage(props) {
@@ -16937,15 +16940,17 @@ function bindTavernFontZoom(node, win) {
 			const [selected, setSelected] = React.useState("");
 			const [refreshes, setRefreshes] = React.useState({});
 			const view = props.view;
-			const statuses = view && isPlayMode(view.mode) ? (view.tavernStatusViews || []) : [];
-			const manual = entries.filter(function (entry) { return entry.sessionId === props.sessionId && entry.pinned; });
+			// "pinned": only panels pinned from messages (status bar shown in the story body);
+			// "status": only the card's status views (that body copy). Default: both.
+			const statuses = view && isPlayMode(view.mode) && props.panels !== "pinned" ? (view.tavernStatusViews || []) : [];
+			const manual = props.panels === "status" ? [] : entries.filter(function (entry) { return entry.sessionId === props.sessionId && entry.pinned; });
 			const newest = manual.reduce(function (latest, entry) { return !latest || entry.activation > latest.activation ? entry : latest; }, null);
 			React.useEffect(function () { if (newest) setSelected(newest.id); }, [props.sessionId, newest && newest.activation]);
 			const ids = statuses.map(function (panel) { return panel.viewId; }).concat(manual.map(function (entry) { return entry.id; }));
 			const active = ids.includes(selected) ? selected : ids[0];
 			if (!view || !view.tavernHelper || !ids.length) return null;
 			const h = React.createElement;
-			return h("section", { className: "dsh-tavern-status-runtime" + (ids.length === 1 ? " single-panel" : "") },
+			const runtime = h("section", { className: "dsh-tavern-status-runtime" + (ids.length === 1 ? " single-panel" : "") },
 				h("div", { className: "dsh-tavern-panel-toolbar" }, ids.length > 1 ? h("div", { className: "dsh-tavern-panel-tabs", role: "tablist", "aria-label": "人物卡面板" },
 					statuses.concat(manual.map(function (entry) { return { viewId: entry.id, title: entry.title }; })).map(function (panel) {
 						return h("button", { key: panel.viewId, role: "tab", type: "button", "aria-selected": active === panel.viewId,
@@ -16969,6 +16974,7 @@ function bindTavernFontZoom(node, win) {
 					h("button", { type: "button", className: "dsh-tavern-btn", onClick: function () { tavernPanelRegistry.pin(entry.id, false); } }, "返回正文栏"),
 					h(TavernDockedPanel, { id: entry.id })); })
 			);
+			return props.section ? h("section", { className: "dsh-tavern-status-section" }, runtime) : runtime;
 		}
 
 		function latestTavernAssistantMessageId(snapshot) {
@@ -17992,9 +17998,8 @@ function bindTavernFontZoom(node, win) {
 					) : null,
 					view.worldBookError ? h("div", { className: "dsh-card-error" }, "世界书召回失败：" + view.worldBookError) : null,
 					view.foregroundError ? h("div", { className: "dsh-card-error" }, view.foregroundError.message || "前台正文生成失败，请重新生成本轮正文。") : null,
-					view.tavernHelper && view.statusBarPlacement !== "body" ? h("section", { className: "dsh-tavern-status-section" },
-						h(TavernPersistentStatusRuntime, { sessionId: props.sessionId, view: view, executeSlash: props.executeSlash })
-					) : null,
+					view.tavernHelper ? h(TavernPersistentStatusRuntime, { sessionId: props.sessionId, view: view, executeSlash: props.executeSlash,
+						panels: view.statusBarPlacement === "body" ? "pinned" : "all", section: true }) : null,
 					(view.presentationWarnings || []).map(function (warning, index) {
 						return h("div", { className: "dsh-card-error", key: "presentation-warning-" + index }, warning);
 					}),
@@ -19269,6 +19274,7 @@ function bindTavernFontZoom(node, win) {
                 { name: "conversation.session.header.utilities", id: "dsh-tavern-conversation-settings", order: 80 },
                 props => React.createElement(TavernConversationSettingsAction, { ...props, sessions: ctx.sessions, open: sessionId => openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId }) })
             )), "dsh-tavern: conversation settings action");
+			ctx.effect(() => tavernPanelRegistry.onPin(sessionId => openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId })), "dsh-tavern: reveal pinned panels");
 			ctx.effect(() => ctx.betterSidebar.registerTab({
 				id: "dsh-tavern:status",
 				title: "酒馆状态",
