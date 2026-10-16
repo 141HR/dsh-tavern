@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "851fc1597e699a3cb42b9dd21830ccb7a952f046",
-  "releaseSequence": 617,
+  "revision": "794456925bfcb8da62f28a45b95fe0a235049c2a",
+  "releaseSequence": 618,
   "version": "2.7.0",
   "files": [
     {
@@ -526,8 +526,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/bounded-compaction.js",
-      "sha256": "82f18a311421f229ce9fa026cbd9a4ac83ae52ea398fe509fb1d400d7103fd61",
-      "size": 5838
+      "sha256": "c734857346826ad45fff18be556d98323338caa26098df556103ff9d1d170723",
+      "size": 5725
     },
     {
       "path": "tavern-plugin/lib/domain/bounded-history.js",
@@ -706,8 +706,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/compaction-failure.js",
-      "sha256": "3c7ce65a9bea6d902a7c5c40413aa0365adc3461590c15150124c5e9552eac69",
-      "size": 2058
+      "sha256": "c5704e873889eb9d64bd36e99e80abd1344847d43d82c728720177edb2522a95",
+      "size": 2155
     },
     {
       "path": "tavern-plugin/lib/domain/compaction-request.js",
@@ -1285,6 +1285,11 @@
       "size": 2043
     },
     {
+      "path": "tavern-plugin/lib/domain/provider-overflow.js",
+      "sha256": "1710d0141dfe1d4cb12b43949e74c05b028ed1fe7be79ccc45d578f49797ae39",
+      "size": 1314
+    },
+    {
       "path": "tavern-plugin/lib/domain/read-variables.js",
       "sha256": "953d419eebf4af491da47da4d5ff0602c100176b103e78da24ce3494debf2d8e",
       "size": 5566
@@ -1811,8 +1816,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/tavern-retry-limiter.js",
-      "sha256": "0645573359abf38eca8eb7d489305e33bed0b3594a620c5d97ad355d0e6ab86e",
-      "size": 2870
+      "sha256": "3afffea66d676091831408838ca1b91afcbeb414ab1e9e0d6e2b655c8845a82b",
+      "size": 3037
     },
     {
       "path": "tavern-plugin/lib/domain/tavern-runtime-assets.js",
@@ -2031,8 +2036,8 @@
     },
     {
       "path": "tavern-plugin/lib/hooks/request.js",
-      "sha256": "c2bcf33eb6c4c6e2ba032409b0c4d4378c10472684e534f239da272a880de7d4",
-      "size": 3006
+      "sha256": "fd22e0ca24170d55991e8bbe5e23a3b776f765b44ccbeb47905da03ae8b90e36",
+      "size": 3295
     },
     {
       "path": "tavern-plugin/lib/hooks/turn-lifecycle.js",
