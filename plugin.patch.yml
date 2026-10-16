@@ -196,6 +196,18 @@
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
 
+          # 联网搜索：dsh-web-app 把 host plane 的 tool-web 关掉、改由每个 preset
+          # 自己声明（见 dsh-web-app/presets/standard.patch.yml）。后台结算/世界书过滤的
+          # childCtx.tools.restrict({allow:['…','web_search']}) 只认已注册的全局工具，
+          # 缺这一行时 0.2.0 的 restrict 直接抛
+          # `tools.restrict() names unknown global tool "web_search"`，整个后台任务失败，
+          # MVU 变量结算因此不执行。与前台保持一致的 search:true / fetch:false。
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              search: true
+              fetch: false
+
           - id: compaction
             name: cordis:group
             group: true
