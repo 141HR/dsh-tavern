@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "bc8a657c2390651d9c98d7e92736a2719a55ba65",
-  "releaseSequence": 621,
+  "revision": "01a4d0e28178befe5c733525a2e9f315c77c2c73",
+  "releaseSequence": 622,
   "version": "2.7.0",
   "files": [
     {
@@ -96,8 +96,8 @@
     },
     {
       "path": "bin/launcher-environment.mjs",
-      "sha256": "9a605ae871795cf76acde1ca933726ea050f2b8e7bcbff04735a9724eb7597e0",
-      "size": 10137
+      "sha256": "25ec1d3db21b8c4cbc1698f8a19efd355de1b1de51e484ba5dc831729ec94bfa",
+      "size": 11133
     },
     {
       "path": "bin/launcher-settings.mjs",
@@ -131,8 +131,8 @@
     },
     {
       "path": "bin/profile-installation.mjs",
-      "sha256": "958d957746e17dcd61aaa15d7eed0656f3f6f2a4fc090ba74d148c085fcfccb1",
-      "size": 17065
+      "sha256": "03d47c46bcdbf93a44302bafa6fdfbaf7551cb168cfaeb02b3f4b5745374d3c4",
+      "size": 17120
     },
     {
       "path": "bin/prune-installed-files.mjs",
@@ -366,8 +366,8 @@
     },
     {
       "path": "presets/tavern/skills/edit-card/SKILL.md",
-      "sha256": "a5132bcec1cd23cec356a39909d624c594d5f638cd0670365493e9edcd0ea214",
-      "size": 3095
+      "sha256": "a74d05459d4a95e154951c22e31f94790c906759ab89af3775b59b5812abaf17",
+      "size": 3150
     },
     {
       "path": "presets/tavern/skills/gentle-rewrite/SKILL.md",
@@ -636,8 +636,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/card-validation.js",
-      "sha256": "4d3e3510e7e5046ae1b3200e8e206f39f98753b81fef9f7abc8be8668b11b933",
-      "size": 5293
+      "sha256": "9d90713ec62382b48bdd9b29f4945121717238ad8733dd57f2bba3d3b7c2dcfd",
+      "size": 4567
     },
     {
       "path": "tavern-plugin/lib/domain/card-workspace-message.js",
@@ -1343,6 +1343,11 @@
       "path": "tavern-plugin/lib/domain/resource-save-summary.js",
       "sha256": "806b672390e6d6557d5ed0786eb3c9ba6bc915df00a8f3c199f26ca9bc5993da",
       "size": 1135
+    },
+    {
+      "path": "tavern-plugin/lib/domain/resource-validation.js",
+      "sha256": "e36de2b687eefa0357247d40923474d0b09ab5f0992d3641efbda2e2d0bf74ab",
+      "size": 7664
     },
     {
       "path": "tavern-plugin/lib/domain/resource-workspace-projection.js",
@@ -2086,8 +2091,8 @@
     },
     {
       "path": "tavern-plugin/lib/tools/card-reading.js",
-      "sha256": "ab8bee23f57997c877285dacec13be4e5b0ca4064dae2b9d3a623607d950cea9",
-      "size": 13111
+      "sha256": "d6763e04db250fceaec2078c0f0b01e221e7ccd8552f2a6d71565d71b676ee92",
+      "size": 14089
     },
     {
       "path": "tavern-plugin/lib/tools/card-validation-check.js",
@@ -2106,8 +2111,8 @@
     },
     {
       "path": "tavern-plugin/lib/tools/preset.js",
-      "sha256": "9c261dcd97c7589ccd3101d40413911bc1bbf280d4abf264259d320fba095f51",
-      "size": 4004
+      "sha256": "1eb2e7dfb72a66c63db998d6e8fdb9614e0a7624a61e44ef8f24efd84ac2fe10",
+      "size": 3992
     },
     {
       "path": "tavern-plugin/lib/tools/regex-library.js",
@@ -2131,8 +2136,8 @@
     },
     {
       "path": "tavern-plugin/lib/tools/worldbook.js",
-      "sha256": "8e6af033212f0929918374438b60ec521c62446aefbda03d30b696693d4912b0",
-      "size": 9972
+      "sha256": "b7e37323057895e31b8b2579bae64de8019a8f8f0d1dba30c712d9c2cb90d6e5",
+      "size": 9960
     },
     {
       "path": "tavern-plugin/lib/vendor/dsh-image-gen-LICENSE",
@@ -4436,8 +4441,8 @@
     },
     {
       "path": "tavern-plugin/prompts/card-task-preset.md",
-      "sha256": "7bb9557d65775576f6dd05f9c0ad21f84f4c1dcf4a9698e110dd565659e2585a",
-      "size": 489
+      "sha256": "75d16828761a9ac8cf5acc63e61494f8f53355babb0b5370ab4572133b648b8b",
+      "size": 623
     },
     {
       "path": "tavern-plugin/prompts/card-task-script.md",
@@ -4446,13 +4451,13 @@
     },
     {
       "path": "tavern-plugin/prompts/card-task-worldbook.md",
-      "sha256": "468da3f646723a30a95fcf26e0ec7aa1130a34e733d00105c9885a9d9c732204",
-      "size": 449
+      "sha256": "79c9bf1b32080462eb9615e0c74be7c809c6aba3296cf6be6a9331ef49dc85e0",
+      "size": 611
     },
     {
       "path": "tavern-plugin/prompts/card-workspace.md",
-      "sha256": "14dd65caf6abbb83917e26ea02a7f31bfc76b487cb1761569272b5eab119ade5",
-      "size": 1903
+      "sha256": "eaaa65b2774a72e18babb3ea00bee572defd2b1bd5a0f8e23736e556dba6f320",
+      "size": 1952
     },
     {
       "path": "tavern-plugin/prompts/posture-settlement.md",
