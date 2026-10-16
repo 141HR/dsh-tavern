@@ -3,7 +3,7 @@ import { assertRescueHistoryEditable } from './chat-history-rescue.js'
 import { replaceSessionSurface } from './session-surface-mutations.js'
 import { canUndoRollback, restoreSurface, preflightSurfaceRestore, unchangedSinceRollback } from './surface-restoration.js'
 import { rewindBackgroundSurface } from './background-surface.js'
-import { releaseOpeningTurn, sessionEvents } from './session-events.js'
+import { releaseOpeningTurn, sessionEvents, withSurfaceEditTurn } from './session-events.js'
 import { randomUUID } from 'node:crypto'
 import { createRegenerationRecovery } from './regeneration-recovery.js'
 import { isDeepStrictEqual } from 'node:util'
@@ -852,16 +852,19 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     let rollbackWarning = state.rollbackWarning
     // 3) 原生消息面：用空消息替换最近一轮的所有 surface 节点（模型不再看到），UI 由客户端隐藏对应 turn tail
     try {
-      replaceSessionSurface(session, 'assistant/message', {
-        turn: rollbackSurface.turn,
-        step: rollbackSurface.step,
+      // A rollback runs between turns, and the replacement is read at the log
+      // tail: give it a turn of its own when none is open, so the archive keeps
+      // loading instead of failing "does not match an open turn and step".
+      withSurfaceEditTurn(session, agent, (turn, step) => replaceSessionSurface(session, 'assistant/message', {
+        turn,
+        step,
         message: {
           id: randomUUID(),
           role: 'assistant',
           content: [],
           source: rollbackSurface.source
         }
-      }, { start: rollbackSurface.userSeq, end: rollbackSurface.endSeq, sourceEventSeqs: shadowedSeqs })
+      }, { start: rollbackSurface.userSeq, end: rollbackSurface.endSeq, sourceEventSeqs: shadowedSeqs }))
     } catch (error) {
       // Keep append-only history intact. A rejected surface replacement must not consume the story checkpoint.
       try {

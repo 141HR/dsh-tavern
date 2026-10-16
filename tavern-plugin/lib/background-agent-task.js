@@ -366,7 +366,7 @@ export function createBackgroundAgentTask(options) {
 
   // Hide the latest task (its request and everything after) from the model's
   // surface in the same Session; raw events stay for the trace. Fixed seeds remain.
-  async function undoLastTask(session, traceSessionId) {
+  async function undoLastTask(session, traceSessionId, agent) {
     const events = new Map(sessionEvents(session).map(event => [event.seq, event]))
     const nodes = Array.isArray(session?.surface?.nodes) ? session.surface.nodes : []
     const start = nodes.findLast(seq => {
@@ -374,7 +374,7 @@ export function createBackgroundAgentTask(options) {
       return event?.type === 'user/message' && !String(event.data?.id || '').startsWith('tavern-session-prefix:')
     })
     if (start === undefined) return { traceSessionId, undone: false }
-    try { rewindBackgroundSurface(session, start - 1) }
+    try { rewindBackgroundSurface(session, start - 1, agent) }
     catch (error) { throw new Error('撤销失败，对话未改变。原因：' + str(error?.message || error), { cause: error }) }
     if (typeof options.flushSession === 'function') await options.flushSession(session)
     return { traceSessionId, undone: true }
@@ -382,9 +382,9 @@ export function createBackgroundAgentTask(options) {
 
   async function execute({ agent, state, traceSessionId, persistent }, input) {
     state.session = agent.session
-    if (input.undoLastTask === true) return undoLastTask(agent.session, traceSessionId)
+    if (input.undoLastTask === true) return undoLastTask(agent.session, traceSessionId, agent)
     const runtimeInput = state.input
-    try { rewindBackgroundSurface(agent.session, input.rewindTo) }
+    try { rewindBackgroundSurface(agent.session, input.rewindTo, agent) }
     catch (error) {
       const failure = new Error('后台历史回退失败，本次任务已停止，未基于旧上下文继续执行。原因：' + str(error?.message || error), { cause: error })
       failure.code = 'BACKGROUND_REWIND_FAILED'

@@ -60,6 +60,36 @@ export function releaseOpeningTurn(session, agent) {
   }
 }
 
+// Surface edits are appended to an append-only log, so released V4 reads them at
+// the tail: a replacement written while the previous turn already ended fails
+// requireStep ("assistant/message does not match an open turn and step") and the
+// whole archive stops loading. Give such an edit its own turn, and publish it as
+// used so the Agent's next turn continues after it.
+export function withSurfaceEditTurn(session, agent, write) {
+  const current = openTurnStep(sessionEvents(session))
+  const opened = current.turn === null || current.step === null
+  let turn = current.turn
+  let step = current.step
+  if (opened) {
+    turn = sessionEvents(session).reduce((highest, event) =>
+      event.type === 'turn/start' ? Math.max(highest, Number(event.data?.turn) || 0) : highest, 0) + 1
+    step = 1
+    appendSessionEvent(session, 'turn/start', { turn })
+    appendSessionEvent(session, 'step/start', { turn, step })
+  }
+  try {
+    return write(turn, step)
+  } finally {
+    if (opened) {
+      appendSessionEvent(session, 'step/end', { turn, step })
+      appendSessionEvent(session, 'turn/end', { turn, reason: { kind: 'completed' } })
+      if (agent && agent.phase && agent.phase.kind === 'idle') {
+        agent.phase.lastTurn = Math.max(Number(agent.phase.lastTurn) || 0, turn)
+      }
+    }
+  }
+}
+
 // V3 compaction pins only surface node zero. Reserve the host's empty system
 // slot before Tavern seeds, so the first real Agent step fills that same slot.
 // Existing surfaces are never reordered or rewritten.
