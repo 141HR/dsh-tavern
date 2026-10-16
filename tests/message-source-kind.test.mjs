@@ -51,9 +51,11 @@ test('合成的 system 头使用 v4 的 producer-owned kind', function () {
     append(type, data, intent) { appended.push({ type, data, intent }) },
   }
   ensureSessionSystemHead(session)
-  assert.equal(appended.length, 1)
-  assert.equal(appended[0].type, 'system/message')
-  assert.equal(appended[0].data.message.source.kind, 'system-prompt')
+  // Released V4 rejects a surface event outside an open turn, so the head is
+  // reserved together with the opening turn it belongs to.
+  assert.deepEqual(appended.map(event => event.type), ['turn/start', 'step/start', 'system/message'])
+  const head = appended[2]
+  assert.equal(head.data.message.source.kind, 'system-prompt')
 })
 
 // 会话格式 v4 的 source() 校验拒收裸 kind:'plugin'（报

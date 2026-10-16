@@ -7,11 +7,65 @@ export function sessionEvents(session) {
   return Array.isArray(session.events) ? session.events : []
 }
 
+// Released V4 rejects any surface event written outside an open turn, and the
+// token meter rejects a step that starts before the previous one ended. Both the
+// reserved head and the Agent's own step therefore have to agree on which turn
+// and step is open, so read it from the log instead of assuming.
+function openTurnStep(events) {
+  let turn = null
+  let step = null
+  for (const event of events) {
+    if (event.type === 'turn/start') { turn = event.data?.turn ?? null; step = null }
+    else if (event.type === 'turn/end') { turn = null; step = null }
+    else if (event.type === 'step/start') step = event.data?.step ?? null
+    else if (event.type === 'step/end') step = null
+  }
+  return { turn, step }
+}
+
+// The reserved system head is a surface node, and released V4 rejects a surface
+// event written before any turn opened. The opening turn therefore opens before
+// the head and stays open until the greeting closes it. A turn the host already
+// opened (system-prompt assembly) is used as-is: never nest a second one.
+export function ensureOpeningTurn(session) {
+  if (!session || typeof session.append !== 'function') return
+  const opened = () => sessionEvents(session)
+  const current = openTurnStep(opened())
+  // A host step is already open (system-prompt assembly): its turn is the right
+  // place for the reserved head, and nesting another one is invalid. A reserved
+  // turn that lost only its step/start is still ours to finish.
+  if (current.turn !== null && !(current.turn === 1 && current.step === null)) return
+  if (!opened().some(event => event.type === 'turn/start' && event.data?.turn === 1)) appendSessionEvent(session, 'turn/start', { turn: 1 })
+  if (!opened().some(event => event.type === 'step/start' && event.data?.turn === 1 && event.data?.step === 1)) appendSessionEvent(session, 'step/start', { turn: 1, step: 1 })
+}
+
+// A session whose reserved opening turn never receives a greeting must still
+// close it: the Agent opens its own first turn, and an open reserved turn makes
+// that write collide. Closing it lets the Agent continue at the next turn.
+export function closeOpeningTurn(session) {
+  if (!session || typeof session.append !== 'function') return
+  const current = openTurnStep(sessionEvents(session))
+  if (current.turn !== 1 || current.step !== 1) return
+  appendSessionEvent(session, 'step/end', { turn: 1, step: 1 })
+  appendSessionEvent(session, 'turn/end', { turn: 1, reason: { kind: 'completed' } })
+}
+
+// Close a reserved opening turn that no greeting will ever fill, and publish it
+// as already used: the Agent numbers its next turn from the turn it can read, so
+// it continues after the reserved one instead of colliding with it.
+export function releaseOpeningTurn(session, agent) {
+  closeOpeningTurn(session)
+  if (agent && agent.phase && agent.phase.kind === 'idle') {
+    agent.phase.lastTurn = Math.max(Number(agent.phase.lastTurn) || 0, 1)
+  }
+}
+
 // V3 compaction pins only surface node zero. Reserve the host's empty system
 // slot before Tavern seeds, so the first real Agent step fills that same slot.
 // Existing surfaces are never reordered or rewritten.
 export function ensureSessionSystemHead(session) {
   if (!(session?.header?.version >= 3) || session.surface.nodes.length > 0) return
+  ensureOpeningTurn(session)
   appendSessionEvent(session, 'system/message', { turn: 1, step: 1, message: {
     id: 'tavern-system-head:' + session.id, role: 'system', content: [],
     source: producerSource('@deepseek-ai/dsh-system-prompt', undefined, 'system')

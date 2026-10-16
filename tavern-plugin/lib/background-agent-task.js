@@ -6,7 +6,7 @@ import { projectWorldbookFilterContext } from './domain/worldbook-filter-context
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { prependSystemInstruction } from './domain/system-append.js'
 import { rewindBackgroundSurface } from './domain/background-surface.js'
-import { sessionEvents } from './domain/session-events.js'
+import { releaseOpeningTurn, sessionEvents } from './domain/session-events.js'
 import { randomUUID } from 'node:crypto'
 import { readSceneImageSystemInstruction } from './scene-image-prompts.js'
 import { CHARACTER_DESIGN_READ_TOOL } from './domain/character-design-document.js'
@@ -413,6 +413,9 @@ export function createBackgroundAgentTask(options) {
         const background = existing && revision <= existing.revision ? existing.text : typeof options.resolveStablePrefix === 'function'
           ? await options.resolveStablePrefix(input) : input.backgroundContext
         const prefix = await ensureSessionStablePrefix(agent.session, background, options.stablePrefixStorage, revision)
+        // A background session never appends a greeting, so the turn reserved
+        // with its system head must close before this task opens its own turn.
+        releaseOpeningTurn(agent.session, agent)
         if (prefix && prefix.event !== existing?.event && typeof options.flushSession === 'function') await options.flushSession(agent.session)
       }
       // The filter reuses the last projection (or makes the first one after a restart) so the

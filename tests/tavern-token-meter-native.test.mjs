@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { installTavernTokenMeter } from '../tavern-plugin/lib/domain/tavern-token-meter.js'
-import { ensureSessionSeedTrajectory } from '../tavern-plugin/lib/domain/session-seed-trajectory.js'
+import { sessionSeedTrajectoryMessages } from '../tavern-plugin/lib/domain/session-seed-trajectory.js'
 
 const native = { skip: !process.env.DSH_BOOT_MODULE }
 async function harness(t) {
@@ -33,7 +33,11 @@ function completed(session, usage) {
 test('原生 Token Meter 可统计既有无 step 的 Tavern 种子消息，且不改写历史', native, async t => {
   const { ctx, Session } = await harness(t)
   const session = Session.create('seed', [], { ...Session.create('seed').header, agentPreset: 'tavern' })
-  await ensureSessionSeedTrajectory(session)
+  // Pre-0.2 archives hold the reserved head and Tavern seeds without any
+  // opening turn. The meter patch must still measure them without rewriting.
+  appendSessionEvent(session, 'system/message', { turn: 1, step: 1, message: {
+    id: 'tavern-system-head:' + session.id, role: 'system', content: [], source: { kind: 'system-prompt' } } }, { surfaceOp: 'append' })
+  for (const stage of sessionSeedTrajectoryMessages(session.id)) appendSessionEvent(session, stage.type, stage.data, stage.intent)
   const before = JSON.stringify(session.snapshotEvents())
   assert.throws(() => ctx.tokenMeter.measure(session), /assistant\/message.*no matching step\/start/)
   const dispose = installTavernTokenMeter(ctx.tokenMeter)
