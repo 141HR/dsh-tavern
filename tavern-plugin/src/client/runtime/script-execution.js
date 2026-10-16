@@ -338,7 +338,7 @@
 				listeners.forEach(function (listener) { listener(); });
 			}
 			function selectedOwner() {
-				let id = String(sessions.list.getSnapshot().current || "");
+				let id = String(tavernMainSessionId(sessions) || "");
 				const seen = new Set();
 				while (id) {
 					if (seen.has(id) || seen.size >= 32) return "";
@@ -387,7 +387,7 @@
 			}
 			function createRecord(sessionId) {
 				const record = { sessionId: sessionId, viewState: null, loadState: null, fresh: false, foregroundRunning: sessions.list.getSnapshot().byId?.[sessionId]?.running === true, stopView: null };
-				record.templatePanel = createServerTemplatePanel({ window: hostWindow, rpc: options.rpc || rpc, isActive: () => current === record && String(sessions.list.getSnapshot().current || "") === record.sessionId });
+				record.templatePanel = createServerTemplatePanel({ window: hostWindow, rpc: options.rpc || rpc, isActive: () => current === record && tavernMainSessionId(sessions) === record.sessionId });
 				record.execution = (options.createExecution || createTavernScriptExecutionModule)({
 					window: hostWindow, rpc: options.rpc || rpc, executeSlash: options.executeSlash,
 					signals: options.signals || tavernSessionSignals,
@@ -419,7 +419,7 @@
 				if ((current ? current.sessionId : "") === sessionId) {
                     // Child agents keep the root executor alive, but its card UI
                     // belongs only to the actual root conversation surface.
-                    const visible = String(sessions.list.getSnapshot().current || "") === sessionId;
+                    const visible = tavernMainSessionId(sessions) === sessionId;
                     if (current?.execution.setForeground) current.execution.setForeground(visible);
                     if (current && !visible) current.templatePanel.close();
                     return;
@@ -430,7 +430,7 @@
 				retention.select(sessionId);
 				hostWindow.__dshTavernSelectedSessionId = sessionId;
 				current = sessionId ? records.get(sessionId) || createRecord(sessionId) : null;
-                if (current && current.execution.setForeground) current.execution.setForeground(String(sessions.list.getSnapshot().current || "") === sessionId);
+                if (current && current.execution.setForeground) current.execution.setForeground(tavernMainSessionId(sessions) === sessionId);
 				if (previous) {
 					// Do not retire from a cached idle view: the settlement-start
 					// notification may still be in flight when navigation happens.

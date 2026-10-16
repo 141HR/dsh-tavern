@@ -1094,7 +1094,9 @@ test('动态媒体 src 和属性观察器不重新代理，图片仍走缓存', 
   assert.equal(video.src, 'https://media.example/movie.mp4')
   assert.equal(audio.getAttribute('src'), 'https://media.example/bgm.mp3')
   assert.equal(source.getAttribute('src'), 'https://media.example/live')
-  assert.match(image.getAttribute('src'), /^\/api\/dsh-tavern\/static-assets/)
+  assert.match(image.attrs.src, /^\/api\/dsh-tavern\/static-assets/)
+  // 卡片脚本读 src 时拿回原始 https（valid() 校验绝对地址），加载仍走缓存代理。
+  assert.equal(image.getAttribute('src'), 'https://media.example/image.png')
 })
 
 test('iframe 是独立页面导航，不经静态缓存代理', () => {
