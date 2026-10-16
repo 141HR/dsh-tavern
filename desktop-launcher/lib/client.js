@@ -97,8 +97,6 @@ window.__ModuleLoader__.load({
 			meta: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", opacity: 0.7, wordBreak: "break-all" },
 			error: { color: "#f87171", wordBreak: "break-word" },
 			hint: { opacity: 0.6, lineHeight: 1.5 },
-			frameWrap: { flex: "1 1 auto", minHeight: "220px", display: "flex", border: "1px solid color-mix(in srgb, currentColor 18%, transparent)", borderRadius: "8px", overflow: "hidden" },
-			frame: { flex: "1 1 auto", width: "100%", border: "0", background: "transparent" },
 		};
 
 		// ── 视图 ────────────────────────────────────────────────────────────────
@@ -108,7 +106,6 @@ window.__ModuleLoader__.load({
 			const [state, setState] = React.useState(null);
 			const [busy, setBusy] = React.useState("");
 			const [error, setError] = React.useState("");
-			const [embedded, setEmbedded] = React.useState(false);
 
 			const refresh = React.useCallback(async () => {
 				try {
@@ -132,8 +129,6 @@ window.__ModuleLoader__.load({
 				try {
 					const next = await callTavern(method);
 					setState(next);
-					if (method === "stop") setEmbedded(false);
-					if (next !== null && typeof next.url === "string" && next.url.length > 0) setEmbedded(true);
 				} catch (failure) {
 					setError(failure.message !== undefined ? String(failure.message) : String(failure));
 				} finally {
@@ -186,32 +181,20 @@ window.__ModuleLoader__.load({
 					type: "button",
 					style: styles.button(false, url === ""),
 					disabled: url === "",
+					title: "在新的浏览器窗口打开酒馆界面（带 token 的完整地址）",
 					onClick: () => { if (url !== "") window.open(url, "_blank", "noopener"); },
-				}, "新窗口打开"),
-				e("button", {
-					key: "embed",
-					type: "button",
-					style: styles.button(false, url === ""),
-					disabled: url === "",
-					onClick: () => setEmbedded((current) => !current),
-				}, embedded ? "收起内嵌" : "侧边栏内嵌"),
+				}, "打开 Web"),
 			);
-
-			const body = embedded && url !== ""
-				? e("div", { style: styles.frameWrap, key: "frame" },
-					e("iframe", { style: styles.frame, src: url, title: "DSH Tavern" }),
-				)
-				: e("div", { style: styles.hint, key: "hint" },
-					ready
-						? "服务已就绪：可用「新窗口打开」进入带 token 的地址，或「侧边栏内嵌」在此处显示。"
-						: "点击「启动 Tavern」拉起 tavern profile（首次启动较慢），就绪后可内嵌或新窗口打开。",
-				);
 
 			return e("div", { style: styles.root },
 				header,
 				e("div", { style: styles.card }, details, buttons),
 				error === "" ? null : e("div", { style: styles.error }, error),
-				body,
+				e("div", { style: styles.hint, key: "hint" },
+					ready
+						? "服务已就绪：点「打开 Web」在新窗口进入酒馆界面。"
+						: "点「启动 Tavern」拉起 tavern profile，首次启动较慢。",
+				),
 			);
 		}
 
@@ -256,7 +239,7 @@ window.__ModuleLoader__.load({
 					dispose: service.registerTab({
 						id: TAB_ID,
 						title: () => "Tavern",
-						description: () => "启动 / 停止 DSH Tavern 服务，并在侧边栏内嵌其界面",
+						description: () => "启动 / 停止 DSH Tavern 服务，并在新窗口打开酒馆界面",
 						icon: (size) => TavernIcon(size),
 						order: 30,
 						single: true,

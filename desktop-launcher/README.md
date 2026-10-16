@@ -1,6 +1,6 @@
 # dsh-tavern-launcher
 
-把 **DSH Tavern 的启动按钮注册进 [DSH Better Sidebar](https://github.com/RevolutionLA/dsh-better-sidebar)**：在 DSH Desktop 的 GUI 里直接启动 / 停止 tavern 服务，并把酒馆界面内嵌在侧边栏（或新窗口打开），不必再依赖托盘菜单。
+把 **DSH Tavern 的启动按钮注册进 [DSH Better Sidebar](https://github.com/RevolutionLA/dsh-better-sidebar)**：在 DSH Desktop 的 GUI 里直接启动 / 停止 tavern 服务，并在新窗口打开酒馆界面，不必再依赖托盘菜单。
 
 这是 DSH 的「双半侧插件」：宿主半侧负责进程生命周期，浏览器半侧负责 UI。
 
@@ -29,8 +29,7 @@ dsh plugin --profile desktop remove dsh-tavern-launcher
 | 状态标签 | `未运行` / `启动中` / `运行中`（每 5 秒刷新，页面不可见时暂停轮询） |
 | 启动 Tavern | 拉起 `tavern` profile 的 DSH web 服务；已运行时幂等返回当前地址 |
 | 停止 | 结束该服务（带 PID 记录校验，不会误杀占用同一端口的其他进程） |
-| 新窗口打开 | 用带 token 的完整地址开新窗口 |
-| 侧边栏内嵌 | 在 sidebar 内 iframe 显示酒馆界面（再点一次收起） |
+| 打开 Web | 用带 token 的完整地址在新窗口打开酒馆界面 |
 
 ## 设计
 
@@ -69,4 +68,3 @@ node <dsh 工作区>/tmp/launcher-client-harness.mjs
 | 侧边栏没有 Tavern tab | 确认 profile 装了 `dsh-better-sidebar` 并已刷新页面；`dsh plugin --profile desktop list` 看包在不在 |
 | 点启动报「未找到 DSH Tavern 源码目录」 | 设置 `DSH_TAVERN_SOURCE`，或确认 `$DSH_HOME/profiles/tavern/package.json` 里有 `dshTavern.source` |
 | 启动很慢 | 首次启动要等 DSH 服务初始化，状态标签会停在「启动中」；日志见状态里的 `logPath`（默认 `$DSH_HOME/logs/tavern.log`） |
-| 内嵌页面空白 | 某些环境下 iframe 受限，改用「新窗口打开」 |

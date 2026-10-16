@@ -278,7 +278,7 @@ async function handleApi(req, res) {
 				return;
 			}
 			case "open": {
-				// 只回传当前带 token 的地址，由浏览器半侧决定内嵌还是新窗口打开。
+				// 只回传当前带 token 的地址，供浏览器半侧在新窗口打开酒馆界面。
 				writeJson(res, 200, { ok: true, value: await serviceSnapshot() });
 				return;
 			}
