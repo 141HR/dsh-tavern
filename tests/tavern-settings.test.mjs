@@ -5,7 +5,7 @@ import path from 'node:path'
 import test from 'node:test'
 import vm from 'node:vm'
 
-import { applyTavernSettingsPatch, presentTavernSettings, statusSectionOverrides } from '../tavern-plugin/lib/domain/tavern-settings.js'
+import { applyTavernSettingsPatch, presentTavernSettings } from '../tavern-plugin/lib/domain/tavern-settings.js'
 
 import { createProfileDataStore } from '../tavern-plugin/lib/profile-data-store.js'
 
@@ -116,9 +116,4 @@ test('酒馆状态可选区块默认隐藏，可单独打开并保留其他区�
   assert.deepEqual(presentTavernSettings(saved, {}).statusSections, { characterDesigns: false, ledger: true, posture: true })
   assert.throws(() => applyTavernSettingsPatch(saved, { statusSections: { posture: 'yes' } }), /无效的酒馆状态显示设置/)
   assert.throws(() => applyTavernSettingsPatch(saved, { statusSections: { other: true } }), /无效的酒馆状态显示设置/)
-})
-
-test('本局酒馆状态显示只保留本局设置过的区块，其余跟随全局', () => {
-  assert.deepEqual(statusSectionOverrides(undefined), {})
-  assert.deepEqual(statusSectionOverrides({ posture: false, ledger: 'yes', other: true }), { posture: false })
 })

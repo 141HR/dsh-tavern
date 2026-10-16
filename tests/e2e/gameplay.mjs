@@ -144,17 +144,6 @@ async function showPosture() {
   await openStatus()
   const posture = page.getByText('站在柜台前，收下奖励。', { exact: true }).filter({ visible: true })
   await posture.waitFor()
-  // 本局设置 overrides the global choice for this game only.
-  const local = page.getByRole('switch', { name: '本局显示人物姿势', exact: true })
-  for (const shown of [false, true]) {
-    await page.getByText('本局设置', { exact: true }).filter({ visible: true }).first().click()
-    assert.equal(await local.isChecked(), !shown)
-    await local.click()
-    await page.waitForFunction(([name, value]) => [...document.querySelectorAll('[role="switch"]')].some(node => node.getAttribute('aria-label') === name && node.checked === value), ['本局显示人物姿势', shown])
-    await openStatus()
-    if (shown) await posture.waitFor()
-    else await posture.waitFor({ state: 'detached' })
-  }
 }
 try {
   await step('准备独立运行环境', async () => {

@@ -220,7 +220,7 @@ import { createProfileDataStore } from './profile-data-store.js'
 import { createChatPersistence } from './domain/chat-persistence.js'
 import { createChatJournalStore } from './domain/chat-journal-store.js'
 import { createResourceGraph } from './domain/resource-graph.js'
-import { normalizeBackgroundTasks, applyTavernSettingsPatch, presentTavernSettings, resolveSystemPrompt, statusSectionOverrides } from './domain/tavern-settings.js'
+import { normalizeBackgroundTasks, applyTavernSettingsPatch, presentTavernSettings, resolveSystemPrompt } from './domain/tavern-settings.js'
 // Runtime reads go through runtimePrompt() so panel overrides apply; the raw
 // file catalog only supplies built-in defaults.
 import { prompt as promptFile, SYSTEM_PROMPT_DEFINITIONS, SYSTEM_PROMPT_NAMES } from './prompt-catalog.js'
@@ -1992,7 +1992,6 @@ export async function apply(ctx) {
       ...(deferResources ? {cardResourceAccess:sessionResources.issue(chat.id, resourceRevision, 'card')} : {}),
       cardUpdate,
       statusBarPlacement: chat.statusBarPlacement === 'body' ? 'body' : 'sidebar',
-      statusSections: statusSectionOverrides(chat.statusSections),
       posture: chat.posture || '',
       ledger: readLedger(chat.ledger),
       ledgerTask: manualLedger.project(chat),
@@ -4177,7 +4176,7 @@ export async function apply(ctx) {
       case 'getConversationBackgroundConfig': {
         const chat = await backgroundConfigForSession(str(args?.sessionId))
         if (!chat || groupOfMode(chat.mode) !== 'play') throw new Error('请先打开游玩会话')
-        return { backgroundModel: chat.backgroundModelSelection || null, imageModel: chat.imageModelSelection || null, backgroundTasks: normalizeBackgroundTasks(chat.backgroundTasks), webSearchEnabled: chat.webSearchEnabled === true, sceneImagesEnabled: chat.sceneImagesEnabled === true, sceneImagesAvailable: TAVERN_RELEASE_CAPABILITIES.sceneImages, modelCatalog: await tavernModelCatalog() }
+        return { backgroundModel: chat.backgroundModelSelection || null, imageModel: chat.imageModelSelection || null, backgroundTasks: normalizeBackgroundTasks(chat.backgroundTasks), webSearchEnabled: chat.webSearchEnabled === true, sceneImagesEnabled: chat.sceneImagesEnabled === true, sceneImagesAvailable: TAVERN_RELEASE_CAPABILITIES.sceneImages, mvuCard: chat.mvu?.enabled === true && chat.mvu.owner === 'official', modelCatalog: await tavernModelCatalog() }
       }
       case 'setConversationBackgroundModel':
       case 'setConversationBackgroundConfig': {
@@ -4529,14 +4528,6 @@ export async function apply(ctx) {
         if (!chat || !['story', 'script'].includes(chat.mode || 'story')) throw new Error('请先打开游玩会话')
         await updateChat(chat.id, current => ({ ...current, statusBarPlacement: args.placement }), { source: 'ui.status-bar-placement' })
         return { statusBarPlacement: args.placement }
-      }
-      case 'setStatusSection': {
-        const patch = statusSectionOverrides({ [args?.name]: args?.shown })
-        if (!Object.keys(patch).length) throw new Error('无效的酒馆状态显示设置')
-        const chat = await chatForSession(args.sessionId)
-        if (!chat || !['story', 'script'].includes(chat.mode || 'story')) throw new Error('请先打开游玩会话')
-        const saved = await updateChat(chat.id, current => ({ ...current, statusSections: { ...statusSectionOverrides(current.statusSections), ...patch } }), { source: 'ui.status-sections' })
-        return { statusSections: statusSectionOverrides(saved.statusSections) }
       }
       case 'setPlayerName': return { playerName: await setPlayerName(args && args.sessionId, args && args.userName) }
       case 'setRequestMode': return { requestMode: await setRequestMode(args && args.sessionId, args && args.requestMode) }

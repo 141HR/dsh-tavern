@@ -1,4 +1,3 @@
-import { statusSectionOverrides } from './tavern-settings.js'
 import { createImmutableTurnFields } from './freeze-json.js'
 import { createMvuReceiptIndex } from './mvu-receipt-index.js'
 import { copyJsonTree } from './copy-json-tree.js'
@@ -167,7 +166,6 @@ export function createSessionStateView({ activity: activityOf, evidence: evidenc
       settlementTurn: rollback.rollbackTargetTurn,
       scriptProgress,
       statusBarPlacement: chat.statusBarPlacement === 'body' ? 'body' : 'sidebar',
-      statusSections: statusSectionOverrides(chat.statusSections),
       updatedAt: chat.updatedAt || 0,
       // Compaction writes only this header field; cached views must not keep a stale notice.
       contextCompaction: chat.contextCompaction || null,
@@ -220,6 +218,7 @@ export function projectChatBackgroundConfig(chat) {
     if (Object.hasOwn(chat, key)) selected[key] = chat[key]
   }
   selected.backgroundSessionStatus = chat.timeline?.participants?.background?.status
+  if (chat.mvu) selected.mvu = { enabled: chat.mvu.enabled, owner: chat.mvu.owner }
   return structuredClone(selected)
 }
 
