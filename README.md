@@ -185,7 +185,7 @@ curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | D
 欢迎交流使用经验、分享人物卡或反馈问题：
 
 - **[GitHub Discussions](https://github.com/flizzywine/dsh-tavern/discussions)**：任何人都可以直接发帖。
-- **[Discord](https://discord.gg/hYAEjKnpra)**：DSH Tavern 交流频道。
+- **[Discord](https://discord.gg/hYAEjKnpra)**：DSH Tavern 交流频道，任何人都可以加入。
 
 除 Discord 外，本项目没有官方的 QQ 群、微信群或其他群聊。
 
