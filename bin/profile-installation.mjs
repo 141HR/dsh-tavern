@@ -16,7 +16,7 @@ import { migrateLegacyTavernData, resolveTavernDataRoot } from '../tavern-plugin
 import { ensureUserExtensions } from '../tavern-plugin/lib/domain/user-extensions.js'
 import { beginProfileConfigurationUpdate, loadProfileManifest, mergeProfileManifest, prepareProfilePatch, prepareProfileWorkspace, syncProfileDependencyPatches } from './profile-configuration.mjs'
 import { ensureSidebarDefaults } from './launcher-settings.mjs'
-import { INSTALL_HOSTS, SOURCE_ROOT, DSH_ROOT, LEGACY_DSH_ROOT, CLI_RUNTIME_ROOT, RUNTIME_HOST, PROFILE_DIR, LOG_DIR, SCRIPT_PATH, PROFILE, RELEASE_FILE, DEFAULT_COMMIT_URL, REQUIRED_SOURCE_FILES, findDshCommand, requireCommand, run, runInstallCommand, runInstallDsh } from './launcher-environment.mjs'
+import { INSTALL_HOSTS, SOURCE_ROOT, DSH_ROOT, LEGACY_DSH_ROOT, CLI_RUNTIME_ROOT, RUNTIME_HOST, PROFILE_DIR, LOG_DIR, SCRIPT_PATH, PROFILE, RELEASE_FILE, DEFAULT_COMMIT_URL, REQUIRED_SOURCE_FILES, findDshCommand, pinnedDesktopDsh, requireCommand, run, runInstallCommand, runInstallDsh } from './launcher-environment.mjs'
 
 // Own installation transaction and legacy-source discovery. Desktop never installs a CLI shim.
 export { extractDshVersion } from './dsh-compatibility.mjs'
@@ -258,7 +258,7 @@ async function installProfileOwned(host, { attemptId, runInstall, runDsh }) {
   const runtime = host === 'cli' ? await installCliRuntime({ root: CLI_RUNTIME_ROOT, run: runInstall }) : null
   if (runtime?.reused) console.log('已复用版本匹配且可启动的独立 DSH，无需重新下载。')
   try {
-    const dsh = runtime?.command || findDshCommand(host)
+    const dsh = runtime?.command || pinnedDesktopDsh(host)?.bootstrap || findDshCommand(host)
     const dshVersion = extractDshVersion(await runDsh(dsh, ['--version'], { capture: true, host, timeoutMs: 30_000 }))
     assertCompatibleDshVersion(dshVersion, host)
     console.log(dshCompatibilityNotice(dshVersion, host))

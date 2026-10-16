@@ -149,7 +149,22 @@ export function findDshCommand(host = RUNTIME_HOST) {
   throw new Error('找不到 dsh，请先安装 DeepSeek Harness，并重新打开终端。')
 }
 
-export function resolveDshInvocation(command, args, host = 'cli', nodePath = process.execPath) {
+// Windows Desktop (the one-click Setup and the Desktop terminal) names its own
+// bundled DSH. Looking up `dsh` by name can reach an unrelated DSH the user
+// installed elsewhere, so installs run this exact bootstrap instead.
+export function pinnedDesktopDsh(host, env = process.env, platform = process.platform) {
+  if (host !== 'desktop' || platform !== 'win32') return null
+  const executable = env.DSH_DESKTOP_APP_EXECUTABLE
+  const bootstrap = env.DSH_DESKTOP_DSH_BOOTSTRAP
+  if (!executable || !bootstrap || !existsSync(executable) || !existsSync(bootstrap)) return null
+  return { executable, bootstrap }
+}
+
+export function resolveDshInvocation(command, args, host = 'cli', nodePath = process.execPath, env = process.env, platform = process.platform) {
+  const pinned = pinnedDesktopDsh(host, env, platform)
+  if (pinned && command === pinned.bootstrap) {
+    return { command: pinned.executable, args: ['--expose-internals', pinned.bootstrap, ...args], env: { ELECTRON_RUN_AS_NODE: '1' } }
+  }
   if (host !== 'android') return { command, args }
   return { command: nodePath, args: ['--expose-internals', command, ...args] }
 }
@@ -168,7 +183,7 @@ export function runDsh(command, args, options = {}) {
   const spawnOptions = { ...options }
   delete spawnOptions.host
   const result = spawnSync(invocation.command, invocation.args, {
-    encoding: 'utf8', shell: process.platform === 'win32' && !nativeCli, env: runtimeEnvironment(), ...spawnOptions,
+    encoding: 'utf8', shell: process.platform === 'win32' && !nativeCli && !invocation.env, env: { ...runtimeEnvironment(), ...invocation.env }, ...spawnOptions,
   })
   if (result.error) throw new Error(`无法运行 dsh：${result.error.message}`)
   if (result.status !== 0) {
@@ -198,7 +213,7 @@ export async function runInstallDsh(command, args, options = {}) {
   const invocation = nativeCli ? { command: process.execPath, args: [resolveDshCliEntry({ dsh: command }), ...args] } : resolveDshInvocation(command, args, options.host)
   try {
     const result = await runInstallationProcess(invocation.command, invocation.args, {
-      ...options, env: runtimeEnvironment(), shell: process.platform === 'win32' && !nativeCli,
+      ...options, env: { ...runtimeEnvironment(), ...invocation.env }, shell: process.platform === 'win32' && !nativeCli && !invocation.env,
       timeoutMs: options.timeoutMs || 60_000, label: options.label || 'DSH 配置验证',
     })
     return options.capture ? result.stdout.trim() : ''
