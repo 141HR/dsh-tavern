@@ -375,7 +375,7 @@
 						),
 						guideError ? h("div", { className: "dsh-card-error" }, guideError) : null
 					),
-					h("section", { className: "dsh-tavern-status-section" },
+					h("section", { className: "dsh-tavern-status-section", "data-status-optional": "characterDesigns" },
 						h("div", { className: "dsh-tavern-character-design-head" },
                             h("div", { className: "dsh-tavern-status-label" }, "人物设计档案（" + ((view.characterDesigns && view.characterDesigns.characters || []).length) + "）"),
                             h("button", { className: "dsh-tavern-btn", disabled: running || view.activity?.busy || view.characterDesignTask?.status === "running", onClick: () => designCharacter(view.characterDesignTask?.status === "failed" ? view.characterDesignTask.guidance : "") }, view.characterDesignTask?.status === "running" ? "设计中…" : view.characterDesignTask?.status === "failed" ? "重试设计" : "设计人物")),
@@ -408,7 +408,7 @@
 					),
 					h(TavernPluginTasks, { sessionId: props.sessionId, activity: view.activity, busy: running || view.activity?.busy || view.activity?.phase === "pending" }),
 					h(TavernLedger, { sessionId: props.sessionId, ledger: view.ledger, ledgerTask: view.ledgerTask, busy: running || view.activity?.busy }),
-					h("section", { className: "dsh-tavern-status-section" },
+					h("section", { className: "dsh-tavern-status-section", "data-status-optional": "posture" },
 						h("div", { className: "dsh-tavern-status-label" }, "人物姿势"),
 						view.posture ? h("div", { className: "dsh-tavern-status-now" }, view.posture) : h("div", { className: "dsh-tavern-status-empty" }, "等待第一轮状态结算")
 					)

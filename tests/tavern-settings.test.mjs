@@ -108,3 +108,12 @@ test('the global scene image Agent default model saves like the other defaults a
   assert.deepEqual(presentTavernSettings(saved, []).defaultImageModel, { provider: 'p', model: 'flash' })
   assert.equal(presentTavernSettings(applyTavernSettingsPatch(saved, { defaultImageModel: null }), []).defaultImageModel, null)
 })
+
+test('酒馆状态可选区块默认隐藏，可单独打开并保留其他区块', () => {
+  assert.deepEqual(presentTavernSettings({}, {}).statusSections, { characterDesigns: false, ledger: false, posture: false })
+  let saved = applyTavernSettingsPatch({}, { statusSections: { posture: true } })
+  saved = applyTavernSettingsPatch(saved, { statusSections: { ledger: true } })
+  assert.deepEqual(presentTavernSettings(saved, {}).statusSections, { characterDesigns: false, ledger: true, posture: true })
+  assert.throws(() => applyTavernSettingsPatch(saved, { statusSections: { posture: 'yes' } }), /无效的酒馆状态显示设置/)
+  assert.throws(() => applyTavernSettingsPatch(saved, { statusSections: { other: true } }), /无效的酒馆状态显示设置/)
+})

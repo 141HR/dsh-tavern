@@ -1970,6 +1970,10 @@ body.dsh-tavern-shell-active > :is([role="tree"], [role="menu"], [role="listbox"
 .dsh-tavern-menu-unavailable { display: grid; gap: 2px; white-space: normal !important; }
 .dsh-tavern-menu-unavailable small { font-size: 11px; font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
 
+/* Optional 酒馆状态 sections stay hidden until global settings turn them on. */
+html:not(.dsh-tavern-show-status-characterDesigns) [data-status-optional="characterDesigns"],
+html:not(.dsh-tavern-show-status-ledger) [data-status-optional="ledger"],
+html:not(.dsh-tavern-show-status-posture) [data-status-optional="posture"] { display: none !important; }
 /* Presentation only: keep request/history data and actionable tool rows intact. */
 html.dsh-tavern-hide-process [data-chat-flow-kind="context"],
 html.dsh-tavern-hide-process [data-chat-flow-kind="system-prompt"],

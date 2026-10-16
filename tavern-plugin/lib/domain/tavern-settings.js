@@ -16,6 +16,13 @@ export function normalizeBackgroundTasks(value) {
   return { posture: tasks.posture !== false, characterDesign: false, variables: tasks.variables !== false, ledger: false, variableFeedback: tasks.variableFeedback !== false }
 }
 
+// Optional status-tab sections, hidden until the player turns them on (display only).
+export const STATUS_SECTIONS = ['characterDesigns', 'ledger', 'posture']
+export function normalizeStatusSections(value) {
+  const input = object(value)
+  return Object.fromEntries(STATUS_SECTIONS.map(name => [name, input[name] === true]))
+}
+
 export function normalizePlayDefaults(value) {
   const input = object(value)
   return { playerName: typeof input.playerName === 'string' ? input.playerName.trim().slice(0, 80) || '你' : '你',
@@ -51,6 +58,11 @@ export function applyTavernSettingsPatch(current, patch) {
   if (Object.hasOwn(input, 'hideContextAndReasoning')) {
     if (typeof input.hideContextAndReasoning !== 'boolean') throw new Error('无效的对话显示设置')
     next.hideContextAndReasoning = input.hideContextAndReasoning
+  }
+  if (Object.hasOwn(input, 'statusSections')) {
+    const patchSections = object(input.statusSections)
+    if (Object.entries(patchSections).some(([name, shown]) => !STATUS_SECTIONS.includes(name) || typeof shown !== 'boolean')) throw new Error('无效的酒馆状态显示设置')
+    next.statusSections = normalizeStatusSections({ ...object(next.statusSections), ...patchSections })
   }
   if (Object.hasOwn(input, 'candidateDismissMode')) {
     if (!['after-fill', 'after-send'].includes(input.candidateDismissMode)) throw new Error('无效的候选项收起方式')
@@ -125,6 +137,7 @@ export function presentTavernSettings(document, defaults) {
     defaultImageModel: normalizeBackgroundModel(object(document).defaultImageModel),
     contextCompaction: compactionPolicy(object(document).contextCompaction),
     hideContextAndReasoning: object(document).hideContextAndReasoning !== false,
+    statusSections: normalizeStatusSections(object(document).statusSections),
     candidateDismissMode: object(document).candidateDismissMode === 'after-fill' ? 'after-fill' : 'after-send',
     compatibilityMode: false,
     sillyModeEnabled: false,
