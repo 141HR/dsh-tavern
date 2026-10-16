@@ -1,6 +1,6 @@
 # 原生会话可修复：存档永不因原生会话而废
 
-状态：第 1–3、5 步已实现（修复原语 `tavern-plugin/lib/domain/native-surface-repair.js`；接入存档核对 `reconcileStory`；回退、重新生成、编辑正文、撤销回退改为存档优先；E2E `--native-repair`）。第 4 步（后台边界丢失时原地清空）待实施。
+状态：第 1–3、5 步已实现（修复原语 `tavern-plugin/lib/domain/native-surface-repair.js`；接入存档核对 `reconcileStory`；回退、重新生成、编辑正文、撤销回退改为存档优先；E2E `--native-repair`）。第 4 步已实现：后台会话压缩过或找不到回退位置时，沿用同一个后台会话原地清空任务历史。
 
 ## 问题
 
@@ -85,7 +85,10 @@ chat.nativeSync = { status: 'stale', reason: '<原因>', at: <ts> }
 
 ### 4. 后台 Agent 与 MVU
 
-- **后台会话：沿用同一个，不新建。** 前台修复不改 Chat，后台无需因此变动；后台跟随 Chat 回退靠的是它自己已有的原地回退（`domain/background-surface.js` 的 `rewindBackgroundSurface`：把 checkpoint 边界之后的任务历史在同一 Session 里替换掉）。边界找不到时按同一原则降级为 `rewindTo: -1`，即在**同一个后台 Session** 里清掉前缀之后的全部任务历史，下一次结算从 Chat 当前状态重新开始。现有"改用新的后台会话"（`background-agent-sessions.js:277-302`，#164）只在宿主不支持替换 surface 时触发；随包固定的 DSH 运行时（ADR 0007）支持替换，不会走到，本方案不新增任何新建后台会话的路径。
+- **后台会话：沿用同一个，不新建。** 前台修复不改 Chat，后台无需因此变动；后台跟随 Chat 回退靠它自己的原地回退（`domain/background-surface.js` 的 `rewindBackgroundSurface`：把 checkpoint 边界之后的任务历史在同一 Session 里替换掉）。以前有两种情况会改用新后台会话，现在都改为在**同一个后台 Session** 里清掉前缀之后的全部任务历史（`rewindTo: -1`），下一次结算从 Chat 当前状态重新开始（`domain/story-timeline.js`）：
+  - checkpoint 里没有可用边界（回退、撤销回退/重新生成失败恢复 `replacement.abort`）；
+  - 后台会话压缩过（`requiresNewSessionOnRewind`）：边界落在摘要里，无法回到那里。清空执行后压缩标记随之清除。
+  现有"改用新的后台会话"（`background-agent-sessions.js`，#164）只剩宿主不支持替换 surface 这一种情况；随包固定的 DSH 运行时（ADR 0007）支持替换，不会走到。
 - **MVU 与变量**：变量和回执都在 Chat 楼层里，修复不触碰。进行中的 MVU 投递按现有规则校验 branch/revision，过期即作废。
 - **模板展示、状态栏**：按 Chat 楼层渲染，不受影响。
 
