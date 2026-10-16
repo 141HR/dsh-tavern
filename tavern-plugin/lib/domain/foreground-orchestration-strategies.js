@@ -276,8 +276,12 @@ function labelPresetFront(messages, texts) {
 
 function presetFrontSections(snapshot) {
   const entries = Array.isArray(snapshot?.front?.entries) ? snapshot.front.entries : []
+  // The front phase is resolved by Tavern's own macro engine; unknown extension macros (for example
+  // "{{压缩相邻消息::...}}" from ecosystem preset tools) intentionally stay literal. DSH's strict
+  // system-prompt variable scanner would reject any residual {{...}} as a malformed variable, so the
+  // section must be non-interpolating to keep those macros verbatim instead of failing the turn.
   return entries.filter(entry => str(entry?.content).trim() !== '')
-    .map(entry => ({ name: 'tavern:runtime-preset-front', text: str(entry.content) }))
+    .map(entry => ({ name: 'tavern:runtime-preset-front', text: str(entry.content), interpolate: false }))
 }
 
 export function createNativePlayOrchestrationStrategy(options) {
