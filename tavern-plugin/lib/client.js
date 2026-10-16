@@ -4841,6 +4841,39 @@ function tavernModelRefusalNotice(text) {
 		    host.removeEventListener("focus", renew);
 		  };
 		}
+
+		// The opening preview renders card panels inline in the preview frame, while card host scripts run through the
+		// preview window proxy whose parent is the frame itself. Panels then dispatch confirm events on the real app
+		// document (window.parent.document) where no card listener exists. Mirror those events synchronously into the
+		// preview document so preview-scope host scripts can answer them in the same dispatch.
+		function installTavernPreviewHostEventRelay(parentWindow, frameWindow) {
+		  let parentDocument = null;
+		  try { parentDocument = parentWindow && parentWindow.document; } catch (error) { parentDocument = null; }
+		  if (!parentDocument || parentDocument === frameWindow.document) return function () {};
+		  if (parentDocument.__dshTavernPreviewEventRelay) return parentDocument.__dshTavernPreviewEventRelay.release;
+		  const originalDispatch = parentDocument.dispatchEvent;
+		  const release = function () {
+		    if (Object.getOwnPropertyDescriptor(parentDocument, "dispatchEvent")?.value === dispatch) delete parentDocument.dispatchEvent;
+		    delete parentDocument.__dshTavernPreviewEventRelay;
+		  };
+		  const dispatch = function (event) {
+		    let result;
+		    try { result = originalDispatch.call(parentDocument, event); } finally {
+		      try {
+		        const detail = event && event.detail;
+		        if (event && typeof event.type === "string" && !String(event.type).startsWith("dsh-") && detail && typeof detail === "object") {
+		          frameWindow.document.dispatchEvent(new frameWindow.CustomEvent(event.type, { detail: detail }));
+		        }
+		      } catch (error) { /* 预览帧已卸载时静默放弃 */ }
+		    }
+		    return result;
+		  };
+		  try {
+		    Object.defineProperty(parentDocument, "dispatchEvent", { configurable: true, value: dispatch });
+		    parentDocument.__dshTavernPreviewEventRelay = { release: release };
+		  } catch (error) { return function () {}; }
+		  return release;
+		}
 		// Shared lifetime rules for frame scripts and every opening input adapter.
 		// Self-contained because the same module runs in serialized card documents.
 		function createTavernFrameLifecycle(win, doc = win.document) {
@@ -5906,7 +5939,7 @@ function tavernModelRefusalNotice(text) {
 				+ (input && input.helperContext && input.helperContext.openingHost ? '<script data-dsh-tavern-session-opening>(' + installSessionOpeningBridge.toString() + ')(' + token + ',' + JSON.stringify(Object.assign({}, input.helperContext.openingHost, { extensionSettings: input.helperContext.extensionSettings || {} })).replace(/</g, '\\u003c') + ');<\/script>' : '')
 				+ (input && input.helperContext ? '<script data-dsh-tavern-frame-variable-aliases>(' + installTavernFrameVariableAliases.toString() + ')();<\/script>' : '')
 				+ (input && input.helperContext && input.persistent === true && input.preserveInstance !== true ? '<script data-dsh-tavern-status-refresh>(' + installTavernStatusRefresh.toString() + ')(' + token + ');<\/script>' : '')
-				+ (input && input.openingPreview ? '<script data-dsh-tavern-opening-preview>(function(){const install=()=>(' + installOpeningPreviewBridge.toString() + ')(' + token + ',' + JSON.stringify(input.openingPreview).replace(/</g, '\\u003c') + ');if(window.__dshTavernHelperReady)window.__dshTavernHelperReady.then(install);else install();})();<\/script>' : '')
+				+ (input && input.openingPreview ? '<script data-dsh-tavern-opening-preview>(function(){const releaseRelay=(' + installTavernPreviewHostEventRelay.toString() + ')(window.parent,window);if(typeof window.addEventListener==="function"){window.addEventListener("pagehide",releaseRelay,{once:true});window.addEventListener("unload",releaseRelay,{once:true});}const install=()=>(' + installOpeningPreviewBridge.toString() + ')(' + token + ',' + JSON.stringify(input.openingPreview).replace(/</g, '\\u003c') + ');if(window.__dshTavernHelperReady)window.__dshTavernHelperReady.then(install);else install();})();<\/script>' : '')
 				+ (preparationRuntime && input.trustedCardMode === true ? '<script data-dsh-tavern-opening-host>(function(){const release=(' + installTavernTrustedHostFacade.toString() + ')(window.parent,window,10);window.addEventListener("pagehide",release,{once:true});window.addEventListener("unload",release,{once:true});})();<\/script>' : '')
 				// Viewers without the execution lease still receive live variables. Legacy
 				// status panels read parent.Mvu; expose their Helper API below the executor.
