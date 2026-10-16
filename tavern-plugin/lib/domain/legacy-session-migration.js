@@ -6,6 +6,7 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { constants, zstdCompressSync, zstdDecompressSync } from 'node:zlib'
+import { isPluginSource, isProducerSource, sourceProducerName } from './message-source.js'
 
 const SURFACE = new Set(['user/message', 'assistant/message', 'tool/result', 'system/message'])
 const ALLOWED_FORM = new Set(['instructions', 'catalog', 'snapshot', 'notice', 'relay', 'recall'])
@@ -84,7 +85,7 @@ function compactionBoundaries(events) {
       range: Boolean(event.data.shadowedRange), seqs: Boolean(event.data.shadowedSeqs?.length),
     }]
     if (event.surfaceOp?.op === 'replace' &&
-        (message?.source?.compactionId || /compact/.test(message?.source?.plugin || ''))) {
+        (message?.source?.compactionId || /compact/.test(sourceProducerName(message?.source)))) {
       return [{ kind: 'checkpoint', content: message.content }]
     }
     return []
@@ -1005,7 +1006,7 @@ function stripKnownExtras(source) {
 }
 
 function normalizePluginForm(source) {
-  if (!source || source.kind !== 'plugin' || !source.form || ALLOWED_FORM.has(source.form)) return false
+  if (!isPluginSource(source) || !source.form || ALLOWED_FORM.has(source.form)) return false
   if (validSections(source.sections)) source.form = 'snapshot'
   else {
     delete source.form
@@ -1016,7 +1017,7 @@ function normalizePluginForm(source) {
 }
 
 function cleanSource(source) {
-  if (!source || source.kind !== 'plugin' || source.plugin !== 'dsh-tavern') return false
+  if (!isProducerSource(source, 'dsh-tavern')) return false
   let changed = false
   for (const key of Object.keys(source)) {
     if (TAVERN_SOURCE_KEYS.has(key)) continue

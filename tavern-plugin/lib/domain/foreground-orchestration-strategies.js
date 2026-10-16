@@ -5,6 +5,7 @@ import { createEphemeralCompatibilityRequest, isCompatibilityConversationRequest
 import { projectRuntimePresetRequest } from './runtime-preset-lifecycle.js'
 import { markRequestHandled, requestHandledBy } from './request-lineage.js'
 import { inputKind } from './session-turn-input.js'
+import { isProducerSource, isSystemPromptSource } from './message-source.js'
 
 const CARD_REFERENCE_SECTIONS = new Set(['tavern:character-card', 'tavern:card-system-prompt', 'tavern:constant-worldbook'])
 // The card Agent resends its system prompt on every tool step and reads live
@@ -105,7 +106,7 @@ function snapshotMessage(text) {
     role: 'user',
     content: [{ type: 'text', text: str(text) }],
     source: {
-      kind: 'plugin', plugin: 'dsh-tavern', form: 'snapshot',
+      kind: 'plugin:dsh-tavern', form: 'snapshot',
       sections: [{ name: 'tavern:turn', text: str(text) }]
     }
   }
@@ -119,7 +120,7 @@ function hasProviderContent(message) {
 function isNativeStablePrefix(message) {
   const source = message && message.source
   return str(message && message.id).startsWith('tavern-session-prefix:') && message.role === 'user'
-    && source && source.kind === 'plugin' && source.plugin === 'dsh-tavern'
+    && isProducerSource(source, 'dsh-tavern')
     && (source.form === 'snapshot' || source.form === 'session-prefix')
 }
 
@@ -264,7 +265,7 @@ export function createCompatibilityOrchestrationStrategy(options) {
 // the provider, and the trajectory keeps its own unannotated message.
 function labelPresetFront(messages, texts) {
   if (!Array.isArray(messages) || !texts?.length) return messages
-  const index = messages.findIndex(message => message?.role === 'system' && message.source?.plugin === '@deepseek-ai/dsh-system-prompt')
+  const index = messages.findIndex(message => message?.role === 'system' && isSystemPromptSource(message.source))
   const message = messages[index]
   const body = (message?.content || []).map(block => block?.type === 'text' ? block.text : '').join('')
   if (index < 0 || !texts.every(text => body.includes(text))) return messages

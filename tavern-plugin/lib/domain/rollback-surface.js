@@ -8,6 +8,7 @@ import { createSurfaceOwnership, planSurfaceRecovery, planSurfaceRange, SurfaceR
 import { randomUUID } from 'node:crypto'
 import { inputKind, isTurnInput, isNewTurnInput, isNewPlayerInput } from './session-turn-input.js'
 import { resolveRoundAnchor } from './round-anchor.js'
+import { isPluginSource, isProducerSource, sourceProducerName } from './message-source.js'
 
 function object(value) {
   return value !== null && typeof value === 'object' ? value : null
@@ -62,16 +63,17 @@ function modelSourceOf(event) {
 
 function isForegroundContext(event) {
   const source = event?.type === 'user/message' && event.data?.source
-  return source?.kind === 'plugin' && source.plugin === 'dsh-tavern' &&
+  return isProducerSource(source, 'dsh-tavern') &&
     ['foreground-frame', 'worldbook-snapshot', 'snapshot', 'variable-changes'].includes(source.form)
 }
 
 function isRollbackUserTombstone(event) {
   const source = event && event.type === 'user/message' && event.data && event.data.source
-  return source && source.kind === 'plugin' && (
-    source.plugin === 'dsh-tavern-failed-turn-cleanup' ||
-    source.plugin === 'dsh-tavern-regeneration-abort' ||
-    source.plugin === 'dsh-tavern-context-window'
+  const producer = sourceProducerName(source)
+  return producer !== '' && (
+    producer === 'dsh-tavern-failed-turn-cleanup' ||
+    producer === 'dsh-tavern-regeneration-abort' ||
+    producer === 'dsh-tavern-context-window'
   )
 }
 
@@ -110,7 +112,7 @@ export function abortedRegenerationTurns(input) {
   const seqs = []
   for (const event of events) {
     const source = event && event.type === 'user/message' && event.data && event.data.source
-    if (!source || source.kind !== 'plugin' || source.plugin !== 'dsh-tavern-regeneration-abort') continue
+    if (!isProducerSource(source, 'dsh-tavern-regeneration-abort')) continue
     if (Array.isArray(event.sourceEventSeqs)) seqs.push(...event.sourceEventSeqs)
   }
   return modelTurns(events, seqs)
@@ -210,7 +212,7 @@ export function pendingFailedSurfaceTurns({ events = [], nodes = [], suppressed 
     // marker and legacy context snapshots do not end the pending failure tail.
     if (isRollbackAssistantTombstone(event, events) || isForegroundContext(event)) continue
     if (!isRollbackUserTombstone(event)) break
-    if (event.data.source.plugin !== 'dsh-tavern-failed-turn-cleanup') continue
+    if (sourceProducerName(event.data.source) !== 'dsh-tavern-failed-turn-cleanup') continue
     ownership ??= createSurfaceOwnership(events)
     failures ??= turnIntervals(events).filter(interval => interval.failed && !hidden.has(interval.turn))
     const sources = event.sourceEventSeqs || []
@@ -285,7 +287,7 @@ export function locateRollbackSurface(input) {
     if (isCompactionCheckpoint(event)) return null
     // The round starts at its input: messages other plugins or card scripts add
     // around it belong to the round and go with it, never stand in for it.
-    if (event && event.type === 'user/message' && (isTurnInput(event.data) || event.data?.source?.kind !== 'plugin') && !isRollbackUserTombstone(event)) {
+    if (event && event.type === 'user/message' && (isTurnInput(event.data) || !isPluginSource(event.data?.source)) && !isRollbackUserTombstone(event)) {
       userIndex = index
       break
     }
@@ -412,7 +414,7 @@ export function regenerationProjection(replacement, data, operationId) {
     data,
     range: { start: replacement.start, end: replacement.end, sourceEventSeqs: [...replacement.shadowedSeqs] },
     cleanups: (replacement.cleanups || []).map((run, index) => ({
-      data: { id: 'tavern-regen-cleanup:' + operationId + ':' + index, role: 'user', content: [], source: { kind: 'plugin', plugin: 'dsh-tavern-regeneration-abort' } },
+      data: { id: 'tavern-regen-cleanup:' + operationId + ':' + index, role: 'user', content: [], source: { kind: 'plugin:dsh-tavern-regeneration-abort' } },
       range: { start: run.start, end: run.end, sourceEventSeqs: [...run.shadowedSeqs] }
     }))
   }
@@ -489,7 +491,7 @@ export function clearFailedTurnSurface(input) {
     id: makeId(),
     role: 'user',
     content: [],
-    source: { kind: 'plugin', plugin: 'dsh-tavern-failed-turn-cleanup' }
+    source: { kind: 'plugin:dsh-tavern-failed-turn-cleanup' }
   }, { start: cleanup.start, end: cleanup.end, sourceEventSeqs: cleanup.shadowedSeqs })
   return cleanup.shadowedSeqs.length
 }
@@ -508,7 +510,7 @@ export function clearRegenerationAttemptSurface(input) {
     inScope: event => event.seq >= eventStart,
     // Failed cleanup may precede regeneration abort; convert it once to the
     // abort marker, then retries are true no-ops (including after a flush error).
-    ignore: event => event?.data?.source?.plugin === 'dsh-tavern-regeneration-abort',
+    ignore: event => sourceProducerName(event?.data?.source) === 'dsh-tavern-regeneration-abort',
     message: '重新生成临时消息不是连续区间，无法安全清理'
   })
   if (!cleanup) return 0
@@ -517,7 +519,7 @@ export function clearRegenerationAttemptSurface(input) {
     id: makeId(),
     role: 'user',
     content: [],
-    source: { kind: 'plugin', plugin: 'dsh-tavern-regeneration-abort' }
+    source: { kind: 'plugin:dsh-tavern-regeneration-abort' }
   }, { start: cleanup.start, end: cleanup.end, sourceEventSeqs: cleanup.shadowedSeqs })
   return cleanup.shadowedSeqs.length
 }

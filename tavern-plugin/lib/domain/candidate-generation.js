@@ -311,7 +311,7 @@ export function createCandidateGenerator(options) {
       id: 'choices-' + now().toString(36),
       role: 'user',
       content: [{ type: 'text', text: request }],
-      source: { kind: 'plugin', plugin: 'dsh-tavern' }
+      source: { kind: 'plugin:dsh-tavern' }
     }])
     const research = scriptMode ? scriptResearchAttempt(script, scriptWindow, card, chat) : null
     let submittedChoices = null

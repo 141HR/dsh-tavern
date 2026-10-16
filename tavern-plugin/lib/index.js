@@ -3369,7 +3369,7 @@ export async function apply(ctx) {
               role: 'user',
               regexPlacement: 2,
               content: [{ type: 'text', text: settleUserText(snapshot, backgroundTasksSettings.posture, taskRun.participantRequest.rewindTo == null ? lastSubmittedPosture(backgroundSessionId && (agentRegistry.get(backgroundSessionId)?.session || sessionStore.get(backgroundSessionId))) : '') }],
-              source: { kind: 'plugin', plugin: 'dsh-tavern' }
+              source: { kind: 'plugin:dsh-tavern' }
             }],
             system: [
               backgroundTasksSettings.posture ? runtimePrompt('posture-settlement') : '本轮不生成或提交姿势。完成启用的后台任务后简短回复完成。',
@@ -4871,7 +4871,7 @@ export async function apply(ctx) {
         role: item.role,
         content: projectPlayerContent(item.inputAttachments, item.content, { fallback: false }),
         source: {
-          kind: 'plugin', plugin: 'dsh-tavern', form: 'sillytavern-compatibility',
+          kind: 'plugin:dsh-tavern', form: 'sillytavern-compatibility',
           sections: [{ name: 'tavern:sillytavern:' + label, text: item.content }],
           trace: item.source
         }

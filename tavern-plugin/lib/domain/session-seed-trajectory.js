@@ -25,7 +25,7 @@ function userMessage(sessionId, index, texts) {
     id: id(sessionId, index),
     role: 'user',
     content: [{ type: 'text', text: texts[index] }],
-    source: { kind: 'plugin', plugin: 'dsh-tavern', form: 'synthetic-trajectory', version: VERSION }
+    source: { kind: 'plugin:dsh-tavern', form: 'synthetic-trajectory', version: VERSION }
   }
 }
 

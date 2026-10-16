@@ -221,7 +221,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
         id: randomUUID(),
         role: 'user',
         content: projectPlayerContent(msgs0[oldAssistantIndex - 1].inputAttachments, syntheticText),
-        source: { kind: 'plugin', plugin: 'dsh-tavern-regen', regenerationId: operationId }
+        source: { kind: 'plugin:dsh-tavern-regen', regenerationId: operationId }
       })
       await agent.whenIdle()
       syntheticTurn = agent.phase !== undefined && agent.phase !== null && Number.isFinite(Number(agent.phase.lastTurn)) ? Number(agent.phase.lastTurn) : (beforeLastTurn + 1)
@@ -399,7 +399,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
         id: randomUUID(),
         role: 'user',
         content: projectPlayerContent(originalUser.inputAttachments, syntheticText),
-        source: { kind: 'plugin', plugin: 'dsh-tavern-regen', regenerationId: operationId }
+        source: { kind: 'plugin:dsh-tavern-regen', regenerationId: operationId }
       })
       await agent.whenIdle()
       syntheticTurn = agent.phase !== undefined && agent.phase !== null && Number.isFinite(Number(agent.phase.lastTurn)) ? Number(agent.phase.lastTurn) : (beforeLastTurn + 1)
