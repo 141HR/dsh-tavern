@@ -20,6 +20,7 @@ import { cardVariableUpdateChecks } from './card-variable-update.mjs'
 import { cardUpdateChecks } from './card-update.mjs'
 import { sidebarUpgrade } from './sidebar-upgrade.mjs'
 import { pinPanelChecks } from './pin-panel.mjs'
+import { mobileSidebarChecks } from './mobile-sidebar.mjs'
 import { compactedEditedLegacySession } from '../fixtures/compacted-legacy-session.mjs'
 import { encodeMigratedSessionLog, parseSessionLog } from '../../tavern-plugin/lib/domain/legacy-session-migration.js'
 import { compactionChecks } from './compaction.mjs'
@@ -572,6 +573,8 @@ try {
     await incrementalMvuChecks({page,step,savedChat,output,report,restartServer})
   } else if (process.argv.includes('--background-lifecycle')) {
     await backgroundLifecycleChecks({page,step,savedChat,data,output,report,restartServer})
+  } else if (process.argv.includes('--mobile-sidebar')) {
+    await mobileSidebarChecks({page,step,output,report})
   } else if (pinScenario) {
     await pinPanelChecks({page,step,output,report})
   } else if (displayScenario) {
