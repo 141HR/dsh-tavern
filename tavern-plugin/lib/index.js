@@ -97,7 +97,7 @@ import { createBodyEditor } from './domain/body-editor.js'
 import { appendHelperUserSessionContext } from './domain/helper-user-session-context.js'
 import { userMessageForTurn, requestIdForTurn, requestIdForMessages } from './domain/session-turn-input.js'
 import { inspectStoryAlignment, nativeStoryTurns } from './domain/story-alignment.js'
-import { repairNativeSurface, recordNativeSurfaceRepair } from './domain/native-surface-repair.js'
+import { repairNativeSurface, recordNativeSurfaceRepair, planNativeSurfaceRepair } from './domain/native-surface-repair.js'
 import { sessionOpeningDescriptor, prepareSessionOpening } from './domain/session-opening.js'
 import { scriptPromptScanText } from './domain/tavern-script-prompts.js'
 import { createOpeningPreparation } from './domain/opening-preparation.js'
@@ -4771,7 +4771,7 @@ export async function apply(ctx) {
 
   // The save's latest player rounds, oldest first: enough rows to cover the native window.
   async function storyAlignmentInput(sessionId, nativeCount) {
-    const fields = ['mode', 'nativeCommits', 'suppressedDshTurns', 'regeneratedDshTurns', 'regenInProgress']
+    const fields = ['id', 'mode', 'nativeCommits', 'suppressedDshTurns', 'regeneratedDshTurns', 'regenInProgress', 'nativeSync']
     const head = await chatSliceForSession(sessionId, [], fields)
     let header, rows
     if (head?.chat) {
@@ -4785,13 +4785,22 @@ export async function apply(ctx) {
     }
     if (!header) return null
     const story = rows.filter(message => message?.role === 'assistant' && !message.greeting)
-    return { header, storyTurns: story.map(message => Number(message.turn)), storyAnchors: story.map(message => message.nativeAnchor).filter(Boolean) }
+    return { header, rows, storyTurns: story.map(message => Number(message.turn)), storyAnchors: story.map(message => message.nativeAnchor).filter(Boolean) }
   }
 
   // Bring the save and the native session back into agreement before anything
   // acts on "the latest round" (#196): record a round the save missed, re-shadow
   // a rolled-back round the model still sees, and report what cannot be repaired.
   // Never blocks the action that asked for it.
+  // Turn numbers can agree while the text drifted (an edit that never reached the model):
+  // the repair planner checks the latest rounds' text against the rows already read.
+  function alignStory(session, input) {
+    const report = inspectStoryAlignment({ session, ...input })
+    if (report.state === 'regenerating') return report
+    const textDrift = planNativeSurfaceRepair({ chat: { id: input.header.id, messages: input.rows }, events: sessionEvents(session), nodes: session.surface?.nodes || [] }).status !== 'intact'
+    const nativeSync = input.header.nativeSync?.status || ''
+    return { ...report, textDrift, nativeSync, aligned: report.aligned && !textDrift && nativeSync !== 'stale' }
+  }
   async function reconcileStory(sessionId, { repair = true, stillIdle = () => true } = {}) {
     try {
       sessionId = str(sessionId)
@@ -4799,7 +4808,7 @@ export async function apply(ctx) {
       if (!session) return null
       const input = await storyAlignmentInput(sessionId, nativeStoryTurns(session).length)
       if (!input || !['story', 'script'].includes(input.header.mode || 'story')) return null
-      const report = inspectStoryAlignment({ session, ...input })
+      const report = alignStory(session, input)
       if (!repair || report.aligned || report.state === 'regenerating') return report
       for (const round of report.adopt) {
         if (!stillIdle()) return report
@@ -4811,12 +4820,11 @@ export async function apply(ctx) {
         await sessionStore.flush(session)
         console.warn('dsh-tavern: 第 ' + shadowed.join('、') + ' 轮已回退但模型仍能看到，已重新隐藏')
       }
-      let after = inspectStoryAlignment({ session, ...(await storyAlignmentInput(sessionId, nativeStoryTurns(session).length)) })
+      let after = alignStory(session, await storyAlignmentInput(sessionId, nativeStoryTurns(session).length))
       // The save is the truth: rewrite the native tail after the last round both still agree on.
-      const stale = (await chatSliceForSession(sessionId, [], ['nativeSync']))?.chat?.nativeSync?.status === 'stale'
-      if ((after.state === 'mismatch' || after.anchors.lost.length || stale) && stillIdle()) {
-        await repairNativeStory(sessionId, session, after.state === 'mismatch' ? '轮次不一致' : stale ? '上次同步失败' : '找不到原生位置')
-        after = inspectStoryAlignment({ session, ...(await storyAlignmentInput(sessionId, nativeStoryTurns(session).length)) })
+      if (!after.aligned && stillIdle()) {
+        await repairNativeStory(sessionId, session, after.state === 'mismatch' ? '轮次不一致' : after.nativeSync === 'stale' ? '上次同步失败' : after.textDrift ? '正文不一致' : '找不到原生位置')
+        after = alignStory(session, await storyAlignmentInput(sessionId, nativeStoryTurns(session).length))
       }
       if (after.state === 'mismatch') console.warn('dsh-tavern: 存档与模型上下文的轮次修复后仍不一致：' + JSON.stringify(after.mismatch))
       return after

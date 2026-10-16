@@ -170,3 +170,29 @@ test('修复写回存档：只给读时未变的楼层换锚点，清掉待修�
   assert.deepEqual(moved.messages.at(-1).nativeAnchor, h.chat.messages.at(-1).nativeAnchor)
   assert.equal(recordNativeSurfaceRepair(structuredClone(current), read, []), false)
 })
+
+test('原生里是模型原文（未去空白、未经正则），存档里是投影后的文字：仍算一致', () => {
+  const h = game(2)
+  for (const message of h.chat.messages.filter(row => row.role === 'assistant' && !row.greeting)) {
+    message.sourceText = message.text
+    message.text = message.text + '〔正则处理后〕'
+  }
+  // A further round whose raw native text keeps trailing blank lines; saved texts are trimmed.
+  const input = appendSessionEvent(h.session, 'user/message', { id: 'in-raw', role: 'user', content: [{ type: 'text', text: '行动' }], source: { kind: 'user' } }, { surfaceOp: 'append' })
+  const reply = appendSessionEvent(h.session, 'assistant/message', { turn: 4, step: 1, message: { id: 'out-raw', role: 'assistant', content: [{ type: 'text', text: '原文\n\n' }], source: model } }, { surfaceOp: 'append', sourceEventSeqs: [] })
+  h.chat.messages.push({ role: 'user', text: '行动' }, { role: 'assistant', turn: 4, sourceText: '原文', text: '原文〔正则处理后〕', nativeAnchor: roundAnchor(4, input, reply) })
+  assert.equal(plan(h).status, 'intact')
+  delete h.chat.messages.at(-1).nativeAnchor
+  assert.equal(plan(h).status, 'intact', 'text fallback normalizes the same way')
+})
+
+test('失败、中断或仍在进行的回合留在末尾：交给失败回合重放处理，不算残留', () => {
+  for (const reason of ['error', 'aborted', null]) {
+    const h = game(2, { id: 'failed-' + reason })
+    appendSessionEvent(h.session, 'turn/start', { turn: 9 })
+    appendSessionEvent(h.session, 'user/message', { id: 'in-9', role: 'user', content: [{ type: 'text', text: '被拦截的输入' }], source: { kind: 'user' } }, { surfaceOp: 'append' })
+    appendSessionEvent(h.session, 'assistant/message', { turn: 9, step: 1, message: { id: 'out-9', role: 'assistant', content: [{ type: 'text', text: '半截' }], source: model } }, { surfaceOp: 'append', sourceEventSeqs: [] })
+    if (reason) appendSessionEvent(h.session, 'turn/end', { turn: 9, reason: { kind: reason } })
+    assert.equal(plan(h).status, 'intact', String(reason))
+  }
+})

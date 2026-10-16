@@ -22,8 +22,11 @@ function chatRounds(chat) {
   for (const [index, message] of (chat.messages || []).entries()) {
     if (message?.role === 'user') { users.push(String(message.text ?? '')); continue }
     if (message?.role !== 'assistant') continue
+    // The native reply holds the raw model output (sourceText) unless an edit wrote the
+    // projected text; both are this round. Saved texts are trimmed, native ones may not be.
+    const texts = new Set([message.text, message.sourceText, message.projectionText].filter(value => typeof value === 'string').map(value => value.trim()))
     rounds.push({ messageIndex: index, turn: Number(message.turn) || 0, greeting: message.greeting === true,
-      userText: users.length ? users.join('\n\n') : null, replyText: String(message.text ?? ''), anchor: message.nativeAnchor })
+      userText: users.length ? users.join('\n\n') : null, replyText: String(message.text ?? ''), texts, anchor: message.nativeAnchor })
     users = []
   }
   return rounds
@@ -58,18 +61,16 @@ export function planNativeSurfaceRepair({ chat, events = [], nodes = [] }) {
   const checkpoint = nodes.findLastIndex(seq => isCompactionCheckpoint(bySeq.get(seq)))
   const resolve = createRoundAnchorResolver({ events, nodes })
   let replies = null
-  function replyByText(text) {
+  function replyByText(texts) {
     if (replies === null) {
       replies = new Map()
       for (let index = checkpoint + 1; index < nodes.length; index++) {
         const event = at(index)
         if (event?.type !== 'assistant/message' || event.data?.message?.source?.kind !== 'model') continue
-        const key = textOf(event.data.message.content)
-        if (!replies.has(key)) replies.set(key, [])
-        replies.get(key).push(index)
+        replies.set(textOf(event.data.message.content).trim(), index)
       }
     }
-    return replies.get(text)?.at(-1) ?? -1
+    return Math.max(-1, ...[...texts].map(text => replies.get(text) ?? -1))
   }
   // Where this round's reply stands, if the surface still says what the Chat says.
   function locate(round) {
@@ -82,12 +83,23 @@ export function planNativeSurfaceRepair({ chat, events = [], nodes = [] }) {
       if (found?.reply != null) {
         const index = nodes.indexOf(found.reply)
         const event = at(index)
-        const intact = index > checkpoint && event?.type === 'assistant/message' && textOf(event.data?.message?.content) === round.replyText
+        const intact = index > checkpoint && event?.type === 'assistant/message' && round.texts.has(textOf(event.data?.message?.content).trim())
         return { index: intact ? index : -1, summarized: checkpoint >= 0 && (found.reply === nodes[checkpoint] || found.input === nodes[checkpoint]) }
       }
     }
-    return { index: replyByText(round.replyText), summarized: false }
+    return { index: replyByText(round.texts), summarized: false }
   }
+  // A failed, stopped or still running turn left on the surface is the failed-turn
+  // replay's to clear or resend (CONTEXT.md, Failed Turn Replay); only a completed
+  // turn the save does not have is residue.
+  const turnOfSeq = new Map(), ended = new Map()
+  let started = 0
+  for (const event of events) {
+    if (event?.type === 'turn/start') started = Number(event.data?.turn) || started
+    if (event?.type === 'turn/end') ended.set(Number(event.data?.turn), event.data?.reason?.kind || '')
+    turnOfSeq.set(event?.seq, started)
+  }
+  const residue = seq => isStoryResidue(bySeq.get(seq)) && ended.get(turnOfSeq.get(seq)) === 'completed'
   const plan = (status, keep, rewrite) => ({ status, keep, rounds: rewrite, checkpoint })
   for (let position = rounds.length - 1; position >= 0; position--) {
     const round = rounds[position]
@@ -96,7 +108,7 @@ export function planNativeSurfaceRepair({ chat, events = [], nodes = [] }) {
     if (index >= 0) {
       const rewrite = rounds.slice(position + 1)
       // Only residue after an intact last round: shadow it, keep that round.
-      if (!rewrite.length && !nodes.slice(index + 1).some(seq => isStoryResidue(bySeq.get(seq)))) return plan('intact', nodes.length, [])
+      if (!rewrite.length && !nodes.slice(index + 1).some(residue)) return plan('intact', nodes.length, [])
       return plan('tail', index + 1, rewrite)
     }
     if (found.summarized) return plan('tail', checkpoint + 1, rounds.slice(position + 1))
