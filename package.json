@@ -25,7 +25,8 @@
     "check:plugin-package": "node bin/build-plugin-package.mjs --check",
     "prepublishOnly": "npm run check:client && npm run check:plugin-package",
     "test:card-memory": "node --test tests/card-memory.test.mjs",
-    "test:e2e:card-memory": "node bin/build-tavern-client.mjs --check && node tests/e2e/gameplay.mjs --card-memory"
+    "test:e2e:card-memory": "node bin/build-tavern-client.mjs --check && node tests/e2e/gameplay.mjs --card-memory",
+    "test:fast": "node bin/test-tavern.mjs --fast"
   },
   "dependencies": {
     "acorn": "8.15.0",
