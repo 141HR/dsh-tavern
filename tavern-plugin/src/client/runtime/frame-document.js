@@ -88,10 +88,12 @@
 		function installTavernStatusRefresh(token) {
 			// A legacy status may render only once. Observe reads, not card names or
 			// source patterns; give event handlers and existing 4s polls time to catch up.
+			// A card that re-reads the same data later polls by itself (some every 10s):
+			// reloading it would only blank the panel and refetch its assets.
 			const read = window.getVariables;
 			const reads = new Map();
 			const subscriptions = new Map();
-			let timer = 0, requested = false, writes = false;
+			let timer = 0, requested = false, writes = false, polling = false;
 			document.addEventListener("input", function () { writes = true; }, true);
 			document.addEventListener("change", function () { writes = true; }, true);
 			["eventOn", "eventOff"].forEach(function (name) {
@@ -113,7 +115,10 @@
 				const current = normalized.type === "message" && (normalized.message_id == null || normalized.message_id === window.getCurrentMessageId());
 				if (current) delete normalized.message_id;
 				const result = read.apply(this, arguments);
-				reads.set(JSON.stringify([normalized, current]), { option: normalized, current: current, value: JSON.stringify(result) });
+				const key = JSON.stringify([normalized, current]), now = Date.now(), previous = reads.get(key);
+				// Re-reads during the first render burst are not polling.
+				if (previous && now - previous.first >= 2000) polling = true;
+				reads.set(key, { option: normalized, current: current, value: JSON.stringify(result), first: previous ? previous.first : now });
 				return result;
 			};
 			// Reloading a read-only view is safe; never automatically replay Helper
@@ -125,10 +130,10 @@
 			});
 			addEventListener("message", function (event) {
 				const data = event && event.data;
-				if (event.source !== parent || !data || data.token !== token || data.type !== "dsh-tavern-helper-context-update" || timer || requested || writes) return;
+				if (event.source !== parent || !data || data.token !== token || data.type !== "dsh-tavern-helper-context-update" || timer || requested || writes || polling) return;
 				timer = setTimeout(function () {
 					timer = 0;
-					if (writes || requested || Array.from(subscriptions.values()).some(function (handlers) { return handlers.size > 0; })) return;
+					if (writes || requested || polling || Array.from(subscriptions.values()).some(function (handlers) { return handlers.size > 0; })) return;
 					const stale = Array.from(reads.values()).some(function (entry) { return JSON.stringify(read(optionFor(entry))) !== entry.value; });
 					if (!stale) return;
 					requested = true;

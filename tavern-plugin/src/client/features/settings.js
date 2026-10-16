@@ -149,7 +149,6 @@
             function apply(settings) {
                 value = { hideContextAndReasoning: settings.hideContextAndReasoning === true, statusSections: Object.assign({}, settings.statusSections) };
                 document.documentElement.classList.toggle("dsh-tavern-hide-process", value.hideContextAndReasoning);
-                TAVERN_STATUS_SECTIONS.forEach(([name]) => document.documentElement.classList.toggle("dsh-tavern-show-status-" + name, value.statusSections[name] === true));
                 listeners.forEach(listener => listener());
             }
             async function refresh() {
@@ -172,8 +171,7 @@
                     const onStorage = event => { if (event.key === key) refresh(); };
                     window.addEventListener("focus", refresh);
                     window.addEventListener("storage", onStorage);
-                    return () => { ++revision; window.removeEventListener("focus", refresh); window.removeEventListener("storage", onStorage); document.documentElement.classList.remove("dsh-tavern-hide-process");
-                        TAVERN_STATUS_SECTIONS.forEach(([name]) => document.documentElement.classList.remove("dsh-tavern-show-status-" + name)); };
+                    return () => { ++revision; window.removeEventListener("focus", refresh); window.removeEventListener("storage", onStorage); document.documentElement.classList.remove("dsh-tavern-hide-process"); };
                 }
             };
         })();
@@ -196,7 +194,7 @@
             return h("section", { className: "dsh-tavern-settings-group dsh-tavern-display-preferences" },
                 row("隐藏上下文注入和思考过程", "隐藏对话中的上下文注入、已思考和思考过程。仅影响显示，正文、模型请求和存档内容不变。",
                     preferences?.hideContextAndReasoning === true, value => ({ hideContextAndReasoning: value })),
-                TAVERN_STATUS_SECTIONS.map(([name, title, description]) => row("酒馆状态显示" + title, description,
+                TAVERN_STATUS_SECTIONS.map(([name, title, description]) => row("酒馆状态显示" + title, description + "已单独设置的游戏以本局设置为准。",
                     preferences?.statusSections[name] === true, value => ({ statusSections: { [name]: value } }))),
                 notice ? h("p", { className: "dsh-tavern-settings-desc", role: "status" }, notice) : null);
         }

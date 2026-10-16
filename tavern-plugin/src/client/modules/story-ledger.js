@@ -101,7 +101,7 @@ function TavernLedger(props) {
         sceneTree(path));
     });
   }
-  return h("section", { className: "dsh-tavern-status-section dsh-ledger", "aria-label": "游玩台账", "data-status-optional": "ledger" },
+  return h("section", { className: "dsh-tavern-status-section dsh-ledger", "aria-label": "游玩台账" },
     // The update button stays reachable while the notebook is collapsed.
     h("div", { className: "dsh-tavern-character-design-head" },
       h("button", { type: "button", className: "dsh-ledger-toggle", "aria-expanded": open, onClick: () => setOpen(!open) }, "游玩台账", h("span", null, open ? "收起" : "查看")),

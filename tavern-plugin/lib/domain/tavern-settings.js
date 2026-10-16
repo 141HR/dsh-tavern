@@ -23,6 +23,12 @@ export function normalizeStatusSections(value) {
   return Object.fromEntries(STATUS_SECTIONS.map(name => [name, input[name] === true]))
 }
 
+// A game's own choices; sections it never set follow the global setting.
+export function statusSectionOverrides(value) {
+  const input = object(value)
+  return Object.fromEntries(STATUS_SECTIONS.filter(name => typeof input[name] === 'boolean').map(name => [name, input[name]]))
+}
+
 export function normalizePlayDefaults(value) {
   const input = object(value)
   return { playerName: typeof input.playerName === 'string' ? input.playerName.trim().slice(0, 80) || '你' : '你',

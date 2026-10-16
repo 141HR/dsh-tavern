@@ -1,3 +1,4 @@
+import { statusSectionOverrides } from './tavern-settings.js'
 import { createImmutableTurnFields } from './freeze-json.js'
 import { createMvuReceiptIndex } from './mvu-receipt-index.js'
 import { copyJsonTree } from './copy-json-tree.js'
@@ -29,7 +30,7 @@ export function projectChatSessionState(chat, options = {}) {
   const selected = { pendingMvuSettlement }
   for (const key of ['id', 'sessionId', '_storageRevision', 'mode', 'cardPath', 'cardContextRevision',
     'backgroundConfigVersion', 'conversationFeaturesVersion', 'disabledWritingSkills', 'contextCompaction', 'updatedAt', 'timeline', 'candidateAgent',
-    'cardName', 'requestMode', 'statusBarPlacement', 'webSearchEnabled', 'candidates', 'taskMailbox', 'regenInProgress',
+    'cardName', 'requestMode', 'statusBarPlacement', 'statusSections', 'webSearchEnabled', 'candidates', 'taskMailbox', 'regenInProgress',
     'settleError', 'scriptState', 'hiddenDshErrorTurns', 'suppressedDshTurns', 'regeneratedDshTurns', 'tavernHelperLifecycleRevision']) {
     if (Object.hasOwn(chat, key)) selected[key] = chat[key]
   }
@@ -165,6 +166,7 @@ export function createSessionStateView({ activity: activityOf, evidence: evidenc
       settlementTurn: rollback.rollbackTargetTurn,
       scriptProgress,
       statusBarPlacement: chat.statusBarPlacement === 'body' ? 'body' : 'sidebar',
+      statusSections: statusSectionOverrides(chat.statusSections),
       updatedAt: chat.updatedAt || 0,
       // Compaction writes only this header field; cached views must not keep a stale notice.
       contextCompaction: chat.contextCompaction || null,
