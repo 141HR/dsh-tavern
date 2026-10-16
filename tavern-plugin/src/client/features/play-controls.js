@@ -165,6 +165,7 @@
 			const liveState = useLiveTavernView(props.sessionId, stateKey);
 			const view = liveState.view;
 			const loadState = liveState.phase;
+			const displayed = useTavernStatusSections(view);
             React.useEffect(function () {
                 if (view?.characterDesignTask?.status === "done" && view.characterDesignTask.published?.length) notifyTavernDataChanged(["worldbooks", "cards"], "character-design");
             }, [props.sessionId, JSON.stringify(view?.characterDesignTask?.published || [])]);
@@ -334,9 +335,8 @@
 					) : null,
 					view.worldBookError ? h("div", { className: "dsh-card-error" }, "世界书召回失败：" + view.worldBookError) : null,
 					view.foregroundError ? h("div", { className: "dsh-card-error" }, view.foregroundError.message || "前台正文生成失败，请重新生成本轮正文。") : null,
-					view.tavernHelper && view.statusBarPlacement !== "body" ? h("section", { className: "dsh-tavern-status-section" },
-						h(TavernPersistentStatusRuntime, { sessionId: props.sessionId, view: view, executeSlash: props.executeSlash })
-					) : null,
+					view.tavernHelper ? h(TavernPersistentStatusRuntime, { sessionId: props.sessionId, view: view, executeSlash: props.executeSlash,
+						panels: view.statusBarPlacement === "body" ? "pinned" : "all", section: true }) : null,
 					(view.presentationWarnings || []).map(function (warning, index) {
 						return h("div", { className: "dsh-card-error", key: "presentation-warning-" + index }, warning);
 					}),
@@ -376,7 +376,7 @@
 						),
 						guideError ? h("div", { className: "dsh-card-error" }, guideError) : null
 					),
-					h("section", { className: "dsh-tavern-status-section" },
+					displayed.characterDesigns ? h("section", { className: "dsh-tavern-status-section" },
 						h("div", { className: "dsh-tavern-character-design-head" },
                             h("div", { className: "dsh-tavern-status-label" }, "人物设计档案（" + ((view.characterDesigns && view.characterDesigns.characters || []).length) + "）"),
                             h("button", { className: "dsh-tavern-btn", disabled: running || view.activity?.busy || view.characterDesignTask?.status === "running", onClick: () => designCharacter(view.characterDesignTask?.status === "failed" ? view.characterDesignTask.guidance : "") }, view.characterDesignTask?.status === "running" ? "设计中…" : view.characterDesignTask?.status === "failed" ? "重试设计" : "设计人物")),
@@ -406,13 +406,13 @@
 								});
 							}) : h("div", { className: "dsh-tavern-status-empty" }, "点击“设计人物”，按你的要求创建或补充档案。")
 						)
-					),
+					) : null,
 					h(TavernPluginTasks, { sessionId: props.sessionId, activity: view.activity, busy: running || view.activity?.busy || view.activity?.phase === "pending" }),
-					h(TavernLedger, { sessionId: props.sessionId, ledger: view.ledger, ledgerTask: view.ledgerTask, busy: running || view.activity?.busy }),
-					h("section", { className: "dsh-tavern-status-section" },
+					displayed.ledger ? h(TavernLedger, { sessionId: props.sessionId, ledger: view.ledger, ledgerTask: view.ledgerTask, busy: running || view.activity?.busy }) : null,
+					displayed.posture ? h("section", { className: "dsh-tavern-status-section" },
 						h("div", { className: "dsh-tavern-status-label" }, "人物姿势"),
 						view.posture ? h("div", { className: "dsh-tavern-status-now" }, view.posture) : h("div", { className: "dsh-tavern-status-empty" }, "等待第一轮状态结算")
-					)
+					) : null
 
 				)
 			);
@@ -958,6 +958,31 @@
                 error ? h("div", { className: "dsh-card-error", role: "alert" }, error) : null);
         }
 
+        // Optional 酒馆状态 sections: this game's own choice, else the global setting.
+        function useTavernStatusSections(view) {
+            const global = React.useSyncExternalStore(displayPreferences.subscribe, displayPreferences.snapshot, displayPreferences.snapshot);
+            return Object.fromEntries(TAVERN_STATUS_SECTIONS.map(([name]) => [name, view?.statusSections?.[name] ?? global?.statusSections?.[name] === true]));
+        }
+        function TavernLocalStatusSections(props) {
+            const h = React.createElement;
+            const state = useLiveTavernView(props.sessionId, "status-sections");
+            const displayed = useTavernStatusSections(state.view);
+            const [busy, setBusy] = React.useState(false);
+            const [error, setError] = React.useState("");
+            async function change(name, shown) {
+                setBusy(true); setError("");
+                try { await rpc("setStatusSection", { name, shown }, props.sessionId); liveTavernView.invalidate(props.sessionId); }
+                catch (err) { setError(String(err.message || err)); }
+                finally { setBusy(false); }
+            }
+            return h("section", { className: "dsh-local-section" }, h("h3", null, "酒馆状态显示"),
+                h("p", { className: "dsh-local-help" }, "未单独设置时跟随全局设置；仅影响显示。"),
+                TAVERN_STATUS_SECTIONS.map(([name, title, description]) => h("label", { key: name, className: "dsh-tavern-background-task" },
+                    h("span", null, title, h("span", { className: "dsh-tavern-settings-desc" }, description)),
+                    h("input", { type: "checkbox", role: "switch", "aria-label": "本局显示" + title, checked: displayed[name], disabled: busy || !state.view, onChange: event => change(name, event.target.checked) }))),
+                error ? h("p", { role: "alert" }, "保存失败：" + error) : null);
+        }
+
         function TavernConversationSettingsTab(props) {
             const h = React.createElement;
             const owner = props.sessions.subagentAddress(props.sessionId)?.parentSessionId || props.sessionId;
@@ -972,6 +997,7 @@
                         h(TavernConversationPreset, { key: owner + ":preset", sessionId: owner }),
                         h(UserPreferenceProfileTab, { key: owner + ":profile", scope: { sessionId: owner }, conversationOnly: true }),
                         h("p", { className: "dsh-local-warning" }, "切换预设或长期偏好会使提示词缓存失效，首次请求会增加耗时和费用。")),
+                    h(TavernLocalStatusSections, { key: owner + ":sections", sessionId: owner }),
                     h(TavernConversationBackgroundModel, { key: owner, sessionId: owner }), h(TavernConversationWritingSkills, { key: owner + ":skills", sessionId: owner }),
                     h(TavernConversationPlugins, { key: owner + ":plugins", sessionId: owner })) : h("p", null, "请选择一个游玩对话。")));
         }
@@ -1549,6 +1575,7 @@
                 { name: "conversation.session.header.utilities", id: "dsh-tavern-conversation-settings", order: 80 },
                 props => React.createElement(TavernConversationSettingsAction, { ...props, sessions: ctx.sessions, open: sessionId => openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId }) })
             )), "dsh-tavern: conversation settings action");
+			ctx.effect(() => tavernPanelRegistry.onPin(sessionId => openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId })), "dsh-tavern: reveal pinned panels");
 			ctx.effect(() => ctx.betterSidebar.registerTab({
 				id: "dsh-tavern:status",
 				title: "酒馆状态",
