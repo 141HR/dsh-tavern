@@ -165,7 +165,6 @@
 			const liveState = useLiveTavernView(props.sessionId, stateKey);
 			const view = liveState.view;
 			const loadState = liveState.phase;
-			const displayed = useTavernStatusSections();
             React.useEffect(function () {
                 if (view?.characterDesignTask?.status === "done" && view.characterDesignTask.published?.length) notifyTavernDataChanged(["worldbooks", "cards"], "character-design");
             }, [props.sessionId, JSON.stringify(view?.characterDesignTask?.published || [])]);
@@ -376,7 +375,7 @@
 						),
 						guideError ? h("div", { className: "dsh-card-error" }, guideError) : null
 					),
-					displayed.characterDesigns ? h("section", { className: "dsh-tavern-status-section" },
+					h("section", { className: "dsh-tavern-status-section" },
 						h("div", { className: "dsh-tavern-character-design-head" },
                             h("div", { className: "dsh-tavern-status-label" }, "人物设计档案（" + ((view.characterDesigns && view.characterDesigns.characters || []).length) + "）"),
                             h("button", { className: "dsh-tavern-btn", disabled: running || view.activity?.busy || view.characterDesignTask?.status === "running", onClick: () => designCharacter(view.characterDesignTask?.status === "failed" ? view.characterDesignTask.guidance : "") }, view.characterDesignTask?.status === "running" ? "设计中…" : view.characterDesignTask?.status === "failed" ? "重试设计" : "设计人物")),
@@ -406,10 +405,10 @@
 								});
 							}) : h("div", { className: "dsh-tavern-status-empty" }, "点击“设计人物”，按你的要求创建或补充档案。")
 						)
-					) : null,
+					),
 					h(TavernPluginTasks, { sessionId: props.sessionId, activity: view.activity, busy: running || view.activity?.busy || view.activity?.phase === "pending" }),
-					displayed.ledger ? h(TavernLedger, { sessionId: props.sessionId, ledger: view.ledger, ledgerTask: view.ledgerTask, busy: running || view.activity?.busy }) : null,
-					displayed.posture ? h("section", { className: "dsh-tavern-status-section" },
+					h(TavernLedger, { sessionId: props.sessionId, ledger: view.ledger, ledgerTask: view.ledgerTask, busy: running || view.activity?.busy }),
+					view.postureEnabled ? h("section", { className: "dsh-tavern-status-section" },
 						h("div", { className: "dsh-tavern-status-label" }, "人物姿势"),
 						view.posture ? h("div", { className: "dsh-tavern-status-now" }, view.posture) : h("div", { className: "dsh-tavern-status-empty" }, "等待第一轮状态结算")
 					) : null
@@ -956,12 +955,6 @@
                 h("div", { className: "dsh-tavern-plugin-tasks" }, tasks.manual.map(task => h("button", { key: task.key, type: "button", className: "dsh-tavern-btn",
                     title: task.description || "插件 " + task.plugin, disabled: props.busy || running || Boolean(starting), onClick: () => void run(task) }, starting === task.key ? "启动中…" : task.title))),
                 error ? h("div", { className: "dsh-card-error", role: "alert" }, error) : null);
-        }
-
-        // Optional 酒馆状态 sections follow the global display setting.
-        function useTavernStatusSections() {
-            const global = React.useSyncExternalStore(displayPreferences.subscribe, displayPreferences.snapshot, displayPreferences.snapshot);
-            return Object.fromEntries(TAVERN_STATUS_SECTIONS.map(([name]) => [name, global?.statusSections?.[name] === true]));
         }
 
         function TavernConversationSettingsTab(props) {

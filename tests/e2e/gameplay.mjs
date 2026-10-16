@@ -128,22 +128,7 @@ async function inspectScreen() {
   await openStatus()
   await page.frameLocator('.dsh-tavern-status-runtime iframe.dsh-tavern-message-frame:not([aria-hidden="true"])')
     .locator('#e2e-gold').filter({ hasText: /^金币：10$/ }).waitFor()
-  if (postureShown) await page.getByText('站在柜台前，收下奖励。', { exact: true }).filter({ visible: true }).waitFor()
-}
-// 人物姿势 is hidden in 酒馆状态 until turned on in global settings.
-let postureShown = false
-async function showPosture() {
-  assert.equal(await page.getByText('站在柜台前，收下奖励。', { exact: true }).filter({ visible: true }).count(), 0, '人物姿势默认不显示')
-  await page.getByText('Settings', { exact: true }).filter({ visible: true }).first().click()
-  await page.getByText('DSH Tavern', { exact: true }).filter({ visible: true }).last().click()
-  const toggle = page.getByRole('switch', { name: '酒馆状态显示人物姿势', exact: true })
-  await toggle.click()
-  await page.getByRole('status').filter({ hasText: '已保存，对所有对话立即生效' }).first().waitFor()
-  await page.keyboard.press('Escape')
-  postureShown = true
-  await openStatus()
-  const posture = page.getByText('站在柜台前，收下奖励。', { exact: true }).filter({ visible: true })
-  await posture.waitFor()
+  await page.getByText('站在柜台前，收下奖励。', { exact: true }).filter({ visible: true }).waitFor()
 }
 try {
   await step('准备独立运行环境', async () => {
@@ -497,7 +482,6 @@ try {
     await composer.fill('领取任务奖励')
     await composer.press('Enter')
     await inspectScreen()
-    await showPosture()
     report.beforeReload = inspectSaved(await savedChat())
     await page.screenshot({ path: join(output, 'before-reload.png'), fullPage: true })
   })

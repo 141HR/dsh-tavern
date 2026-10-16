@@ -139,15 +139,12 @@
                 error ? h("p", { className: "dsh-tavern-settings-error", role: "alert" }, error) : null);
         }
 
-        // Optional 酒馆状态 sections, hidden unless turned on in global settings.
-        const TAVERN_STATUS_SECTIONS = [["characterDesigns", "人物设计档案", "按你的要求创建或补充人物档案。"],
-            ["ledger", "游玩台账", "手动整理剧情中的物品、人物和地点备忘。"], ["posture", "人物姿势", "查看后台总结的人物位置和动作；是否结算在本局设置中开关。"]];
         const displayPreferences = (() => {
             let value = null, revision = 0;
             const listeners = new Set();
             const key = "dsh-tavern:display-preferences-changed";
             function apply(settings) {
-                value = { hideContextAndReasoning: settings.hideContextAndReasoning === true, statusSections: Object.assign({}, settings.statusSections) };
+                value = { hideContextAndReasoning: settings.hideContextAndReasoning === true };
                 document.documentElement.classList.toggle("dsh-tavern-hide-process", value.hideContextAndReasoning);
                 listeners.forEach(listener => listener());
             }
@@ -194,8 +191,6 @@
             return h("section", { className: "dsh-tavern-settings-group dsh-tavern-display-preferences" },
                 row("隐藏上下文注入和思考过程", "隐藏对话中的上下文注入、已思考和思考过程。仅影响显示，正文、模型请求和存档内容不变。",
                     preferences?.hideContextAndReasoning === true, value => ({ hideContextAndReasoning: value })),
-                TAVERN_STATUS_SECTIONS.map(([name, title, description]) => row("酒馆状态显示" + title, description,
-                    preferences?.statusSections[name] === true, value => ({ statusSections: { [name]: value } }))),
                 notice ? h("p", { className: "dsh-tavern-settings-desc", role: "status" }, notice) : null);
         }
 
