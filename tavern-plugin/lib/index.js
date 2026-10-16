@@ -1993,7 +1993,6 @@ export async function apply(ctx) {
       cardUpdate,
       statusBarPlacement: chat.statusBarPlacement === 'body' ? 'body' : 'sidebar',
       posture: chat.posture || '',
-      postureEnabled: normalizeBackgroundTasks(chat.backgroundTasks).posture,
       ledger: readLedger(chat.ledger),
       ledgerTask: manualLedger.project(chat),
       characterDesigns: projectCharacterDesignDocument(chat.characterDesignDocument),

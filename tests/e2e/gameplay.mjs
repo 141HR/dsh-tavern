@@ -128,7 +128,6 @@ async function inspectScreen() {
   await openStatus()
   await page.frameLocator('.dsh-tavern-status-runtime iframe.dsh-tavern-message-frame:not([aria-hidden="true"])')
     .locator('#e2e-gold').filter({ hasText: /^金币：10$/ }).waitFor()
-  await page.getByText('站在柜台前，收下奖励。', { exact: true }).filter({ visible: true }).waitFor()
 }
 try {
   await step('准备独立运行环境', async () => {
