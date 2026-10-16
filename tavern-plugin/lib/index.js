@@ -170,7 +170,7 @@ import { createDisplayRuntimeStore, displayRuntimeReceipt } from './domain/displ
 import { createPhoneChat } from './domain/phone-chat.js'
 import { createPresetLibrary } from './domain/preset-library.js'
 import { createForegroundOrchestrationStrategies } from './domain/foreground-orchestration-strategies.js'
-import { clearFailedTurnSurface, rollbackAvailability, reshadowRolledBackRounds } from './domain/rollback-surface.js'
+import { clearFailedTurnSurface, rollbackAvailability, reshadowRolledBackRounds, interruptedSurfaceTurns } from './domain/rollback-surface.js'
 import { assistantResultForTurn } from './domain/session-turn-result.js'
 import { forkTurnsByMessageId as forkTargetsFromSession } from './domain/conversation-fork-targets.js'
 import { createTavernRetryLimiter } from './domain/tavern-retry-limiter.js'
@@ -3814,7 +3814,9 @@ export async function apply(ctx) {
       if (!chat) return 0
       const availability = rollbackAvailability(chat, { events: sessionEvents(session), nodes: session.surface?.nodes || [] })
       let cleared = 0
-      for (const turn of availability.unclearedTurns || []) cleared += clearFailedTurnSurface({ session, turn })
+      // A turn the server stopped in the middle never ended, so nothing cleaned it up.
+      const turns = new Set([...(availability.unclearedTurns || []), ...interruptedSurfaceTurns({ events: sessionEvents(session), nodes: session.surface?.nodes || [] })])
+      for (const turn of turns) cleared += clearFailedTurnSurface({ session, turn })
       if (cleared) await sessionStore.flush(session)
       else if (!availability.canRollback && availability.reason && /失败回合/.test(availability.reason)) console.warn('dsh-tavern: 上一次失败回合的残留无法清理，本轮请求可能带上它:', availability.reason)
       return cleared
