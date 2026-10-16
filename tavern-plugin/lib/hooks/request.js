@@ -1,3 +1,4 @@
+import { normalizeProviderOverflow } from '../domain/provider-overflow.js'
 import { synchronizeBodyEdits } from '../domain/body-editor.js'
 import { randomUUID } from 'node:crypto'
 import { lastRoundVariableChanges } from '../domain/foreground-variable-changes.js'
@@ -31,6 +32,9 @@ export function registerRequestHooks({
   })
 
   ctx.on('agent/request-error', tavernRetryLimiter.handle, { prepend: true })
+  // Registered last with prepend, so it runs first: the retry limiter and DSH's
+  // overflow compaction both see the normalized code.
+  ctx.on('agent/request-error', normalizeProviderOverflow, { prepend: true })
 
   ctx.on('agent/pre-step', async function (payload, next) {
     const sessionId = payload.agent && payload.agent.session ? payload.agent.session.id : ''

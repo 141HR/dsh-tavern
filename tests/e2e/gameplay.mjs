@@ -130,8 +130,8 @@ try {
   await step('准备独立运行环境', async () => {
     if (compactionScenario) {
       await mkdir(data, { recursive: true })
-      await writeFile(join(data, 'tavern-settings.json'), JSON.stringify({ contextCompaction: { mode: compactionScenario === 'rounds' ? 'rounds' : ['manual', 'overflow', 'legacy'].includes(compactionScenario) ? 'manual' : 'percent', rounds: 2, percent: 50, retainRounds: 2 } }))
-      await writeFile(join(output, 'model-control.json'), JSON.stringify({ foregroundPadding: compactionScenario === 'overflow' ? 4000 : 650, backgroundPadding: 0, window: compactionScenario === 'overflow' ? 262144 : 32768 }))
+      await writeFile(join(data, 'tavern-settings.json'), JSON.stringify({ contextCompaction: { mode: compactionScenario === 'rounds' ? 'rounds' : ['manual', 'overflow', 'provider-overflow', 'legacy'].includes(compactionScenario) ? 'manual' : 'percent', rounds: 2, percent: 50, retainRounds: 2 } }))
+      await writeFile(join(output, 'model-control.json'), JSON.stringify({ foregroundPadding: ['overflow', 'provider-overflow'].includes(compactionScenario) ? 4000 : 650, backgroundPadding: 0, window: ['overflow', 'provider-overflow'].includes(compactionScenario) ? 262144 : 32768 }))
     }
     if (displayScenario) {
       await mkdir(data,{recursive:true})
