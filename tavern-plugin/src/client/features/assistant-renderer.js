@@ -529,7 +529,7 @@
 			function TavernInlineStatusRuntime(props) {
 				const state = useLiveTavernView(props.sessionId, "inline-status");
 				return state.view ? React.createElement(TavernPersistentStatusRuntime, {
-					sessionId: props.sessionId, view: state.view, executeSlash: props.executeSlash
+					sessionId: props.sessionId, view: state.view, executeSlash: props.executeSlash, panels: "status"
 				}) : null;
 			}
             function TavernPreparedScriptMessage(props) {

@@ -19,6 +19,8 @@ import { surfaceRecoveryChecks } from './surface-recovery.mjs'
 import { cardVariableUpdateChecks } from './card-variable-update.mjs'
 import { cardUpdateChecks } from './card-update.mjs'
 import { sidebarUpgrade } from './sidebar-upgrade.mjs'
+import { pinPanelChecks } from './pin-panel.mjs'
+import { mobileSidebarChecks } from './mobile-sidebar.mjs'
 import { compactedEditedLegacySession } from '../fixtures/compacted-legacy-session.mjs'
 import { encodeMigratedSessionLog, parseSessionLog } from '../../tavern-plugin/lib/domain/legacy-session-migration.js'
 import { compactionChecks } from './compaction.mjs'
@@ -33,7 +35,8 @@ import { spawn } from 'node:child_process'
 import { chromium } from 'playwright'
 import { createChatJournalStore } from '../../tavern-plugin/lib/domain/chat-journal-store.js'
 
-const displayScenario = process.argv.includes('--display-regression')
+const pinScenario = process.argv.includes('--pin-panel')
+const displayScenario = pinScenario || process.argv.includes('--display-regression')
 const recoveryScenario = process.argv.includes('--surface-recovery')
 const helperApiScenario = process.argv.includes('--helper-api')
 const compactionScenario = process.argv.find(arg => arg.startsWith('--compaction='))?.split('=')[1]
@@ -124,7 +127,33 @@ async function inspectScreen() {
   await openStatus()
   await page.frameLocator('.dsh-tavern-status-runtime iframe.dsh-tavern-message-frame:not([aria-hidden="true"])')
     .locator('#e2e-gold').filter({ hasText: /^金币：10$/ }).waitFor()
-  await page.getByText('站在柜台前，收下奖励。', { exact: true }).filter({ visible: true }).waitFor()
+  if (postureShown) await page.getByText('站在柜台前，收下奖励。', { exact: true }).filter({ visible: true }).waitFor()
+}
+// 人物姿势 is hidden in 酒馆状态 until turned on in global settings.
+let postureShown = false
+async function showPosture() {
+  assert.equal(await page.getByText('站在柜台前，收下奖励。', { exact: true }).filter({ visible: true }).count(), 0, '人物姿势默认不显示')
+  await page.getByText('Settings', { exact: true }).filter({ visible: true }).first().click()
+  await page.getByText('DSH Tavern', { exact: true }).filter({ visible: true }).last().click()
+  const toggle = page.getByRole('switch', { name: '酒馆状态显示人物姿势', exact: true })
+  await toggle.click()
+  await page.getByRole('status').filter({ hasText: '已保存，对所有对话立即生效' }).first().waitFor()
+  await page.keyboard.press('Escape')
+  postureShown = true
+  await openStatus()
+  const posture = page.getByText('站在柜台前，收下奖励。', { exact: true }).filter({ visible: true })
+  await posture.waitFor()
+  // 本局设置 overrides the global choice for this game only.
+  const local = page.getByRole('switch', { name: '本局显示人物姿势', exact: true })
+  for (const shown of [false, true]) {
+    await page.getByText('本局设置', { exact: true }).filter({ visible: true }).first().click()
+    assert.equal(await local.isChecked(), !shown)
+    await local.click()
+    await page.waitForFunction(([name, value]) => [...document.querySelectorAll('[role="switch"]')].some(node => node.getAttribute('aria-label') === name && node.checked === value), ['本局显示人物姿势', shown])
+    await openStatus()
+    if (shown) await posture.waitFor()
+    else await posture.waitFor({ state: 'detached' })
+  }
 }
 try {
   await step('准备独立运行环境', async () => {
@@ -475,6 +504,7 @@ try {
     await composer.fill('领取任务奖励')
     await composer.press('Enter')
     await inspectScreen()
+    await showPosture()
     report.beforeReload = inspectSaved(await savedChat())
     await page.screenshot({ path: join(output, 'before-reload.png'), fullPage: true })
   })
@@ -555,6 +585,10 @@ try {
     await incrementalMvuChecks({page,step,savedChat,output,report,restartServer})
   } else if (process.argv.includes('--background-lifecycle')) {
     await backgroundLifecycleChecks({page,step,savedChat,data,output,report,restartServer})
+  } else if (process.argv.includes('--mobile-sidebar')) {
+    await mobileSidebarChecks({page,step,output,report})
+  } else if (pinScenario) {
+    await pinPanelChecks({page,step,output,report})
   } else if (displayScenario) {
     await displayRegressionChecks({page,step,savedChat,data,output,report,restartServer})
   } else if (compactionScenario) {
