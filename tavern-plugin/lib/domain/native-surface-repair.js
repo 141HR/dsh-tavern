@@ -126,7 +126,8 @@ export function applyNativeSurfaceRepair(session, chat, plan, { repairId }) {
   const anchors = []
   for (const [index, round] of plan.rounds.entries()) {
     const id = `tavern-native-repair:${repairId}:${index}`
-    const turn = Number(chat.regeneratedDshTurns?.[String(round.turn)]) || round.turn
+    // Story turn, as a regenerate's projection writes it (story alignment reads it).
+    const turn = round.turn
     const input = round.userText === null ? null : write('user/message', { id: id + ':input', role: 'user',
       content: [{ type: 'text', text: round.userText }], source: { kind: 'user', repair: { id: repairId } } })
     const reply = write('assistant/message', { turn, step: 1, message: { id: round.greeting ? nativeOpeningMessageId(chat.id) : id + ':reply',
@@ -142,4 +143,21 @@ export function applyNativeSurfaceRepair(session, chat, plan, { repairId }) {
 export function repairNativeSurface(session, chat, options) {
   const plan = planNativeSurfaceRepair({ chat, events: sessionEvents(session), nodes: session.surface?.nodes || [] })
   return { plan, ...applyNativeSurfaceRepair(session, chat, plan, options) }
+}
+
+/** Record a repair in the save: new anchors for rewritten rounds, marker cleared.
+ * A row that changed since the repair read it keeps its old anchor; the next
+ * reconcile repairs again. Returns false when there is nothing to write. */
+export function recordNativeSurfaceRepair(current, repaired, anchors) {
+  let changed = false
+  if (current.nativeSync) { delete current.nativeSync; changed = true }
+  for (const { messageIndex, anchor } of anchors) {
+    const row = current.messages?.[messageIndex], read = repaired.messages?.[messageIndex]
+    if (!anchor || row?.role !== 'assistant' || row.text !== read?.text || Number(row.turn) !== Number(read?.turn)) continue
+    row.nativeAnchor = anchor
+    // The rewritten reply already carries the edit; replaying the marker would target a shadowed node.
+    delete row.bodyEdit
+    changed = true
+  }
+  return changed
 }

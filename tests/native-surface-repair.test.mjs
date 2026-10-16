@@ -150,3 +150,23 @@ test('1000 轮存档坏了最后一轮：前 999 轮节点逐个不变，修复�
   assert.deepEqual(h.session.surface.nodes.slice(0, kept.length), kept)
   assert.ok(elapsed < 1000, 'repair took ' + elapsed + 'ms')
 })
+
+test('修复写回存档：只给读时未变的楼层换锚点，清掉待修复标记与旧编辑标记', async () => {
+  const { recordNativeSurfaceRepair } = await import('../tavern-plugin/lib/domain/native-surface-repair.js')
+  const h = game(2)
+  h.chat.messages.at(-1).text = '改过'
+  h.chat.messages.at(-1).bodyEdit = { id: 'old', seq: 1, turn: 3 }
+  h.chat.nativeSync = { status: 'stale', reason: 'x', at: 1 }
+  const read = structuredClone(h.chat)
+  const result = repairNativeSurface(h.session, read, { repairId: 'w' })
+  const current = structuredClone(h.chat)
+  assert.equal(recordNativeSurfaceRepair(current, read, result.anchors), true)
+  assert.equal(current.nativeSync, undefined)
+  assert.equal(current.messages.at(-1).bodyEdit, undefined)
+  assert.deepEqual(current.messages.at(-1).nativeAnchor, result.anchors[0].anchor)
+  // The row changed after the repair read it: keep its anchor, repair again later.
+  const moved = structuredClone(h.chat); moved.messages.at(-1).text = '又改了'
+  recordNativeSurfaceRepair(moved, read, result.anchors)
+  assert.deepEqual(moved.messages.at(-1).nativeAnchor, h.chat.messages.at(-1).nativeAnchor)
+  assert.equal(recordNativeSurfaceRepair(structuredClone(current), read, []), false)
+})

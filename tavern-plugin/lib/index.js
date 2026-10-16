@@ -97,6 +97,7 @@ import { createBodyEditor } from './domain/body-editor.js'
 import { appendHelperUserSessionContext } from './domain/helper-user-session-context.js'
 import { userMessageForTurn, requestIdForTurn, requestIdForMessages } from './domain/session-turn-input.js'
 import { inspectStoryAlignment, nativeStoryTurns } from './domain/story-alignment.js'
+import { repairNativeSurface, recordNativeSurfaceRepair } from './domain/native-surface-repair.js'
 import { sessionOpeningDescriptor, prepareSessionOpening } from './domain/session-opening.js'
 import { scriptPromptScanText } from './domain/tavern-script-prompts.js'
 import { createOpeningPreparation } from './domain/opening-preparation.js'
@@ -4743,6 +4744,29 @@ export async function apply(ctx) {
     } finally { reconciling.delete(sessionId) }
   }
 
+  async function repairNativeStory(sessionId, session, reason) {
+    const chat = await chatForSession(sessionId)
+    if (!chat || chat.regenInProgress || !['story', 'script'].includes(chat.mode || 'story')) return null
+    try {
+      const result = repairNativeSurface(session, chat, { repairId: randomUUID() })
+      if (result.applied) await sessionStore.flush(session)
+      await updateChat(chat.id, current => recordNativeSurfaceRepair(current, chat, result.anchors) ? current : undefined, { source: 'native-repair' })
+      if (result.applied) console.warn('dsh-tavern: 模型上下文与存档不一致（' + reason + '），已按存档重写最近 ' + result.plan.rounds.length + ' 轮')
+      return result
+    } catch (error) {
+      console.warn('dsh-tavern: 模型上下文修复失败，下次打开或操作时重试：' + str(error?.message || error))
+      await markNativeStale(chat.id, reason).catch(() => {})
+      return null
+    }
+  }
+  async function markNativeStale(chatId, reason) {
+    await updateChat(chatId, current => {
+      if (current.nativeSync?.status === 'stale') return undefined
+      current.nativeSync = { status: 'stale', reason: str(reason), at: Date.now() }
+      return current
+    }, { source: 'native-repair.stale' })
+  }
+
   // The save's latest player rounds, oldest first: enough rows to cover the native window.
   async function storyAlignmentInput(sessionId, nativeCount) {
     const fields = ['mode', 'nativeCommits', 'suppressedDshTurns', 'regeneratedDshTurns', 'regenInProgress']
@@ -4785,8 +4809,14 @@ export async function apply(ctx) {
         await sessionStore.flush(session)
         console.warn('dsh-tavern: 第 ' + shadowed.join('、') + ' 轮已回退但模型仍能看到，已重新隐藏')
       }
-      const after = inspectStoryAlignment({ session, ...(await storyAlignmentInput(sessionId, nativeStoryTurns(session).length)) })
-      if (after.state === 'mismatch') console.warn('dsh-tavern: 存档与模型上下文的轮次不一致，未自动修复：' + JSON.stringify(after.mismatch))
+      let after = inspectStoryAlignment({ session, ...(await storyAlignmentInput(sessionId, nativeStoryTurns(session).length)) })
+      // The save is the truth: rewrite the native tail after the last round both still agree on.
+      const stale = (await chatSliceForSession(sessionId, [], ['nativeSync']))?.chat?.nativeSync?.status === 'stale'
+      if ((after.state === 'mismatch' || after.anchors.lost.length || stale) && stillIdle()) {
+        await repairNativeStory(sessionId, session, after.state === 'mismatch' ? '轮次不一致' : stale ? '上次同步失败' : '找不到原生位置')
+        after = inspectStoryAlignment({ session, ...(await storyAlignmentInput(sessionId, nativeStoryTurns(session).length)) })
+      }
+      if (after.state === 'mismatch') console.warn('dsh-tavern: 存档与模型上下文的轮次修复后仍不一致：' + JSON.stringify(after.mismatch))
       return after
     } catch (error) {
       console.warn('dsh-tavern: 存档与模型上下文核对失败：' + str(error?.message || error))
