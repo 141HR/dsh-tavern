@@ -146,3 +146,19 @@ test('插件整段替换正文：HTML 块必须原样保留，只改文字', asy
   await h.editor.replaceText(h.session.id, '雨停了，灯亮了。\n\n' + block)
   assert.equal(h.chat.messages[1].sourceText, '雨停了，灯亮了。\n\n' + block)
 })
+
+test('原生上下文丢了最后一轮：有修复能力时照样编辑，保存后按存档修复', async () => {
+  const h = fixture('原正文')
+  h.session.surface.nodes.splice(1) // The reply left the surface.
+  const repairs = []
+  h.options.repairNative = async (sessionId, session) => { repairs.push(sessionId); assert.equal(session, h.session) }
+  const editor = createBodyEditor(h.options)
+  const edit = await editor.read(h.session.id)
+  await editor.save(h.session.id, { token: edit.token, texts: ['改过的正文'] })
+  assert.equal(h.chat.messages[1].sourceText, '改过的正文')
+  assert.equal(h.chat.messages[1].bodyEdit, undefined, 'no marker for a node that is not there')
+  assert.ok(repairs.length >= 2, 'repaired when opening the edit and after saving')
+  // Without repair the old refusal stays.
+  const plain = fixture('原正文'); plain.session.surface.nodes.splice(1)
+  await assert.rejects(plain.editor.read(plain.session.id), /不在当前上下文/)
+})

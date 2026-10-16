@@ -139,10 +139,11 @@ export function createSessionStateView({ activity: activityOf, evidence: evidenc
       rollbackTargetTurn: settlementTurn(chat),
       canReplayFailedTurn: replayTarget !== null,
       replayFailedTurn: replayTarget === null ? null : replayTarget.turn,
-      canRollback: rollbackState.canRollback,
+      // The save decides: a round the native surface lost is repaired, not refused.
+      canRollback: rollbackState.canRollback || hasRound,
       canClearIncompleteReply: rollbackState.canClearIncompleteReply,
       undoRollbackTurn: canUndoRollback(chat, evidence.session) ? chat.rollbackUndo.turn : null,
-      rollbackUnavailableReason: rollbackState.reason
+      rollbackUnavailableReason: rollbackState.canRollback || hasRound ? '' : rollbackState.reason
     }
     if (native && chat.id && Number.isSafeInteger(chat._storageRevision)
       && key.length + (sharedMappings ? JSON.stringify({...result,regeneratedDshTurns:undefined}).length + mappingFields.bytes(mappings) : JSON.stringify(result).length) < 1024*1024) {

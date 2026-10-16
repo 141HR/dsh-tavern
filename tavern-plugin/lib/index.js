@@ -3889,6 +3889,7 @@ export async function apply(ctx) {
     cancelSettlement,
     present: presentStory,
     sessionPatch,
+    repairNative: (sessionId, session) => repairNativeStory(sessionId, session, '回退或重新生成时找不到原生位置'),
   })
 
   const bodyEditor = createBodyEditor({
@@ -3903,6 +3904,7 @@ export async function apply(ctx) {
     },
     present: presentStory,
     sessionPatch,
+    repairNative: (sessionId, session) => repairNativeStory(sessionId, session, '编辑正文时找不到原生位置'),
   })
 
   // ---------- HTTP RPC（客户端同源 fetch） ----------
