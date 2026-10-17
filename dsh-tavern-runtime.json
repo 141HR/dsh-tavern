@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "77c045b795b65a51434babff0cdcaadd358d045f",
-  "releaseSequence": 643,
+  "revision": "f85acdf9c34c267e118404bfa14e5c6edb56dfb2",
+  "releaseSequence": 645,
   "version": "2.7.0",
   "files": [
     {
@@ -80,6 +80,11 @@
       "size": 3777
     },
     {
+      "path": "bin/import-user-home.mjs",
+      "sha256": "fd306e2953cdb9b037a0b6b317beefa2530eb5ced639d17a64aecb89f5bdf92f",
+      "size": 9889
+    },
+    {
       "path": "bin/installation-process.mjs",
       "sha256": "37495f8116b21afce9fa0e60af059989b9155ea8f1ecc7f034c54b4d37101362",
       "size": 38127
@@ -136,8 +141,8 @@
     },
     {
       "path": "bin/profile-installation.mjs",
-      "sha256": "2e368c62d06a20735cf30d07a960e4d219861f066b63be5ffe970abd75c6a67a",
-      "size": 19013
+      "sha256": "40ace06e2b4335b940bef4a2b43f1d2902d0887d382401622b95a44b408376f6",
+      "size": 19506
     },
     {
       "path": "bin/prune-installed-files.mjs",
