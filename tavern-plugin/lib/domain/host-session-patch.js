@@ -98,7 +98,10 @@ export async function prepareExpandedPatch(runtime, options = {}) {
     await compile('@deepseek-ai/dsh-session-format-v2-to-v3', text => once(text,
       'if (event.type === "assistant/message" && sources !== void 0) throw',
       `if (event.type === "assistant/message" && sources !== void 0 && !${own}) throw`))
-    const { sessionFormatCatalog: catalog } = await compile('@deepseek-ai/dsh-session-format-catalog')
+    const migration = await compile('@deepseek-ai/dsh-session-format-v3-to-v4')
+    migration.RELEASED_V3_EVENT_TYPES.add(marker)
+    const catalogs = await compile('@deepseek-ai/dsh-session-format-catalog')
+    const { sessionFormatCatalog: catalog } = catalogs
     // 0.2.1 exposes the plugin apply() rather than the backend class.
     // Export the pinned internal class only from our in-memory module.
     const { JsonlSessionPersistence: PatchedPersistence } = await compile('@deepseek-ai/dsh-session-persistence-jsonl',
@@ -122,6 +125,7 @@ export async function prepareExpandedPatch(runtime, options = {}) {
     const undoPersistence = []
     return {
       catalog, patchedSurface, clientSource, marker,
+      migration: { ...catalogs, historicalChildCatalogSource: migration.historicalChildCatalogSource },
       patchQuery(instance) {
         assert.equal(instance._observations.cache.size, 0, 'Install before querying Session history')
         for (const [target, prototype] of [
@@ -196,6 +200,7 @@ const INSTALLED = Symbol.for('dsh-tavern.host-session-patch.v1')
 // variants must be appended here (with their own sha256) before they are shipped.
 // Values recomputed from the desktop app.asar with tmp/compute-pins.mjs.
 const PINNED_SHA256 = Object.freeze({
+  '@deepseek-ai/dsh-session-format-v3-to-v4': Object.freeze(['a6b974d110572bd0b16aa7ab09a30d9061944e8dc9f811e8c4a35e4891f83f12']),
   '@deepseek-ai/dsh-session/surface': Object.freeze(['ebe8920a22fca8d987cbacab94c9db92f71df44863f58370a1be559155be734e']),
   '@deepseek-ai/dsh-session': Object.freeze(['2f5dd07cb5c744a29abbb8003a8a4cefd9e582c6e2538074ca299a0ddd02a3bf']),
   '@deepseek-ai/dsh-session-persistence': Object.freeze(['cc0b6d3a224133af611b428d5a49020e300f86c3b4ba28037aeb219029bde3eb']),
@@ -353,6 +358,8 @@ export async function installHostSessionPatch({ hostRequire, persistence, query 
     return finish({ status: 'failed', hostVersion, reason: '会话补丁安装失败：' + (error.message || error) })
   }
   const handle = finish({ status: 'ready', hostVersion, clientSource: patch.clientSource })
+  handle.loadSessionCatalog = async () => patch.catalog
+  handle.loadSessionMigration = async () => patch.migration
   handle.dispose = () => patch.dispose()
   Object.defineProperty(persistence, INSTALLED, { value: handle })
   return handle
