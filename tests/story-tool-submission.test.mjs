@@ -2,9 +2,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
-import { createStorySubmissionTool, storySubmissionForTurn, activeStoryTurn, storyToolCallEnabled } from '../tavern-plugin/lib/domain/story-tool-submission.js'
+import { createStorySubmissionTool, foldStorySubmission, storySubmissionForTurn, activeStoryTurn, storyToolCallEnabled } from '../tavern-plugin/lib/domain/story-tool-submission.js'
 import { assistantResultForTurn } from '../tavern-plugin/lib/domain/session-turn-result.js'
 import { createNativePlayOrchestrationStrategy } from '../tavern-plugin/lib/domain/foreground-orchestration-strategies.js'
+import { Session } from './fixtures/dsh-session-host.mjs'
+import { appendSessionEvent, sessionEvents } from '../tavern-plugin/lib/domain/session-events.js'
+import { replaceSessionSurface } from '../tavern-plugin/lib/domain/session-surface-mutations.js'
+import { locateRollbackSurface } from '../tavern-plugin/lib/domain/rollback-surface.js'
 
 function fixture(content = '<game>正文\\引号"\n新行</game>', { error = false, result = content, turn = 2 } = {}) {
   const raw = JSON.stringify({ content })
@@ -138,8 +142,8 @@ test('真实 setter 独立保存当前对话，拒绝错误参数、工作台和
   assert.match(server, /storyToolCallEnabled: chat.storyToolCallEnabled === true/)
 })
 
-test('真实收尾 hook 将工具正文交给现有保存链路，不替换或破坏工具调用历史', async () => {
-  let hook, saved, replacements = 0
+test('真实收尾 hook 将工具正文交给现有保存链路，并把调用与回执折叠成保存后的正文', async () => {
+  let hook, saved, replacements = []
   const session = fixture('最终正文')
   const context = { ctx: { on(_name, handler) { hook = handler } }, clearRuntimePresetRequestState() {},
     backgroundAgentRunner: { owns: () => false, requestContext: () => undefined }, fullTemplateRuntime: { cancel() {} },
@@ -149,15 +153,45 @@ test('真实收尾 hook 将工具正文交给现有保存链路，不替换或�
     requestIdForTurn: () => 'rpc-1', roundAnchor: () => null, inputEventForTurn: () => null,
     assistantResultForTurn, turnOrchestrator: { recordFailure() { throw new Error('不应误判空正文') } },
     foregroundHandoff: { async finalize(input) { saved = input; return { reply: { sessionText: '正则投影正文' } } } },
-    replaceAssistantReply() { replacements++ } }
+    replaceAssistantReply(_session, result, text) { replacements.push([result.storyToolSubmission, result.receiptIndex, text]) } }
   const start = hooks.indexOf("  ctx.on('agent/turn-stopping'")
   const end = hooks.indexOf("  ctx.on('agent/error'", start)
   vm.runInNewContext(hooks.slice(start, end), context)
   await hook({ agent: { session }, turn: 2 })
   assert.equal(saved.assistantText, '最终正文')
   assert.equal(saved.requestId, 'rpc-1')
-  assert.equal(replacements, 0)
-  assert.equal(session.events.length, 4)
+  assert.deepEqual(replacements, [[true, 3, '正则投影正文']])
+})
+
+test('折叠后上下文只剩一条普通正文，回合结果、回退都按普通回合处理', () => {
+  const session = Session.create('story-tool-fold')
+  appendSessionEvent(session, 'turn/start', { turn: 1 })
+  const input = appendSessionEvent(session, 'user/message', { id: 'input-1', role: 'user', content: [{ type: 'text', text: '玩家输入' }], source: { kind: 'user' } }, { surfaceOp: 'append' })
+  const raw = JSON.stringify({ content: '原始正文' })
+  const call = appendSessionEvent(session, 'assistant/message', { turn: 1, step: 1, message: { id: 'call-1', role: 'assistant', content: [{ type: 'tool-call', id: 'submit-1', name: 'submit_story', arguments: raw }], source: { kind: 'model', provider: 'test', model: 'test' } } }, { surfaceOp: 'append' })
+  appendSessionEvent(session, 'tool/call', { turn: 1, step: 1, callId: 'submit-1', name: 'submit_story', arguments: raw })
+  const receipt = appendSessionEvent(session, 'tool/result', { turn: 1, step: 1, message: { id: 'receipt-1', role: 'user', content: [{ type: 'tool-result', toolCallId: 'submit-1', isError: false, content: [{ type: 'text', text: '原始正文' }] }], source: { kind: 'tool', callId: 'submit-1' } } }, { surfaceOp: 'append', sourceEventSeqs: [call.seq] })
+  appendSessionEvent(session, 'turn/end', { turn: 1, reason: { kind: 'completed' } })
+  const result = assistantResultForTurn(session, 1)
+  assert.deepEqual([result.index, result.receiptIndex], [call.seq, receipt.seq])
+
+  const start = server.indexOf('  function replaceAssistantReply(')
+  const context = { replaceSessionSurface, foldStorySubmission, randomUUID: () => 'projection-1' }
+  vm.runInNewContext(server.slice(start, server.indexOf('\n  }\n', start) + 4) + '; this.replace = replaceAssistantReply', context)
+  context.replace(session, result, '保存后的正文')
+
+  const visible = session.surface.nodes.map(seq => sessionEvents(session).find(event => event.seq === seq))
+  assert.deepEqual(visible.map(event => event.type), ['user/message', 'assistant/message'])
+  assert.deepEqual(visible[1].data.message.content, [{ type: 'text', text: '保存后的正文' }])
+  // The chat view only follows appends: the same step also gains a plain text answer.
+  const shown = sessionEvents(session).findLast(event => event.type === 'assistant/message' && event.surfaceOp === 'append')
+  assert.deepEqual([shown.data.turn, shown.data.step, shown.data.message.content], [1, 1, [{ type: 'text', text: '保存后的正文' }]])
+  assert.equal(storySubmissionForTurn(session, 1), null)
+  const after = assistantResultForTurn(session, 1)
+  assert.equal(after.text, '保存后的正文')
+  assert.equal(after.storyToolSubmission, undefined)
+  const rollback = locateRollbackSurface({ events: sessionEvents(session), nodes: session.surface.nodes })
+  assert.deepEqual(rollback.shadowedSeqs, [input.seq, visible[1].seq])
 })
 
 test('菜单开关携带 sessionId，加载或生成中禁用，失败不改变服务端值', async () => {

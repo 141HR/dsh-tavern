@@ -41,6 +41,8 @@ const pinScenario = process.argv.includes('--pin-panel')
 const displayScenario = pinScenario || process.argv.includes('--display-regression')
 const recoveryScenario = process.argv.includes('--surface-recovery')
 const helperApiScenario = process.argv.includes('--helper-api')
+// Story body submitted through the submit_story tool (per-conversation toggle, off by default).
+const storyToolScenario = process.argv.includes('--story-tool')
 const compactionScenario = process.argv.find(arg => arg.startsWith('--compaction='))?.split('=')[1]
 const source = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const runtime = resolve(process.env.TAVERN_E2E_RUNTIME || join(homedir(), '.dsh-tavern/runtime'))
@@ -209,6 +211,7 @@ try {
           TAVERN_PERF_BODY_REPEATS: process.env.TAVERN_PERF_BODY_REPEATS || '',
           TAVERN_E2E_BACKGROUND_DIR: (process.argv.includes('--background-lifecycle') || process.argv.includes('--background-failure')) ? output : '',
           TAVERN_E2E_REQUEST_AUDIT: join(output, 'preset-requests.jsonl'),
+          TAVERN_E2E_STORY_TOOL_LOG: storyToolScenario ? join(output, 'story-tool.jsonl') : '',
           TAVERN_E2E_MEMORY_AUDIT: process.argv.includes('--card-memory') ? join(output, 'memory-requests.jsonl') : '',
           TAVERN_E2E_SCENE_AUDIT: process.argv.includes('--scene-add') ? join(output, 'scene-requests.jsonl') : '',
           TAVERN_E2E_CONTEXT_AUDIT: process.argv.includes('--native-repair') || process.argv.includes('--failure-resilience') ? join(output, 'context-requests.jsonl') : '',
@@ -479,6 +482,13 @@ try {
   } else if (recoveryScenario) {
     await surfaceRecoveryChecks({ page, step, savedChat, output, report, root, restartServer })
   } else {
+  if (storyToolScenario) await step('开启正文走工具调用', async () => {
+    await page.getByRole('button', { name: '更多 ▾', exact: true }).click()
+    await page.getByRole('menuitemcheckbox', { name: '正文走工具调用：关', exact: true }).click()
+    await page.getByRole('button', { name: '更多 ▾', exact: true }).click()
+    await page.getByRole('menuitemcheckbox', { name: '正文走工具调用：开', exact: true }).waitFor()
+    await page.getByRole('button', { name: '更多 ▾', exact: true }).click()
+  })
   await step('玩一轮，确认正文、金币与人物姿势', async () => {
     const composer = page.getByRole('textbox', { name: /发消息|Message/ })
     await composer.fill('领取任务奖励')
@@ -813,6 +823,11 @@ try {
     report.nativeFormat.restart=true
   })
   // Every scenario ends with the story save agreeing with what the model sees (#196).
+  if (storyToolScenario) await step('正文均经 submit_story 提交', async () => {
+    const submitted = (await readFile(join(output, 'story-tool.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line).content)
+    report.storyToolSubmissions = submitted.length
+    for (const text of ['你获得了十枚金币。', '你再次领取了奖励，金币累计二十枚。', '雨夜里，你重新领取了奖励。']) assert.ok(submitted.some(content => content.startsWith(text)), text)
+  })
   if (process.env.TAVERN_E2E_BROKEN_STOP !== '1' && !['--settlement-performance', '--display-regression', '--text-colors', '--opening-only'].some(flag => process.argv.includes(flag))) await step('存档与模型上下文一致', async () => {
     const chat = await savedChat().catch(() => null)
     if (!chat?.sessionId) return

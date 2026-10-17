@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto'
 import { sessionEvents } from './session-events.js'
+import { createSessionSurfaceMutator } from './session-surface-mutations.js'
 
 export const STORY_SUBMIT_TOOL_NAME = 'submit_story'
 export const STORY_SUBMIT_PROMPT = [
@@ -50,10 +52,28 @@ export function storySubmissionForTurn(session, turn) {
       try { content = validContent(JSON.parse(model.block.arguments).content) } catch { continue }
       const resultText = (block.content || []).filter(part => part?.type === 'text').map(part => part.text).join('')
       if (resultText !== content) continue
-      return { index: model.index, event: model.event, text: content.trim(), content, toolCallId: block.toolCallId, storyToolSubmission: true }
+      return { index: model.index, receiptIndex: Number(event.seq ?? index), event: model.event, text: content.trim(), content, toolCallId: block.toolCallId, storyToolSubmission: true }
     }
   }
   return null
+}
+
+/**
+ * Turn a finished submission into an ordinary reply. The appended text lets the
+ * chat view show the step as an answer (it ignores surface replacements); the
+ * replacement then leaves that one text where the call, receipt and copy were,
+ * so the model sees the body once and rollback/regeneration see a normal round.
+ */
+export function foldStorySubmission(session, result, bodyText) {
+  const data = result.event.data
+  const message = content => ({ ...data.message, id: randomUUID(), source: { kind: 'model', provider: 'dsh-tavern', model: 'reply-projection' }, content })
+  const turn = Number(data.turn) || 0
+  const step = Number(data.step) || 1
+  const surface = createSessionSurfaceMutator(session)
+  const shown = surface.append('assistant/message', { turn, step, message: message([{ type: 'text', text: bodyText }]) }, { surfaceOp: 'append', sourceEventSeqs: [] })
+  const shownSeq = typeof shown === 'number' ? shown : shown.seq
+  surface.replace('assistant/message', { turn, step, message: message([{ type: 'text', text: bodyText }]) },
+    { start: result.index, end: shownSeq, sourceEventSeqs: [result.index, result.receiptIndex, shownSeq] })
 }
 
 export function activeStoryTurn(session) {

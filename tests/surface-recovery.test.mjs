@@ -138,32 +138,3 @@ test('卡片脚本在正文后写入的消息不会让这一轮无法回退，�
   assert.equal(target.assistantSeq, reply.seq)
   assert.deepEqual(target.shadowedSeqs, [input.seq, reply.seq, script.seq])
 })
-
-test('工具正文重新生成连同回执一起替换，不留下缺少调用的工具结果', async () => {
-  const { planRegenerationSurface, locateRollbackSurface, regenerationProjection, applyRegenerationProjection } = await import('../tavern-plugin/lib/domain/rollback-surface.js')
-  const session = Session.create('regen-story-receipt')
-  appendSessionEvent(session, 'turn/start', { turn: 1 })
-  const input = appendSessionEvent(session, 'user/message', user('input-1'), { surfaceOp: 'append' })
-  const old = storyTurn(session, 1, 'old', '旧正文')
-  const eventStart = sessionEvents(session).length
-  appendSessionEvent(session, 'turn/start', { turn: 2 })
-  const regen = appendSessionEvent(session, 'user/message', user('regen', 'dsh-tavern-regen'), { surfaceOp: 'append' })
-  const fresh = storyBody(session, 2, 'new', '新正文')
-  appendSessionEvent(session, 'turn/end', { turn: 2, reason: { kind: 'completed' } })
-  assert.deepEqual(session.surface.nodes, [input.seq, old.call.seq, old.receipt.seq, regen.seq, fresh.call.seq, fresh.receipt.seq])
-
-  const plan = planRegenerationSurface({ events: sessionEvents(session), nodes: session.surface.nodes, oldAssistantSeq: old.call.seq, eventStart })
-  assert.deepEqual([plan.start, plan.end], [old.call.seq, fresh.receipt.seq])
-  assert.equal(plan.finalAssistantSeq, fresh.call.seq)
-  assert.deepEqual(plan.shadowedSeqs, [old.call.seq, old.receipt.seq, regen.seq, fresh.call.seq, fresh.receipt.seq])
-  assert.deepEqual(plan.cleanups, [])
-  // The old body's own receipt is consumed with its call; nothing dangles after it.
-  const rollback = locateRollbackSurface({ events: sessionEvents(session), nodes: session.surface.nodes })
-  assert.equal(rollback.endSeq, fresh.receipt.seq)
-
-  const projection = regenerationProjection(plan, { turn: 1, step: 1, message: { id: 'tavern-regen:op', role: 'assistant', content: [{ type: 'text', text: '新正文' }], source: { kind: 'model', provider: 'test', model: 'test' } } }, 'op')
-  applyRegenerationProjection(session, projection)
-  const visible = session.surface.nodes.map(seq => sessionEvents(session).find(event => event.seq === seq))
-  assert.deepEqual(visible.map(event => event.data.message?.id ?? event.data.id), ['input-1', 'tavern-regen:op'])
-  for (const gone of [old.call.seq, old.receipt.seq, regen.seq, fresh.call.seq, fresh.receipt.seq]) assert.ok(!session.surface.nodes.includes(gone))
-})
