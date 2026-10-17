@@ -245,6 +245,7 @@ export function createBackgroundAgentSessions(options, task) {
           })
           // Publish identity before the first model turn, including failed starts.
           handle.agent.session.append('subagent/descriptor', descriptor)
+          options.onCreated?.(traceSessionId, str(input.sessionId))
         }
       } catch (error) {
         const wrapped = traceError(error, traceSessionId, input.task)

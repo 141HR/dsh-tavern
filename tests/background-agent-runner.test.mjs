@@ -35,7 +35,8 @@ test('人物设计读取工具在生图会话中只注册一次，跨任务保�
       })() }, async whenIdle() { await pending } }, async dispose() {} }
     }
   }
-  const runner = createBackgroundAgentRunner({ agents, id: () => session.id })
+  const created = []
+  const runner = createBackgroundAgentRunner({ agents, id: () => session.id, onCreated: (id, parentId) => created.push([id, parentId]) })
   try {
     for (const version of ['第一轮资料', '第二轮资料']) {
       await runner.run({
@@ -48,6 +49,7 @@ test('人物设计读取工具在生图会话中只注册一次，跨任务保�
       assert.equal(JSON.parse(await registered.get('character_design_read').execute({})).ok, false, '空闲时不能继续读取旧快照')
     }
     assert.deepEqual(answers, ['第一轮资料', '第二轮资料'])
+    assert.deepEqual(created, [['image-reader', 'parent']], '新建后台会话时通知一次，常驻会话复用时不再通知')
     assert.equal(counts.get('character_design_read'), 1)
     assert.equal(registered.has('character_design_save'), false)
   } finally { await runner.dispose() }

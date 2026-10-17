@@ -2551,6 +2551,8 @@ export async function apply(ctx) {
     // The browser's session list keeps a disposed subagent as an idle row until the list is
     // reloaded; tell the game's page so its header count drops the retired worker at once.
     onRetired: (_id, parentId) => sessionSignals.publish(parentId, { kind: 'subagents', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) }),
+    // Nor does it learn of a new one; the same signal reloads the list so the header counts it.
+    onCreated: (_id, parentId) => sessionSignals.publish(parentId, { kind: 'subagents', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) }),
     systemAppend: () => runtimePrompt('system-append'),
     imageSystemPrompt: () => runtimePrompt('scene-image-system'),
     resolveModelSelection: async input => backgroundModelSelection(await backgroundConfigForSession(input.sessionId)) || input.selection,
