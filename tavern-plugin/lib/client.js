@@ -11161,7 +11161,7 @@ function bindTavernFontZoom(node, win) {
 			const entries = new Map();
 			function entryFor(sessionId) {
 				let entry = entries.get(sessionId);
-				if (!entry) { entry = { version: 0, enabled: true, turns: new Map(), queued: new Set(), timer: null, listeners: new Set(), stop: null }; entries.set(sessionId, entry); }
+				if (!entry) { entry = { version: 0, generation: 0, enabled: true, turns: new Map(), queued: new Set(), timer: null, listeners: new Set(), stop: null }; entries.set(sessionId, entry); }
 				return entry;
 			}
 			function notify(entry) { entry.version += 1; Array.from(entry.listeners).forEach(function (listener) { listener(); }); }
@@ -11170,6 +11170,7 @@ function bindTavernFontZoom(node, win) {
 				if (!entry) return;
 				entry.enabled = true;
 				entry.turns = new Map();
+					entry.generation += 1;
 				notify(entry);
 			}
 			function load(sessionId, turn) {
@@ -11179,15 +11180,19 @@ function bindTavernFontZoom(node, win) {
 				if (entry.timer !== null) return;
 				entry.timer = window.setTimeout(function () {
 					entry.timer = null;
-					const turns = Array.from(entry.queued);
+					const generation = entry.generation;
+						const turns = Array.from(entry.queued);
 					entry.queued.clear();
 					turns.forEach(function (item) { entry.turns.set(item, null); });
 					rpc("castForTurns", { turns: turns }, sessionId).then(function (result) {
-						if (entries.get(sessionId) !== entry) return;
+						if (entries.get(sessionId) !== entry || entry.generation !== generation) return;
 						entry.enabled = result.enabled !== false;
 						turns.forEach(function (item) { entry.turns.set(item, Array.isArray(result.turns && result.turns[item]) ? result.turns[item] : []); });
 						notify(entry);
-					}, function () { turns.forEach(function (item) { entry.turns.delete(item); }); });
+					}, function () {
+							if (entries.get(sessionId) !== entry || entry.generation !== generation) return;
+							turns.forEach(function (item) { entry.turns.delete(item); });
+						});
 				}, 0);
 			}
 			function subscribe(sessionId, listener) {
