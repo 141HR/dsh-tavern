@@ -12143,11 +12143,11 @@ function bindTavernFontZoom(node, win) {
 			return { beats: beats, index: Math.min(index, Math.max(0, beats.length - 1)), setIndex: setIndex, turn: latest && latest.turn };
 		}
 
-		// Reading the stage aloud: a per-browser choice, effective while voicing is on.
+		// Reading the stage aloud: on by default once voicing is on; the button turns it off for this browser.
 		const TAVERN_STAGE_READ_KEY = "dsh-tavern-stage-read";
 		function useTavernStageReading() {
 			const speech = useTavernSpeechSettings();
-			const [reading, setReading] = React.useState(function () { try { return window.localStorage.getItem(TAVERN_STAGE_READ_KEY) === "1"; } catch (_) { return false; } });
+			const [reading, setReading] = React.useState(function () { try { return window.localStorage.getItem(TAVERN_STAGE_READ_KEY) !== "0"; } catch (_) { return true; } });
 			function toggle() {
 				const next = !reading;
 				setReading(next);
