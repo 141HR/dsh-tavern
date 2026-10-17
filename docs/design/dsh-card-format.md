@@ -191,6 +191,20 @@ packs/<包 id>/figures/  sprites/  bundles/  credits/
 - **CHARX 版能导入**：14 种情绪认出 9 种当立绘，Tavern 自带的舞台和对话头像直接可用；`crashed`、`drooling`、`eating`、`singing` 没有对应，原样保留。试的过程中发现 `crying` 抢在 `sad` 前面占了"难过"，已修复：按名字贴近程度排序。
 - **`.dshcard` 导入失败**：现在的 zip 读取有 50 MB 上限，并且要整包读进内存。这印证了实施步骤 1、3 必须先做。
 
+### 按定稿结构改写（第二版）
+
+按本文最终的结构重新改了一次：
+
+- 4 个包放进 `assets/dafeiyu/`、`assets/china-backgrounds/`、`assets/general-bgm/`、`assets/general-sfx/`，包内容原样不动。
+- `card.json` 放在根目录：封面在 CHARX 惯例的 `assets/icon/images/main.png`（封面不属于任何包）；14 种情绪直接指向 `assets/dafeiyu/media/<摘要>.png`，不复制。
+- `dsh.json` 写卡的标识和版本、4 个包（id、format、contentHash、大小、署名文件）；`plugins` 为空。
+
+检查结果：`card.json` 单独是合法的 CCv3；15 个素材地址都能解析；4 个包共 713 个文件逐个核对摘要，全部一致；署名文件齐全；包里没有能执行的文件；包名没有用到保留名。得到 `大肥鱼.dshcard`（272.5 MB）和降级的 `大肥鱼.charx`（16.2 MB）。降级的 CHARX 用现在的导入代码导入，认出 9 种情绪当立绘。
+
+暴露的问题：
+- **卡没有稳定标识**：分支的卡包里没有卡 id，改写时临时用"作者/仓库/卡名"算了一个。标识应由作者在第一次导出时生成并一直保留。
+- **`plugins` 是空的**：Galgame 的导演、舞台、Live2D、模组都写在分支的核心代码里，没有可以放进 `plugins/` 的插件。所以这张 `.dshcard` 目前只能做到"三级可用"的前两级：在其他前端是普通卡，在 Tavern 里有头像、立绘和舞台。第三级（服装、Live2D、导演、音乐）要等分支作者把这些改写成一个解读 `dsh-asset-pack` 的插件。这正是插件接口要支撑的事。
+
 ### 对格式的结论
 
 1. **素材包直接采用分支的 `dsh-asset-pack` 结构**，不另造：按内容寻址、清单带每个文件的摘要，正是存储层要的。`.dshcard` 的 `assets/<包名>/` 原样放它（分支卡包里的 `packs/<id>/` 导入时按 `dsh-tavern-card-bundle.json` 照认）。
