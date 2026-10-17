@@ -3264,190 +3264,14 @@ export async function apply(ctx) {
       if (snapshot === null) return
       const taskRun = await backgroundTasks.begin(snapshot, 'settlement', { reuseSnapshot: true })
       snapshot = taskRun.chat
-      let backgroundSessionId = str(taskRun.participantRequest.sessionId)
-      let backgroundBoundary = null
+      const trace = { sessionId: str(taskRun.participantRequest.sessionId), boundary: null }
       try {
         signal?.throwIfAborted()
         const card = await readChatCard(snapshot)
         signal?.throwIfAborted()
-        const variableRetry = snapshot.messages?.some(message => message.mvu?.pending && message.mvu?.variableRetry === true)
-        // Seam to the plugin layer: a plugin may replace the posture settlement of a game
-        // without official MVU. Any failure falls back to Tavern's own settlement.
-        const settleByPlugin = async function () {
-          const latest = [...(snapshot.messages || [])].reverse().find(message => message?.role === 'assistant')
-          const replaced = await pluginApi.replaceSettlement({ gameId: snapshot.sessionId, turn: settlementTurn(snapshot), signal,
-            onStart: plugin => pluginSettlementProgress.begin(snapshot.sessionId, plugin),
-            text: latest ? projectAgentMessageText(latest, { charName: card && card.name, macroState: snapshot.macroState }) : '',
-            posture: str(snapshot.posture), tasks: { posture: backgroundTasksSettings.posture === true } })
-          if (!replaced) return false
-          result = replaced.posture ? { ...normalizePostureSubmission({ posture: replaced.posture }, { charName: card && card.name, macroState: snapshot.macroState }) } : {}
-          text = JSON.stringify({ plugin: replaced.owner, ...result })
-          return true
-        }
-        const backgroundTasksSettings = normalizeBackgroundTasks(variableRetry ? { variables: true, posture: false, characterDesign: false } : snapshot.backgroundTasks)
-        const mvuTarget = snapshot.mvu && snapshot.mvu.enabled === true && snapshot.mvu.owner === 'official'
-          ? pendingMvuTarget(snapshot)
-          : null
-        let text = ''
-        let result = null
-        let mvuResult = null
-        if (mvuTarget !== null && (backgroundTasksSettings.variables !== false || mvuTarget.message.mvu.pendingSubmission)) {
-          if (!mvuTarget.message.mvuBaseline || mvuTarget.message.mvuBaseline.swipeId !== mvuTarget.swipeId) {
-            mvuTarget.message.mvuBaseline = { swipeId: mvuTarget.swipeId, variables: structuredClone(mvuTarget.variables) }
-            await taskRun.checkpointMessage(mvuTarget.messageId, function (draft, target) {
-              if (!target || Number(target.swipeId || 0) !== mvuTarget.swipeId
-                || Number(draft.tavernHelperLifecycleRevision || 0) !== Number(snapshot.tavernHelperLifecycleRevision || 0)) throw new Error('MVU 任务目标已过期')
-              target.mvuBaseline = structuredClone(mvuTarget.message.mvuBaseline)
-            })
-          }
-          const saveDelivery = async function (submission, prepared) {
-            signal?.throwIfAborted()
-            await taskRun.checkpointMessage(mvuTarget.messageId, function (draft, target) {
-              if (!target || Number(target.swipeId || 0) !== mvuTarget.swipeId
-                || Number(draft.tavernHelperLifecycleRevision || 0) !== Number(snapshot.tavernHelperLifecycleRevision || 0)) throw new Error('MVU 任务目标已过期')
-              target.mvu.pendingSubmission = structuredClone(submission)
-              target.mvu.delivery = {
-                version: 1, taskId: target.mvu.delivery?.taskId || taskRun.operationId, operationId: taskRun.operationId,
-                branchId: taskRun.basedOn.branchId, revision: taskRun.basedOn.revision,
-                lifecycleRevision: Number(snapshot.tavernHelperLifecycleRevision || 0),
-                swipeId: mvuTarget.swipeId,
-                posture: prepared?.posture ?? target.mvu.delivery?.posture,
-                ...(prepared ? { prepared: structuredClone({ submission: prepared.submission, receipt: prepared.receipt, effect: prepared.effect, posture: prepared.posture }) } : {})
-              }
-            })
-          }
-          const settlementInput = {
-            onSubmission: submission => saveDelivery(submission),
-            onPrepared: prepared => saveDelivery(prepared.submission, prepared),
-            guidance: mvuTarget.message.mvu.guidance || '',
-            preserveForeground: variableRetry,
-            onPersistentSessionReady: id => taskRun.bindSession(id, { stateOnly: true }),
-            backgroundTasks: backgroundTasksSettings,
-            operationId: taskRun.operationId,
-            chatId: snapshot.id,
-            branchId: taskRun.basedOn.branchId,
-            basedOnRevision: taskRun.basedOn.revision,
-            sessionId: snapshot.sessionId,
-            turn: settlementTurn(snapshot),
-            messageId: mvuTarget.messageId,
-            swipeId: mvuTarget.swipeId,
-            expectedLifecycleRevision: Math.max(0, Number(snapshot.tavernHelperLifecycleRevision) || 0),
-            storyText: projectAgentMessageText(mvuTarget.message, { charName: card && card.name, macroState: snapshot.macroState }),
-            currentVariables: mvuTarget.variables,
-            helperContext: collectMvuHelperContext(snapshot.messages, mvuTarget.messageId),
-            guides: Array.isArray(snapshot.guides) ? snapshot.guides : [],
-            variableSchema: mvuTarget.variables.schema,
-            charName: card && card.name,
-            macroState: snapshot.macroState,
-            updateRules: await mvuUpdateRules(snapshot, card),
-            webSearchEnabled: snapshot.webSearchEnabled === true
-          }
-          const pendingSubmission = mvuTarget.message.mvu && mvuTarget.message.mvu.pendingSubmission
-          const delivery = mvuTarget.message.mvu?.delivery
-          if (delivery && (delivery.branchId !== taskRun.basedOn.branchId || delivery.revision !== taskRun.basedOn.revision
-            || delivery.lifecycleRevision !== Number(snapshot.tavernHelperLifecycleRevision || 0) || delivery.swipeId !== mvuTarget.swipeId)) throw new Error('MVU 任务目标已过期，旧任务未执行')
-          if (delivery?.prepared) {
-            mvuResult = structuredClone(delivery.prepared)
-          } else if (pendingSubmission && typeof pendingSubmission === 'object') {
-            mvuResult = await mvuSettlement.resumeVariables({ ...settlementInput, submission: pendingSubmission })
-          } else {
-            const selection = backgroundModelSelection(snapshot)
-            if (selection === null) throw new Error('没有可用的模型配置，请先在当前会话的模型选择器中选择模型')
-            mvuResult = await mvuSettlement.settleVariables({
-              ...settlementInput,
-              system: backgroundTasksSettings.posture ? postureItem.requirement() : '',
-              selection,
-              persistentSessionId: backgroundSessionId,
-              signal
-            })
-          }
-          if (mvuResult.posture === undefined && delivery?.posture !== undefined) mvuResult.posture = delivery.posture
-          text = str(mvuResult.text) || JSON.stringify({ posture: mvuResult.posture })
-          backgroundSessionId = str(mvuResult.traceSessionId) || backgroundSessionId
-          backgroundBoundary = Number.isSafeInteger(mvuResult.traceBoundary) ? mvuResult.traceBoundary : null
-          if (mvuResult.receipt?.status === 'pending') {
-            const runtimeState = tavernScriptDispatch.status(snapshot.sessionId)
-            if (runtimeState.initializationError) throw new Error(runtimeState.initializationError)
-            await taskRun.defer({
-              participant: taskRun.participant({ sessionId: backgroundSessionId, boundary: backgroundBoundary }),
-              apply(draft) {
-                const target = draft.messages[mvuTarget.messageId]
-                target.mvu.pendingSubmission = structuredClone(mvuResult.submission || pendingSubmission)
-                target.mvu.receipt = structuredClone(mvuResult.receipt)
-                if (target.mvu.delivery && mvuResult.posture !== undefined) target.mvu.delivery.posture = mvuResult.posture
-                draft.settleStatus = 'pending'
-                draft.settleError = null
-              }
-            })
-            return
-          }
-          if (['error', 'partial'].includes(mvuResult.receipt?.status)) {
-            const error = new Error(mvuResult.receipt.summary || mvuResult.receipt.failures?.[0]?.message || '变量结算失败，请重试结算')
-            error.mvuReceipt = mvuResult.receipt
-            throw error
-          }
-          result = { posture: mvuResult.posture }
-        } else if (!backgroundTasksSettings.posture && !await settlementItems.wanted()) {
-          result = {}
-        } else if (await settleByPlugin()) {
-          // A plugin replaced this settlement; its validated result is committed like Tavern's own.
-        } else {
-          const selection = backgroundModelSelection(snapshot)
-          if (selection === null) throw new Error('没有可用的模型配置，请先在当前会话的模型选择器中选择模型')
-          let submittedPosture = null
-          let settlementToolTail = Promise.resolve()
-          const plan = plainSettlementPlan({ posture: backgroundTasksSettings.posture ? postureItem : null })
-          const run = await backgroundAgentRunner.run({
-            onPersistentSessionReady: id => taskRun.bindSession(id, { stateOnly: true }),
-            task: 'settlement',
-            turn: settlementTurn(snapshot),
-            backgroundTasks: backgroundTasksSettings,
-            persistent: true,
-            persistentSessionId: backgroundSessionId,
-            rewindTo: taskRun.participantRequest.rewindTo,
-            selection,
-            messages: [{
-              id: 'settle-' + Date.now().toString(36),
-              role: 'user',
-              regexPlacement: 2,
-              content: [{ type: 'text', text: settleUserText(snapshot, backgroundTasksSettings.posture, taskRun.participantRequest.rewindTo == null ? lastSubmittedPosture(backgroundSessionId && (agentRegistry.get(backgroundSessionId)?.session || sessionStore.get(backgroundSessionId))) : '') }],
-              source: { kind: 'plugin', plugin: 'dsh-tavern' }
-            }],
-            system: plan.system,
-            tools: plan.tools,
-            maxToolCalls: 12,
-            temperature: 0.2,
-            sessionId: snapshot.sessionId,
-            webSearchEnabled: snapshot.webSearchEnabled === true,
-            signal,
-            stopToolsWhen: function () { return submittedPosture !== null },
-            acceptWithoutText: function () { return submittedPosture !== null },
-            onToolCall(call) {
-              const pending = settlementToolTail.then(async function () {
-                if (!backgroundTasksSettings.posture || !call || call.name !== POSTURE_SUBMIT_TOOL_NAME) {
-                  return JSON.stringify({ ok: false, retryable: true, error: '当前任务只允许调用人物设计工具和 posture_submit' })
-                }
-                try {
-                  submittedPosture = normalizePostureSubmission(call.arguments, {
-                    charName: card && card.name,
-                    macroState: snapshot.macroState
-                  })
-                  return JSON.stringify({ ok: true })
-                } catch (error) {
-                  return JSON.stringify({ ok: false, retryable: true, error: str(error && error.message || error) })
-                }
-              })
-              settlementToolTail = pending.catch(function () {})
-              return pending
-            }
-          })
-          await settlementToolTail
-          if (backgroundTasksSettings.posture && submittedPosture === null) throw new Error('后台 Agent 未调用 posture_submit 提交有效姿势')
-          result = { ...(submittedPosture || {}) }
-          text = str(run.text) || JSON.stringify(result)
-          backgroundSessionId = str(run.traceSessionId)
-          backgroundBoundary = Number.isSafeInteger(run.traceBoundary) ? run.traceBoundary : null
-        }
+        const engine = await runSettlementEngine({ snapshot, taskRun, card, signal, trace })
+        if (engine.deferred) return
+        const { text, result, mvuResult, mvuTarget, backgroundTasksSettings } = engine
         signal?.throwIfAborted()
         let stat = { postureUpdated: false }
         const completion = {
@@ -3455,7 +3279,7 @@ export async function apply(ctx) {
             ? {messageIndices:[mvuTarget.messageId,...(mvuResult?.effect?.changes || []).filter(c=>c.path[0]==='messages').map(c=>c.path[1])]} : {}),
           stateChanged: Boolean(mvuResult?.effect?.changes?.length) || Boolean(mvuResult && mvuResult.receipt && mvuResult.receipt.status === 'updated') ||
             str(result && result.posture).trim() !== '',
-          participant: taskRun.participant({ sessionId: backgroundSessionId, boundary: backgroundBoundary }),
+          participant: taskRun.participant({ sessionId: trace.sessionId, boundary: trace.boundary }),
           apply(draft, scope) {
             if (mvuResult && mvuResult.effect) applyMvuSettlementEffect(draft, mvuResult.effect, scope)
             stat = applySettlement(draft, result)
@@ -3496,15 +3320,15 @@ export async function apply(ctx) {
       } catch (err) {
         if (signal?.aborted) return
         const failedSessionId = str(err && err.traceSessionId)
-        if (failedSessionId && failedSessionId !== backgroundSessionId) {
-          backgroundSessionId = failedSessionId
-          backgroundBoundary = null
+        if (failedSessionId && failedSessionId !== trace.sessionId) {
+          trace.sessionId = failedSessionId
+          trace.boundary = null
         }
-        if (backgroundBoundary === null && Number.isSafeInteger(err && err.traceBoundary)) backgroundBoundary = err.traceBoundary
+        if (trace.boundary === null && Number.isSafeInteger(err && err.traceBoundary)) trace.boundary = err.traceBoundary
         const failed = await taskRun.commit({
           status: 'failed',
           stateChanged: false,
-          participant: taskRun.participant({ sessionId: backgroundSessionId, boundary: backgroundBoundary })
+          participant: taskRun.participant({ sessionId: trace.sessionId, boundary: trace.boundary })
         })
         if (failed.status === 'missing') return
         if (failed.status === 'stale') {
@@ -3537,6 +3361,190 @@ export async function apply(ctx) {
   // ---------- 插件任务：结算前后的任务、玩家手动运行的任务（docs/plugin-api.md） ----------
   // A settlement job: plugin tasks before Tavern's settlement, the settlement, plugin tasks after it.
   // Running inside the job, they hold the next turn back (foreground handoff waits for the job).
+  // The main settlement's engine (docs/design/background-task-pipeline.md): official MVU
+  // variables, nothing to do, a plugin's replacement, or Tavern's plain agent run.
+  // `trace` carries the background session the run used, also when it throws.
+  async function runSettlementEngine({ snapshot, taskRun, card, signal, trace }) {
+    const variableRetry = snapshot.messages?.some(message => message.mvu?.pending && message.mvu?.variableRetry === true)
+    // Seam to the plugin layer: a plugin may replace the posture settlement of a game
+    // without official MVU. Any failure falls back to Tavern's own settlement.
+    const settleByPlugin = async function () {
+      const latest = [...(snapshot.messages || [])].reverse().find(message => message?.role === 'assistant')
+      const replaced = await pluginApi.replaceSettlement({ gameId: snapshot.sessionId, turn: settlementTurn(snapshot), signal,
+        onStart: plugin => pluginSettlementProgress.begin(snapshot.sessionId, plugin),
+        text: latest ? projectAgentMessageText(latest, { charName: card && card.name, macroState: snapshot.macroState }) : '',
+        posture: str(snapshot.posture), tasks: { posture: backgroundTasksSettings.posture === true } })
+      if (!replaced) return false
+      result = replaced.posture ? { ...normalizePostureSubmission({ posture: replaced.posture }, { charName: card && card.name, macroState: snapshot.macroState }) } : {}
+      text = JSON.stringify({ plugin: replaced.owner, ...result })
+      return true
+    }
+    const backgroundTasksSettings = normalizeBackgroundTasks(variableRetry ? { variables: true, posture: false, characterDesign: false } : snapshot.backgroundTasks)
+    const mvuTarget = snapshot.mvu && snapshot.mvu.enabled === true && snapshot.mvu.owner === 'official'
+      ? pendingMvuTarget(snapshot)
+      : null
+    let text = ''
+    let result = null
+    let mvuResult = null
+    if (mvuTarget !== null && (backgroundTasksSettings.variables !== false || mvuTarget.message.mvu.pendingSubmission)) {
+      if (!mvuTarget.message.mvuBaseline || mvuTarget.message.mvuBaseline.swipeId !== mvuTarget.swipeId) {
+        mvuTarget.message.mvuBaseline = { swipeId: mvuTarget.swipeId, variables: structuredClone(mvuTarget.variables) }
+        await taskRun.checkpointMessage(mvuTarget.messageId, function (draft, target) {
+          if (!target || Number(target.swipeId || 0) !== mvuTarget.swipeId
+            || Number(draft.tavernHelperLifecycleRevision || 0) !== Number(snapshot.tavernHelperLifecycleRevision || 0)) throw new Error('MVU 任务目标已过期')
+          target.mvuBaseline = structuredClone(mvuTarget.message.mvuBaseline)
+        })
+      }
+      const saveDelivery = async function (submission, prepared) {
+        signal?.throwIfAborted()
+        await taskRun.checkpointMessage(mvuTarget.messageId, function (draft, target) {
+          if (!target || Number(target.swipeId || 0) !== mvuTarget.swipeId
+            || Number(draft.tavernHelperLifecycleRevision || 0) !== Number(snapshot.tavernHelperLifecycleRevision || 0)) throw new Error('MVU 任务目标已过期')
+          target.mvu.pendingSubmission = structuredClone(submission)
+          target.mvu.delivery = {
+            version: 1, taskId: target.mvu.delivery?.taskId || taskRun.operationId, operationId: taskRun.operationId,
+            branchId: taskRun.basedOn.branchId, revision: taskRun.basedOn.revision,
+            lifecycleRevision: Number(snapshot.tavernHelperLifecycleRevision || 0),
+            swipeId: mvuTarget.swipeId,
+            posture: prepared?.posture ?? target.mvu.delivery?.posture,
+            ...(prepared ? { prepared: structuredClone({ submission: prepared.submission, receipt: prepared.receipt, effect: prepared.effect, posture: prepared.posture }) } : {})
+          }
+        })
+      }
+      const settlementInput = {
+        onSubmission: submission => saveDelivery(submission),
+        onPrepared: prepared => saveDelivery(prepared.submission, prepared),
+        guidance: mvuTarget.message.mvu.guidance || '',
+        preserveForeground: variableRetry,
+        onPersistentSessionReady: id => taskRun.bindSession(id, { stateOnly: true }),
+        backgroundTasks: backgroundTasksSettings,
+        operationId: taskRun.operationId,
+        chatId: snapshot.id,
+        branchId: taskRun.basedOn.branchId,
+        basedOnRevision: taskRun.basedOn.revision,
+        sessionId: snapshot.sessionId,
+        turn: settlementTurn(snapshot),
+        messageId: mvuTarget.messageId,
+        swipeId: mvuTarget.swipeId,
+        expectedLifecycleRevision: Math.max(0, Number(snapshot.tavernHelperLifecycleRevision) || 0),
+        storyText: projectAgentMessageText(mvuTarget.message, { charName: card && card.name, macroState: snapshot.macroState }),
+        currentVariables: mvuTarget.variables,
+        helperContext: collectMvuHelperContext(snapshot.messages, mvuTarget.messageId),
+        guides: Array.isArray(snapshot.guides) ? snapshot.guides : [],
+        variableSchema: mvuTarget.variables.schema,
+        charName: card && card.name,
+        macroState: snapshot.macroState,
+        updateRules: await mvuUpdateRules(snapshot, card),
+        webSearchEnabled: snapshot.webSearchEnabled === true
+      }
+      const pendingSubmission = mvuTarget.message.mvu && mvuTarget.message.mvu.pendingSubmission
+      const delivery = mvuTarget.message.mvu?.delivery
+      if (delivery && (delivery.branchId !== taskRun.basedOn.branchId || delivery.revision !== taskRun.basedOn.revision
+        || delivery.lifecycleRevision !== Number(snapshot.tavernHelperLifecycleRevision || 0) || delivery.swipeId !== mvuTarget.swipeId)) throw new Error('MVU 任务目标已过期，旧任务未执行')
+      if (delivery?.prepared) {
+        mvuResult = structuredClone(delivery.prepared)
+      } else if (pendingSubmission && typeof pendingSubmission === 'object') {
+        mvuResult = await mvuSettlement.resumeVariables({ ...settlementInput, submission: pendingSubmission })
+      } else {
+        const selection = backgroundModelSelection(snapshot)
+        if (selection === null) throw new Error('没有可用的模型配置，请先在当前会话的模型选择器中选择模型')
+        mvuResult = await mvuSettlement.settleVariables({
+          ...settlementInput,
+          system: backgroundTasksSettings.posture ? postureItem.requirement() : '',
+          selection,
+          persistentSessionId: trace.sessionId,
+          signal
+        })
+      }
+      if (mvuResult.posture === undefined && delivery?.posture !== undefined) mvuResult.posture = delivery.posture
+      text = str(mvuResult.text) || JSON.stringify({ posture: mvuResult.posture })
+      trace.sessionId = str(mvuResult.traceSessionId) || trace.sessionId
+      trace.boundary = Number.isSafeInteger(mvuResult.traceBoundary) ? mvuResult.traceBoundary : null
+      if (mvuResult.receipt?.status === 'pending') {
+        const runtimeState = tavernScriptDispatch.status(snapshot.sessionId)
+        if (runtimeState.initializationError) throw new Error(runtimeState.initializationError)
+        await taskRun.defer({
+          participant: taskRun.participant({ sessionId: trace.sessionId, boundary: trace.boundary }),
+          apply(draft) {
+            const target = draft.messages[mvuTarget.messageId]
+            target.mvu.pendingSubmission = structuredClone(mvuResult.submission || pendingSubmission)
+            target.mvu.receipt = structuredClone(mvuResult.receipt)
+            if (target.mvu.delivery && mvuResult.posture !== undefined) target.mvu.delivery.posture = mvuResult.posture
+            draft.settleStatus = 'pending'
+            draft.settleError = null
+          }
+        })
+        return { deferred: true }
+      }
+      if (['error', 'partial'].includes(mvuResult.receipt?.status)) {
+        const error = new Error(mvuResult.receipt.summary || mvuResult.receipt.failures?.[0]?.message || '变量结算失败，请重试结算')
+        error.mvuReceipt = mvuResult.receipt
+        throw error
+      }
+      result = { posture: mvuResult.posture }
+    } else if (!backgroundTasksSettings.posture && !await settlementItems.wanted()) {
+      result = {}
+    } else if (await settleByPlugin()) {
+      // A plugin replaced this settlement; its validated result is committed like Tavern's own.
+    } else {
+      const selection = backgroundModelSelection(snapshot)
+      if (selection === null) throw new Error('没有可用的模型配置，请先在当前会话的模型选择器中选择模型')
+      let submittedPosture = null
+      let settlementToolTail = Promise.resolve()
+      const plan = plainSettlementPlan({ posture: backgroundTasksSettings.posture ? postureItem : null })
+      const run = await backgroundAgentRunner.run({
+        onPersistentSessionReady: id => taskRun.bindSession(id, { stateOnly: true }),
+        task: 'settlement',
+        turn: settlementTurn(snapshot),
+        backgroundTasks: backgroundTasksSettings,
+        persistent: true,
+        persistentSessionId: trace.sessionId,
+        rewindTo: taskRun.participantRequest.rewindTo,
+        selection,
+        messages: [{
+          id: 'settle-' + Date.now().toString(36),
+          role: 'user',
+          regexPlacement: 2,
+          content: [{ type: 'text', text: settleUserText(snapshot, backgroundTasksSettings.posture, taskRun.participantRequest.rewindTo == null ? lastSubmittedPosture(trace.sessionId && (agentRegistry.get(trace.sessionId)?.session || sessionStore.get(trace.sessionId))) : '') }],
+          source: { kind: 'plugin', plugin: 'dsh-tavern' }
+        }],
+        system: plan.system,
+        tools: plan.tools,
+        maxToolCalls: 12,
+        temperature: 0.2,
+        sessionId: snapshot.sessionId,
+        webSearchEnabled: snapshot.webSearchEnabled === true,
+        signal,
+        stopToolsWhen: function () { return submittedPosture !== null },
+        acceptWithoutText: function () { return submittedPosture !== null },
+        onToolCall(call) {
+          const pending = settlementToolTail.then(async function () {
+            if (!backgroundTasksSettings.posture || !call || call.name !== POSTURE_SUBMIT_TOOL_NAME) {
+              return JSON.stringify({ ok: false, retryable: true, error: '当前任务只允许调用人物设计工具和 posture_submit' })
+            }
+            try {
+              submittedPosture = normalizePostureSubmission(call.arguments, {
+                charName: card && card.name,
+                macroState: snapshot.macroState
+              })
+              return JSON.stringify({ ok: true })
+            } catch (error) {
+              return JSON.stringify({ ok: false, retryable: true, error: str(error && error.message || error) })
+            }
+          })
+          settlementToolTail = pending.catch(function () {})
+          return pending
+        }
+      })
+      await settlementToolTail
+      if (backgroundTasksSettings.posture && submittedPosture === null) throw new Error('后台 Agent 未调用 posture_submit 提交有效姿势')
+      result = { ...(submittedPosture || {}) }
+      text = str(run.text) || JSON.stringify(result)
+      trace.sessionId = str(run.traceSessionId)
+      trace.boundary = Number.isSafeInteger(run.traceBoundary) ? run.traceBoundary : null
+    }
+    return { text, result, mvuResult, mvuTarget, backgroundTasksSettings }
+  }
   async function runSettlementCycle(chatId, signal) {
     const state = await taskStateReader.read(chatId).catch(() => null)
     const gameId = str(state?.sessionId)
