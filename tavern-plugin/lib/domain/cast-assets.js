@@ -249,6 +249,14 @@ export function createCastAssets({ store }) {
     return summary
   }
 
+  /** The asset packs a card carries (asset-packs.js), by id and content hash; replaces the list. */
+  async function bindPacks(cardPath, packs) {
+    await update(cardPath, manifest => {
+      manifest.packs = packs.map(pack => ({ id: pack.id, contentHash: pack.contentHash, format: pack.format || '', title: pack.title || '', name: pack.name || '' }))
+    })
+    return read(cardPath)
+  }
+
   /** Bytes of one of the card's material files, for export. */
   async function readFile(cardPath, file) {
     if (!/^[0-9a-f]{32}\.[a-z0-9]{1,10}$/.test(String(file))) return undefined
@@ -262,5 +270,5 @@ export function createCastAssets({ store }) {
     return bytes ? { bytes, mediaType: IMAGE_TYPES[file.split('.').pop()] } : undefined
   }
 
-  return Object.freeze({ read, movePath, setImage, removeImage, setCharacter, setVoice, removeCharacter, importSpritePack, importCardAssets, readFile, readImage, keyOf: cardPath => hash(String(cardPath)) })
+  return Object.freeze({ read, movePath, setImage, removeImage, setCharacter, setVoice, removeCharacter, importSpritePack, importCardAssets, bindPacks, readFile, readImage, keyOf: cardPath => hash(String(cardPath)) })
 }

@@ -550,6 +550,10 @@ Tavern 的 Skill：`listSkills` 返回 `[{ name, source, description }]`，`sour
 
 这局人物卡的角色素材：`{ player, card: { name, imageUrl }, characters: [{ name, aliases, avatarUrl, sprites, voices }] }`。`player` 是玩家名；`sprites` 是 `{ 情绪名: 图片地址 }`；`voices` 是 `{ 配音渠道: 声音 }`；地址都可以直接放进 `<img src>`。素材由玩家在舞台页上传或导入 ST 立绘包，跟着人物卡走，所有用这张卡的局共用。找人物时同时比对 `name` 和 `aliases`。
 
+### `listCardPacks({ gameId })`、`readCardPackFile({ gameId, pack, path })`
+
+DSH 人物卡（`.dshcard`，见[格式设计](design/dsh-card-format.md)）带的素材包。`listCardPacks` 返回这局人物卡带的包：`[{ id, contentHash, format, title, name, baseUrl }]`。Tavern 不解读包的内容，`format` 说明由谁解读（例如 `dsh-asset-pack`）。读文件：宿主侧用 `readCardPackFile`，返回 `{ data, mediaType, size }`；浏览器侧直接用 `baseUrl + 包内路径`，支持分段读取（音频、视频可以边下边播）。图片、音频、视频、字体、JSON、文本按原类型提供，其他类型（包括 HTML、SVG、JS）只能下载，不会在页面里运行。浏览器侧用 `tavernUi.getCardPacks(gameId)` 拿同样的列表。
+
 ### `speechProvider({ id, label, description?, voices?, defaultVoice?, synthesize })`
 
 添加一个配音渠道，例如 Edge TTS、火山、自己部署的语音服务。玩家在「设置 → DSH Tavern → 显示与交互 → 配音」的渠道列表里选中它后，台词朗读、舞台朗读和其他插件的 `synthesizeSpeech` 都走这个渠道。

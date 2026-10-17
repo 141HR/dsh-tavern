@@ -169,7 +169,11 @@ import { POSTURE_SUBMIT_TOOL, POSTURE_SUBMIT_TOOL_NAME, lastSubmittedPosture, no
 import { createCastPresentation } from './domain/cast-presentation.js'
 import { createCastAssets } from './domain/cast-assets.js'
 import { createSpeech } from './domain/speech.js'
-import { buildCharx, cardImport } from './domain/card-assets.js'
+import { buildCharx, cardImport, cardImportFromCard } from './domain/card-assets.js'
+import { createAssetPacks } from './domain/asset-packs.js'
+import { readCardArchive } from './domain/card-archive.js'
+import { openZipFile } from './domain/zip-file.js'
+import { createUploads } from './domain/uploads.js'
 import { createPostureItem, createSettlementItems, plainSettlementPlan, runPipelineStages } from './domain/background-pipeline.js'
 import { TAVERN_COMPATIBILITY_CAPABILITIES, createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
 import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics, sanitizeModuleFailure, sanitizeMvuLoadDiagnostic, redactMvuLoadError } from './domain/mvu-diagnostics.js'
@@ -209,7 +213,7 @@ import { readZipEntries, writeZipEntries } from './domain/zip-entries.js'
 import { createGameFootprint } from './domain/game-footprint.js'
 import { buildGameSave, collectSaveRevisions, readGameSave } from './domain/game-save.js'
 import { readFileSync } from 'node:fs'
-import { readdir, rm } from 'node:fs/promises'
+import { readdir, readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 
 const TAVERN_PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
@@ -1018,6 +1022,10 @@ export async function apply(ctx) {
     return result
   }
   const castAssets = createCastAssets({ store: profileData })
+  // DSH cards (docs/design/dsh-card-format.md): asset packs stored once by content; big files uploaded to disk.
+  const assetPacks = createAssetPacks({ root: dataRoot, store: profileData })
+  const uploads = createUploads({ root: dataRoot })
+  void uploads.sweep().catch(() => {})
   // Voiced dialogue: channels are Tavern's and the plugins' (pluginApi is created later; read lazily).
   const speech = createSpeech({ store: profileData, credentials: () => ctx.get('credentials'), plugins: () => pluginApi.speechProviders() })
   resourceGraph = createResourceGraph({
@@ -1040,9 +1048,29 @@ export async function apply(ctx) {
   }
   async function importCard(input) {
     // A CHARX is stored as PNG or JSON; the material any card file carries goes to its character material.
-    const { payload, collected } = cardImport(input)
+    return await storeImportedCard(cardImport(input))
+  }
+  // A CHARX, DSH card or card bundle read from disk: its packs first, so a failure leaves no card behind.
+  async function importCardArchiveFile(file, name) {
+    const label = /\.dshcard$/i.test(name) ? 'DSH 人物卡' : 'CHARX'
+    const zip = await openZipFile(file, { label })
+    try {
+      const archive = await readCardArchive(zip)
+      const packs = []
+      for (const pack of archive.packs) {
+        const { pack: stored, reused } = await assetPacks.importFromZip(zip, pack)
+        packs.push({ id: stored.id, contentHash: stored.contentHash, format: stored.format, title: stored.title, name: pack.prefix.split('/')[1], files: Object.keys(stored.files).length, reused })
+      }
+      const imported = await storeImportedCard(cardImportFromCard({ card: archive.card, resolve: archive.resolve, name }), { unique: true })
+      if (packs.length) await castAssets.bindPacks(imported.path, packs)
+      return { ...imported, format: archive.kind, ...(archive.info ? { info: archive.info } : {}),
+        ...(packs.length ? { packs: packs.map(({ id, contentHash, title, format, files, reused }) => ({ id, contentHash, title, format, files, reused })) } : {}),
+        ...(archive.plugins.length ? { pluginsSkipped: archive.plugins.map(plugin => plugin.name) } : {}) }
+    } finally { await zip.close() }
+  }
+  async function storeImportedCard({ payload, collected }, options = {}) {
     const workspace = cardPreparation.create({ kind: 'import', payload: payload })
-    const cardPath = await fileResources.importCard(payload, workspace)
+    const cardPath = await fileResources.importCard(payload, workspace, options)
     const card = cardPreparation.project(workspace)
     let assets = null
     if (collected && (collected.emotions.length || collected.backgrounds.length || collected.cover || collected.extras.length || collected.cast.length || collected.skipped)) {
@@ -2689,6 +2717,12 @@ export async function apply(ctx) {
   function speechReply(result) {
     return result.browser ? result : { url: '/api/dsh-tavern/speech-audio?id=' + result.id, mediaType: result.mediaType }
   }
+  // The asset packs this game's card carries, with the base address of their files.
+  async function cardPacksOf(sessionId) {
+    const card = await castCardOf(str(sessionId))
+    return ((await castAssets.read(card.path)).packs || []).map(pack => ({ ...pack,
+      baseUrl: '/api/dsh-tavern/pack-file?' + new URLSearchParams({ pack: pack.id, v: pack.contentHash }).toString() + '&path=' }))
+  }
   async function castEdit(sessionId, edit) {
     const card = await castCardOf(sessionId)
     const result = await edit(card.path, card)
@@ -2785,6 +2819,13 @@ export async function apply(ctx) {
     },
     readHistory: readPluginHistory,
     readCast: (sessionId, turn) => castPresentation.annotation(sessionId, turn),
+    listCardPacks: sessionId => cardPacksOf(sessionId),
+    readCardPackFile: async (sessionId, packId, file) => {
+      const pack = (await cardPacksOf(sessionId)).find(item => item.id === packId)
+      const found = pack ? await assetPacks.file(pack.id, pack.contentHash, file) : undefined
+      if (!found) throw Object.assign(new Error('素材包里没有这个文件：' + file), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
+      return { data: await readFile(found.path), mediaType: found.mediaType, size: found.size }
+    },
     synthesizeSpeech: (sessionId, line) => speakLine(sessionId, line),
     readCastAssets: async sessionId => {
       const card = await castCardOf(sessionId)
@@ -4390,8 +4431,17 @@ export async function apply(ctx) {
       }
       case 'markConversationOpened': return await conversationRegistry.touch(args && args.sessionId, Date.now())
       case 'listMobileCardImports': return await mobileCardImport.list()
-      case 'importMobileCard': return { card: await importCard(await mobileCardImport.read(args && args.id)) }
+      case 'importMobileCard': {
+        const archive = await mobileCardImport.archive(args && args.id)
+        return { card: archive ? await importCardArchiveFile(archive.file, archive.name) : await importCard(await mobileCardImport.read(args && args.id)) }
+      }
       case 'importCard': return { card: await importCard(args && args.payload) }
+      case 'importCardUpload': {
+        const upload = await uploads.take(args && args.uploadId)
+        try { return { card: await importCardArchiveFile(upload.file, str(args && args.name) || '人物卡.dshcard') } }
+        finally { await upload.remove() }
+      }
+      case 'cardPacks': return { packs: await cardPacksOf(args && args.sessionId) }
       case 'deleteCard': return await deleteCard(args && args.path)
       case 'prepareDeleteChats': return await deleteChats(args && args.chatIds, true)
       case 'deleteChats': return await deleteChats(args && args.chatIds)
@@ -4780,6 +4830,8 @@ export async function apply(ctx) {
     castAssets,
     speech,
     exportCardCharx,
+    assetPacks,
+    uploads,
     exposeHandler: handle => { tavernHttpHandle = handle },
     pluginAssets: createPluginAssets({ pluginsDir: userPluginPaths(dataRoot).plugins }),
     dispatch,

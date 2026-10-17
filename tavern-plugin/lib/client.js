@@ -327,8 +327,27 @@ window.__ModuleLoader__.load({
 		  return file.arrayBuffer().then(buffer => ({ name, type: file.type || 'application/epub+zip', fileB64: bytesToBase64(new Uint8Array(buffer)), chunkSize: 500 }));
 		}
 
+		/** Import one card file: archives (CHARX, DSH cards) go up as raw files, others as parsed JSON. */
+		async function importTavernCardFile(file, call) {
+			if (/\.(charx|dshcard)$/i.test(String(file.name || ""))) {
+				const response = await fetch("/api/dsh-tavern/card-upload", { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+				let reply = null;
+				try { reply = await response.json(); } catch (_error) {}
+				if (!reply || !reply.ok) throw new Error(reply && reply.error || "上传失败（HTTP " + response.status + "）");
+				return call("importCardUpload", { uploadId: reply.uploadId, name: file.name });
+			}
+			return call("importCard", { payload: await parseCardFile(file) });
+		}
+
 		/** What a card file brought into its character material, for the import notice. */
-		function tavernCardAssetNotice(assets) {
+		function tavernCardAssetNotice(assets, card) {
+			const extra = [];
+			if (card && card.packs && card.packs.length) extra.push("素材包 " + card.packs.map(function (pack) { return pack.title || pack.id; }).join("、") + (card.packs.some(function (pack) { return pack.reused; }) ? "（已有的包直接复用）" : ""));
+			if (card && card.pluginsSkipped && card.pluginsSkipped.length) extra.push("卡里带的插件（" + card.pluginsSkipped.join("、") + "）暂不支持，未启用");
+			const base = tavernCardAssetText(assets);
+			return [base].concat(extra).filter(Boolean).join("；");
+		}
+		function tavernCardAssetText(assets) {
 			if (!assets) return "";
 			if (assets.error) return "角色素材导入失败：" + assets.error;
 			const parts = [];
@@ -10867,6 +10886,11 @@ function bindTavernFontZoom(node, win) {
 						return addTo(stageViews, entry);
 					}, "tavernUi.registerStageView()");
 				},
+				// The asset packs this game's card carries (apiVersion 2): { id, title, format, contentHash, baseUrl }.
+				getCardPacks(gameId) {
+					if (typeof gameId !== "string" || !gameId) return Promise.reject(new TypeError("getCardPacks 需要 gameId"));
+					return rpc("cardPacks", {}, gameId).then(function (reply) { return reply ? reply.packs || [] : []; });
+				},
 				// Say a line in its character's voice on the channel the player chose (apiVersion 2);
 				// resolves true when it was heard to the end. A new line stops the one being said.
 				speak(input) {
@@ -14537,7 +14561,7 @@ function bindTavernFontZoom(node, win) {
 			}
 			async function importCard(file) {
 				setBusy(true); setError("");
-				try { const payload = await parseCardFile(file); await call("importCard", { payload: payload }); await refresh(); notifyDataChanged(["cards"]); }
+				try { await importTavernCardFile(file, call); await refresh(); notifyDataChanged(["cards"]); }
 				catch (err) { setError(String(err && err.message || err)); }
 				finally { setBusy(false); }
 			}
@@ -14896,7 +14920,7 @@ function bindTavernFontZoom(node, win) {
 							h("button", { type: "button", role: "menuitem", disabled: busy, title: "在其他电脑的 DSH Tavern 导出的存档，作为一局新游戏继续玩", onClick: function () { if (saveImportFile.current) saveImportFile.current.click(); } }, "DSH Tavern 存档（.dshsave）"),
 							h("button", { type: "button", role: "menuitem", disabled: busy, title: "SillyTavern 导出的聊天记录，需要对应的人物卡", onClick: function () { if (sillyTavernChatFile.current) sillyTavernChatFile.current.click(); } }, "SillyTavern 聊天记录（.jsonl）"))),
 					h("button", { className: "dsh-tavern-btn", onClick: closePicker }, "关闭")),
-				h("input", { ref: fileRef, type: "file", accept: ".png,.json,.charx", style: { display: "none" }, onChange: function (e) { const f = e.target.files && e.target.files[0]; if (f) importCard(f); e.target.value = ""; } }),
+				h("input", { ref: fileRef, type: "file", accept: ".png,.json,.charx,.dshcard", style: { display: "none" }, onChange: function (e) { const f = e.target.files && e.target.files[0]; if (f) importCard(f); e.target.value = ""; } }),
 				pendingChatImport ? h("div", { className: "dsh-tavern-side-empty", role: "status", style: { padding: "4px 6px", display: "flex", alignItems: "center", gap: "8px" } }, h("span", null, "选择这份 SillyTavern 聊天记录对应的人物卡" + (pendingChatImport.characterName ? "（记录里的角色：" + pendingChatImport.characterName + "）" : "")), h("button", { className: "dsh-tavern-btn", disabled: busy, onClick: function () { setPendingChatImport(null); } }, "取消")) : null,
 				organization.toolbar(),
 				organization.visible.length ? h(React.Fragment, null, h("div", { className: "dsh-tavern-side-empty", style: { padding: "4px 6px" } }, "已绑定剧本的人物卡将自动按剧本推进；未绑定的按自由故事推进。剧本绑定在“卡片模式”中管理。"), h(TavernCardList, { place: "play", cards: organization.visible, batch: cardBatch, busy: busy, open: function (card) { if (!card.readError) preparePlayConversation(card); }, builtin: function () { return organization.renderCards(function (card) { return h("div", { key: card.path, className: "dsh-tavern-card-pick-wrap" },
@@ -14963,7 +14987,7 @@ function bindTavernFontZoom(node, win) {
 					: null);
 			const cardPicker = h("div", { className: "dsh-tavern-card-picker", role: "dialog", "aria-modal": "true", "aria-label": "选择卡片工作台起始任务" }, pickerError,
 				h("div", { className: "dsh-tavern-card-picker-head" }, cardEntry ? h("button", { className: "dsh-tavern-btn", onClick: function () { setCardEntry(""); } }, "← 返回") : h("span", null, "选择起始任务"), cardEntry === "writing-skill" ? h("span", null, "选择参考素材（至少 1 份）") : cardEntry === "extract" ? h("span", null, "选择初始剧本（至少 1 份）") : cardEntry === "mvu" ? h("span", null, "选择要转换的人物卡") : cardEntry === "resource-edit" ? h("span", null, "选择一个编辑目标") : null, h("span", { className: "dsh-tavern-spacer" }), cardEntry === "edit" || cardEntry === "gentle" || cardEntry === "mvu" ? h(MobileCardImportButton, { inputRef: fileRef, disabled: busy, onImported: async function () { await refresh(); notifyDataChanged(["cards"]); } }) : null, initialImportButtons, h("button", { className: "dsh-tavern-btn", onClick: closePicker }, "关闭")),
-				h("input", { ref: fileRef, type: "file", accept: ".png,.json,.charx", style: { display: "none" }, onChange: function (e) { const f = e.target.files && e.target.files[0]; if (f) importCard(f); e.target.value = ""; } }),
+				h("input", { ref: fileRef, type: "file", accept: ".png,.json,.charx,.dshcard", style: { display: "none" }, onChange: function (e) { const f = e.target.files && e.target.files[0]; if (f) importCard(f); e.target.value = ""; } }),
 				h("input", { ref: initialImportRef, type: "file", accept: ".txt,.md,.json,.epub,text/plain,text/markdown,application/json,application/epub+zip", style: { display: "none" }, onChange: function (e) { const f = e.target.files && e.target.files[0]; if (f) importInitialResource(f, initialImportKindRef.current); e.target.value = ""; } }),
 					(cardEntry === "edit" || cardEntry === "gentle") ? cardEditRows : cardEntry === "mvu" ? cardMvuRows : cardEntry === "writing-skill" || cardEntry === "extract" || cardEntry === "resource-edit" ? initialResourcePicker : h(React.Fragment, null,
 						h("button", { className: "dsh-tavern-card-pick", disabled: busy, onClick: function () { newCardConversation(null, "create", "新建人物卡"); } }, h("b", null, "新建人物卡"), h("span", null, "逐题问答确定角色与开场，可选 MVU 变量和前端美化，先看草图再建卡")),
@@ -17437,9 +17461,9 @@ function bindTavernFontZoom(node, win) {
 						const file = files[index];
 						setImportStatus("正在导入 " + (index + 1) + "/" + files.length + "：" + file.name);
 						try {
-							const result = await rpc("importCard", { payload: await parseCardFile(file) });
+							const result = await importTavernCardFile(file, rpc);
 							imported += 1; lastPath = result.card.path;
-							const notice = tavernCardAssetNotice(result.card.assets);
+							const notice = tavernCardAssetNotice(result.card.assets, result.card);
 							if (notice) notices.push((files.length > 1 ? file.name + "：" : "") + notice);
 						} catch (err) { failures.push(file.name + "：" + String(err && err.message || err)); }
 					}
@@ -17504,8 +17528,8 @@ function bindTavernFontZoom(node, win) {
 			// "@" quotes a card into the card workspace conversation; only there does it mean anything.
 			const mentionButton = sessionMode === "card" ? function (item) { return h("button", { type: "button", className: "dsh-tavern-card-mention", title: "在对话中引用", "aria-label": "在对话中引用：" + item.name, onClick: function (event) { event.stopPropagation(); props.appendMention(item.path, item.name); } }, "@"); } : null;
 			return h("div", { className: "dsh-tavern-library dsh-tavern-card-library" },
-				h("div", { className: "dsh-tavern-status-head" }, h("div", { className: "dsh-tavern-status-title" }, "人物卡库"), h("div", { className: "dsh-tavern-question-sub" }, cards.length + " 张人物卡"), h("div", { className: "dsh-tavern-library-head-actions" }, h(MobileCardImportButton, { inputRef: importInput, disabled: busy, onImported: async function (imported) { await refreshCards(); await loadCard(imported.path); notifyTavernDataChanged(["cards"], "cards"); } }), h("input", { ref: importInput, type: "file", multiple: true, accept: ".png,.json,.charx", style: { display: "none" }, onChange: function (event) { const files = Array.from(event.target.files || []); importCardFiles(files); event.target.value = ""; } }))),
-				h("div", { className: "dsh-tavern-question-sub dsh-tavern-card-import-hint", role: "status" }, importStatus || "支持多选 PNG、JSON、CHARX 人物卡一起导入"),
+				h("div", { className: "dsh-tavern-status-head" }, h("div", { className: "dsh-tavern-status-title" }, "人物卡库"), h("div", { className: "dsh-tavern-question-sub" }, cards.length + " 张人物卡"), h("div", { className: "dsh-tavern-library-head-actions" }, h(MobileCardImportButton, { inputRef: importInput, disabled: busy, onImported: async function (imported) { await refreshCards(); await loadCard(imported.path); notifyTavernDataChanged(["cards"], "cards"); } }), h("input", { ref: importInput, type: "file", multiple: true, accept: ".png,.json,.charx,.dshcard", style: { display: "none" }, onChange: function (event) { const files = Array.from(event.target.files || []); importCardFiles(files); event.target.value = ""; } }))),
+				h("div", { className: "dsh-tavern-question-sub dsh-tavern-card-import-hint", role: "status" }, importStatus || "支持多选 PNG、JSON、CHARX、DSH 人物卡一起导入"),
 				organization.toolbar(),
 				h("div", { className: "dsh-tavern-resource-body" }, error ? h("div", { className: "dsh-tavern-dock-error" }, error) : null, visible.length ? h(TavernCardList, { place: "library", cards: visible, batch: cardBatch, busy: busy, open: function (item) { loadCard(item.path); }, menu: organization.rowMenu, mention: mentionButton, builtin: function () { return organization.renderCards(function (item) { return h("div", { key: item.path, className: "dsh-tavern-library-card-row" },
 					cardBatch.checkbox(item),

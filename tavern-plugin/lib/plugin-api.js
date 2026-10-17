@@ -277,6 +277,20 @@ export function createTavernPluginApi(deps) {
       return (await deps.readCastAssets?.(game.sessionId)) ?? null
     },
 
+    // The asset packs this game's card carries (DSH cards): opaque data the plugin reading their
+    // `format` interprets. Files are read by path, or loaded in the page from `baseUrl + path`.
+    async listCardPacks({ gameId } = {}) {
+      const game = await requireGame(gameId)
+      return structuredClone((await deps.listCardPacks?.(game.sessionId)) || [])
+    },
+
+    async readCardPackFile({ gameId, pack, path } = {}) {
+      const game = await requireGame(gameId)
+      if (typeof pack !== 'string' || typeof path !== 'string' || !path) throw new TypeError('readCardPackFile 需要 pack 和 path')
+      if (!deps.readCardPackFile) throw Object.assign(new Error('当前版本不支持素材包'), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
+      return await deps.readCardPackFile(game.sessionId, pack, path)
+    },
+
     // A speech channel of the plugin's own; players pick it in Tavern's voicing settings.
     speechProvider({ id, label, description = '', voices = [], defaultVoice = '', synthesize } = {}) {
       const owner = ownerOf(this)
