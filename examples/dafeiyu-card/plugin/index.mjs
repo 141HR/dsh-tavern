@@ -10,6 +10,12 @@ export const inject = ['tavern']
 const TOOL = 'galgame_direct'
 const MAX_SCENES = 12
 
+// SillyTavern's 28 emotions (Tavern's line annotations) → this figure's own expressions.
+const EMOTIONS = { joy: 'joy', amusement: 'joy', excitement: 'joy', optimism: 'joy', approval: 'joy', gratitude: 'joy', relief: 'joy', admiration: 'joy', caring: 'joy',
+  anger: 'anger', annoyance: 'anger', disapproval: 'anger', sadness: 'sad', grief: 'crying', disappointment: 'sad', remorse: 'sad',
+  nervousness: 'anxious', fear: 'anxious', confusion: 'anxious', surprise: 'anxious', neutral: 'calm', curiosity: 'calm', realization: 'calm',
+  embarrassment: 'shy', disgust: 'disgust', love: 'love', desire: 'love', pride: 'smug' }
+
 function words(text) { return String(text || '').toLowerCase() }
 
 // The full-body standing picture of one outfit and emotion, as layers on a canvas (pixels of the canvas).
@@ -147,6 +153,18 @@ export function apply(ctx) {
       return { ok: true }
     }
   })
+
+  // The figure's expression avatars join Tavern's cast, so the story shows her face for each line's emotion.
+  tavern.castAssetSource({ name: 'figure', characters: async ({ gameId }) => {
+    const data = await catalog(gameId)
+    if (!data.figure) return []
+    const state = await tavern.getTurnState({ gameId }).catch(() => null)
+    const current = await sceneAt(gameId, state?.turn || 0)
+    const outfit = (data.figure.outfits || []).find(item => item.key === current.outfit) || data.figure.outfits?.[0]
+    const avatar = emotion => data.figureMedia(outfit?.avatars?.[emotion])
+    const avatars = Object.fromEntries(Object.entries(EMOTIONS).map(([emotion, own]) => [emotion, avatar(own)]).filter(([, url]) => url))
+    return [{ name: data.figure.name, aliases: data.figure.aliases || [], avatarUrl: avatar(outfit?.defaultEmotion || 'calm'), avatars }]
+  } })
 
   // The browser half asks for the scene of the turn it shows, with the URLs it needs.
   tavern.handle('dsh-card-dafeiyu-galgame/scene', async ({ gameId, turn }) => {
