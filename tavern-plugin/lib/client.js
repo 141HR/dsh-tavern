@@ -14272,7 +14272,7 @@ function bindTavernFontZoom(node, win) {
 			// Whether the left drawer is open on narrow layouts, as of the last render. Opening the right
 			// column used to close it as a side effect; now that it stays shut (#213), close the drawer here.
 			let sidebarWide = false;
-			function closeNarrowSidebar() {}
+			function closeNarrowSidebar() { if (sidebarWide) { sidebarWide = false; ctx.layout.toggleSidebar(); } }
 			ctx.effect(() => slots.inject("sidebar.workspaces", () => slots.register(
 				{ name: "sidebar.workspaces", priority: -1 },
 				function (props) { sidebarWide = Boolean(props.wide); return React.createElement(TavernSidebar, Object.assign({}, props, {
