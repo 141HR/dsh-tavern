@@ -8,6 +8,10 @@ import { copyTreeSync } from './portable-fs.mjs'
 const entries = ['profile-data/tavern', 'attachments', '.agent-presets', 'settings.yaml', '.credentials.yaml', '.openai-codex-auth.json', 'profiles/tavern/package.json', 'profiles/tavern/cordis.patch.yml']
 const configuration = new Set(['settings.yaml', '.credentials.yaml', '.openai-codex-auth.json', 'profiles/tavern/package.json', 'profiles/tavern/cordis.patch.yml'])
 const inside = (a, b) => a === b || b.startsWith(a + path.sep)
+function canonicalFuture(file) {
+  if (existsSync(file)) return realpathSync(file)
+  return path.join(canonicalFuture(path.dirname(file)), path.basename(file))
+}
 function save(file, value) {
   const temporary = file + '.tmp'
   writeFileSync(temporary, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 })
@@ -86,8 +90,9 @@ function recover(file, journal) {
 export function importUserHome({ source, target, beforePublish = () => {} }) {
   if (!source || !path.isAbsolute(source)) throw Error('DSH_TAVERN_IMPORT_HOME 必须是旧 DSH 数据主目录的绝对路径。')
   source = realpathSync(source)
-  mkdirSync(target, { recursive: true }); target = realpathSync(target)
+  target = canonicalFuture(path.resolve(target))
   if (inside(source, target) || inside(target, source)) throw Error('源目录与目标目录不能相同或互相包含。')
+  mkdirSync(target, { recursive: true })
   assertStopped(source); assertStopped(target)
   assertDesktopStopped([source, target])
   const reportRoot = path.join(target, 'backups', 'tavern-home-import')

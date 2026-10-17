@@ -59,6 +59,7 @@ test('源目录变化停止提交，旧服务运行和嵌套路径均拒绝', t 
   put(f.source, 'logs/tavern.pid.json', JSON.stringify({ pid: process.pid }))
   assert.throws(() => importUserHome(f), /停止旧命令行/)
   assert.throws(() => importUserHome({ source: f.source, target: path.join(f.source, 'nested') }), /互相包含/)
+  assert.equal(existsSync(path.join(f.source, 'nested')), false)
 })
 test('旧自定义安装的程序旁 data 目录完整进入固定数据目录', t => {
   const f = fixture(t), checkout = path.join(f.source, 'old-program')
