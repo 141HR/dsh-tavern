@@ -200,7 +200,7 @@
 				if (reading.on && beat) tavernSpeech.speak(tavernBeatSpeech(props.sessionId, beat)).then(function (heard) { turn(heard ? 400 : delay); });
 				else turn(delay);
 				return function () { active = false; if (timer !== null) window.clearTimeout(timer); };
-			}, [auto, reader.index, atEnd, reading.on]);
+			}, [auto, reader.index, reader.turn, reader.beats, atEnd, reading.on, props.sessionId]);
 			async function send(event) {
 				event.preventDefault();
 				const text = draft.trim();
@@ -312,7 +312,7 @@
 			const shown = Boolean(data && data.enabled !== false);
 			React.useEffect(function () {
 				if (shown && reading.on && beat && !fullscreen) void tavernSpeech.speak(tavernBeatSpeech(props.sessionId, beat));
-			}, [reader.index, reader.turn, reading.on, fullscreen, shown]);
+			}, [reader.index, reader.turn, reader.beats, reading.on, fullscreen, shown, props.sessionId]);
 			// Music belongs to this game's stage: leaving the game (switching, deleting) or losing the stage stops it.
 			React.useEffect(function () { if (shown) return function () { tavernMusic.stop(); }; }, [props.sessionId, shown]);
 			if (!shown) return null;
