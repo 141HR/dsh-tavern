@@ -124,6 +124,23 @@ for (const asset of card.data?.assets || []) {
 }
 files.set('card.json', Buffer.from(JSON.stringify(card, null, 2)))
 
+// The licences (CC BY / CC BY-NC-SA) ask that changes be indicated: say what this script did.
+const today = new Date().toLocaleDateString('sv')
+for (const pack of dsh.packs) {
+  const changed = [...renamed.values()].filter(change => files.has(pack.path + 'media/' + change.hash + '.' + change.ext))
+  const note = '# Changes for the DSH card distribution (' + today + ')\n\n' +
+    'This pack was re-encoded to make the 大肥鱼 DSH card smaller. Content, credits and licences are otherwise unchanged.\n\n' +
+    '- ' + changed.filter(change => change.ext === 'webp').length + ' pictures re-encoded as WebP (PNG at quality 90 with lossless alpha; WebP backgrounds over 100 KB at quality 80).\n' +
+    '- ' + changed.filter(change => change.ext === 'ogg').length + ' recordings re-encoded as Ogg Opus (music 64 kb/s, effects 48 kb/s).\n' +
+    (dropLive2d && pack.path.endsWith('/dafeiyu/') ? '- Live2D models removed; the card shows the static standing pictures.\n' : '') +
+    '\nRe-encoded files have new content hashes; references in this pack were updated to match.\n'
+  files.set(pack.path + 'credits/DSH-CARD-CHANGES.md', Buffer.from(note))
+  const manifest = JSON.parse(files.get(pack.path + 'manifest.json').toString('utf8'))
+  if (Array.isArray(manifest.credits) && !manifest.credits.includes('credits/DSH-CARD-CHANGES.md')) manifest.credits.push('credits/DSH-CARD-CHANGES.md')
+  files.set(pack.path + 'manifest.json', Buffer.from(JSON.stringify(manifest, null, 2)))
+  if (Array.isArray(pack.credits) && !pack.credits.includes(pack.path + 'credits/DSH-CARD-CHANGES.md')) pack.credits.push(pack.path + 'credits/DSH-CARD-CHANGES.md')
+}
+
 // Each pack's manifest: blobs and the file list follow, then the pack digest.
 for (const pack of dsh.packs) {
   const manifestPath = pack.path + 'manifest.json'
