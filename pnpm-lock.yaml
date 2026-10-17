@@ -5,7 +5,6 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  dsh-better-sidebar@0.26.0: dbfa67fb8adc1248d6243ad219b8ae37021b087f007a20ce98cce4fbb734e31a
   dsh-pocket@2.11.0: c15da3df37f06a475b03ccd527a88f5c4edf913b4eea06ed1a88bbfcd052e109
   dsh-web-mobile@3.1.0: b151174b09138f5a19067f2593383b1cd6586547748ab6848e3e3e061d0a270b
 
@@ -51,8 +50,8 @@ importers:
         version: 4.6.5
     devDependencies:
       dsh-better-sidebar:
-        specifier: 0.26.0
-        version: 0.26.0(patch_hash=dbfa67fb8adc1248d6243ad219b8ae37021b087f007a20ce98cce4fbb734e31a)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+        specifier: 0.28.0
+        version: 0.28.0(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       dsh-dream-skin:
         specifier: link:./tavern-plugin/packages/dsh-dream-skin
         version: link:tavern-plugin/packages/dsh-dream-skin
@@ -214,8 +213,14 @@ packages:
   '@deepseek-ai/cosmokit@1.8.5':
     resolution: {integrity: sha512-LXsrlem9z8dq4sLflj2yuCuYX7KqhdzF5hZly3eZyuTo8d6oDSOXuEgC5DbQWKW+lksm6zmOutQLsP/ma6wR6A==}
 
+  '@deepseek-ai/cosmokit@1.8.6':
+    resolution: {integrity: sha512-ZSD/fN52L498LBIOYwjIOlaLv5veY6ZEwI2yzvZUKQtctn0QAPqu8tKdJ+OF5+Tv6NBq1U+wJWH+QI6OGy5EvQ==}
+
   '@deepseek-ai/schemastery@3.18.4':
     resolution: {integrity: sha512-SSXO6tYuyrIqKVbmOnIq0s+riUywYzouFMcnBluHF9n4KMo2G8HvEzhCYj6pj2617/glOjbJuVInJ9hfONsjkg==}
+
+  '@deepseek-ai/schemastery@3.18.5':
+    resolution: {integrity: sha512-Mnobvqf9rHsZYv4g5edj5ddxS1oF1kIdSlz0DunUgnY3LWG5F26MqvH3YOOsSaodCgyzJ16OMN9O99/s5Crtdw==}
 
   '@formkit/auto-animate@0.10.0':
     resolution: {integrity: sha512-KGomRttjUfORuPUaR/ZGQw+6xfMrTM+sxnILv7JAd9AmabU9rg9i6gF/iC0Ih+QpKCubJpCA/1DX9UHKE8cX+A==}
@@ -644,25 +649,24 @@ packages:
   dompurify@3.4.14:
     resolution: {integrity: sha512-dVoH9z+MY+C9IilgGCk3YfFqjLi3fChm2OiKJMzh6axrJ5qwxqWaZamgmHrpv22CN/KdbZJuGEGgfQoL00LTdg==}
 
-  dsh-better-sidebar@0.26.0:
-    resolution: {integrity: sha512-tjWdPvvOgSeHvtPex/5c8pwBUa9zbKTemkGdnbbRgx6Y3oTXxBLqZ/2HJk29wrYKnth8bW3RiLxyFK1M2oa5SA==}
+  dsh-better-sidebar@0.28.0:
+    resolution: {integrity: sha512-x7+/YmH/HrSlXWOBZkhL7qQqcDgZEnDcWrhR5GlizzUZjz+w84FbQ6jo8trJC9tyaQxMaNvXVnXwDxn4I330Ew==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@deepseek-ai/cordis': ^4.0.4
-      '@deepseek-ai/dsh-agent': ^0.2.0-rc.2
-      '@deepseek-ai/dsh-client-locale': ^0.2.0-rc.2
-      '@deepseek-ai/dsh-client-ui-conversation': ^0.2.0-rc.2
-      '@deepseek-ai/dsh-client-ui-primitives': ^0.2.0-rc.2
-      '@deepseek-ai/dsh-client-ui-settings': ^0.2.0-rc.2
-      '@deepseek-ai/dsh-client-ui-sidebar-right': ^0.2.0-rc.2
-      '@deepseek-ai/dsh-client-ui-slots': ^0.2.0-rc.2
-      '@deepseek-ai/dsh-host-webserver': ^0.2.0-rc.2
-      '@deepseek-ai/dsh-invariants': ^0.2.0-rc.2
-      '@deepseek-ai/dsh-llm': ^0.2.0-rc.2
-      '@deepseek-ai/dsh-session': ^0.2.0-rc.2
-      '@deepseek-ai/dsh-settings': ^0.2.0-rc.2
-      '@deepseek-ai/dsh-subagent': ^0.2.0-rc.2
-      '@deepseek-ai/dsh-tools': ^0.2.0-rc.2
+      '@deepseek-ai/cordis': ^4.0.5
+      '@deepseek-ai/dsh-agent': ^0.2.1-rc.1
+      '@deepseek-ai/dsh-client-locale': ^0.2.1-rc.1
+      '@deepseek-ai/dsh-client-ui-conversation': ^0.2.1-rc.1
+      '@deepseek-ai/dsh-client-ui-primitives': ^0.2.1-rc.1
+      '@deepseek-ai/dsh-client-ui-settings': ^0.2.1-rc.1
+      '@deepseek-ai/dsh-client-ui-sidebar-right': ^0.2.1-rc.1
+      '@deepseek-ai/dsh-client-ui-slots': ^0.2.1-rc.1
+      '@deepseek-ai/dsh-host-webserver': ^0.2.1-rc.1
+      '@deepseek-ai/dsh-llm': ^0.2.1-rc.1
+      '@deepseek-ai/dsh-session': ^0.2.1-rc.1
+      '@deepseek-ai/dsh-settings': ^0.2.1-rc.1
+      '@deepseek-ai/dsh-subagent': ^0.2.1-rc.1
+      '@deepseek-ai/dsh-tools': ^0.2.1-rc.1
       '@huanlin/dsh-plugin-better-locale': ^0.1.0
       react: ^18.2.0
       react-dom: ^18.2.0
@@ -1452,9 +1456,16 @@ snapshots:
 
   '@deepseek-ai/cosmokit@1.8.5': {}
 
+  '@deepseek-ai/cosmokit@1.8.6': {}
+
   '@deepseek-ai/schemastery@3.18.4':
     dependencies:
       '@deepseek-ai/cosmokit': 1.8.5
+      '@standard-schema/spec': 1.1.0
+
+  '@deepseek-ai/schemastery@3.18.5':
+    dependencies:
+      '@deepseek-ai/cosmokit': 1.8.6
       '@standard-schema/spec': 1.1.0
 
   '@formkit/auto-animate@0.10.0': {}
@@ -1960,7 +1971,7 @@ snapshots:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
-  dsh-better-sidebar@0.26.0(patch_hash=dbfa67fb8adc1248d6243ad219b8ae37021b087f007a20ce98cce4fbb734e31a)(react-dom@19.2.0(react@19.2.0))(react@19.2.0):
+  dsh-better-sidebar@0.28.0(react-dom@19.2.0(react@19.2.0))(react@19.2.0):
     dependencies:
       '@codemirror/commands': 6.11.0
       '@codemirror/lang-cpp': 6.0.3
@@ -1983,7 +1994,7 @@ snapshots:
       '@codemirror/search': 6.7.1
       '@codemirror/state': 6.7.1
       '@codemirror/view': 6.43.9
-      '@deepseek-ai/schemastery': 3.18.4
+      '@deepseek-ai/schemastery': 3.18.5
       '@formkit/auto-animate': 0.10.0
       '@lezer/highlight': 1.2.5
       '@xterm/addon-fit': 0.11.0
