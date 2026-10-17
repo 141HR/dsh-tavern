@@ -1,5 +1,7 @@
 # 角色演出：对话头像、立绘差分、配音
 
+整体分层见 [从酒馆到 Galgame：四层演出](tavern-to-galgame.md)。
+
 借鉴 [DSH Tavern Galgame](https://github.com/jerryzmtz/dsh-tavern-galgame) 的效果，在 Tavern 本体实现「谁在说话、什么表情、什么声音」这层多模态基础能力，再通过插件接口开放给插件（例如 Galgame 的舞台）。
 
 ## 原则
