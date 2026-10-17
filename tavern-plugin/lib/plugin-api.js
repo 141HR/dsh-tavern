@@ -324,6 +324,24 @@ export function createTavernPluginApi(deps) {
       return (await deps.readCardImage?.(game.sessionId)) ?? null
     },
 
+    // This game's character design archive (人物设计档案): the one text and pictures share.
+    async getCharacterDesigns({ gameId } = {}) {
+      const game = await requireGame(gameId)
+      return structuredClone(await deps.readCharacterDesigns(game.sessionId))
+    },
+
+    // Create or update one person in the archive, as the settlement's own design tool does:
+    // all five fields are required, and the game's worldbook entry for them follows.
+    async saveCharacterDesign({ gameId, name, aliases, identity, personality, appearance, speechStyle, narrativeRole } = {}) {
+      const owner = ownerOf(this)
+      const game = await requireGame(gameId)
+      if ((await choicesFor(game.sessionId)).disabled.has(owner)) throw new Error('玩家在本局关闭了插件 ' + owner)
+      if (aliases !== undefined && (!Array.isArray(aliases) || aliases.some(alias => typeof alias !== 'string'))) throw new TypeError('aliases 必须是文本数组')
+      const result = await deps.saveCharacterDesign(game.sessionId, { name, ...(aliases ? { aliases } : {}), identity, personality, appearance, speechStyle, narrativeRole })
+      if (result?.ok !== true) throw new Error(String(result?.error || '人物设计保存失败'))
+      return { name: result.name }
+    },
+
     // Every character card in the library, read-only. `id` is what card-taking methods accept.
     async listCards() {
       return (await deps.listCards()).map(card => ({

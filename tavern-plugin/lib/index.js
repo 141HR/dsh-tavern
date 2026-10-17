@@ -2708,6 +2708,12 @@ export async function apply(ctx) {
     ...pluginTurns,
     backgroundModel: async sessionId => backgroundModelSelection(await backgroundConfigForSession(sessionId)),
     readCard: readPluginCard,
+    readCharacterDesigns: async sessionId => projectCharacterDesignDocument((await chatForSession(sessionId))?.characterDesignDocument),
+    saveCharacterDesign: async (sessionId, input) => {
+      const chat = await chatForSession(sessionId)
+      if (!chat) throw Object.assign(new Error('这一局不存在'), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
+      return JSON.parse(await characterDesignDocuments.execute(chat.id, { name: CHARACTER_DESIGN_SAVE_TOOL.name, arguments: input }))
+    },
     listCards,
     readCardRaw: async card => {
       const cardPath = normalizeResourcePath(card, 'card')

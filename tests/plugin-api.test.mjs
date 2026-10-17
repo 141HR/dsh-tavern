@@ -838,3 +838,29 @@ test('人物卡库、改卡、工具可见范围与 Skill：插件不用读写 T
   await tick()
   assert.equal(h.api.toolModesFor('wrongbook_lookup'), null, '插件卸载后可见范围撤销')
 })
+
+test('人物设计档案：插件读取本局档案，并能按结算同样的规则保存人物', { skip: !cordis }, async t => {
+  const archive = { revision: 2, updatedAt: 1, characters: [{ name: '林岚', aliases: ['阿岚'], identity: '镖师', narrativeRole: '护送', updatedAt: 1, sections: [{ key: 'appearance', label: '外貌', text: '黑发' }] }] }
+  const saved = []
+  let disabled = []
+  const h = await harness(t, {
+    readCharacterDesigns: async sessionId => sessionId === 'game-1' ? archive : null,
+    saveCharacterDesign: async (sessionId, input) => { saved.push([sessionId, input]); return input.identity ? { ok: true, name: input.name } : { ok: false, error: '人物设计缺少 identity' } },
+    data: { readSettings: async () => ({ disabled }), updateSettings: async () => {} }
+  })
+  let tavern
+  await h.root.plugin({ name: 'image-plugin', inject: ['tavern'], apply(ctx) { tavern = ctx.tavern } })
+  await tick()
+  const read = await tavern.getCharacterDesigns({ gameId: 'game-1' })
+  read.characters[0].name = '改了'
+  assert.equal(archive.characters[0].name, '林岚', '读到的是副本')
+  await assert.rejects(tavern.getCharacterDesigns({ gameId: 'nope' }), /不存在/)
+
+  const person = { name: '林岚', aliases: ['阿岚'], identity: '镖师', personality: '冷静', appearance: '黑发、左眉有疤', speechStyle: '简短', narrativeRole: '护送' }
+  assert.deepEqual(await tavern.saveCharacterDesign({ gameId: 'game-1', ...person }), { name: '林岚' })
+  assert.deepEqual(saved, [['game-1', person]])
+  await assert.rejects(tavern.saveCharacterDesign({ gameId: 'game-1', name: '无名' }), /缺少 identity/)
+  await assert.rejects(tavern.saveCharacterDesign({ gameId: 'game-1', ...person, aliases: '阿岚' }), /aliases/)
+  disabled = ['image-plugin']
+  await assert.rejects(tavern.saveCharacterDesign({ gameId: 'game-1', ...person }), /关闭了插件/)
+})
