@@ -161,6 +161,7 @@ import { createLedgerEditor } from './domain/ledger-editor.js'
 import { readLedger, LEDGER_SUBMIT_TOOL } from './domain/story-ledger.js'
 import { createManualLedger } from './domain/manual-ledger.js'
 import { POSTURE_SUBMIT_TOOL, POSTURE_SUBMIT_TOOL_NAME, lastSubmittedPosture, normalizePostureSubmission } from './domain/posture-submission.js'
+import { createCastPresentation } from './domain/cast-presentation.js'
 import { TAVERN_COMPATIBILITY_CAPABILITIES, createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
 import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics, sanitizeModuleFailure, sanitizeMvuLoadDiagnostic, redactMvuLoadError } from './domain/mvu-diagnostics.js'
 import { createPlayChatDebugReference, readPlayChatDebugTurn } from './domain/play-chat-debug.js'
@@ -2447,6 +2448,7 @@ export async function apply(ctx) {
     backgroundTools: BACKGROUND_TOOLS,
     // Set up after the runner: plugin tools are read when a background Session is set up.
     pluginSettlement: () => pluginApi.settlement,
+    castSettlement: () => castPresentation.settlement,
     pluginCandidate: () => pluginApi.candidate,
     sharedTools: [sharedWorldbookSearch(searchWorldbook), {
       tool: HISTORY_RECALL_TOOL,
@@ -2614,6 +2616,13 @@ export async function apply(ctx) {
     worldbooks: sceneWorldbooks
   })
   const pluginSettlementProgress = createPluginSettlementProgress()
+  // Dialogue speakers and emotions, annotated by settlement (docs/design/cast-presentation.md).
+  const castPresentation = createCastPresentation({
+    enabled: async () => (await readTavernSettings()).castPresentation === true,
+    turns: pluginTurns,
+    data: pluginData,
+    publish: sessionId => sessionSignals.publish(sessionId, { kind: 'cast', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
+  })
   // ---------- 插件接口：读人物卡与历史、改变量、后台任务（docs/plugin-api.md） ----------
   const pluginStoryTurn = message => Number(message?.turn || (message?.greeting ? 1 : 0))
   const pluginSource = message => str(message?.projectionText ?? message?.sourceText ?? message?.text)
@@ -3341,7 +3350,7 @@ export async function apply(ctx) {
             throw error
           }
           result = { posture: mvuResult.posture }
-        } else if (!backgroundTasksSettings.posture && !backgroundTasksSettings.characterDesign) {
+        } else if (!backgroundTasksSettings.posture && !backgroundTasksSettings.characterDesign && !await castPresentation.settlement.wanted()) {
           result = {}
         } else if (await settleByPlugin()) {
           // A plugin replaced this settlement; its validated result is committed like Tavern's own.
@@ -4220,6 +4229,7 @@ export async function apply(ctx) {
       case 'listSceneImageModels': return await enabledSceneIllustrations().listModels(args)
       case 'testSceneImageGeneration': return await enabledSceneIllustrations().testGenerate()
       case 'pluginMediaForTurn': return await pluginMediaForTurn(args && args.sessionId, args && args.turn)
+      case 'castForTurns': return await castPresentation.forTurns(str(args && args.sessionId), args && args.turns)
       case 'pluginMediaTurns': return await pluginMediaTurns(args && args.sessionId)
       case 'sceneImageStatus': return { illustration: await enabledSceneIllustrations().status(args.sessionId, args.turn) }
       case 'recordSceneImageInteraction': {

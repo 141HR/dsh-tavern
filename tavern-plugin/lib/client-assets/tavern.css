@@ -2774,3 +2774,14 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
 }
 .dsh-tavern-plugin-overlay-error { display: flex; gap: 12px; align-items: center; justify-content: center; min-height: 100%; }
 .dsh-local-advanced > summary { cursor: pointer; margin-bottom: 16px; font-size: 15px; font-weight: 700; color: var(--dsw-alias-label-primary); }
+
+/* 对话头像（docs/design/cast-presentation.md）：含已标注台词的段落显示成说话人的一行。 */
+.dsh-tavern-cast-line { display: flex; align-items: flex-start; gap: 12px; margin: 14px 0; }
+.dsh-tavern-cast-avatar { flex: none; width: 44px; height: 44px; border-radius: 50%; object-fit: cover; object-position: top; background: var(--dsw-alias-bg-layer-2, rgba(127,127,127,.12)); }
+.dsh-tavern-cast-avatar-letter { display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; font-weight: 600; background: hsl(var(--dsh-cast-hue, 210) 45% 52%); }
+.dsh-tavern-cast-body { flex: 1; min-width: 0; }
+.dsh-tavern-cast-body > :first-child + * > :first-child, .dsh-tavern-cast-body p:first-child { margin-top: 0; }
+.dsh-tavern-cast-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; line-height: 20px; }
+.dsh-tavern-cast-name { font-weight: 600; font-size: 14px; color: hsl(var(--dsh-cast-hue, 210) 45% 42%); }
+.dsh-tavern-cast-emotion { font-size: 12px; padding: 0 6px; border-radius: 6px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2, rgba(127,127,127,.12)); }
+[data-ds-dark-theme] .dsh-tavern-cast-name { color: hsl(var(--dsh-cast-hue, 210) 60% 70%); }

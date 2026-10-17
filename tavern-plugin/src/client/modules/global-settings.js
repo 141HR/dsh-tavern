@@ -42,15 +42,16 @@ function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernD
             message ? h("p", { role: "status" }, message) : null);
     }
 
-    // A model-compatibility switch, not a per-game preference: it applies to every game from its next turn.
-    function StoryToolCallSettings({ settings }) {
+    // Global switches: they apply to every game from its next turn, not per-game preferences.
+    function SettingSwitch({ settings, name, title, description }) {
         const h = React.createElement;
-        const [enabled, setEnabled] = React.useState(settings.storyToolCall === true), [busy, setBusy] = React.useState(false), [message, setMessage] = React.useState("");
+        const [enabled, setEnabled] = React.useState(settings[name] === true), [busy, setBusy] = React.useState(false), [message, setMessage] = React.useState("");
         async function save(value) {
             setBusy(true); setMessage("");
             try {
-                const result = await rpc("updateTavernSettings", { patch: { storyToolCall: value } });
-                setEnabled(result.settings.storyToolCall === true);
+                const result = await rpc("updateTavernSettings", { patch: { [name]: value } });
+                setEnabled(result.settings[name] === true);
+                notifySettingsChanged();
                 setMessage("已保存，所有游戏下一轮生效");
             } catch (err) { setMessage("保存失败：" + String(err.message || err)); }
             finally { setBusy(false); }
@@ -58,9 +59,9 @@ function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernD
         return h("section", { className: "dsh-tavern-settings-group" },
             h("label", { className: "dsh-tavern-settings-row dsh-tavern-background-task" },
                 h("span", { className: "dsh-tavern-settings-copy" },
-                    h("strong", null, "正文走工具调用"),
-                    h("p", { className: "dsh-tavern-settings-desc" }, "让模型通过工具调用提交正文，可缓解 Gemini 等模型在正文中途截断或拒答。需要模型支持工具调用；正文生成完成后一次性显示。")),
-                h("input", { type: "checkbox", role: "switch", "aria-label": "正文走工具调用", checked: enabled, disabled: busy, onChange: event => save(event.target.checked) })),
+                    h("strong", null, title),
+                    h("p", { className: "dsh-tavern-settings-desc" }, description)),
+                h("input", { type: "checkbox", role: "switch", "aria-label": title, checked: enabled, disabled: busy, onChange: event => save(event.target.checked) })),
             message ? h("div", { className: "dsh-tavern-settings-row", role: "status" }, h("span", { className: "dsh-tavern-settings-desc" }, message)) : null);
     }
 
@@ -102,10 +103,13 @@ function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernD
                 state.settings ? h(GlobalPlayDefaults, { settings: state.settings }) : null,
                 h(TavernConversationWritingSkills, { globalDefaults: true })),
             group("显示与交互", "",
+                state.settings ? h(SettingSwitch, { settings: state.settings, name: "castPresentation", title: "对话头像",
+                    description: "后台结算时顺带标注每句台词的说话人和情绪，台词显示成带头像的一行。主角用人物卡头像，其他人物用首字头像。" }) : null,
                 h(DisplayPreferencesSettings),
                 h(CandidatePreferencesSettings)),
             group("高级", "",
-                state.settings ? h(StoryToolCallSettings, { settings: state.settings }) : null,
+                state.settings ? h(SettingSwitch, { settings: state.settings, name: "storyToolCall", title: "正文走工具调用",
+                    description: "让模型通过工具调用提交正文，可缓解 Gemini 等模型在正文中途截断或拒答。需要模型支持工具调用；正文生成完成后一次性显示。" }) : null,
                 h(PromptTemplateSettingsEntry),
                 h(ContextCompactionSettings)),
             state.error ? React.createElement("div", { className: "dsh-tavern-settings-error", role: "alert" }, "保存失败：" + state.error) : null

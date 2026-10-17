@@ -60,6 +60,10 @@ export function applyTavernSettingsPatch(current, patch) {
     if (typeof input.storyToolCall !== 'boolean') throw new Error('正文走工具调用设置必须是布尔值')
     next.storyToolCall = input.storyToolCall
   }
+  if (Object.hasOwn(input, 'castPresentation')) {
+    if (typeof input.castPresentation !== 'boolean') throw new Error('对话头像设置必须是布尔值')
+    next.castPresentation = input.castPresentation
+  }
   if (Object.hasOwn(input, 'contextCompaction')) next.contextCompaction = { ...compactionPolicy(input.contextCompaction), revision: Date.now() }
   if (Object.prototype.hasOwnProperty.call(input, 'backgroundTasks')) {
     next.backgroundTasks = normalizeBackgroundTasks({ ...normalizeBackgroundTasks(next.backgroundTasks), ...object(input.backgroundTasks) })
@@ -131,6 +135,7 @@ export function presentTavernSettings(document, defaults) {
     hideContextAndReasoning: object(document).hideContextAndReasoning !== false,
     candidateDismissMode: object(document).candidateDismissMode === 'after-fill' ? 'after-fill' : 'after-send',
     storyToolCall: object(document).storyToolCall === true,
+    castPresentation: object(document).castPresentation === true,
     compatibilityMode: false,
     sillyModeEnabled: false,
     webSearchEnabled: object(document).webSearchEnabled === true,

@@ -114,8 +114,10 @@ export function createBackgroundAgentTask(options) {
   }
   // Seam to the plugin layer (plugin-api.js): tools and notes plugins add to settlement.
   const pluginSettlement = () => typeof options.pluginSettlement === 'function' ? options.pluginSettlement() : null
+  // Tavern's own optional settlement tools (dialogue annotation): same seam, never disabled per plugin.
+  const castSettlement = () => typeof options.castSettlement === 'function' ? options.castSettlement() : null
   function pluginTools() {
-    const tools = pluginSettlement()?.tools() || []
+    const tools = [...(castSettlement()?.tools() || []), ...(pluginSettlement()?.tools() || [])]
     return tools.filter(tool => tool && !stableNames.has(tool.name) && !sharedByName.has(tool.name))
   }
   function completedBoundary(events) {
@@ -274,6 +276,9 @@ export function createBackgroundAgentTask(options) {
           const shared = (input.task !== 'worldbook-filter' || registeredShared?.allowDuringWorldbookFilter === true) &&
             (input.task !== 'character-design' || registeredShared?.allowDuringCharacterDesign === true) ? registeredShared : undefined
           const current = allowed.get(tool.name) || (shared && shared.tool)
+          if (current === undefined && input.task === 'settlement' && castSettlement()?.has(tool.name)) {
+            return await castSettlement().call(tool.name, args, { gameId: str(input.sessionId), turn: Math.max(0, Number(input.turn) || 0) })
+          }
           if (current === undefined && input.task === 'settlement' && state.pluginCall && pluginSettlement()?.has(tool.name)) {
             if (typeof input.stopToolsWhen === 'function' && input.stopToolsWhen()) {
               return JSON.stringify({ ok: false, retryable: false, message: '当前任务已经提交完成，请结束本轮。插件工具请在提交结算之前调用。' })
@@ -433,6 +438,7 @@ export function createBackgroundAgentTask(options) {
       const systemUpdate = input.task === 'candidate' && typeof input.systemPromptText === 'string'
         ? cardSystemPromptSnapshot(agent.session, input.systemPromptText) : null
       const pluginNotes = plugins ? await plugins.sections(pluginContext) : []
+      const castNote = input.task === 'settlement' && castSettlement() ? await castSettlement().section(pluginContext).catch(() => '') : ''
       // Tool definitions stay fixed for the cache; which ones may be called is stated each
       // turn, so a plugin turned off and on again is usable without stale refusals.
       const pluginToolNames = plugins ? await plugins.toolNames(pluginContext) : { available: [], unavailable: [] }
@@ -444,7 +450,7 @@ export function createBackgroundAgentTask(options) {
         ...pluginNotes.map(note => note.text)].join('\n\n')
         : candidateNotes.length ? ['【插件附加的候选要求】', ...candidateNotes.map(note => note.text)].join('\n\n') : ''
       const taskText = [foregroundReads, snapshot?.rendered, systemUpdate?.rendered,
-        backgroundPrompt(filterContext?.messages || input.messages, scriptContext?.turnContext ?? input.turnContext, input.task, input.system, input), pluginText].filter(Boolean).join('\n\n')
+        backgroundPrompt(filterContext?.messages || input.messages, scriptContext?.turnContext ?? input.turnContext, input.task, input.system, input), castNote, pluginText].filter(Boolean).join('\n\n')
       agent.followup({
         id: randomUUID(),
         role: 'user',

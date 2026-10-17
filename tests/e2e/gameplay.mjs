@@ -43,6 +43,8 @@ const recoveryScenario = process.argv.includes('--surface-recovery')
 const helperApiScenario = process.argv.includes('--helper-api')
 // Story body submitted through the submit_story tool (per-conversation toggle, off by default).
 const storyToolScenario = process.argv.includes('--story-tool')
+// Dialogue avatars: settlement annotates speakers, quoted lines show as speaker rows.
+const castScenario = process.argv.includes('--cast')
 const compactionScenario = process.argv.find(arg => arg.startsWith('--compaction='))?.split('=')[1]
 const source = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const runtime = resolve(process.env.TAVERN_E2E_RUNTIME || join(homedir(), '.dsh-tavern/runtime'))
@@ -212,6 +214,7 @@ try {
           TAVERN_E2E_BACKGROUND_DIR: (process.argv.includes('--background-lifecycle') || process.argv.includes('--background-failure')) ? output : '',
           TAVERN_E2E_REQUEST_AUDIT: join(output, 'preset-requests.jsonl'),
           TAVERN_E2E_STORY_TOOL_LOG: storyToolScenario ? join(output, 'story-tool.jsonl') : '',
+          TAVERN_E2E_CAST: castScenario ? '1' : '',
           TAVERN_E2E_MEMORY_AUDIT: process.argv.includes('--card-memory') ? join(output, 'memory-requests.jsonl') : '',
           TAVERN_E2E_SCENE_AUDIT: process.argv.includes('--scene-add') ? join(output, 'scene-requests.jsonl') : '',
           TAVERN_E2E_CONTEXT_AUDIT: process.argv.includes('--native-repair') || process.argv.includes('--failure-resilience') ? join(output, 'context-requests.jsonl') : '',
@@ -494,6 +497,17 @@ try {
     await page.goto(chatUrl)
     await page.getByRole('textbox', { name: /发消息|Message/ }).waitFor()
   })
+  if (castScenario) await step('开启对话头像', async () => {
+    const chatUrl = page.url()
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.getByText('DSH Tavern', { exact: true }).first().click()
+    const toggle = page.getByRole('switch', { name: '对话头像', exact: true })
+    await toggle.click()
+    await page.getByText('已保存，所有游戏下一轮生效').first().waitFor()
+    assert.equal(await toggle.isChecked(), true)
+    await page.goto(chatUrl)
+    await page.getByRole('textbox', { name: /发消息|Message/ }).waitFor()
+  })
   await step('玩一轮，确认正文、金币与人物姿势', async () => {
     const composer = page.getByRole('textbox', { name: /发消息|Message/ })
     await composer.fill('领取任务奖励')
@@ -501,6 +515,21 @@ try {
     await inspectScreen()
     report.beforeReload = inspectSaved(await savedChat())
     await page.screenshot({ path: join(output, 'before-reload.png'), fullPage: true })
+  })
+  if (castScenario) await step('台词显示成带头像的说话人行，刷新后仍在', async () => {
+    const rows = page.locator('.dsh-tavern-cast-line').filter({ visible: true })
+    for (const reload of [false, true]) {
+      if (reload) await page.reload({ waitUntil: 'domcontentloaded' })
+      await rows.first().waitFor({ timeout: 30000 })
+      const shown = await rows.evaluateAll(items => items.map(item => ({
+        name: item.querySelector('.dsh-tavern-cast-name')?.textContent, emotion: item.querySelector('.dsh-tavern-cast-emotion')?.textContent || '',
+        avatar: item.querySelector('.dsh-tavern-cast-avatar')?.textContent || 'img', text: item.querySelector('.dsh-tavern-cast-body')?.textContent || '' })))
+      assert.deepEqual(shown.map(row => [row.name, row.emotion, row.avatar]), [['店主', '开心', '店'], ['你', '感激', '你']])
+      assert.ok(shown[0].text.includes('欢迎回来，这是你的奖励。'))
+      await page.getByText('你获得了十枚金币。', { exact: false }).filter({ visible: true }).first().waitFor()
+    }
+    await page.screenshot({ path: join(output, 'cast-lines.png') })
+    report.castLines = true
   })
   await step('刷新后确认同一局、正文和状态均保留', async () => {
     await page.reload({ waitUntil: 'domcontentloaded' })
