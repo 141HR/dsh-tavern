@@ -2554,11 +2554,12 @@ button.dsh-tavern-play-fullscreen {
   html.dsh-tavern-viewport-pinned.dsh-tavern-seat-scroll [data-composer-seat] { overflow-y: auto; overscroll-behavior: contain; }
   body.dsh-tavern-shell-active .dsh-tavern-candidate-error-banner { max-height: calc(var(--dsh-vv-height, 100dvh) * .2); overflow-y: auto; }
   body.dsh-tavern-shell-active [data-composer-card] :is(textarea, [contenteditable="true"]) { font-size: 16px !important; }
-  /* 触控命中区放大到 40px，可见底色仍按宿主原尺寸画在内容区（#215）：
-     宿主的 + 和附件按钮带圆形底色，直接放大会变成大灰块，挤压时还会变成竖条。
-     按宿主的 add 样式类选，不按 aria-label：标签随界面语言变（中文是「指令」「添加附件」）。 */
-  body.dsh-tavern-shell-active [data-composer-card] button { min-width: 40px; min-height: 40px; flex-shrink: 0; }
-  body.dsh-tavern-shell-active [data-composer-card] button:is([class$="_add"], [class*="_add "]) { padding: 6px; background-clip: content-box; }
+  /* 触控命中区放大到 40px（#215）。宿主的 + 和附件按钮是 28px 的圆形底色：不改它的尺寸，
+     用透明的 ::after 向外扩出命中区，外观在任何宿主版本下都不变。
+     只用老 WebView 也认的选择器（不用 :is()、inset），否则整条规则失效、按钮又被撑成大灰块。 */
+  body.dsh-tavern-shell-active [data-composer-card] button:not([class*="_add"]) { min-width: 40px; min-height: 40px; flex-shrink: 0; }
+  body.dsh-tavern-shell-active [data-composer-card] button[class*="_add"] { position: relative; flex-shrink: 0; }
+  body.dsh-tavern-shell-active [data-composer-card] button[class*="_add"]::after { content: ""; position: absolute; top: -6px; right: -6px; bottom: -6px; left: -6px; }
   body.dsh-tavern-shell-active :is([data-sidebar-right-panel], .dsh-tavern-picker-overlay, .dsh-tavern-prompt, .dsh-tavern-group-manager, .dsh-ejs-editor, [role="dialog"]:has(> nav[class*="_nav"]))
     :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select) { font-size: 16px; max-width: 100%; box-sizing: border-box; }
   body.dsh-tavern-shell-active :is([data-sidebar-right-panel]) :is(button, summary, select) { min-height: 40px; }
@@ -2706,7 +2707,7 @@ button.dsh-tavern-play-fullscreen {
   body.dsh-tavern-shell-active [data-composer-card] [class*="_trailing"] { flex: 1; min-width: 0; gap: 2px; }
   body.dsh-tavern-shell-active [data-composer-card] [class*="_trailing"] > :has([class*="_triggerEffort"]),
   body.dsh-tavern-shell-active [data-composer-card] [class*="_root"]:has(> [class*="_trigger"] > [class*="_triggerEffort"]) { flex: 1; min-width: 0; }
-  body.dsh-tavern-shell-active [data-composer-card] button { min-width: 40px; min-height: 40px; flex-shrink: 0; }
+  body.dsh-tavern-shell-active [data-composer-card] button:not([class*="_add"]) { min-width: 40px; min-height: 40px; flex-shrink: 0; }
   body.dsh-tavern-shell-active [data-composer-card] [class*="_trigger"]:has(> [class*="_triggerEffort"]) { width: 100%; min-width: 40px; overflow: hidden; }
   body.dsh-tavern-shell-active [data-composer-card] [class*="_triggerLabel"] { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   body.dsh-tavern-shell-active [data-composer-card] [class*="_triggerEffort"] { display: none; }
