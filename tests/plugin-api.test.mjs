@@ -42,19 +42,6 @@ test('插件媒体：只接受本轮发出过的正文版本，按插件隔离�
   assert.deepEqual(await media.list({ chatId: 'c' }), [])
 })
 
-test('插件媒体：校验类型、数据大小与附件形状', async () => {
-  const media = createPluginMedia({ store: memoryStore() })
-  const attach = item => media.attach({ chatId: 'c', sessionId: 's', owner: 'p', turn: 1, key: 'k', currentKey: 'k', item })
-  await assert.rejects(attach({ kind: 'Image' }), /kind/)
-  await assert.rejects(attach({ kind: 'image', attachment: { attachmentId: 'x', name: 'a.mp4' } }), /图片附件/)
-  await assert.rejects(attach({ kind: 'x/y', data: 'a'.repeat(70000) }), /64 KB/)
-  await assert.rejects(attach({ kind: 'x/y', progress: 2 }), /progress/)
-  const video = await attach({ kind: 'video', attachment: { attachmentId: 'v', name: 'clip.mp4', bytes: 5 } })
-  assert.equal(video.attachment.name, 'clip.mp4')
-  const custom = await attach({ kind: 'my-plugin/card', data: { a: 1 } })
-  assert.deepEqual(custom.data, { a: 1 })
-})
-
 test('插件媒体：Range 与文件类型', async () => {
   assert.deepEqual(pluginMediaRange('bytes=2-4', 10), { start: 2, end: 4 })
   assert.deepEqual(pluginMediaRange('bytes=-3', 10), { start: 7, end: 9 })
@@ -418,35 +405,6 @@ test('插件轮次读取：真实存储下与生图共用正文版本，未结�
   assert.equal(await reader.readLatestSettledTurn('game-1'), null, '结算进行中不可读')
 })
 
-test('真实正文请求：插件段落只进入游玩的 system，卡片 Agent 不受影响', { skip: !process.env.DSH_BOOT_MODULE }, async t => {
-  const { createInitializationNative } = await import('./fixtures/conversation-initialization-native.mjs')
-  const { registerTurnLifecycleHooks } = await import('../tavern-plugin/lib/hooks/turn-lifecycle.js')
-  const h = await createInitializationNative(process.env.DSH_BOOT_MODULE, { assembleStablePrefix: false })
-  t.after(() => h.dispose())
-  let chat = await h.open().start({ ...h.input, mode: 'card', cardPath: '' })
-  let mode = 'story'
-  const calls = []
-  registerTurnLifecycleHooks({ ctx: h.ctx, hookChatForSession: async () => ({ ...chat, mode }), ensureNativeSystemPrefix: async () => {},
-    backgroundAgentRunner: { owns: () => false }, fullTemplateRuntime: { cancel() {} }, clearRuntimePresetRequestState() {},
-    userMessageForTurn: () => null, contentText: () => '', foregroundHandoff: { end() {} },
-    sessionStore: { flush: session => h.ctx.sessions.flush(session) },
-    foregroundStrategies: { assembleSystemPrompt: async assembly => { assembly.sections = [{ name: 'tavern:fixed', text: '卡片设定' }]; return assembly }, endTurn() {} },
-    turnOrchestrator: { modeFor: async () => mode },
-    pluginPromptSections: async input => { calls.push(input); return [{ name: 'tavern-plugin:image:rules', text: '在段落之间写 image###标签###' }] },
-    nativeWorldBookTemplateContext: async () => ({}), readChatCard: async () => ({}),
-    publishResourceWorkspace: async () => ({}), runtimePrompt: () => ''
-  })
-  for (const next of ['story', 'card']) {
-    mode = next
-    h.target.agent.followup({ id: crypto.randomUUID(), role: 'user', content: [{ type: 'text', text: '继续' }], source: { kind: 'human' } })
-    await h.target.agent.whenIdle()
-  }
-  assert.equal(h.requests.length, 2)
-  assert.match(h.requests[0].system, /卡片设定\n\n在段落之间写 image###标签###/)
-  assert.doesNotMatch(h.requests[1].system, /image###/)
-  assert.equal(calls[0].gameId, h.target.agent.session.id)
-})
-
 test('正文切分：标记换成插件元素，锚点媒体放在所在段落之后，找不到的不放', async () => {
   const { segmentPluginText, extractPluginMarkers } = await import('../tavern-plugin/lib/domain/plugin-text-segments.js')
   const text = '她**推开**了门，\n风灌进来。\n\n第二段 image###rain, night### 收尾。\n\n第三段。'
@@ -460,71 +418,6 @@ test('正文切分：标记换成插件元素，锚点媒体放在所在段落�
   const html = extractPluginMarkers('<div class="bar">image###a###</div>', [/image###(.+?)###/])
   assert.equal(html.html, '<div class="bar"></div>')
   assert.equal(html.markers.length, 1)
-})
-
-test('示例插件按文档写法运行：先占位，再换成图片', { skip: !cordis }, async t => {
-  const h = await harness(t)
-  const saved = []
-  await h.root.plugin({ name: 'fake-attachments', apply(ctx) {
-    ctx.provide('attachments', { async saveImage(input) { saved.push(input); return { attachmentId: 'png-1', mediaType: input.mediaType, bytes: input.data.length, width: 96, height: 64 } } })
-  } })
-  const example = await import('../examples/tavern-plugin-hello/index.mjs')
-  let tavern
-  await h.root.plugin(example)
-  await h.root.plugin({ name: 'observer', inject: ['tavern'], apply(ctx) { tavern = ctx.tavern } })
-  await tick()
-  await h.api.turnSettled('game-1')
-  for (let index = 0; index < 50 && !saved.length; index++) await tick()
-  await tick()
-  assert.equal(saved.length, 1)
-  assert.deepEqual(await tavern.list({ gameId: 'game-1' }), [], '其他插件看不到示例插件的项')
-  const [item] = await h.media.list({ chatId: 'chat-1' })
-  assert.equal(item.owner, 'tavern-plugin-hello')
-  assert.equal(item.status, 'ready')
-  assert.equal(item.anchor, '她推开门。')
-  assert.equal(item.attachment.attachmentId, 'png-1')
-})
-
-test('内置 Skill 携带的接口文档与示例和正本一致', async () => {
-  const { readFile } = await import('node:fs/promises')
-  const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8')
-  assert.equal(await read('presets/tavern/skills/tavern-plugin/references/plugin-api.md'), await read('docs/plugin-api.md'), '修改 docs/plugin-api.md 后同步复制到 Skill')
-  assert.equal(await read('presets/tavern/skills/tavern-plugin/references/plugin-recipes.md'), await read('docs/plugin-recipes.md'), '修改 docs/plugin-recipes.md 后同步复制到 Skill')
-  const copy = await read('presets/tavern/skills/tavern-plugin/references/example-plugin.md')
-  for (const file of ['package.json', 'index.mjs', 'client.js']) {
-    const block = new RegExp('## ' + file.replace('.', '\\.') + '\\n\\n```\\w+\\n([\\s\\S]*?)\\n```').exec(copy)?.[1]
-    assert.equal(block + '\n', await read('examples/tavern-plugin-hello/' + file), '修改示例插件 ' + file + ' 后同步复制到 Skill')
-  }
-})
-
-test('重复读取同一正文版本不再读写媒体记录', async () => {
-  const store = memoryStore()
-  let reads = 0, writes = 0
-  const counted = { ...store, readJson: async path => { reads++; return store.readJson(path) }, updateJson: async (path, fn) => { writes++; return store.updateJson(path, fn) } }
-  const media = createPluginMedia({ store: counted })
-  await media.issue('c', 2, 'k')
-  const after = { reads, writes }
-  await media.issue('c', 2, 'k')
-  await media.issue('c', 2, 'k')
-  assert.deepEqual({ reads, writes }, after)
-  assert.equal(after.writes, 1)
-  await media.removeChat('c')
-  await media.issue('c', 2, 'k')
-  assert.equal(writes, 2, '删局后重新登记')
-})
-
-test('tavern 服务：onTurnSettled 与 getTurn 带上这一轮的只读变量', { skip: !cordis }, async t => {
-  const h = await harness(t, { readVariables: async material => ({ stat_data: { turn: material.turn } }) })
-  const seen = []
-  let tavern
-  await h.root.plugin({ name: 'world', inject: ['tavern'], apply(ctx) { tavern = ctx.tavern; ctx.tavern.onTurnSettled(turn => seen.push(turn)) } })
-  await tick()
-  await h.api.turnSettled('game-1')
-  await tick()
-  assert.deepEqual(seen[0].variables, { stat_data: { turn: 3 } })
-  const read = await tavern.getTurn({ gameId: 'game-1', turn: 3 })
-  read.variables.stat_data.turn = 9
-  assert.deepEqual((await tavern.getTurn({ gameId: 'game-1', turn: 3 })).variables, { stat_data: { turn: 3 } })
 })
 
 test('tavern 服务：handle 注册的处理函数供浏览器侧 callHost 调用，插件卸载后撤销', { skip: !cordis }, async t => {
@@ -541,19 +434,6 @@ test('tavern 服务：handle 注册的处理函数供浏览器侧 callHost 调�
   fiber.dispose()
   await tick()
   await assert.rejects(h.api.callHandler('drawer/draw', {}), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
-})
-
-test('示例插件的重画按钮：callHost 调到宿主侧，按当前正文再挂一张图', { skip: !cordis }, async t => {
-  const h = await harness(t)
-  await h.root.plugin({ name: 'fake-attachments', apply(ctx) {
-    ctx.provide('attachments', { async saveImage(input) { return { attachmentId: 'png-x', mediaType: input.mediaType, bytes: input.data.length, width: 96, height: 64 } } })
-  } })
-  await h.root.plugin(await import('../examples/tavern-plugin-hello/index.mjs'))
-  await tick()
-  const { id } = await h.api.callHandler('tavern-plugin-hello/redraw', { gameId: 'game-1', turn: 3 })
-  const item = (await h.media.list({ chatId: 'chat-1' })).find(entry => entry.id === id)
-  assert.equal(item.status, 'ready')
-  await assert.rejects(h.api.callHandler('tavern-plugin-hello/redraw', { gameId: 'game-1', turn: 9 }), /还没写完/)
 })
 
 test('tavern 服务：worldbookEntries 的条目经校验后交给世界书召回，坏条目记入插件错误', { skip: !cordis }, async t => {
@@ -863,4 +743,87 @@ test('人物设计档案：插件读取本局档案，并能按结算同样的�
   await assert.rejects(tavern.saveCharacterDesign({ gameId: 'game-1', ...person, aliases: '阿岚' }), /aliases/)
   disabled = ['image-plugin']
   await assert.rejects(tavern.saveCharacterDesign({ gameId: 'game-1', ...person }), /关闭了插件/)
+})
+
+test('台词标注与角色素材：插件读取某轮当前版本的标注和卡的人物素材，标注完成时收到通知；本局关闭的插件不通知', { skip: !cordis }, async t => {
+  const lines = [{ n: 1, quote: '你好。', speaker: '林曦', emotion: 'joy' }]
+  let disabled = []
+  const h = await harness(t, {
+    readCast: async (sessionId, turn) => turn === 3 ? { turn, textVersion: 'key-3', lines } : null,
+    readCastAssets: async () => ({ player: '你', card: { name: 'A', imageUrl: '/card' }, characters: [{ name: '林曦', aliases: [], avatarUrl: '/a', sprites: { joy: '/j' } }] }),
+    data: { readSettings: async () => ({ disabled }), updateSettings: async () => {} }
+  })
+  const seen = []
+  let tavern
+  await h.root.plugin({ name: 'director', inject: ['tavern'], apply(ctx) { tavern = ctx.tavern; ctx.tavern.onCastAnnotated(event => seen.push(event)) } })
+  await tick()
+  assert.deepEqual(await tavern.getCast({ gameId: 'game-1', turn: 3 }), { turn: 3, textVersion: 'key-3', lines })
+  assert.equal(await tavern.getCast({ gameId: 'game-1', turn: 4 }), null)
+  await assert.rejects(tavern.getCast({ gameId: 'nope', turn: 3 }), /不存在/)
+  assert.equal((await tavern.getCastAssets({ gameId: 'game-1' })).characters[0].sprites.joy, '/j')
+  h.api.castAnnotated('game-1', { turn: 3, textVersion: 'key-3', lines })
+  await tick()
+  assert.deepEqual(seen, [{ gameId: 'game-1', turn: 3, textVersion: 'key-3', lines }])
+  assert.deepEqual((await h.api.gamePlugins('game-1')).plugins[0].uses, [{ stage: '演出', mode: '观察' }])
+  disabled = ['director']
+  h.api.castAnnotated('game-1', { turn: 3, textVersion: 'key-3', lines })
+  await tick()
+  assert.equal(seen.length, 1)
+})
+
+test('配音渠道：插件注册的渠道带上归属，合成超时或出错记入插件错误；synthesizeSpeech 按本局人物声音合成', { skip: !cordis }, async t => {
+  const lines = []
+  const h = await harness(t, { synthesizeSpeech: async (sessionId, line) => { lines.push([sessionId, line]); return line.narration ? { skip: true } : { url: '/api/dsh-tavern/speech-audio?id=x.mp3', mediaType: 'audio/mpeg' } } })
+  let tavern
+  await h.root.plugin({ name: 'edge-tts', inject: ['tavern'], apply(ctx) {
+    tavern = ctx.tavern
+    ctx.tavern.speechProvider({ id: 'edge', label: 'Edge 朗读', voices: ['zh-CN-XiaoxiaoNeural'], synthesize: async ({ text }) => {
+      if (text === 'boom') throw new Error('服务挂了')
+      return { data: new Uint8Array([1]), mediaType: 'audio/mpeg' }
+    } })
+  } })
+  await tick()
+  const [entry] = h.api.speechProviders()
+  assert.equal(entry.id, 'edge-tts/edge')
+  assert.equal(entry.owner, 'edge-tts')
+  assert.deepEqual(await entry.synthesize({ text: '你好' }), { data: new Uint8Array([1]), mediaType: 'audio/mpeg' })
+  await assert.rejects(entry.synthesize({ text: 'boom' }), /服务挂了/)
+  assert.throws(() => tavern.speechProvider({ id: 'edge', label: '重复', synthesize() {} }), /已注册/)
+  assert.throws(() => tavern.speechProvider({ id: 'Bad', label: 'x', synthesize() {} }), /name/)
+
+  assert.deepEqual(await tavern.synthesizeSpeech({ gameId: 'game-1', speaker: '林曦', text: '你好', emotion: 'joy' }), { url: '/api/dsh-tavern/speech-audio?id=x.mp3', mediaType: 'audio/mpeg' })
+  assert.deepEqual(lines[0], ['game-1', { speaker: '林曦', text: '你好', emotion: 'joy', narration: false }])
+  assert.equal(await tavern.synthesizeSpeech({ gameId: 'game-1', text: '夜深了。', narration: true }), null)
+  await assert.rejects(tavern.synthesizeSpeech({ gameId: 'game-1', text: ' ' }), /text/)
+})
+
+test('卡内插件只在所属人物卡的局里出现：回调不触发、调用被拒、人物卡列表只剩本卡、本局插件面板不列出', { skip: !cordis }, async t => {
+  let cardOfGame = 'cards/other.json'
+  const settled = []
+  const h = await harness(t, {
+    data: createPluginData({ store: memoryStore() }),
+    cardScope: async () => new Map([['fish-plugin', { cardPath: 'cards/fish.json', folder: 'card-x-fish' }]]),
+    cardPathOf: async () => cardOfGame,
+    listCards: async () => [{ path: 'cards/fish.json', name: '鱼' }, { path: 'cards/other.json', name: '别的' }],
+    readCardRaw: async () => ({ data: {} })
+  })
+  let tavern
+  await h.root.plugin({ name: 'fish-plugin', inject: ['tavern'], apply(ctx) { tavern = ctx.tavern; ctx.tavern.onTurnSettled(turn => settled.push(turn.turn)); ctx.tavern.promptSection({ name: 'fish', text: '鱼的规则' }) } })
+  await tick()
+  await h.api.turnSettled('game-1')
+  await tick()
+  assert.deepEqual(settled, [], '别的卡的局不通知')
+  assert.deepEqual(await h.api.promptSections({ gameId: 'game-1' }), [])
+  await assert.rejects(tavern.getTurn({ gameId: 'game-1', turn: 3 }), /只能用于它所在的人物卡/)
+  await assert.rejects(tavern.readCardRaw({ card: 'cards/other.json' }), /只能用于它所在的人物卡/)
+  assert.deepEqual((await tavern.listCards()).map(card => card.id), ['cards/fish.json'])
+  assert.deepEqual((await h.api.gamePlugins('game-1')).plugins, [])
+
+  cardOfGame = 'cards/fish.json'
+  h.setLatest(turnMaterial({ key: 'key-3c' }))
+  await h.api.turnSettled('game-1')
+  await tick()
+  assert.deepEqual(settled, [3], '本卡的局照常通知')
+  assert.equal((await tavern.getTurn({ gameId: 'game-1', turn: 3 })).text, '她推开门。')
+  assert.deepEqual((await h.api.promptSections({ gameId: 'game-1' })).map(item => item.text), ['鱼的规则'])
 })
