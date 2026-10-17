@@ -97,6 +97,7 @@ import { createBodyEditor } from './domain/body-editor.js'
 import { appendHelperUserSessionContext } from './domain/helper-user-session-context.js'
 import { userMessageForTurn, requestIdForTurn, requestIdForMessages } from './domain/session-turn-input.js'
 import { inspectStoryAlignment, nativeStoryTurns } from './domain/story-alignment.js'
+import { repairNativeSurface, recordNativeSurfaceRepair, planNativeSurfaceRepair } from './domain/native-surface-repair.js'
 import { sessionOpeningDescriptor, prepareSessionOpening } from './domain/session-opening.js'
 import { scriptPromptScanText } from './domain/tavern-script-prompts.js'
 import { createOpeningPreparation } from './domain/opening-preparation.js'
@@ -169,7 +170,7 @@ import { createDisplayRuntimeStore, displayRuntimeReceipt } from './domain/displ
 import { createPhoneChat } from './domain/phone-chat.js'
 import { createPresetLibrary } from './domain/preset-library.js'
 import { createForegroundOrchestrationStrategies } from './domain/foreground-orchestration-strategies.js'
-import { clearFailedTurnSurface, rollbackAvailability, reshadowRolledBackRounds } from './domain/rollback-surface.js'
+import { clearFailedTurnSurface, rollbackAvailability, reshadowRolledBackRounds, interruptedSurfaceTurns } from './domain/rollback-surface.js'
 import { assistantResultForTurn } from './domain/session-turn-result.js'
 import { forkTurnsByMessageId as forkTargetsFromSession } from './domain/conversation-fork-targets.js'
 import { createTavernRetryLimiter } from './domain/tavern-retry-limiter.js'
@@ -219,7 +220,7 @@ import { createProfileDataStore } from './profile-data-store.js'
 import { createChatPersistence } from './domain/chat-persistence.js'
 import { createChatJournalStore } from './domain/chat-journal-store.js'
 import { createResourceGraph } from './domain/resource-graph.js'
-import { normalizeBackgroundTasks, applyTavernSettingsPatch, presentTavernSettings, resolveSystemPrompt, statusSectionOverrides } from './domain/tavern-settings.js'
+import { normalizeBackgroundTasks, applyTavernSettingsPatch, presentTavernSettings, resolveSystemPrompt } from './domain/tavern-settings.js'
 // Runtime reads go through runtimePrompt() so panel overrides apply; the raw
 // file catalog only supplies built-in defaults.
 import { prompt as promptFile, SYSTEM_PROMPT_DEFINITIONS, SYSTEM_PROMPT_NAMES } from './prompt-catalog.js'
@@ -1998,7 +1999,6 @@ export async function apply(ctx) {
       ...(deferResources ? {cardResourceAccess:sessionResources.issue(chat.id, resourceRevision, 'card')} : {}),
       cardUpdate,
       statusBarPlacement: chat.statusBarPlacement === 'body' ? 'body' : 'sidebar',
-      statusSections: statusSectionOverrides(chat.statusSections),
       posture: chat.posture || '',
       ledger: readLedger(chat.ledger),
       ledgerTask: manualLedger.project(chat),
@@ -3821,7 +3821,9 @@ export async function apply(ctx) {
       if (!chat) return 0
       const availability = rollbackAvailability(chat, { events: sessionEvents(session), nodes: session.surface?.nodes || [] })
       let cleared = 0
-      for (const turn of availability.unclearedTurns || []) cleared += clearFailedTurnSurface({ session, turn })
+      // A turn the server stopped in the middle never ended, so nothing cleaned it up.
+      const turns = new Set([...(availability.unclearedTurns || []), ...interruptedSurfaceTurns({ events: sessionEvents(session), nodes: session.surface?.nodes || [] })])
+      for (const turn of turns) cleared += clearFailedTurnSurface({ session, turn })
       if (cleared) await sessionStore.flush(session)
       else if (!availability.canRollback && availability.reason && /失败回合/.test(availability.reason)) console.warn('dsh-tavern: 上一次失败回合的残留无法清理，本轮请求可能带上它:', availability.reason)
       return cleared
@@ -3895,6 +3897,7 @@ export async function apply(ctx) {
     cancelSettlement,
     present: presentStory,
     sessionPatch,
+    repairNative: (sessionId, session) => repairNativeStory(sessionId, session, '回退或重新生成时找不到原生位置'),
   })
 
   const bodyEditor = createBodyEditor({
@@ -3909,6 +3912,7 @@ export async function apply(ctx) {
     },
     present: presentStory,
     sessionPatch,
+    repairNative: (sessionId, session) => repairNativeStory(sessionId, session, '编辑正文时找不到原生位置'),
   })
 
   // ---------- HTTP RPC（客户端同源 fetch） ----------
@@ -4181,7 +4185,7 @@ export async function apply(ctx) {
       case 'getConversationBackgroundConfig': {
         const chat = await backgroundConfigForSession(str(args?.sessionId))
         if (!chat || groupOfMode(chat.mode) !== 'play') throw new Error('请先打开游玩会话')
-        return { backgroundModel: chat.backgroundModelSelection || null, imageModel: chat.imageModelSelection || null, backgroundTasks: normalizeBackgroundTasks(chat.backgroundTasks), webSearchEnabled: chat.webSearchEnabled === true, sceneImagesEnabled: chat.sceneImagesEnabled === true, sceneImagesAvailable: TAVERN_RELEASE_CAPABILITIES.sceneImages, modelCatalog: await tavernModelCatalog() }
+        return { backgroundModel: chat.backgroundModelSelection || null, imageModel: chat.imageModelSelection || null, backgroundTasks: normalizeBackgroundTasks(chat.backgroundTasks), webSearchEnabled: chat.webSearchEnabled === true, sceneImagesEnabled: chat.sceneImagesEnabled === true, sceneImagesAvailable: TAVERN_RELEASE_CAPABILITIES.sceneImages, mvuCard: chat.mvu?.enabled === true && chat.mvu.owner === 'official', modelCatalog: await tavernModelCatalog() }
       }
       case 'setConversationBackgroundModel':
       case 'setConversationBackgroundConfig': {
@@ -4203,7 +4207,7 @@ export async function apply(ctx) {
         return { backgroundModel: saved.backgroundModelSelection || null, imageModel: saved.imageModelSelection || null, backgroundTasks: normalizeBackgroundTasks(saved.backgroundTasks), webSearchEnabled: saved.webSearchEnabled === true, sceneImagesEnabled: saved.sceneImagesEnabled === true }
       }
       case 'getBackgroundModelReasoning': return { reasoning: await readBackgroundModelReasoning(llm, args) }
-      case 'getDisplayPreferences': { const settings = await readTavernSettings(); return { hideContextAndReasoning: settings.hideContextAndReasoning, statusSections: settings.statusSections } }
+      case 'getDisplayPreferences': { const settings = await readTavernSettings(); return { hideContextAndReasoning: settings.hideContextAndReasoning } }
       case 'getCandidatePreferences': return { candidateDismissMode: (await readTavernSettings()).candidateDismissMode }
       case 'getTavernSettings': return { settings: await readTavernSettings(), modelCatalog: await tavernModelCatalog(), releaseCapabilities: TAVERN_RELEASE_CAPABILITIES }
       case 'getSceneImageSettings': {
@@ -4534,14 +4538,6 @@ export async function apply(ctx) {
         await updateChat(chat.id, current => ({ ...current, statusBarPlacement: args.placement }), { source: 'ui.status-bar-placement' })
         return { statusBarPlacement: args.placement }
       }
-      case 'setStatusSection': {
-        const patch = statusSectionOverrides({ [args?.name]: args?.shown })
-        if (!Object.keys(patch).length) throw new Error('无效的酒馆状态显示设置')
-        const chat = await chatForSession(args.sessionId)
-        if (!chat || !['story', 'script'].includes(chat.mode || 'story')) throw new Error('请先打开游玩会话')
-        const saved = await updateChat(chat.id, current => ({ ...current, statusSections: { ...statusSectionOverrides(current.statusSections), ...patch } }), { source: 'ui.status-sections' })
-        return { statusSections: statusSectionOverrides(saved.statusSections) }
-      }
       case 'setPlayerName': return { playerName: await setPlayerName(args && args.sessionId, args && args.userName) }
       case 'setRequestMode': return { requestMode: await setRequestMode(args && args.sessionId, args && args.requestMode) }
       case 'ensureOpening': return { view: await ensureNativeOpening(args && args.sessionId) }
@@ -4750,9 +4746,32 @@ export async function apply(ctx) {
     } finally { reconciling.delete(sessionId) }
   }
 
+  async function repairNativeStory(sessionId, session, reason) {
+    const chat = await chatForSession(sessionId)
+    if (!chat || chat.regenInProgress || !['story', 'script'].includes(chat.mode || 'story')) return null
+    try {
+      const result = repairNativeSurface(session, chat, { repairId: randomUUID() })
+      if (result.applied) await sessionStore.flush(session)
+      await updateChat(chat.id, current => recordNativeSurfaceRepair(current, chat, result.anchors) ? current : undefined, { source: 'native-repair' })
+      if (result.applied) console.warn('dsh-tavern: 模型上下文与存档不一致（' + reason + '），已按存档重写最近 ' + result.plan.rounds.length + ' 轮')
+      return result
+    } catch (error) {
+      console.warn('dsh-tavern: 模型上下文修复失败，下次打开或操作时重试：' + str(error?.message || error))
+      await markNativeStale(chat.id, reason).catch(() => {})
+      return null
+    }
+  }
+  async function markNativeStale(chatId, reason) {
+    await updateChat(chatId, current => {
+      if (current.nativeSync?.status === 'stale') return undefined
+      current.nativeSync = { status: 'stale', reason: str(reason), at: Date.now() }
+      return current
+    }, { source: 'native-repair.stale' })
+  }
+
   // The save's latest player rounds, oldest first: enough rows to cover the native window.
   async function storyAlignmentInput(sessionId, nativeCount) {
-    const fields = ['mode', 'nativeCommits', 'suppressedDshTurns', 'regeneratedDshTurns', 'regenInProgress']
+    const fields = ['id', 'mode', 'nativeCommits', 'suppressedDshTurns', 'regeneratedDshTurns', 'regenInProgress', 'nativeSync']
     const head = await chatSliceForSession(sessionId, [], fields)
     let header, rows
     if (head?.chat) {
@@ -4766,13 +4785,22 @@ export async function apply(ctx) {
     }
     if (!header) return null
     const story = rows.filter(message => message?.role === 'assistant' && !message.greeting)
-    return { header, storyTurns: story.map(message => Number(message.turn)), storyAnchors: story.map(message => message.nativeAnchor).filter(Boolean) }
+    return { header, rows, storyTurns: story.map(message => Number(message.turn)), storyAnchors: story.map(message => message.nativeAnchor).filter(Boolean) }
   }
 
   // Bring the save and the native session back into agreement before anything
   // acts on "the latest round" (#196): record a round the save missed, re-shadow
   // a rolled-back round the model still sees, and report what cannot be repaired.
   // Never blocks the action that asked for it.
+  // Turn numbers can agree while the text drifted (an edit that never reached the model):
+  // the repair planner checks the latest rounds' text against the rows already read.
+  function alignStory(session, input) {
+    const report = inspectStoryAlignment({ session, ...input })
+    if (report.state === 'regenerating') return report
+    const textDrift = planNativeSurfaceRepair({ chat: { id: input.header.id, messages: input.rows }, events: sessionEvents(session), nodes: session.surface?.nodes || [] }).status !== 'intact'
+    const nativeSync = input.header.nativeSync?.status || ''
+    return { ...report, textDrift, nativeSync, aligned: report.aligned && !textDrift && nativeSync !== 'stale' }
+  }
   async function reconcileStory(sessionId, { repair = true, stillIdle = () => true } = {}) {
     try {
       sessionId = str(sessionId)
@@ -4780,7 +4808,7 @@ export async function apply(ctx) {
       if (!session) return null
       const input = await storyAlignmentInput(sessionId, nativeStoryTurns(session).length)
       if (!input || !['story', 'script'].includes(input.header.mode || 'story')) return null
-      const report = inspectStoryAlignment({ session, ...input })
+      const report = alignStory(session, input)
       if (!repair || report.aligned || report.state === 'regenerating') return report
       for (const round of report.adopt) {
         if (!stillIdle()) return report
@@ -4792,8 +4820,13 @@ export async function apply(ctx) {
         await sessionStore.flush(session)
         console.warn('dsh-tavern: 第 ' + shadowed.join('、') + ' 轮已回退但模型仍能看到，已重新隐藏')
       }
-      const after = inspectStoryAlignment({ session, ...(await storyAlignmentInput(sessionId, nativeStoryTurns(session).length)) })
-      if (after.state === 'mismatch') console.warn('dsh-tavern: 存档与模型上下文的轮次不一致，未自动修复：' + JSON.stringify(after.mismatch))
+      let after = alignStory(session, await storyAlignmentInput(sessionId, nativeStoryTurns(session).length))
+      // The save is the truth: rewrite the native tail after the last round both still agree on.
+      if (!after.aligned && stillIdle()) {
+        await repairNativeStory(sessionId, session, after.state === 'mismatch' ? '轮次不一致' : after.nativeSync === 'stale' ? '上次同步失败' : after.textDrift ? '正文不一致' : '找不到原生位置')
+        after = alignStory(session, await storyAlignmentInput(sessionId, nativeStoryTurns(session).length))
+      }
+      if (after.state === 'mismatch') console.warn('dsh-tavern: 存档与模型上下文的轮次修复后仍不一致：' + JSON.stringify(after.mismatch))
       return after
     } catch (error) {
       console.warn('dsh-tavern: 存档与模型上下文核对失败：' + str(error?.message || error))

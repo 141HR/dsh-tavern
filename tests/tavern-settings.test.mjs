@@ -5,7 +5,7 @@ import path from 'node:path'
 import test from 'node:test'
 import vm from 'node:vm'
 
-import { applyTavernSettingsPatch, presentTavernSettings, statusSectionOverrides } from '../tavern-plugin/lib/domain/tavern-settings.js'
+import { applyTavernSettingsPatch, presentTavernSettings } from '../tavern-plugin/lib/domain/tavern-settings.js'
 
 import { createProfileDataStore } from '../tavern-plugin/lib/profile-data-store.js'
 
@@ -109,16 +109,6 @@ test('the global scene image Agent default model saves like the other defaults a
   assert.equal(presentTavernSettings(applyTavernSettingsPatch(saved, { defaultImageModel: null }), []).defaultImageModel, null)
 })
 
-test('酒馆状态可选区块默认隐藏，可单独打开并保留其他区块', () => {
-  assert.deepEqual(presentTavernSettings({}, {}).statusSections, { characterDesigns: false, ledger: false, posture: false })
-  let saved = applyTavernSettingsPatch({}, { statusSections: { posture: true } })
-  saved = applyTavernSettingsPatch(saved, { statusSections: { ledger: true } })
-  assert.deepEqual(presentTavernSettings(saved, {}).statusSections, { characterDesigns: false, ledger: true, posture: true })
-  assert.throws(() => applyTavernSettingsPatch(saved, { statusSections: { posture: 'yes' } }), /无效的酒馆状态显示设置/)
-  assert.throws(() => applyTavernSettingsPatch(saved, { statusSections: { other: true } }), /无效的酒馆状态显示设置/)
-})
-
-test('本局酒馆状态显示只保留本局设置过的区块，其余跟随全局', () => {
-  assert.deepEqual(statusSectionOverrides(undefined), {})
-  assert.deepEqual(statusSectionOverrides({ posture: false, ledger: 'yes', other: true }), { posture: false })
+test('酒馆状态各区块直接显示，旧的显示开关不再保留', () => {
+  assert.equal(Object.hasOwn(presentTavernSettings({ statusSections: { posture: true } }, {}), 'statusSections'), false)
 })

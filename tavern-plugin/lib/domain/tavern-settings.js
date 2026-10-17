@@ -12,22 +12,9 @@ function promptOverride(document, name) {
 
 export function normalizeBackgroundTasks(value) {
   const tasks = object(value)
-  // variableFeedback: hand the last round's changed variables back to the foreground.
-  return { posture: tasks.posture !== false, characterDesign: false, variables: tasks.variables !== false, ledger: false, variableFeedback: tasks.variableFeedback !== false }
+  return { posture: tasks.posture !== false, characterDesign: false, variables: tasks.variables !== false, ledger: false }
 }
 
-// Optional status-tab sections, hidden until the player turns them on (display only).
-export const STATUS_SECTIONS = ['characterDesigns', 'ledger', 'posture']
-export function normalizeStatusSections(value) {
-  const input = object(value)
-  return Object.fromEntries(STATUS_SECTIONS.map(name => [name, input[name] === true]))
-}
-
-// A game's own choices; sections it never set follow the global setting.
-export function statusSectionOverrides(value) {
-  const input = object(value)
-  return Object.fromEntries(STATUS_SECTIONS.filter(name => typeof input[name] === 'boolean').map(name => [name, input[name]]))
-}
 
 export function normalizePlayDefaults(value) {
   const input = object(value)
@@ -45,7 +32,7 @@ export function applyTavernSettingsPatch(current, patch) {
     for (const key of ['webSearchEnabled', 'sceneImagesEnabled']) if (Object.hasOwn(patch, key) && typeof patch[key] !== 'boolean') throw new Error('默认开关必须为布尔值')
     if (Object.hasOwn(patch, 'playerName') && (typeof patch.playerName !== 'string' || patch.playerName.length > 80)) throw new Error('玩家称呼最多 80 字')
     if (Object.hasOwn(patch, 'statusBarPlacement') && !['body', 'sidebar'].includes(patch.statusBarPlacement)) throw new Error('状态栏位置无效')
-    for (const key of ['variables', 'posture', 'variableFeedback']) if (Object.hasOwn(object(patch.backgroundTasks), key) && typeof patch.backgroundTasks[key] !== 'boolean') throw new Error('默认结算开关必须为布尔值')
+    for (const key of ['variables', 'posture']) if (Object.hasOwn(object(patch.backgroundTasks), key) && typeof patch.backgroundTasks[key] !== 'boolean') throw new Error('默认结算开关必须为布尔值')
     const current = normalizePlayDefaults(next.defaultPlaySettings)
     next.defaultPlaySettings = normalizePlayDefaults({ ...current, ...patch, backgroundTasks: { ...current.backgroundTasks, ...object(patch.backgroundTasks) } })
   }
@@ -64,11 +51,6 @@ export function applyTavernSettingsPatch(current, patch) {
   if (Object.hasOwn(input, 'hideContextAndReasoning')) {
     if (typeof input.hideContextAndReasoning !== 'boolean') throw new Error('无效的对话显示设置')
     next.hideContextAndReasoning = input.hideContextAndReasoning
-  }
-  if (Object.hasOwn(input, 'statusSections')) {
-    const patchSections = object(input.statusSections)
-    if (Object.entries(patchSections).some(([name, shown]) => !STATUS_SECTIONS.includes(name) || typeof shown !== 'boolean')) throw new Error('无效的酒馆状态显示设置')
-    next.statusSections = normalizeStatusSections({ ...object(next.statusSections), ...patchSections })
   }
   if (Object.hasOwn(input, 'candidateDismissMode')) {
     if (!['after-fill', 'after-send'].includes(input.candidateDismissMode)) throw new Error('无效的候选项收起方式')
@@ -143,7 +125,6 @@ export function presentTavernSettings(document, defaults) {
     defaultImageModel: normalizeBackgroundModel(object(document).defaultImageModel),
     contextCompaction: compactionPolicy(object(document).contextCompaction),
     hideContextAndReasoning: object(document).hideContextAndReasoning !== false,
-    statusSections: normalizeStatusSections(object(document).statusSections),
     candidateDismissMode: object(document).candidateDismissMode === 'after-fill' ? 'after-fill' : 'after-send',
     compatibilityMode: false,
     sillyModeEnabled: false,

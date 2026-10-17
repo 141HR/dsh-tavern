@@ -46,6 +46,11 @@ export function apply(ctx) {
         yield { type: 'finish', reason: { kind: block.type === 'tool-call' ? 'tool-calls' : 'stop' } }
         return
       }
+      // Native repair scenario: record what each foreground body request lets the model read.
+      if (process.env.TAVERN_E2E_CONTEXT_AUDIT && !tools.has('mvu_submit_update') && !tools.has('candidate_submit_choices') && !tools.has('posture_submit')) {
+        await appendFile(process.env.TAVERN_E2E_CONTEXT_AUDIT, JSON.stringify({ at: Date.now(), messages: input.messages.map(message => ({ role: message.role,
+          text: (Array.isArray(message.content) ? message.content : []).filter(block => block.type === 'text').map(block => block.text).join('') })) }) + '\n')
+      }
       // Truncation scenario: only the latest user input decides, so later turns answer normally.
       const latestUser = JSON.stringify(input.messages.slice(input.messages.findLastIndex(message => message.role === 'assistant') + 1))
       if (process.env.E2E_TRUNCATE_LOG) await appendFile(process.env.E2E_TRUNCATE_LOG, JSON.stringify({ at: Date.now(), tools: [...tools], tail: input.messages.slice(-4).map(m => ({ role: m.role, content: JSON.stringify(m.content).slice(0, 160) })) }) + '\n')

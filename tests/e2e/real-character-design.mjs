@@ -13,7 +13,7 @@ export async function setupRealCharacterDesign({ root, profile, data, runtimeHom
   await copyFile(join(runtimeHome, '.credentials.yaml'), join(root, '.credentials.yaml'))
   await writeFile(join(profile, 'cordis.patch.yml'), stringify([{ id: 'agent-default-model', config: selection }]))
   await writeFile(join(data, 'tavern-settings.json'), JSON.stringify({ defaultForegroundModel: selection, defaultBackgroundModel: selection,
-    backgroundModel: selection, backgroundTasks: { variables: false, posture: false, characterDesign: false, ledger: false }, statusSections: { characterDesigns: true } }))
+    backgroundModel: selection, backgroundTasks: { variables: false, posture: false, characterDesign: false, ledger: false } }))
   const file = join(data, 'resources/cards/e2e.json'), doc = JSON.parse(await readFile(file, 'utf8'))
   doc.data.description = '中性的虚构城镇故事。按用户要求用简短中文回复；人物设定以本局世界书为准。'
   await writeFile(file, JSON.stringify(doc))

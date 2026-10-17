@@ -10,6 +10,8 @@ import { startSceneImageServer, sceneAddChecks } from './scene-add.mjs'
 import { regenAnomalyChecks, regenTemplateChecks } from './regen-anomalies.mjs'
 import { storageAuditChecks } from './storage-audit.mjs'
 import { brokenSaveChecks } from './broken-save.mjs'
+import { nativeRepairChecks } from './native-repair.mjs'
+import { failureResilienceChecks } from './failure-resilience.mjs'
 import { incrementalMvuChecks } from './mvu-incremental.mjs'
 import {openingUpdateChecks} from './opening-update.mjs'
 import { backgroundLifecycleChecks } from './background-lifecycle.mjs'
@@ -127,33 +129,6 @@ async function inspectScreen() {
   await openStatus()
   await page.frameLocator('.dsh-tavern-status-runtime iframe.dsh-tavern-message-frame:not([aria-hidden="true"])')
     .locator('#e2e-gold').filter({ hasText: /^金币：10$/ }).waitFor()
-  if (postureShown) await page.getByText('站在柜台前，收下奖励。', { exact: true }).filter({ visible: true }).waitFor()
-}
-// 人物姿势 is hidden in 酒馆状态 until turned on in global settings.
-let postureShown = false
-async function showPosture() {
-  assert.equal(await page.getByText('站在柜台前，收下奖励。', { exact: true }).filter({ visible: true }).count(), 0, '人物姿势默认不显示')
-  await page.getByText('Settings', { exact: true }).filter({ visible: true }).first().click()
-  await page.getByText('DSH Tavern', { exact: true }).filter({ visible: true }).last().click()
-  const toggle = page.getByRole('switch', { name: '酒馆状态显示人物姿势', exact: true })
-  await toggle.click()
-  await page.getByRole('status').filter({ hasText: '已保存，对所有对话立即生效' }).first().waitFor()
-  await page.keyboard.press('Escape')
-  postureShown = true
-  await openStatus()
-  const posture = page.getByText('站在柜台前，收下奖励。', { exact: true }).filter({ visible: true })
-  await posture.waitFor()
-  // 本局设置 overrides the global choice for this game only.
-  const local = page.getByRole('switch', { name: '本局显示人物姿势', exact: true })
-  for (const shown of [false, true]) {
-    await page.getByText('本局设置', { exact: true }).filter({ visible: true }).first().click()
-    assert.equal(await local.isChecked(), !shown)
-    await local.click()
-    await page.waitForFunction(([name, value]) => [...document.querySelectorAll('[role="switch"]')].some(node => node.getAttribute('aria-label') === name && node.checked === value), ['本局显示人物姿势', shown])
-    await openStatus()
-    if (shown) await posture.waitFor()
-    else await posture.waitFor({ state: 'detached' })
-  }
 }
 try {
   await step('准备独立运行环境', async () => {
@@ -236,6 +211,7 @@ try {
           TAVERN_E2E_REQUEST_AUDIT: join(output, 'preset-requests.jsonl'),
           TAVERN_E2E_MEMORY_AUDIT: process.argv.includes('--card-memory') ? join(output, 'memory-requests.jsonl') : '',
           TAVERN_E2E_SCENE_AUDIT: process.argv.includes('--scene-add') ? join(output, 'scene-requests.jsonl') : '',
+          TAVERN_E2E_CONTEXT_AUDIT: process.argv.includes('--native-repair') || process.argv.includes('--failure-resilience') ? join(output, 'context-requests.jsonl') : '',
           TAVERN_E2E_LLM_MODULE: join(modules, '@deepseek-ai/dsh-llm/lib/index.js'),
           // Server card scripts are the default; ordinary scenarios keep exercising the page path.
           DSH_TAVERN_SERVER_SCRIPTS: process.argv.includes('--server-scripts') ? '1' : '0',
@@ -475,6 +451,10 @@ try {
     })
   } else if (helperApiScenario) {
     await helperApiChecks({ page, step, savedChat, output, report })
+  } else if (process.argv.includes('--failure-resilience')) {
+    await failureResilienceChecks({ page, step, savedChat, output, report, root, restartServer })
+  } else if (process.argv.includes('--native-repair')) {
+    await nativeRepairChecks({ page, step, savedChat, output, report, data, restartServer })
   } else if (process.argv.includes('--broken-save')) {
     await brokenSaveChecks({ page, step, savedChat, output, report, root, data, profile, source, restartServer })
   } else if (process.argv.includes('--regen-template')) {
@@ -504,7 +484,6 @@ try {
     await composer.fill('领取任务奖励')
     await composer.press('Enter')
     await inspectScreen()
-    await showPosture()
     report.beforeReload = inspectSaved(await savedChat())
     await page.screenshot({ path: join(output, 'before-reload.png'), fullPage: true })
   })

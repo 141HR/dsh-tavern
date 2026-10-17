@@ -296,7 +296,9 @@ export function createStoryTimeline(options = {}) {
       rewindTo: null,
       updatedAt: now()
     }
-    if (str(previousParticipant.sessionId) === str(participant.sessionId) && previousParticipant.requiresNewSessionOnRewind === true) {
+    // A full in-place reset (rewindTo -1) removed the compacted history with the rest.
+    const cleared = previousParticipant.status === 'needs-rewind' && previousParticipant.rewindTo === -1
+    if (str(previousParticipant.sessionId) === str(participant.sessionId) && previousParticipant.requiresNewSessionOnRewind === true && !cleared) {
       nextParticipant.requiresNewSessionOnRewind = true
       nextParticipant.compactedAt = Number(previousParticipant.compactedAt) || now()
     }
@@ -323,9 +325,11 @@ export function createStoryTimeline(options = {}) {
     return null
   }
 
+  // A compacted worker cannot rewind to a boundary inside its summary. Keep the
+  // same session and clear its task history instead (boundary -1, in place).
   function sourceSurvivesCompaction(participant, source) {
     if (source === null || participant.requiresNewSessionOnRewind !== true) return source
-    return str(participant.sessionId) === source.sessionId ? null : source
+    return str(participant.sessionId) === source.sessionId ? { sessionId: source.sessionId, boundary: -1 } : source
   }
 
   function earlierParticipantSource(checkpoints, role) {
@@ -459,7 +463,7 @@ export function createStoryTimeline(options = {}) {
       source = sourceSurvivesCompaction(object(currentParticipants[role]), source)
       // A checkpoint owns story state, not the identity of the resident worker.
       // Imported history may precede its first task: reset task context in place.
-      if (source === null && str(currentParticipant.sessionId) !== '' && currentParticipant.requiresNewSessionOnRewind !== true) {
+      if (source === null && str(currentParticipant.sessionId) !== '') {
         source = { sessionId: currentParticipant.sessionId, boundary: -1 }
       }
       nextParticipants[role] = {
@@ -525,8 +529,8 @@ export function createStoryTimeline(options = {}) {
         if (!persistentParticipant(participant.lifetime)) continue
         const previous = object(checkpoint?.participants?.[role])
         const source = participantCheckpointSource(previous)
-        const needsSession = participant.requiresNewSessionOnRewind === true || !str(participant.sessionId)
-        const boundary = source?.sessionId === participant.sessionId ? source.boundary : -1
+        const needsSession = !str(participant.sessionId)
+        const boundary = participant.requiresNewSessionOnRewind !== true && source?.sessionId === participant.sessionId ? source.boundary : -1
         chat.timeline.participants[role] = {
           ...participant, status: needsSession ? 'needs-session' : 'needs-rewind',
           sessionId: needsSession ? '' : participant.sessionId,
@@ -575,7 +579,11 @@ export function createStoryTimeline(options = {}) {
       for (const role of Object.keys(chat.timeline.participants)) {
         const participant = object(chat.timeline.participants[role])
         if (!persistentParticipant(participant.lifetime)) continue
-        const source = sourceSurvivesCompaction(participant, participantCheckpointSource(participant))
+        let source = sourceSurvivesCompaction(participant, participantCheckpointSource(participant))
+        // No surviving boundary: reset the same worker's task history in place, as a rollback does.
+        if (source === null && str(participant.sessionId) !== '') {
+          source = { sessionId: participant.sessionId, boundary: -1 }
+        }
         participants[role] = {
           role, lifetime: 'chat', sessionId: source === null ? '' : source.sessionId, branchId, syncedRevision: null,
           boundary: source === null ? null : source.boundary,

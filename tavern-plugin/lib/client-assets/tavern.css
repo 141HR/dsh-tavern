@@ -2758,3 +2758,4 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
   background: var(--dsw-specific-sidebar-fill); color: var(--dsw-alias-label-primary);
 }
 .dsh-tavern-plugin-overlay-error { display: flex; gap: 12px; align-items: center; justify-content: center; min-height: 100%; }
+.dsh-local-advanced > summary { cursor: pointer; margin-bottom: 16px; font-size: 15px; font-weight: 700; color: var(--dsw-alias-label-primary); }
