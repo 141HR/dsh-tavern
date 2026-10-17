@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { readZipEntries, writeZipEntries } from '../../tavern-plugin/lib/domain/zip-entries.js'
 
 import { crc32, deflateSync } from 'node:zlib'
@@ -157,6 +158,48 @@ export async function castCardFileChecks({ page, step, report }) {
     for (const asset of written.data.assets) assert.ok(entries.has(asset.uri.replace('embeded://', '')), asset.uri)
     report.castCardFile = true
   })
+  await step('DSH 人物卡：大文件上传后导入，素材包按内容存储，包内文件按类型提供', async () => {
+    const pack = { 'assets/fishpack/manifest.json': JSON.stringify({ id: 'e2e-fish-pack', format: 'dsh-asset-pack', name: '鱼包' }), 'assets/fishpack/media/joy.png': figurePng([240, 180, 80]),
+      'assets/fishpack/media/calm.png': figurePng([120, 140, 200]), 'assets/fishpack/page.html': '<script>alert(1)</script>', 'assets/fishpack/credits/CREDITS.md': '作者自制' }
+    const card = { spec: 'chara_card_v3', spec_version: '3.0', data: { name: 'DSH 卡验收', description: '带素材包', first_mes: '你好。', group_only_greetings: [], assets: [
+      { type: 'emotion', uri: 'embeded://assets/fishpack/media/joy.png', name: 'joy', ext: 'png' }, { type: 'emotion', uri: 'embeded://assets/fishpack/media/calm.png', name: 'calm', ext: 'png' }] } }
+    const dsh = { format: 'dshcard', formatVersion: 1, card: { version: '1.0.0', title: 'DSH 卡验收', author: 'e2e' }, requires: { tavernApi: 2 }, plugins: [],
+      packs: [{ id: 'e2e-fish-pack', title: '鱼包', format: 'dsh-asset-pack', path: 'assets/fishpack/', credits: ['assets/fishpack/credits/CREDITS.md'] }] }
+    const file = writeZipEntries([{ path: 'card.json', content: JSON.stringify(card) }, { path: 'dsh.json', content: JSON.stringify(dsh) }, ...Object.entries(pack).map(([path, content]) => ({ path, content }))])
+    const imported = await importArchive(page, 'DSH 卡验收.dshcard', file)
+    assert.equal(imported.format, 'dshcard')
+    assert.deepEqual(imported.assets.sprites, 2)
+    assert.deepEqual(imported.packs.map(item => [item.id, item.title, item.files, item.reused]), [['e2e-fish-pack', '鱼包', 5, false]])
+    const again = await importArchive(page, 'DSH 卡验收.dshcard', file)
+    assert.equal(again.packs[0].reused, true, '没有写摘要的包按内容重算，同样内容不重复存')
+    assert.notEqual(again.path, imported.path, '再导入一次是另一张卡')
+    const fileUrl = path => new URL('/api/dsh-tavern/pack-file?' + new URLSearchParams({ pack: 'e2e-fish-pack', v: imported.packs[0].contentHash, path }), page.url()).href
+    const image = await page.request.get(fileUrl('media/joy.png'))
+    assert.deepEqual([image.status(), image.headers()['content-type'], image.headers()['content-disposition']], [200, 'image/png', undefined])
+    const partial = await page.request.get(fileUrl('media/joy.png'), { headers: { range: 'bytes=0-7' } })
+    assert.deepEqual([partial.status(), (await partial.body()).length], [206, 8])
+    const html = await page.request.get(fileUrl('page.html'))
+    assert.deepEqual([html.headers()['content-type'], html.headers()['content-disposition']], ['application/octet-stream', 'attachment'], '包里的网页只能下载，不在酒馆页面里运行')
+    assert.equal((await page.request.get(fileUrl('../card.json'))).status(), 404)
+    report.dshCard = { imported: true }
+    if (process.env.TAVERN_E2E_DSHCARD) {
+      const big = await readFile(process.env.TAVERN_E2E_DSHCARD)
+      const started = Date.now()
+      const real = await importArchive(page, process.env.TAVERN_E2E_DSHCARD.split('/').pop(), big)
+      report.dshCard.real = { name: real.name, ms: Date.now() - started, sprites: real.assets?.sprites, packs: real.packs.map(item => item.title + ' ' + item.files) }
+      assert.ok(real.packs.length > 0)
+    }
+  })
+}
+
+async function importArchive(page, name, bytes) {
+  const base = new URL('/', page.url()).href
+  const upload = await page.request.post(base + 'api/dsh-tavern/card-upload', { data: bytes, headers: { 'content-type': 'application/octet-stream' }, timeout: 600000 })
+  const sent = await upload.json()
+  assert.equal(sent.ok, true, JSON.stringify(sent))
+  const reply = await (await page.request.post(base + 'api/dsh-tavern/importCardUpload', { data: { uploadId: sent.uploadId, name }, timeout: 600000 })).json()
+  assert.equal(reply.ok, true, JSON.stringify(reply))
+  return reply.card
 }
 
 // Run last: it plays one more turn from the full-screen stage.

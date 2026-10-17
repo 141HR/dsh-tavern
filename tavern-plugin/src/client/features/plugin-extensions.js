@@ -182,6 +182,11 @@
 						return addTo(stageViews, entry);
 					}, "tavernUi.registerStageView()");
 				},
+				// The asset packs this game's card carries (apiVersion 2): { id, title, format, contentHash, baseUrl }.
+				getCardPacks(gameId) {
+					if (typeof gameId !== "string" || !gameId) return Promise.reject(new TypeError("getCardPacks 需要 gameId"));
+					return rpc("cardPacks", {}, gameId).then(function (reply) { return reply ? reply.packs || [] : []; });
+				},
 				// Say a line in its character's voice on the channel the player chose (apiVersion 2);
 				// resolves true when it was heard to the end. A new line stops the one being said.
 				speak(input) {

@@ -45,8 +45,27 @@ window.__ModuleLoader__.load({
 
 		// @include text-resource-file.js
 
+		/** Import one card file: archives (CHARX, DSH cards) go up as raw files, others as parsed JSON. */
+		async function importTavernCardFile(file, call) {
+			if (/\.(charx|dshcard)$/i.test(String(file.name || ""))) {
+				const response = await fetch("/api/dsh-tavern/card-upload", { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+				let reply = null;
+				try { reply = await response.json(); } catch (_error) {}
+				if (!reply || !reply.ok) throw new Error(reply && reply.error || "上传失败（HTTP " + response.status + "）");
+				return call("importCardUpload", { uploadId: reply.uploadId, name: file.name });
+			}
+			return call("importCard", { payload: await parseCardFile(file) });
+		}
+
 		/** What a card file brought into its character material, for the import notice. */
-		function tavernCardAssetNotice(assets) {
+		function tavernCardAssetNotice(assets, card) {
+			const extra = [];
+			if (card && card.packs && card.packs.length) extra.push("素材包 " + card.packs.map(function (pack) { return pack.title || pack.id; }).join("、") + (card.packs.some(function (pack) { return pack.reused; }) ? "（已有的包直接复用）" : ""));
+			if (card && card.pluginsSkipped && card.pluginsSkipped.length) extra.push("卡里带的插件（" + card.pluginsSkipped.join("、") + "）暂不支持，未启用");
+			const base = tavernCardAssetText(assets);
+			return [base].concat(extra).filter(Boolean).join("；");
+		}
+		function tavernCardAssetText(assets) {
 			if (!assets) return "";
 			if (assets.error) return "角色素材导入失败：" + assets.error;
 			const parts = [];

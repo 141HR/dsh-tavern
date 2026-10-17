@@ -260,18 +260,23 @@ export function buildCharx({ document, cover, manifest, characterName, readFile 
 }
 
 /**
- * A card import with the material it carries. A CHARX becomes what Tavern stores for a card:
- * a PNG (its PNG cover with the card inside) or, with any other cover, plain JSON.
+ * A card read from an archive (CHARX, DSH card, card bundle) as what Tavern stores for a card:
+ * a PNG (its PNG cover with the card inside) or, with any other cover, plain JSON; plus its material.
  */
-export function cardImport(payload) {
-  const source = cardAssetSource(payload)
-  const collected = source.card ? collectCardAssets(source.card, source.resolve) : null
-  if (payload?.kind !== 'charx') return { payload, collected }
-  const text = JSON.stringify(source.card)
-  const base = String(payload.name || '人物卡').replace(/\.charx$/i, '') || '人物卡'
+export function cardImportFromCard({ card, resolve, name }) {
+  const collected = collectCardAssets(card, resolve)
+  const text = JSON.stringify(card)
+  const base = String(name || '人物卡').replace(/\.(charx|dshcard|zip)$/i, '') || '人物卡'
   if (collected.cover && isPng(collected.cover.bytes)) {
     const png = pngWithCard(collected.cover.bytes, text)
     return { payload: { kind: 'png', name: base + '.png', b64: Buffer.from(text, 'utf8').toString('base64'), fileB64: png.toString('base64') }, collected: { ...collected, cover: null } }
   }
   return { payload: { kind: 'text', name: base + '.json', text }, collected }
+}
+
+/** A card import with the material it carries; a CHARX sent whole is read like an archive. */
+export function cardImport(payload) {
+  const source = cardAssetSource(payload)
+  if (payload?.kind !== 'charx') return { payload, collected: source.card ? collectCardAssets(source.card, source.resolve) : null }
+  return cardImportFromCard({ card: source.card, resolve: source.resolve, name: payload.name })
 }
