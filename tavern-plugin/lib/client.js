@@ -5373,7 +5373,10 @@ function tavernModelRefusalNotice(text) {
 		      .finally(function () { refreshing = null; if (again) refreshList(); });
 		  }
 		  function follow() {
-		    const current = sessions.list.getSnapshot().current || null;
+		    // 0.2 hosts dropped the snapshot's top-level current; the main view's retain names it now.
+		    const snapshot = sessions.list.getSnapshot();
+		    const main = Object.values(snapshot.byId || {}).find(function (row) { return row && row.retainedBy && (row.retainedBy.mainView ?? 0) > 0; });
+		    const current = (main && main.id) || snapshot.current || null;
 		    if (current === watched || !signals || typeof signals.subscribe !== 'function') return;
 		    unwatch();
 		    watched = current;
