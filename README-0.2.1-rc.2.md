@@ -1,12 +1,13 @@
-# DSH 0.2.1 官方桌面测试版
+# DSH 0.2.1 测试版
 
 这是面向测试用户的预发布版本，使用 `0.2.1版本` 分支。原有安装方式仍保留在 [README 快速开始](README.md#快速开始)，本页仅提供额外的测试版安装方法。
 
 ## 支持范围
 
-- 宿主仅支持**官方 DeepSeek Harness 0.2.1-rc.2**，从[官网下载](https://deepseek.com/harness/)。安装器会核对内置 DSH 版本，不匹配时停止安装。
+- 桌面宿主支持**官方 DeepSeek Harness 0.2.1-rc.2**，从[官网下载](https://deepseek.com/harness/)。安装器会核对内置 DSH 版本，不匹配时停止安装。
 - macOS（Apple 芯片）和 Windows（64 位）官方桌面；macOS 已本机验证，Windows 安装流程待测试用户验证。
-- 暂不支持社区 DSH Desktop、DSHA、Android APK、Linux 或独立命令行宿主。下面的命令只是把酒馆安装到官方桌面。
+- 另提供独立命令行版，锁定 DSH 0.2.1-rc.2，在浏览器使用酒馆，不需要安装官方桌面。
+- 暂不支持社区 DSH Desktop、DSHA 或 Android APK。桌面与命令行安装方法分别见下文。
 - 本轮不发布一键 EXE 安装包，不要使用原有 EXE 安装这个测试版。
 
 ## 安装前
@@ -33,11 +34,44 @@ $env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString
 
 看到安装成功后，重新打开官方 DeepSeek Harness，即可进入酒馆。侧栏版本处显示“测试版 · DSH 0.2.1”。
 
-## 独立 profile 切换（实验功能）
+## 独立命令行版（浏览器使用）
 
-本分支另附 [Profile 桥接兼容插件](tavern-plugin/packages/dsh-profile-bridge/README.md)，已在 macOS 官方桌面 0.2.1-rc.2 验证酒馆与原版配置往返。它通过目录链接加载独立 `tavern`，保留原版 `desktop`；需正常退出应用后完成切换，再手动启动。
+先准备 Node.js 22.19 或更高版本以及 pnpm。安装器下载锁定版本的独立 DSH，不修改全局 DSH，不需要官方桌面。
 
-**上面的安装命令尚不会自动启用桥接。** 已手动配置桥接的安装会根据 `tavern` 配置中的标记继续更新酒馆目录，避免覆盖原版配置。Windows 桥接尚未实机验证，使用方法、备份要求见插件说明。
+macOS / Linux 终端：
+
+```sh
+curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.sh' -o /tmp/dsh-tavern-testing-install.sh && DSH_TAVERN_HOST=cli DSH_TAVERN_CLI_HOME="$HOME/.dsh-tavern-testing" sh /tmp/dsh-tavern-testing-install.sh
+```
+
+Windows PowerShell：
+
+```powershell
+$env:DSH_TAVERN_HOST='cli'
+$env:DSH_TAVERN_CLI_HOME=Join-Path $HOME '.dsh-tavern-testing'
+$tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.ps1'))
+Invoke-Expression $tavernInstaller
+```
+
+安装后运行 `dsh-tavern start`，按输出地址在浏览器打开；`dsh-tavern stop` 停止，`dsh-tavern status` 查看状态，`dsh-tavern update` 更新。若命令尚未进入 PATH，进入安装目录下的 `apps/dsh-tavern`，运行 `node bin/dsh-tavern.mjs start`。
+
+上述命令使用专用测试目录 `.dsh-tavern-testing`，与官方桌面的 `.dsh` 分开。首次安装会尝试复制默认 `.dsh` 中的旧命令行酒馆数据（仅识别标记为 CLI 的配置），保留源数据；后续两套数据独立变化，不自动同步。自定义旧目录可设置 `DSH_TAVERN_LEGACY_DSH_HOME`，复制前先停止旧酒馆。已有命令行版的 `dsh-tavern` 命令入口会被测试版替换并备份；如需同时使用，分别用各安装目录中的 `node bin/dsh-tavern.mjs` 操作。
+
+## 桌面版：独立 tavern 与原版切换
+
+桌面安装会自动将酒馆装到独立 `profiles/tavern`，再让官方桌面的 `profiles/desktop` 入口链接到它。安装后启动即进入酒馆；这不是官方原生 profile 选择器。
+
+两边都保留 **设置 → 配置档案**：
+
+- 酒馆切回原版：点击“还原为独立 profile”。
+- 原版切回酒馆：选择 `tavern`，点击“使用它”。
+- 点击后在两分钟内正常退出桌面，稍后重新启动。插件不强制结束进程，超时取消切换。
+
+安装前必须完整退出官方桌面；安装过程中不要重新打开。每次安装保留完整配置目录备份，位置显示在安装日志中：`.dsh/backups/profile-bridge-install-*`。原版配置另保留在 `profiles/desktop.fresh-*`，供切换入口还原；不要删除这些目录。存档正文、历史和附件不因 profile 切换而搬动；配置独立不代表账号或全部宿主数据隔离。
+
+已有测试版若占用了 `desktop`，安装器会将当前酒馆配置复制到 `tavern`，并查找原版目录备份或成对的配置文件备份。找不到原版备份时停止，不覆盖现有 profile；需先恢复原版 desktop 备份，再重试。安装失败会恢复之前的 profile 入口和目录，失败现场及备份仍保留；中断后的未完成目录事务在下次安装时恢复。
+
+重新运行安装命令会继续更新独立 `tavern`，安装成功后默认进入酒馆。macOS 桥接已实机验证；Windows junction 切换仍待实机验证。实现与来源见 [桥接插件说明](tavern-plugin/packages/dsh-profile-bridge/README.md)。
 
 ## 从旧命令行版或自定义目录继承数据
 

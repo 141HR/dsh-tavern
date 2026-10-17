@@ -9,6 +9,7 @@ import { SCRIPT_PATH, RUNTIME_HOST, DSH_ROOT } from './launcher-environment.mjs'
 import { installProfile, parseInstallHost } from './profile-installation.mjs'
 import { startService, stopService, statusService, openService, bootstrapFrontendOnce } from './service-lifecycle.mjs'
 import { updateApplication, parseUpdateOptions } from './application-update.mjs'
+import { recordUpdateDiagnostic } from './update-diagnostics.mjs'
 
 // Keep the existing import surface while the executable only dispatches commands.
 export { resolveServicePort, resolveDshInvocation } from './launcher-environment.mjs'
@@ -84,5 +85,14 @@ async function main() {
 
 const isEntrypoint = process.argv[1] && realpathSync(SCRIPT_PATH) === realpathSync(path.resolve(process.argv[1]))
 if (isEntrypoint) {
-  main().catch((error) => fail(error instanceof Error ? error.message : String(error)))
+  main().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error)
+    // A detached in-app update has no console; keep its failure next to its status file.
+    if (process.argv[2] === 'update') {
+      let options = {}
+      try { options = parseUpdateOptions(process.argv.slice(3)) } catch {}
+      if (options.statusFile) recordUpdateDiagnostic(path.dirname(options.statusFile), { attemptId: options.attemptId, event: 'updater.failed', error: message })
+    }
+    fail(message)
+  })
 }

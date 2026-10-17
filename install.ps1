@@ -3,7 +3,7 @@ $PreviousConsoleOutputEncoding = [Console]::OutputEncoding
 $PreviousOutputEncoding = $OutputEncoding
 
 $InstallHost = if ($env:DSH_TAVERN_HOST) { $env:DSH_TAVERN_HOST } else { 'desktop' }
-if ($InstallHost -ne 'desktop') { throw "测试版仅支持官方 DeepSeek Harness Desktop，不支持宿主：$InstallHost" }
+if ($InstallHost -notin @('desktop', 'cli')) { throw "测试版支持官方桌面和独立命令行，不支持宿主：$InstallHost" }
 
 $Repository = if ($env:DSH_TAVERN_REPOSITORY) { $env:DSH_TAVERN_REPOSITORY } else { 'flizzywine/dsh-tavern' }
 $RepositoryUrl = if ($env:DSH_TAVERN_GIT_URL) { $env:DSH_TAVERN_GIT_URL } else { "https://github.com/$Repository.git" }
@@ -664,7 +664,10 @@ function lastActivity(lockDir, owner) {
 function staleReason(lockDir, owner, now = Date.now()) {
   const idle = now - lastActivity(lockDir, owner)
   if (idle > STALE_IDLE_MS) return 'idle'
-  if (owner?.state === 'reserved' || owner?.state === 'uncertain') return ''
+  if (owner?.state === 'uncertain') return ''
+  // The launched updater adopts its reservation before writing anything. If that
+  // process is gone and the reservation is still unadopted, nobody can be writing.
+  if (owner?.state === 'reserved') return Number.isSafeInteger(owner.launcherPid) && owner.launcherPid > 1 && !alive(owner.launcherPid) ? 'launcher-exited' : ''
   // A finished owner spawns nothing more; its stage processes register before running.
   if (!owner?.ownerDone && idle < DEAD_OWNER_GRACE_MS) return ''
   const pids = recordedPids(lockDir, owner)
@@ -689,7 +692,7 @@ function reclaimStale(dshHome, owner) {
     return false
   }
   try { fs.rmSync(removed, { recursive: true, force: true }) } catch {}
-  process.stderr.write(`已清理残留的安装锁（${reason === 'idle' ? '超过 1 小时无进展' : '原安装进程均已退出'}）：${lockDir}\n`)
+  process.stderr.write(`已清理残留的安装锁（${{ idle: '超过 1 小时无进展', 'launcher-exited': '更新进程未开始安装就已退出' }[reason] || '原安装进程均已退出'}）：${lockDir}\n`)
   return true
 }
 
@@ -858,10 +861,15 @@ try {
   # A pending optional version check can keep pnpm alive after it prints Done.
   $env:pnpm_config_update_notifier = 'false'
   if ($InstallHost -eq 'desktop') {
+    # Custom install folders are found through the running app or its uninstall entry.
+    $RegisteredDesktop = @(Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+      'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+      Where-Object { $_.DisplayName -like 'DeepSeek Harness*' -and $_.InstallLocation } | ForEach-Object { Join-Path $_.InstallLocation 'DeepSeek Harness.exe' })
+    $RunningDesktop = @(Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue | ForEach-Object { $_.Path })
     $OfficialDesktopExecutable = @($env:DSH_DESKTOP_NODE_EXECUTABLE, $env:DSH_DESKTOP_APP_EXECUTABLE,
       (Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness\DeepSeek Harness.exe'),
-      (Join-Path $env:ProgramFiles 'DeepSeek Harness\DeepSeek Harness.exe')) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
-    if (-not $OfficialDesktopExecutable) { throw '请先安装官方 DeepSeek Harness：https://deepseek.com/harness/' }
+      (Join-Path $env:ProgramFiles 'DeepSeek Harness\DeepSeek Harness.exe')) + $RegisteredDesktop + $RunningDesktop | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
+    if (-not $OfficialDesktopExecutable) { throw '请先安装官方 DeepSeek Harness：https://deepseek.com/harness/ （装在其他位置时，可用 DSH_DESKTOP_APP_EXECUTABLE 指定程序路径）' }
     New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
     $OfficialDesktopModuleSource = @'
 // Shared bootstrap for the official desktop, shell installers and the Windows bundle.
@@ -918,8 +926,21 @@ if (require.main === module) {
     $PreviousElectronNode = $env:ELECTRON_RUN_AS_NODE
     try {
       $env:ELECTRON_RUN_AS_NODE = '1'
-      $DesktopEnvironment = (& $OfficialDesktopExecutable --expose-internals $OfficialDesktopModule $DshRoot) -join "`n"
-      if ($LASTEXITCODE -ne 0) { throw '官方桌面运行环境校验失败' }
+      # The desktop app is a GUI-subsystem program: & neither waits for it nor sets
+      # $LASTEXITCODE, so the check failed every time. Run it as a waited child process.
+      $DesktopStart = New-Object System.Diagnostics.ProcessStartInfo
+      $DesktopStart.FileName = $OfficialDesktopExecutable
+      $DesktopStart.Arguments = (@('--expose-internals', $OfficialDesktopModule, $DshRoot) | ForEach-Object { '"' + ($_ -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"' }) -join ' '
+      $DesktopStart.UseShellExecute = $false
+      $DesktopStart.CreateNoWindow = $true
+      $DesktopStart.RedirectStandardOutput = $true
+      $DesktopStart.RedirectStandardError = $true
+      $DesktopStart.StandardOutputEncoding = $DesktopStart.StandardErrorEncoding = New-Object Text.UTF8Encoding($false)
+      $DesktopProcess = [System.Diagnostics.Process]::Start($DesktopStart)
+      $DesktopErrors = $DesktopProcess.StandardError.ReadToEndAsync()
+      $DesktopEnvironment = $DesktopProcess.StandardOutput.ReadToEnd()
+      $DesktopProcess.WaitForExit()
+      if ($DesktopProcess.ExitCode -ne 0) { throw ('官方桌面运行环境校验失败：' + $DesktopErrors.Result.Trim()) }
       ($DesktopEnvironment | ConvertFrom-Json).PSObject.Properties | ForEach-Object { [Environment]::SetEnvironmentVariable($_.Name, [string]$_.Value, 'Process') }
     } finally { $env:ELECTRON_RUN_AS_NODE = $PreviousElectronNode }
   }
@@ -1300,7 +1321,7 @@ try {
   }
   if ($InstallHost -eq 'desktop') {
     Write-Host 'DSH Tavern Desktop 版安装完成。'
-    Write-Host '请重启官方 DeepSeek Harness，酒馆已安装到 desktop 配置。'
+    Write-Host '请重启官方 DeepSeek Harness，酒馆已安装到独立 tavern 配置；原版 desktop 已备份，可在设置 → 配置档案中切换。'
   }
   else {
     if ($env:DSH_TAVERN_DEFER_SERVICE_START -ne '1') {

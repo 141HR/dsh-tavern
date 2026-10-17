@@ -11,8 +11,8 @@ export pnpm_config_update_notifier=false
 
 INSTALL_HOST=${DSH_TAVERN_HOST:-desktop}
 case ${INSTALL_HOST} in
-  desktop) ;;
-  *) echo "安装失败：测试版仅支持官方 DeepSeek Harness Desktop，不支持宿主 ${INSTALL_HOST}" >&2; exit 1 ;;
+  desktop|cli) ;;
+  *) echo "安装失败：测试版支持官方桌面和独立命令行，不支持宿主 ${INSTALL_HOST}" >&2; exit 1 ;;
 esac
 
 REPOSITORY=${DSH_TAVERN_REPOSITORY:-flizzywine/dsh-tavern}
@@ -397,7 +397,10 @@ function lastActivity(lockDir, owner) {
 function staleReason(lockDir, owner, now = Date.now()) {
   const idle = now - lastActivity(lockDir, owner)
   if (idle > STALE_IDLE_MS) return 'idle'
-  if (owner?.state === 'reserved' || owner?.state === 'uncertain') return ''
+  if (owner?.state === 'uncertain') return ''
+  // The launched updater adopts its reservation before writing anything. If that
+  // process is gone and the reservation is still unadopted, nobody can be writing.
+  if (owner?.state === 'reserved') return Number.isSafeInteger(owner.launcherPid) && owner.launcherPid > 1 && !alive(owner.launcherPid) ? 'launcher-exited' : ''
   // A finished owner spawns nothing more; its stage processes register before running.
   if (!owner?.ownerDone && idle < DEAD_OWNER_GRACE_MS) return ''
   const pids = recordedPids(lockDir, owner)
@@ -422,7 +425,7 @@ function reclaimStale(dshHome, owner) {
     return false
   }
   try { fs.rmSync(removed, { recursive: true, force: true }) } catch {}
-  process.stderr.write(`已清理残留的安装锁（${reason === 'idle' ? '超过 1 小时无进展' : '原安装进程均已退出'}）：${lockDir}\n`)
+  process.stderr.write(`已清理残留的安装锁（${{ idle: '超过 1 小时无进展', 'launcher-exited': '更新进程未开始安装就已退出' }[reason] || '原安装进程均已退出'}）：${lockDir}\n`)
   return true
 }
 
@@ -1110,7 +1113,7 @@ fi
 
 if [ "${INSTALL_HOST}" = "desktop" ]; then
   echo "DSH Tavern Desktop 版安装完成。"
-  echo "请重启官方 DeepSeek Harness，酒馆已安装到 desktop 配置。"
+  echo "请重启官方 DeepSeek Harness，酒馆已安装到独立 tavern 配置；原版 desktop 已备份，可在设置 → 配置档案中切换。"
 else
   if [ "${DSH_TAVERN_DEFER_SERVICE_START:-0}" != "1" ]; then
     DSH_HOME=${DSH_ROOT} node "${APP_DIR}/bin/dsh-tavern.mjs" start
