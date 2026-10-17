@@ -171,7 +171,7 @@ test('人物卡列表视图：插件视图拿到筛选后的卡片和动作，�
   const opened = [], toggled = []
   let managing = false
   const batch = { get managing() { return managing }, isSelected: path => path === 'cards/甲.png', toggle: path => toggled.push(path) }
-  const props = place => ({ place, cards, batch, busy: false, open: card => opened.push(card.path), menu: card => 'menu:' + card.name, builtin: () => 'builtin' })
+  const props = place => ({ place, cards, batch, busy: false, open: card => opened.push(card.path), menu: card => 'menu:' + card.name, mention: place === 'library' ? card => '@' + card.name : undefined, builtin: () => 'builtin' })
 
   // Nothing chosen yet: Tavern's own list, with a switcher to pick the plugin view.
   let tree = List(props('library'))
@@ -193,6 +193,7 @@ test('人物卡列表视图：插件视图拿到筛选后的卡片和动作，�
   assert.equal(seen.selecting, false)
   assert.equal(seen.isSelected('cards/甲.png'), false)
   assert.equal(seen.menu('cards/甲.png'), 'menu:甲')
+  assert.equal(seen.mention('cards/甲.png'), '@甲')
   seen.open('cards/甲.png'); seen.open('cards/不存在.png')
   assert.deepEqual(opened, ['cards/甲.png'])
 
@@ -202,6 +203,7 @@ test('人物卡列表视图：插件视图拿到筛选后的卡片和动作，�
   assert.equal(seen.selecting, true)
   assert.equal(seen.isSelected('cards/甲.png'), true)
   assert.equal(seen.menu('cards/甲.png'), null)
+  assert.equal(seen.mention('cards/甲.png'), null)
   seen.open('cards/甲.png')
   assert.deepEqual(opened, ['cards/甲.png'])
   assert.deepEqual(toggled, ['cards/甲.png'])
@@ -209,6 +211,7 @@ test('人物卡列表视图：插件视图拿到筛选后的卡片和动作，�
   // A view that returns null for a place leaves Tavern's own list there.
   tree = List(props('play'))
   assert.equal(tree.children[1].children[0].type(tree.children[1].children[0].props), 'builtin')
+  assert.equal(seen.mention('cards/甲.png'), null)
 
   dispose()
   assert.equal(List(props('library')), 'builtin')

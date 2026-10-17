@@ -643,7 +643,7 @@ ctx.tavernUi.registerStartGroup({ title: '叙事锚定', tabs: ['narrative-ancho
 ```js
 ctx.tavernUi.registerCardListView({
   id: 'grid', label: '宫格',
-  render({ place, cards, busy, selecting, isSelected, toggle, open, menu }) {
+  render({ place, cards, busy, selecting, isSelected, toggle, open, menu, mention }) {
     return h('div', { className: 'my-grid' }, cards.map(card => h('button', {
       key: card.path, disabled: busy, onClick: () => open(card.path),
       'aria-pressed': selecting ? isSelected(card.path) : undefined,
@@ -664,6 +664,7 @@ ctx.tavernUi.registerCardListView({
 | `toggle(path)` | 批量管理时勾选或取消；不在批量管理时什么也不做 |
 | `open(path)` | 等于点内置列表的一行：批量管理时勾选或取消，否则在人物卡库打开详情、在开始游玩窗口开局（读取失败的卡不开局） |
 | `menu(path)` | Tavern 自己的「⋯ 移到分组」菜单，可放在卡片角上；开始游玩窗口和批量管理时为 `null` |
+| `mention(path)` | Tavern 自己的「@ 在对话中引用」按钮，点了把这张卡引用进卡片工作台的输入框，可放在卡片角上；只在卡片工作台的人物卡库、且不在批量管理时有，其余为 `null` |
 
 - `id` 只能用小写字母、数字、点、下划线和连字符；`label` 1–20 字。
 - 某一处不想换（例如只想改人物卡库），对那个 `place` 返回 `null`，那里继续用内置列表。

@@ -441,7 +441,7 @@
 		/**
 		 * The card rows of the library and the play picker. Without plugin views this is
 		 * Tavern's own list; with them, a switcher picks one (remembered per browser).
-		 * props: place, cards (already searched and filtered), batch, busy, open(card), menu(card)?, builtin().
+		 * props: place, cards (already searched and filtered), batch, busy, open(card), menu(card)?, mention(card)?, builtin().
 		 */
 		function TavernCardList(props) {
 			useTavernUiExtensions();
@@ -474,7 +474,8 @@
 					if (!card || props.busy) return;
 					if (batch.managing) batch.toggle(path); else props.open(card);
 				},
-				menu: function (path) { const card = byPath.get(path); return card && props.menu && !batch.managing ? props.menu(card) : null; }
+				menu: function (path) { const card = byPath.get(path); return card && props.menu && !batch.managing ? props.menu(card) : null; },
+				mention: function (path) { const card = byPath.get(path); return card && props.mention && !batch.managing ? props.mention(card) : null; }
 			};
 			return h(React.Fragment, null, switcher,
 				h(tavernPluginBoundary(), { key: view.key, owner: view.owner, fallback: builtin }, h(TavernCardListViewBody, { view: view, input: input, fallback: builtin })));
