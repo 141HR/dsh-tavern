@@ -785,3 +785,56 @@ test('导入存档：插件数据与媒体按新游戏的正文版本写入，�
   const items = await media.list({ chatId: 'dst' })
   assert.equal(items.length, 1); assert.equal(items[0].key, 'new2'); assert.equal(items[0].attachment.attachmentId, 'a2')
 })
+
+test('人物卡库、改卡、工具可见范围与 Skill：插件不用读写 Tavern 文件', { skip: !cordis }, async t => {
+  const raw = { spec: 'chara_card_v2', data: { name: 'A', extensions: {} } }
+  const updates = [], skills = new Map([['debug-card', { name: 'debug-card', source: 'builtin', description: '内置', content: '---' }]]), removed = []
+  const h = await harness(t, {
+    listCards: async () => [{ path: 'cards/a.json', name: 'A', hasImage: true, script: null, group: '常玩', starred: true }, { path: 'cards/b.json', name: 'B', hasImage: false, script: { title: '剧本' }, readError: '坏了' }],
+    readCardRaw: async card => card === 'cards/a.json' ? raw : null,
+    updateCardRaw: async (card, operations, owner) => { updates.push({ card, operations, owner }); return true },
+    isControlledTool: name => name === 'tavern_read_variables',
+    skills: {
+      list: async () => [...skills.values()],
+      read: async name => skills.get(name) || null,
+      referenceFiles: async () => [{ path: 'references/a.md', content: '旧' }],
+      write: async input => { const overwritten = skills.has(input.name); skills.set(input.name, { name: input.name, source: 'user', description: input.description, content: input.body }); return { name: input.name, overwritten } },
+      remove: async name => { removed.push(name); skills.delete(name) }
+    }
+  })
+  let tavern
+  const fiber = await h.root.plugin({ name: 'wrongbook', inject: ['tavern'], apply(ctx) { tavern = ctx.tavern } })
+  await tick()
+
+  assert.deepEqual(await tavern.listCards(), [
+    { id: 'cards/a.json', name: 'A', fileName: 'a.json', imageUrl: '/api/dsh-tavern/card-image?path=cards%2Fa.json', script: null, group: '常玩', starred: true, error: '' },
+    { id: 'cards/b.json', name: 'B', fileName: 'b.json', imageUrl: '', script: { title: '剧本' }, group: '', starred: false, error: '坏了' }])
+  const copy = await tavern.readCardRaw({ card: 'cards/a.json' })
+  copy.data.name = '改了'
+  assert.equal(raw.data.name, 'A', '读到的是副本')
+  await assert.rejects(tavern.readCardRaw({ card: 'cards/none.json' }), /不存在/)
+
+  const scripts = [{ name: '通用脚本', content: 'x' }]
+  assert.deepEqual(await tavern.updateCardRaw({ card: 'cards/a.json', operations: [{ op: 'set', path: '/data/extensions/tavern_helper/scripts', value: scripts }, { op: 'delete', path: '/data/extensions/old' }] }), { changed: true })
+  assert.deepEqual(updates, [{ card: 'cards/a.json', owner: 'wrongbook', operations: [{ op: 'set', path: '/data/extensions/tavern_helper/scripts', value: scripts }, { op: 'delete', path: '/data/extensions/old' }] }])
+  await assert.rejects(tavern.updateCardRaw({ card: 'cards/a.json', operations: [] }), /operations/)
+  await assert.rejects(tavern.updateCardRaw({ card: 'cards/a.json', operations: [{ op: 'move', path: '/a' }] }), /set 或 delete/)
+  await assert.rejects(tavern.updateCardRaw({ card: 'cards/a.json', operations: [{ op: 'set', path: 'data' , value: 1 }] }), /JSON Pointer/)
+
+  tavern.toolModes({ name: 'wrongbook_lookup', modes: ['card'] })
+  assert.deepEqual(h.api.toolModesFor('wrongbook_lookup'), ['card'])
+  assert.equal(h.api.toolModesFor('narrative_anchor_read'), null, '没声明的插件工具保持原样')
+  assert.throws(() => tavern.toolModes({ name: 'tavern_read_variables', modes: ['card'] }), /插件自己注册/)
+  assert.throws(() => tavern.toolModes({ name: 'x_tool', modes: ['story'] }), /play、card/)
+
+  assert.deepEqual(await tavern.listSkills(), [{ name: 'debug-card', source: 'builtin', description: '内置' }])
+  assert.deepEqual(await tavern.saveSkill({ name: 'my-notes', description: '踩坑', body: '先读参考', references: [{ path: 'references/错题.md', content: '…' }] }), { name: 'my-notes', overwritten: false })
+  assert.equal((await tavern.readSkill({ name: 'my-notes' })).references[0].content, '旧')
+  await assert.rejects(tavern.removeSkill({ name: 'debug-card' }), /内置 Skill 不能删除/)
+  await tavern.removeSkill({ name: 'my-notes' })
+  assert.deepEqual(removed, ['my-notes'])
+
+  fiber.dispose()
+  await tick()
+  assert.equal(h.api.toolModesFor('wrongbook_lookup'), null, '插件卸载后可见范围撤销')
+})

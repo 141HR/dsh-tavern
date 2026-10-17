@@ -2736,6 +2736,20 @@ export async function apply(ctx) {
     ...pluginTurns,
     backgroundModel: async sessionId => backgroundModelSelection(await backgroundConfigForSession(sessionId)),
     readCard: readPluginCard,
+    listCards,
+    readCardRaw: async card => {
+      const cardPath = normalizeResourcePath(card, 'card')
+      const workspace = await readCardWorkspace(cardPath)
+      return workspace === undefined ? null : cardPreparation.present({ card: workspace, as: 'raw' })
+    },
+    updateCardRaw: async (card, operations, owner) => {
+      const cardPath = normalizeResourcePath(card, 'card')
+      if (await readCardWorkspace(cardPath) === undefined) throw Object.assign(new Error('人物卡不存在：' + card), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
+      return (await updateCard(cardPath, {}, { ts: Date.now(), summary: '插件 ' + owner + ' 修改' }, operations)).changed === true
+    },
+    // Tavern decides where its own tools show; a plugin may only scope the tools it registered.
+    isControlledTool: name => controlledToolNames.has(name),
+    skills: tavernSkills,
     readCardImage: async sessionId => {
       const header = await chatHeaderForSession(sessionId, ['cardPath'])
       const cardPath = str(header?.cardPath)
@@ -5045,7 +5059,8 @@ export async function apply(ctx) {
       ensureSessionPrefix: async function (input) {
         return await ensureNativeSystemPrefix(input.payload.agent.session, input.chat)
       },
-      controlledToolNames
+      controlledToolNames,
+      pluginToolModes: name => pluginApi.toolModesFor(name)
     }
   })
 
