@@ -56,3 +56,24 @@ export function createSettlementItems({ items = () => [], plugins = () => null }
     }
   })
 }
+
+// Tavern's posture item. Its text is two parts: the requirement (replaceable later) and the
+// protocol (which tool submits, and that it ends the run), so a new requirement cannot break it.
+export const NO_POSTURE_REQUIREMENT = '本轮不生成或提交姿势。完成启用的后台任务后简短回复完成。'
+
+export function createPostureItem({ prompt, tool }) {
+  return Object.freeze({
+    id: 'tavern.posture',
+    tool,
+    requirement: () => prompt(),
+    protocol: tool.name + ' 是本任务最后一步。'
+  })
+}
+
+/** What the plain settlement engine sends: posture, when on, is its only terminal item. */
+export function plainSettlementPlan({ posture }) {
+  return {
+    system: [posture ? posture.requirement() : NO_POSTURE_REQUIREMENT, posture ? posture.protocol : ''].join('\n\n'),
+    tools: posture ? [posture.tool] : []
+  }
+}

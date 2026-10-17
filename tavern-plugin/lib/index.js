@@ -163,7 +163,7 @@ import { createManualLedger } from './domain/manual-ledger.js'
 import { POSTURE_SUBMIT_TOOL, POSTURE_SUBMIT_TOOL_NAME, lastSubmittedPosture, normalizePostureSubmission } from './domain/posture-submission.js'
 import { createCastPresentation } from './domain/cast-presentation.js'
 import { createCastAssets } from './domain/cast-assets.js'
-import { createSettlementItems } from './domain/background-pipeline.js'
+import { createPostureItem, createSettlementItems, plainSettlementPlan } from './domain/background-pipeline.js'
 import { TAVERN_COMPATIBILITY_CAPABILITIES, createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
 import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics, sanitizeModuleFailure, sanitizeMvuLoadDiagnostic, redactMvuLoadError } from './domain/mvu-diagnostics.js'
 import { createPlayChatDebugReference, readPlayChatDebugTurn } from './domain/play-chat-debug.js'
@@ -2626,6 +2626,7 @@ export async function apply(ctx) {
   })
   // Work riding on the main settlement call: Tavern's own items first, then plugins.
   const settlementItems = createSettlementItems({ items: () => [castPresentation.settlement], plugins: () => pluginApi.settlement })
+  const postureItem = createPostureItem({ prompt: () => runtimePrompt('posture-settlement'), tool: POSTURE_SUBMIT_TOOL })
   const castAssets = createCastAssets({ store: profileData })
   function castAssetView(cardPath, manifest) {
     const key = castAssets.keyOf(cardPath)
@@ -3354,7 +3355,7 @@ export async function apply(ctx) {
             if (selection === null) throw new Error('没有可用的模型配置，请先在当前会话的模型选择器中选择模型')
             mvuResult = await mvuSettlement.settleVariables({
               ...settlementInput,
-              system: backgroundTasksSettings.posture ? runtimePrompt('posture-settlement') : '',
+              system: backgroundTasksSettings.posture ? postureItem.requirement() : '',
               selection,
               persistentSessionId: backgroundSessionId,
               signal
@@ -3395,6 +3396,7 @@ export async function apply(ctx) {
           if (selection === null) throw new Error('没有可用的模型配置，请先在当前会话的模型选择器中选择模型')
           let submittedPosture = null
           let settlementToolTail = Promise.resolve()
+          const plan = plainSettlementPlan({ posture: backgroundTasksSettings.posture ? postureItem : null })
           const run = await backgroundAgentRunner.run({
             onPersistentSessionReady: id => taskRun.bindSession(id, { stateOnly: true }),
             task: 'settlement',
@@ -3411,11 +3413,8 @@ export async function apply(ctx) {
               content: [{ type: 'text', text: settleUserText(snapshot, backgroundTasksSettings.posture, taskRun.participantRequest.rewindTo == null ? lastSubmittedPosture(backgroundSessionId && (agentRegistry.get(backgroundSessionId)?.session || sessionStore.get(backgroundSessionId))) : '') }],
               source: { kind: 'plugin', plugin: 'dsh-tavern' }
             }],
-            system: [
-              backgroundTasksSettings.posture ? runtimePrompt('posture-settlement') : '本轮不生成或提交姿势。完成启用的后台任务后简短回复完成。',
-              backgroundTasksSettings.posture ? 'posture_submit 是本任务最后一步。' : ''
-            ].join('\n\n'),
-            tools: backgroundTasksSettings.posture ? [POSTURE_SUBMIT_TOOL] : [],
+            system: plan.system,
+            tools: plan.tools,
             maxToolCalls: 12,
             temperature: 0.2,
             sessionId: snapshot.sessionId,
