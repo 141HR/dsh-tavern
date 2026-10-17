@@ -363,10 +363,10 @@ window.__ModuleLoader__.load({
 			return notes.join("；");
 		}
 
-		// Card files the import buttons offer. Browsers know no type for .charx / .dshcard, and some file
-		// dialogs (Safari, some Chrome builds on macOS) grey such files out; the generic binary type keeps
-		// them pickable, and the import checks the format anyway.
-		const TAVERN_CARD_FILE_ACCEPT = ".png,.json,.charx,.dshcard,application/zip,application/octet-stream";
+		// No file filter on card import: macOS file dialogs (Chrome, Safari) grey out .dshcard and
+		// .charx however the accept list names them, since the system knows no type for them.
+		// The import checks the format and says what it accepts.
+		const TAVERN_CARD_FILE_ACCEPT = undefined;
 
 		function parseCardFile(file) {
 			const name = String(file.name || "");
@@ -379,7 +379,7 @@ window.__ModuleLoader__.load({
 			return file.arrayBuffer().then(function (buf) {
 				const bytes = new Uint8Array(buf);
 				if (bytes.length <= 8 || ascii(bytes, 0, 8) !== "\x89PNG\r\n\x1a\n") {
-					throw new Error("无法识别的角色卡文件（需要 PNG、JSON 或 CHARX）");
+					throw new Error("无法识别的人物卡文件（需要 PNG、JSON、CHARX 或 DSH 人物卡 .dshcard）");
 				}
 				let off = 8;
 				while (off + 8 <= bytes.length) {
