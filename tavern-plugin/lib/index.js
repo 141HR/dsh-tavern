@@ -1065,12 +1065,18 @@ export async function apply(ctx) {
       }
       const imported = await storeImportedCard(cardImportFromCard({ card: archive.card, resolve: archive.resolve, name }), { unique: true })
       if (packs.length) await castAssets.bindPacks(imported.path, packs)
-      // The card's plugins are kept aside, unused, until the player turns them on.
+      // The card's plugins come on with it, confined to this card; the card library can turn them off.
       const plugins = archive.plugins.length ? await cardPlugins.stage(zip, { cardKey: castAssets.keyOf(imported.path), plugins: archive.plugins }) : []
-      if (plugins.length) await castAssets.setPlugins(imported.path, plugins)
+      let pluginError = ''
+      if (plugins.length) {
+        try { await cardPlugins.enable({ cardKey: castAssets.keyOf(imported.path), cardPath: imported.path, plugins }) }
+        catch (error) { pluginError = str(error?.message || error) }
+        await castAssets.setPlugins(imported.path, plugins.map(plugin => ({ ...plugin, enabled: !pluginError })))
+      }
       return { ...imported, format: archive.kind, ...(archive.info ? { info: archive.info } : {}),
         ...(packs.length ? { packs: packs.map(({ id, contentHash, title, format, files, reused }) => ({ id, contentHash, title, format, files, reused })) } : {}),
-        ...(plugins.length ? { plugins: plugins.map(({ name, purpose, files, bytes }) => ({ name, purpose, files, bytes, enabled: false })) } : {}) }
+        ...(plugins.length ? { plugins: plugins.map(({ name, purpose, files, bytes }) => ({ name, purpose, files, bytes, enabled: !pluginError })) } : {}),
+        ...(pluginError ? { pluginError } : {}) }
     } finally { await zip.close() }
   }
   async function storeImportedCard({ payload, collected }, options = {}) {

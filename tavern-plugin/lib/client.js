@@ -339,20 +339,10 @@ window.__ModuleLoader__.load({
 			return call("importCard", { payload: await parseCardFile(file) });
 		}
 
-		/** After importing a card with its own plugins, ask once whether to turn them on. Returns a notice. */
-		async function tavernCardPluginPrompt(card, askConfirm, call) {
-			const plugins = card && card.plugins || [];
-			if (!plugins.length) return "";
-			const lines = plugins.map(function (plugin) { return "· " + plugin.name + (plugin.purpose ? "：" + plugin.purpose : ""); });
-			const accepted = await askConfirm("「" + (card.name || "这张卡") + "」带有卡内插件：\n" + lines.join("\n") + "\n\n启用后插件会在这台电脑上运行代码（可以读写文件、联网），只在这张卡的游戏里生效。只启用你信任的人物卡。\n\n现在启用吗？以后也可以在人物卡库的卡片详情里启用或停用。");
-			if (!accepted) return "卡内插件未启用";
-			await call("setCardPlugins", { path: card.path, enabled: true });
-			return "卡内插件已启用，刷新页面后界面部分生效";
-		}
-
 		/** What a card file brought into its character material, for the import notice. */
 		function tavernCardAssetNotice(assets, card) {
 			const extra = [];
+			if (card && card.plugins && card.plugins.length) extra.push(card.pluginError ? "卡内插件没有启用：" + card.pluginError : "卡内插件 " + card.plugins.map(function (plugin) { return plugin.name; }).join("、") + " 已启用，刷新页面后完整生效");
 			if (card && card.packs && card.packs.length) extra.push("素材包 " + card.packs.map(function (pack) { return pack.title || pack.id; }).join("、") + (card.packs.some(function (pack) { return pack.reused; }) ? "（已有的包直接复用）" : ""));
 			const base = tavernCardAssetText(assets);
 			return [base].concat(extra).filter(Boolean).join("；");
@@ -14573,7 +14563,7 @@ function bindTavernFontZoom(node, win) {
 			}
 			async function importCard(file) {
 				setBusy(true); setError("");
-				try { const result = await importTavernCardFile(file, call); await refresh(); notifyDataChanged(["cards"]); await tavernCardPluginPrompt(result.card, askConfirm, call); }
+				try { await importTavernCardFile(file, call); await refresh(); notifyDataChanged(["cards"]); }
 				catch (err) { setError(String(err && err.message || err)); }
 				finally { setBusy(false); }
 			}
@@ -17425,7 +17415,6 @@ function bindTavernFontZoom(node, win) {
 			const [plugins, setPlugins] = React.useState(null);
 			const [busy, setBusy] = React.useState(false);
 			const [message, setMessage] = React.useState("");
-			const askConfirm = useTavernConfirm(props.path);
 			React.useEffect(function () {
 				let active = true;
 				setPlugins(null); setMessage("");
@@ -17435,7 +17424,6 @@ function bindTavernFontZoom(node, win) {
 			if (!plugins || !plugins.length) return null;
 			const enabled = plugins.every(function (plugin) { return plugin.enabled; });
 			async function toggle() {
-				if (!enabled && !await askConfirm("启用这张卡的插件吗？\n启用后插件会在这台电脑上运行代码（可以读写文件、联网），只在这张卡的游戏里生效。只启用你信任的人物卡。")) return;
 				setBusy(true); setMessage("");
 				try {
 					const reply = await rpc("setCardPlugins", { path: props.path, enabled: !enabled });
@@ -17451,7 +17439,7 @@ function bindTavernFontZoom(node, win) {
 				h("ul", null, plugins.map(function (plugin) {
 					return h("li", { key: plugin.folder }, h("span", null, plugin.name), plugin.purpose ? h("small", null, plugin.purpose) : null, h("small", null, plugin.enabled ? "已启用" : "未启用"));
 				})),
-				h("p", { className: "dsh-tavern-settings-desc" }, "插件在这台电脑上运行代码，只在这张卡的游戏里生效。"),
+				h("p", { className: "dsh-tavern-settings-desc" }, "只在这张卡的游戏里生效。"),
 				message ? h("p", { role: "status", className: "dsh-tavern-settings-desc" }, message) : null);
 		}
 
@@ -17543,7 +17531,7 @@ function bindTavernFontZoom(node, win) {
 						try {
 							const result = await importTavernCardFile(file, rpc);
 							imported += 1; lastPath = result.card.path;
-							const notice = [tavernCardAssetNotice(result.card.assets, result.card), await tavernCardPluginPrompt(result.card, askConfirm, rpc)].filter(Boolean).join("；");
+							const notice = tavernCardAssetNotice(result.card.assets, result.card);
 							if (notice) notices.push((files.length > 1 ? file.name + "：" : "") + notice);
 						} catch (err) { failures.push(file.name + "：" + String(err && err.message || err)); }
 					}

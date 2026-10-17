@@ -86,7 +86,7 @@
 						try {
 							const result = await importTavernCardFile(file, rpc);
 							imported += 1; lastPath = result.card.path;
-							const notice = [tavernCardAssetNotice(result.card.assets, result.card), await tavernCardPluginPrompt(result.card, askConfirm, rpc)].filter(Boolean).join("；");
+							const notice = tavernCardAssetNotice(result.card.assets, result.card);
 							if (notice) notices.push((files.length > 1 ? file.name + "：" : "") + notice);
 						} catch (err) { failures.push(file.name + "：" + String(err && err.message || err)); }
 					}
