@@ -343,8 +343,8 @@ export function createFileResourceStore(options = {}) {
     return (bindings.$global?.sources || []).map(source => ({ kind: 'standalone', path: normalizeResourcePath(source.path, 'worldbook') }))
   }
 
-  // Global selections share the binding file with card bindings. Serialize all
-  // public mutations of that file so concurrent toggles cannot erase each other.
+  // Binding changes and resource rename/remove share this queue: serialize the
+  // complete read/check/write operation, including material bindings.
   let worldBookMutationTail = Promise.resolve()
   function serializeWorldBookMutation(work) {
     return (...args) => {
@@ -1004,5 +1004,5 @@ export function createFileResourceStore(options = {}) {
     return result
   }
 
-  return Object.freeze({ globalWorldBookSources, setGlobalWorldBook: serializeWorldBookMutation(setGlobalWorldBook), absolute, copyCard, bindMaterial, bindWorldBook: serializeWorldBookMutation(bindWorldBook), bindWorldBooks: serializeWorldBookMutation(bindWorldBooks), cardsForMaterial, cardImagePreview, ensure, ensureCardWorkspace, originalCardPayload: relative => originalCardPayload(normalizeResourcePath(relative, 'card')), hasCardImage, importCard, importText, importWorldBook, list, metadata, migrateLegacy, readCard, readCardImage, readText, remove: serializeWorldBookMutation(remove), rename: serializeWorldBookMutation(renameResource), replaceScript, restoreCard, scriptBindingsForCards, scriptForCard, unbindMaterial, unbindWorldBook: serializeWorldBookMutation(unbindWorldBook), worldBookBindingForCard, writeWorking })
+  return Object.freeze({ globalWorldBookSources, setGlobalWorldBook: serializeWorldBookMutation(setGlobalWorldBook), absolute, copyCard, bindMaterial: serializeWorldBookMutation(bindMaterial), bindWorldBook: serializeWorldBookMutation(bindWorldBook), bindWorldBooks: serializeWorldBookMutation(bindWorldBooks), cardsForMaterial, cardImagePreview, ensure, ensureCardWorkspace, originalCardPayload: relative => originalCardPayload(normalizeResourcePath(relative, 'card')), hasCardImage, importCard, importText, importWorldBook, list, metadata, migrateLegacy, readCard, readCardImage, readText, remove: serializeWorldBookMutation(remove), rename: serializeWorldBookMutation(renameResource), replaceScript, restoreCard, scriptBindingsForCards, scriptForCard, unbindMaterial: serializeWorldBookMutation(unbindMaterial), unbindWorldBook: serializeWorldBookMutation(unbindWorldBook), worldBookBindingForCard, writeWorking })
 }
