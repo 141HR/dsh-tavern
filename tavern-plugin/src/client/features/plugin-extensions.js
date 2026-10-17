@@ -182,6 +182,14 @@
 						return addTo(stageViews, entry);
 					}, "tavernUi.registerStageView()");
 				},
+				// Say a line in its character's voice on the channel the player chose (apiVersion 2);
+				// resolves true when it was heard to the end. A new line stops the one being said.
+				speak(input) {
+					if (!input || typeof input.gameId !== "string" || !input.gameId) return Promise.reject(new TypeError("speak 需要 gameId"));
+					if (typeof input.text !== "string" || !input.text.trim()) return Promise.reject(new TypeError("speak 需要 text"));
+					return tavernSpeech.speak({ sessionId: input.gameId, speaker: typeof input.speaker === "string" ? input.speaker : "", text: input.text, emotion: input.emotion, narration: input.narration === true });
+				},
+				stopSpeech() { tavernSpeech.stop(); },
 				// Put text in the game's input box without sending it.
 				setInput(input) {
 					const composer = composerFor(input, "setInput");

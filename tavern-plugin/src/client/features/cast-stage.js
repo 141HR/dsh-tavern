@@ -47,7 +47,7 @@
 			const segments = tavernCastSegments(turn.text, turn.lines) || [{ kind: "text", text: turn.text }];
 			const beats = [];
 			segments.forEach(function (segment) {
-				if (segment.kind === "line") beats.push({ kind: "line", text: segment.text.trim(), speaker: segment.speaker, emotion: segment.emotion, turn: turn.turn });
+				if (segment.kind === "line") beats.push({ kind: "line", text: segment.text.trim(), speaker: segment.speaker, emotion: segment.emotion, quotes: segment.quotes || [], turn: turn.turn });
 				else segment.text.split("\n").map(function (row) { return row.trim(); }).filter(Boolean).forEach(function (row) { beats.push({ kind: "narration", text: row, turn: turn.turn }); });
 			});
 			return beats;
@@ -163,10 +163,35 @@
 			return { beats: beats, index: Math.min(index, Math.max(0, beats.length - 1)), setIndex: setIndex, turn: latest && latest.turn };
 		}
 
+		// Reading the stage aloud: a per-browser choice, effective while voicing is on.
+		const TAVERN_STAGE_READ_KEY = "dsh-tavern-stage-read";
+		function useTavernStageReading() {
+			const speech = useTavernSpeechSettings();
+			const [reading, setReading] = React.useState(function () { try { return window.localStorage.getItem(TAVERN_STAGE_READ_KEY) === "1"; } catch (_) { return false; } });
+			function toggle() {
+				const next = !reading;
+				setReading(next);
+				if (!next) tavernSpeech.stop();
+				try { window.localStorage.setItem(TAVERN_STAGE_READ_KEY, next ? "1" : "0"); } catch (_) {}
+			}
+			React.useEffect(function () { return function () { tavernSpeech.stop(); }; }, []);
+			const available = Boolean(speech && speech.enabled);
+			return { available: available, on: available && reading, toggle: toggle };
+		}
+		function tavernBeatSpeech(sessionId, beat) {
+			return beat.kind === "line" ? { sessionId: sessionId, speaker: beat.speaker, text: (beat.quotes || []).join(" ") || beat.text, emotion: beat.emotion }
+				: { sessionId: sessionId, text: beat.text, narration: true };
+		}
+		function TavernStageReadButton(props) {
+			if (!props.reading.available) return null;
+			return React.createElement("button", { type: "button", className: props.reading.on ? "is-on" : "", "aria-pressed": props.reading.on, onClick: props.reading.toggle }, "朗读");
+		}
+
 		function TavernStageFullscreen(props) {
 			const h = React.createElement;
 			const reader = useTavernStageReader(props.data, false);
 			const [auto, setAuto] = React.useState(false);
+			const reading = useTavernStageReading();
 			const [draft, setDraft] = React.useState("");
 			const [sending, setSending] = React.useState(false);
 			const atEnd = reader.index >= reader.beats.length - 1;
@@ -181,13 +206,16 @@
 				document.addEventListener("keydown", onKey, true);
 				return function () { document.removeEventListener("keydown", onKey, true); };
 			}, [reader.beats.length]);
+			// Each beat is read when reading is on; auto play turns the page when it was heard, or after a time by its length.
 			React.useEffect(function () {
-				if (!auto || atEnd) return;
 				const beat = reader.beats[reader.index];
+				let active = true, timer = null;
 				const delay = Math.max(1500, Math.min(10000, 400 + 70 * Array.from(beat ? beat.text : "").length));
-				const timer = window.setTimeout(function () { step(1); }, delay);
-				return function () { window.clearTimeout(timer); };
-			}, [auto, reader.index, atEnd]);
+				const turn = function (wait) { if (active && auto && !atEnd) timer = window.setTimeout(function () { step(1); }, wait); };
+				if (reading.on && beat) tavernSpeech.speak(tavernBeatSpeech(props.sessionId, beat)).then(function (heard) { turn(heard ? 400 : delay); });
+				else turn(delay);
+				return function () { active = false; if (timer !== null) window.clearTimeout(timer); };
+			}, [auto, reader.index, atEnd, reading.on]);
 			async function send(event) {
 				event.preventDefault();
 				const text = draft.trim();
@@ -202,6 +230,7 @@
 				h("span", { className: "dsh-tavern-stage-progress" }, reader.beats.length ? (reader.index + 1) + " / " + reader.beats.length : ""),
 				h("button", { type: "button", onClick: function () { step(1); }, disabled: atEnd, "aria-label": "下一句" }, "›"),
 				h("button", { type: "button", className: auto ? "is-on" : "", onClick: function () { setAuto(!auto); }, "aria-pressed": auto }, "自动"),
+				h(TavernStageReadButton, { reading: reading }),
 				h("span", { className: "dsh-tavern-spacer" }),
 				h("button", { type: "button", onClick: props.onClose }, "退出舞台"));
 			return h("div", { className: "dsh-tavern-stage-overlay", role: "dialog", "aria-modal": "true", "aria-label": "舞台" },
@@ -273,6 +302,8 @@
 					return h("li", { key: name, className: "dsh-tavern-cast-manager-row" },
 						h(TavernCastAvatar, { speaker: name, imageUrl: tavernCastImage(data, name, "neutral", true) }),
 						h("span", { className: "dsh-tavern-cast-manager-name" }, name, h("small", null, count ? count + " 张立绘" : "暂无立绘")),
+						h(TavernCastVoiceField, { sessionId: props.sessionId, name: name, character: character, busy: busy,
+							onSave: function (provider, voice) { void run("castSetVoice", { name: name, provider: provider, voice: voice }, function () { return voice ? "已保存 " + name + " 的声音" : "已清除 " + name + " 的声音"; }); } }),
 						h("button", { type: "button", disabled: busy, onClick: function () { upload(name, "avatar"); } }, "换头像"),
 						h("button", { type: "button", disabled: busy, onClick: function () { upload(name, emotion); } }, "加" + TAVERN_CAST_EMOTIONS[emotion] + "立绘"),
 						character ? h("button", { type: "button", disabled: busy, onClick: function () { void run("castRemoveCharacter", { name: character.name }, function () { return "已清除 " + character.name + " 的素材"; }); } }, "清除") : null);
@@ -287,6 +318,11 @@
 			const reader = useTavernStageReader(stage.data, true);
 			const [fullscreen, setFullscreen] = React.useState(false);
 			const choice = useTavernStageView();
+			const reading = useTavernStageReading();
+			const beat = reader.beats[reader.index];
+			React.useEffect(function () {
+				if (reading.on && beat && !fullscreen) void tavernSpeech.speak(tavernBeatSpeech(props.sessionId, beat));
+			}, [reader.index, reader.turn, reading.on, fullscreen]);
 			const data = stage.data;
 			if (!data) return h("aside", { className: "dsh-tavern-status dsh-tavern-stage-tab", "aria-label": "舞台" }, h("p", { className: "dsh-tavern-settings-desc" }, stage.error || "正在读取舞台…"));
 			return h("aside", { className: "dsh-tavern-status dsh-tavern-stage-tab", "aria-label": "舞台" },
@@ -299,7 +335,8 @@
 					footer: h("div", { className: "dsh-tavern-stage-controls", onClick: function (event) { event.stopPropagation(); } },
 						h("button", { type: "button", "aria-label": "上一句", disabled: reader.index <= 0, onClick: function () { reader.setIndex(function (value) { return Math.max(0, value - 1); }); } }, "‹"),
 						h("span", { className: "dsh-tavern-stage-progress" }, reader.beats.length ? (reader.index + 1) + " / " + reader.beats.length : ""),
-						h("button", { type: "button", "aria-label": "下一句", disabled: reader.index >= reader.beats.length - 1, onClick: function () { reader.setIndex(function (value) { return Math.min(reader.beats.length - 1, value + 1); }); } }, "›")) }),
+						h("button", { type: "button", "aria-label": "下一句", disabled: reader.index >= reader.beats.length - 1, onClick: function () { reader.setIndex(function (value) { return Math.min(reader.beats.length - 1, value + 1); }); } }, "›"),
+						h(TavernStageReadButton, { reading: reading })) }),
 				h(TavernCastManager, { sessionId: props.sessionId, data: data, onCast: function (cast) { stage.setData(Object.assign({}, data, { cast: cast })); } })),
 				fullscreen ? require("react-dom").createPortal(h(TavernStageFullscreen, { view: choice.view, sessionId: props.sessionId, data: data, generating: props.generating, onSubmit: function (text) { return props.submit(props.sessionId, text); }, onClose: function () { setFullscreen(false); } }), document.body) : null);
 		}

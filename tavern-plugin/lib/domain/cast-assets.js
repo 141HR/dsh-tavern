@@ -127,6 +127,23 @@ export function createCastAssets({ store }) {
     return read(cardPath)
   }
 
+  /** A character's voice for one speech provider (docs/design/cast-presentation.md); '' clears it. */
+  async function setVoice({ cardPath, name, provider, voice }) {
+    const character = castName(name)
+    if (typeof provider !== 'string' || !/^[a-z0-9][a-z0-9._/-]{0,96}$/.test(provider)) throw invalid('配音渠道无效')
+    const value = typeof voice === 'string' ? voice.trim() : ''
+    if ([...value].length > 300) throw invalid('声音设置最多 300 字')
+    await update(cardPath, manifest => {
+      const target = characterIn(manifest, character, Boolean(value))
+      if (!target) return
+      const voices = { ...(target.voices || {}) }
+      if (value) voices[provider] = value
+      else delete voices[provider]
+      target.voices = voices
+    })
+    return read(cardPath)
+  }
+
   async function removeCharacter({ cardPath, name }) {
     const character = castName(name)
     await update(cardPath, manifest => { manifest.characters = manifest.characters.filter(item => item.name !== character) })
@@ -166,5 +183,5 @@ export function createCastAssets({ store }) {
     return bytes ? { bytes, mediaType: IMAGE_TYPES[file.split('.').pop()] } : undefined
   }
 
-  return Object.freeze({ read, movePath, setImage, removeImage, setCharacter, removeCharacter, importSpritePack, readImage, keyOf: cardPath => hash(String(cardPath)) })
+  return Object.freeze({ read, movePath, setImage, removeImage, setCharacter, setVoice, removeCharacter, importSpritePack, readImage, keyOf: cardPath => hash(String(cardPath)) })
 }

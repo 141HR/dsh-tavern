@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { writeZipEntries } from '../../tavern-plugin/lib/domain/zip-entries.js'
 
@@ -68,6 +69,65 @@ export async function castStageChecks({ page, step, output, report }) {
     await overlay.waitFor({ state: 'detached' })
     report.castStageFullscreen = true
   })
+}
+
+// Voicing through an OpenAI-compatible channel: a local stand-in service records what it is asked to say.
+export async function castSpeechChecks({ page, step, output, report }) {
+  const requests = []
+  const server = createServer((req, res) => {
+    let body = ''
+    req.on('data', chunk => { body += chunk })
+    req.on('end', () => {
+      requests.push({ url: req.url, authorization: req.headers.authorization, body: JSON.parse(body || '{}') })
+      res.writeHead(200, { 'content-type': 'audio/mpeg' })
+      res.end(Buffer.from('ID3' + 'e2e-audio'.repeat(8)))
+    })
+  })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  try {
+    await step('配音：设置 OpenAI 兼容渠道，台词行朗读用默认声音，角色素材里换声音后按人物的声音读', async () => {
+      const chatUrl = page.url()
+      await page.getByRole('button', { name: 'Settings', exact: true }).click()
+      await page.getByText('DSH Tavern', { exact: true }).first().click()
+      await page.getByRole('combobox', { name: '配音渠道', exact: true }).selectOption('openai')
+      await page.getByRole('textbox', { name: 'API 根地址', exact: true }).fill('http://127.0.0.1:' + server.address().port + '/v1')
+      await page.getByRole('textbox', { name: '模型', exact: true }).fill('tts-1')
+      await page.getByLabel('API Key', { exact: true }).fill('sk-e2e')
+      await page.getByLabel('默认声音', { exact: true }).fill('alloy')
+      await page.getByRole('switch', { name: '配音', exact: true }).click()
+      await page.getByText('已保存，使用「OpenAI 兼容接口」配音').waitFor()
+      assert.equal(await page.getByRole('switch', { name: '配音', exact: true }).isChecked(), true)
+      await page.screenshot({ path: join(output, 'speech-settings.png') })
+      await page.goto(chatUrl)
+      const row = page.locator('.dsh-tavern-cast-line').filter({ visible: true }).filter({ hasText: '店主' }).first()
+      await row.getByRole('button', { name: '朗读这句', exact: true }).click()
+      await expectRequest(requests, request => request.body.voice === 'alloy')
+      assert.deepEqual(requests[0].body, { model: 'tts-1', input: '欢迎回来，这是你的奖励。', voice: 'alloy', response_format: 'mp3' })
+      assert.equal(requests[0].authorization, 'Bearer sk-e2e')
+
+      await page.getByRole('button', { name: '舞台', exact: true }).filter({ visible: true }).first().click()
+      const voice = page.getByLabel('店主 的声音', { exact: true })
+      await voice.fill('onyx')
+      await voice.press('Enter')
+      await page.getByText('已保存 店主 的声音').waitFor()
+      const served = page.waitForResponse(response => response.url().includes('/api/dsh-tavern/speech-audio?id='))
+      await row.getByRole('button', { name: '朗读这句', exact: true }).click()
+      await expectRequest(requests, request => request.body.voice === 'onyx')
+      const audio = await served
+      assert.equal(audio.status(), 200)
+      assert.equal(audio.headers()['content-type'], 'audio/mpeg')
+      assert.equal((await page.request.get(new URL('/api/dsh-tavern/speech-audio?id=' + '0'.repeat(64) + '.mp3', page.url()).href)).status(), 404)
+      report.castSpeech = true
+    })
+  } finally { server.close() }
+}
+
+async function expectRequest(requests, match) {
+  for (let index = 0; index < 100; index++) {
+    if (requests.some(match)) return
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  throw new Error('配音服务没有收到预期的请求：' + JSON.stringify(requests.map(request => request.body)))
 }
 
 // Run last: it plays one more turn from the full-screen stage.

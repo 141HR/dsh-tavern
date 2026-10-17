@@ -26,6 +26,7 @@ export function registerTavernHttpRoutes({
   tavernRemoteAssets,
   tavernStaticResources,
   castAssets,
+  speech,
   exposeHandler,
 }) {
   const webServer = ctx.get('webServer')
@@ -189,6 +190,13 @@ export function registerTavernHttpRoutes({
             // Content-addressed file names: a URL never changes what it serves.
             res.writeHead(200, { 'Content-Type': image.mediaType, 'Content-Length': image.bytes.byteLength, 'Cache-Control': 'private, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' })
             res.end(image.bytes)
+            return
+          }
+          if (req.method === 'GET' && pathname === '/api/dsh-tavern/speech-audio') {
+            const audio = speech ? await speech.readAudio(new URL(req.url, 'http://x').searchParams.get('id')) : undefined
+            if (audio === undefined) { res.writeHead(404, { 'X-Content-Type-Options': 'nosniff' }); res.end('not found'); return }
+            res.writeHead(200, { 'Content-Type': audio.mediaType, 'Content-Length': audio.bytes.byteLength, 'Cache-Control': 'private, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' })
+            res.end(audio.bytes)
             return
           }
           if (req.method === 'GET' && pathname === '/api/dsh-tavern/card-image') {

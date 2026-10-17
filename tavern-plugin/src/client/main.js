@@ -722,6 +722,8 @@ window.__ModuleLoader__.load({
 
 // @include features/plugin-extensions.js
 
+// @include features/speech.js
+
 // @include features/cast-presentation.js
 
 // @include features/cast-stage.js
