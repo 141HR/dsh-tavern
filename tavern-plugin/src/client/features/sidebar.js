@@ -149,13 +149,7 @@
                 playPrewarmRef.current = createConversationPrewarmModule({ resolveWorkspace: playWorkspaceResolverRef.current });
             }
 			if (sessionListRecoveryRef.current === null) {
-				sessionListRecoveryRef.current = createSessionListRecoveryModule({
-					summary: function (sessionId) { return props.sessions.list.getSnapshot().byId[sessionId]; },
-					binding: function (sessionId) { return props.sessions.binding(sessionId); },
-					refresh: function () { return typeof props.sessions.refresh === "function" ? props.sessions.refresh() : Promise.resolve(); },
-					open: function (sessionId) { props.sessions.open(sessionId); },
-					isUnknownSession: isUnknownSessionSelectError
-				});
+				sessionListRecoveryRef.current = createSessionListRecoveryModule(sessionListAdapters(props.sessions));
 			}
 			const currentSummary = current ? summaries[current] : null;
 			const readyTavernSession = current && summaries[current] && summaries[current].blank === false && history.some(function (entry) { return entry.sessionId === current && isPlayMode(entry.mode); }) ? current : "";
@@ -165,7 +159,8 @@
 				if (!current || !summaries[current] || !props.sessions.binding(current)) return;
 				const latest = tavernErrorHub.getSnapshot()[0];
 				if (!latest || latest.source !== "左侧栏操作") return;
-				if (latest.message === "DSH Session 列表同步超时，请刷新页面后重试：" + current) setError("");
+				if (latest.message === "DSH Session 列表同步超时，请刷新页面后重试：" + current
+					|| (latest.message && latest.message.indexOf("已不在宿主列表中") >= 0 && latest.message.indexOf(current) >= 0)) setError("");
 			}, [current, summaries]);
 			function call(method, args, requestOptions) { return rpc(method, args, undefined, requestOptions); }
 			function isMissingUpdateApiError(error) {
@@ -417,14 +412,29 @@
 			async function waitForSessionSummary(sessionId) {
 				await sessionListRecoveryRef.current.wait(sessionId);
 			}
-			function isUnknownSessionSelectError(error) {
-				return /sessions\.select: unknown session/i.test(String(error && error.message || error || ""));
-			}
 			async function openSessionWhenReady(sessionId) {
-				await sessionListRecoveryRef.current.open(sessionId);
+				await openSessionOrRepair(sessionId);
 				await call("markConversationOpened", { sessionId: sessionId });
 				await refresh(["sessions"]);
 				setError("");
+			}
+			// A turn the live Agent numbered twice leaves the stored log unreadable and DSH
+			// refuses to open it. Ask the host to repair that one log, then open again.
+			async function openSessionOrRepair(sessionId) {
+				try {
+					await sessionListRecoveryRef.current.open(sessionId);
+					return;
+				} catch (openError) {
+					let repaired = false;
+					try {
+						const result = await call("repairSessionLog", { sessionId: sessionId });
+						repaired = Boolean(result && result.repaired);
+					} catch (repairError) {
+						// A host without the repair route reports the original open failure.
+					}
+					if (!repaired) throw openError;
+					await sessionListRecoveryRef.current.open(sessionId);
+				}
 			}
 			async function finishPendingOpen(pending) {
 				await openSessionWhenReady(pending.sessionId);
@@ -1149,6 +1159,10 @@
 			const ctx = input.ctx;
 			const slots = input.slots;
 			const uiConversation = ctx.get("uiConversation") || ctx.get("conversation");
+			// uiWorkspace 由 dsh-client-ui-workspace 提供；缺失时（老宿主/未加载）退化为 sessions.retain。
+			function resolveUiWorkspace() {
+				try { return ctx.get("uiWorkspace") || null; } catch (_) { return null; }
+			}
 			ctx.effect(function () {
 				document.body.classList.add("dsh-tavern-shell-active");
 				const releaseLandingStyles = installTavernLandingStyles(document);
@@ -1190,7 +1204,7 @@
 				function (props) { sidebarWide = Boolean(props.wide); return React.createElement(TavernSidebar, Object.assign({}, props, {
 					collapsed: !props.wide,
 					embedded: true,
-					sessions: ctx.sessions,
+					sessions: createSessionCompat(ctx.sessions, resolveUiWorkspace(ctx)),
 					workspaces: ctx.workspaces,
 					conversationHost: createConversationHostAdapter(ctx),
                     executeSlash: createTavernFrameSlashExecutor(ctx),

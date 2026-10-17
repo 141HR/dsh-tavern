@@ -3,7 +3,7 @@ import { assertRescueHistoryEditable } from './chat-history-rescue.js'
 import { replaceSessionSurface } from './session-surface-mutations.js'
 import { canUndoRollback, restoreSurface, preflightSurfaceRestore, unchangedSinceRollback } from './surface-restoration.js'
 import { rewindBackgroundSurface } from './background-surface.js'
-import { sessionEvents } from './session-events.js'
+import { releaseOpeningTurn, sessionEvents, withSurfaceEditTurn } from './session-events.js'
 import { randomUUID } from 'node:crypto'
 import { createRegenerationRecovery } from './regeneration-recovery.js'
 import { isDeepStrictEqual } from 'node:util'
@@ -224,6 +224,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     const rolledMessageCount = (chat.messages || []).length
     const guide = str(guidance).trim()
     const syntheticText = originalUserText + (guide !== '' ? '\n\n【本轮补充要求】\n' + guide : '')
+    releaseOpeningTurn(agent.session, agent)
     const beforeLastTurn = agent.phase !== undefined && agent.phase !== null && Number.isFinite(Number(agent.phase.lastTurn)) ? Number(agent.phase.lastTurn) : 0
     let committedChat, body, syntheticTurn
     try {
@@ -235,7 +236,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
         id: randomUUID(),
         role: 'user',
         content: projectPlayerContent(msgs0[oldAssistantIndex - 1].inputAttachments, syntheticText),
-        source: { kind: 'plugin', plugin: 'dsh-tavern-regen', regenerationId: operationId }
+        source: { kind: 'plugin:dsh-tavern-regen', regenerationId: operationId }
       })
       await agent.whenIdle()
       syntheticTurn = agent.phase !== undefined && agent.phase !== null && Number.isFinite(Number(agent.phase.lastTurn)) ? Number(agent.phase.lastTurn) : (beforeLastTurn + 1)
@@ -402,6 +403,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     }
     const guide = str(guidance).trim()
     const syntheticText = originalUserText + (guide !== '' ? '\n\n【本轮补充要求】\n' + guide : '')
+    releaseOpeningTurn(agent.session, agent)
     const beforeLastTurn = agent.phase !== undefined && agent.phase !== null && Number.isFinite(Number(agent.phase.lastTurn)) ? Number(agent.phase.lastTurn) : 0
     let committedChat, body, syntheticTurn
     try {
@@ -413,7 +415,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
         id: randomUUID(),
         role: 'user',
         content: projectPlayerContent(originalUser.inputAttachments, syntheticText),
-        source: { kind: 'plugin', plugin: 'dsh-tavern-regen', regenerationId: operationId }
+        source: { kind: 'plugin:dsh-tavern-regen', regenerationId: operationId }
       })
       await agent.whenIdle()
       syntheticTurn = agent.phase !== undefined && agent.phase !== null && Number.isFinite(Number(agent.phase.lastTurn)) ? Number(agent.phase.lastTurn) : (beforeLastTurn + 1)
@@ -545,6 +547,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
       // prepare/finalize pipeline commits it exactly like a typed message. Its
       // source must stay kind 'user': hosts render anything else as a context
       // node, which would hide the player's text instead of resending it.
+      releaseOpeningTurn(agent.session, agent)
       agent.followup({
         id: randomUUID(),
         role: 'user',
@@ -883,16 +886,19 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     // 3) 原生消息面：用空消息替换最近一轮的所有 surface 节点（模型不再看到），UI 由客户端隐藏对应 turn tail
     try {
       if (rollbackSurface === null) throw Object.assign(new Error('原生上下文中找不到这一轮'), { code: 'NATIVE_TARGET_MISSING' })
-      replaceSessionSurface(session, 'assistant/message', {
-        turn: rollbackSurface.turn,
-        step: rollbackSurface.step,
+      // A rollback runs between turns, and the replacement is read at the log
+      // tail: give it a turn of its own when none is open, so the archive keeps
+      // loading instead of failing "does not match an open turn and step."
+      withSurfaceEditTurn(session, agent, (turn, step) => replaceSessionSurface(session, 'assistant/message', {
+        turn,
+        step,
         message: {
           id: randomUUID(),
           role: 'assistant',
           content: [],
           source: rollbackSurface.source
         }
-      }, { start: rollbackSurface.userSeq, end: rollbackSurface.endSeq, sourceEventSeqs: shadowedSeqs })
+      }, { start: rollbackSurface.userSeq, end: rollbackSurface.endSeq, sourceEventSeqs: shadowedSeqs }))
     } catch (error) {
       // The save has rolled back; bring the model context after it instead of undoing the story.
       if (typeof repairNative !== 'function') {

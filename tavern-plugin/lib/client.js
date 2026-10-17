@@ -1274,6 +1274,143 @@ window.__ModuleLoader__.load({
 		  }
 		  return {from,update,validKey,has:source => states.has(source)};
 		}
+		// 兼容垫层：为 tavern 客户端提供 0.2.0 已删除的会话 API 等价物。
+		//
+		// 0.1.5 的 ctx.sessions 提供 { list, current, open(), clear(), binding(id), scope(id) }；
+		// 0.2.0 只保留 { list, binding(id), scope(id), create(), fork() }，「当前会话」改为
+		// 主视图 retain（retainedBy.mainView）的推导属性，打开/关闭会话由 uiWorkspace 服务负责。
+		// tavern 侧栏、会话选择器、恢复模块都还在用旧形状，这里一次性补齐，避免散落的 typeof 兜底。
+
+		function mainSessionId(snapshot) {
+			const items = Object.values((snapshot && snapshot.byId) || {});
+			// 0.2.0：主视图 retain 的会话即「当前会话」（dsh-client-ui-workspace 的同一判据）。
+			for (const row of items) {
+				if (row && row.retainedBy && (row.retainedBy.mainView ?? 0) > 0) return row.id;
+			}
+			// 回退：0.1.5 的快照带 current / selected 语义，老宿主直接沿用。
+			if (snapshot && typeof snapshot.current === "string" && snapshot.current) return snapshot.current;
+			return "";
+		}
+
+		// 统一取「当前主会话」：compat 视图（createSessionCompat）的 current 已经是主视图
+		// 推导值；宿主基线对象（0.1.5 的 ctx.sessions、测试替身、服务端 headless 执行器）
+		// 只有裸 list 时回退到快照判定。0.2.0 删掉了顶层 current，散落的直接读取会永远得到
+		// 空串，卡片脚本运行时就选不中会话。
+		function tavernMainSessionId(sessions) {
+			if (!sessions) return "";
+			if (typeof sessions.current === "string" && sessions.current) return sessions.current;
+			const snapshot = sessions.list && typeof sessions.list.getSnapshot === "function" ? sessions.list.getSnapshot() : null;
+			return mainSessionId(snapshot);
+		}
+
+		function isBlankRow(row) {
+			if (!row) return false;
+			return row.blank === true;
+		}
+
+		// createSessionCompat(sessions) -> 兼容后的 sessions 视图
+		// 返回的新对象保留 list/binding/scope/create/fork/refresh 原样，并补回：
+		//   current    —— 主会话 id（0.1.5 语义，随列表快照推导）
+		//   open(id)   —— 切到某会话（0.2.0 用 uiWorkspace.openSession，缺失时退化为 retain）
+		//   clear()    —— 取消当前选择（0.2.0 用 uiWorkspace.clearMain）
+		function createSessionCompat(sessions, uiWorkspace) {
+			if (!sessions || typeof sessions.list !== "object" || sessions.list === null) return sessions;
+			const compat = {
+				list: sessions.list,
+				binding: sessions.binding ? sessions.binding.bind(sessions) : undefined,
+				scope: sessions.scope ? sessions.scope.bind(sessions) : undefined,
+				create: sessions.create ? sessions.create.bind(sessions) : undefined,
+				fork: typeof sessions.fork === "function" ? sessions.fork.bind(sessions) : undefined,
+				refresh: typeof sessions.refresh === "function" ? sessions.refresh.bind(sessions) : undefined,
+				refreshSubagents: typeof sessions.refreshSubagents === "function" ? sessions.refreshSubagents.bind(sessions) : undefined,
+				retain: typeof sessions.retain === "function" ? sessions.retain.bind(sessions) : undefined,
+				subagentAddress: typeof sessions.subagentAddress === "function" ? sessions.subagentAddress.bind(sessions) : undefined,
+			};
+
+			Object.defineProperty(compat, "current", {
+				enumerable: true,
+				get: function () {
+					const snapshot = sessions.list.getSnapshot ? sessions.list.getSnapshot() : null;
+					return mainSessionId(snapshot);
+				},
+			});
+
+			// 0.1.5 的 open() 同步返回；这里统一返回 Promise，调用点已 await。
+			//
+			// 0.2.0 的 uiWorkspace.openSession → replaceMain 会立即 sessions.retain(target)，
+			// 而 retain 在宿主基线快照里没有这一行时同步抛「unknown session」。宿主基线只在
+			// session.list 响应落地后才增长；点击旧存档时若首屏拉取尚未返回（或曾被排入同一次
+			// in-flight 拉取），retain 就会先行失败。因此在真正打开前先确认列表里已有这一行：
+			// 没有就强制刷新基线（refreshList 的 single-flight 会把并发刷新合并成同一次拉取，
+			// 所以要重读到行出现为止，或到确认它真的不在为止），让 retain 找得到目标。
+			function knownSession(sessionId) {
+				const snapshot = sessions.list && typeof sessions.list.getSnapshot === "function" ? sessions.list.getSnapshot() : null;
+				return Boolean(snapshot && snapshot.byId && snapshot.byId[sessionId]);
+			}
+			async function ensureKnownSession(target, attempts) {
+				for (let index = 0; index < attempts; index += 1) {
+					if (knownSession(target)) return true;
+					try { await compat.refresh(); } catch (_) { /* 单次拉取失败由下一次重试兜底 */ }
+				}
+				return knownSession(target);
+			}
+			compat.open = function (sessionId) {
+				const target = String(sessionId || "");
+				if (!target) return compat.clear();
+				if (knownSession(target)) return openTarget(target);
+				return ensureKnownSession(target, 3).then(function (known) {
+					// 基线里始终没有这一行：交给调用方处理（recovery 判定 unknown session 后
+					// 继续等待，或直接把「会话不存在」暴露给用户）。
+					if (!known && typeof compat.onMissingSession === "function") compat.onMissingSession(target);
+					return openTarget(target);
+				});
+			};
+			function openTarget(target) {
+				if (uiWorkspace && typeof uiWorkspace.openSession === "function") {
+					return Promise.resolve(uiWorkspace.openSession(target));
+				}
+				// 兜底：至少 retain 一次，让 summary+binding 两个就绪条件成立。
+				// 未知会话的 sessions.retain 错误冒泡给 recovery 的 isUnknownSession 判定。
+				if (typeof compat.retain === "function") {
+					compat.retain(target, { source: "tavern" });
+				}
+				return Promise.resolve();
+			}
+
+			compat.clear = function () {
+				if (uiWorkspace && typeof uiWorkspace.clearMain === "function") {
+					return Promise.resolve(uiWorkspace.clearMain());
+				}
+				return Promise.resolve();
+			};
+
+			return compat;
+		}
+
+		// sessionListAdapters(sessions) -> createSessionListRecoveryModule 的适配器集合。
+		//
+		// 0.2.0 的会话 scope 只在被 retain 之后才存在，create() 出来的会话先只有列表
+		// placeholder 行。若 binding 只读 scope，新建会话在 wait() 里永远不就绪，
+		// 8 秒后必然抛「DSH Session 列表同步超时」。这里以列表行兜底：就绪 = 会话已进列表，
+		// scope 由 open() 走 uiWorkspace 时再 materialize。
+		function sessionListAdapters(sessions) {
+			const readRow = function (sessionId) {
+				const snapshot = sessions.list && typeof sessions.list.getSnapshot === "function" ? sessions.list.getSnapshot() : null;
+				return (snapshot && snapshot.byId && snapshot.byId[sessionId]) || undefined;
+			};
+			return {
+				summary: readRow,
+				binding: function (sessionId) {
+					return (typeof sessions.binding === "function" ? sessions.binding(sessionId) : undefined) || readRow(sessionId);
+				},
+				refresh: function () { return typeof sessions.refresh === "function" ? sessions.refresh() : Promise.resolve(); },
+				open: function (sessionId) { return sessions.open(sessionId); },
+				isUnknownSession: function (error) {
+					// 0.1.5 选中未知会话报 sessions.select；0.2.0 的 retain 报 sessions.retain。
+					return /sessions\.(select|retain): unknown session/i.test(String(error && error.message || error || ""));
+				},
+			};
+		}
 		const beginSessionViewRead = createSessionViewReader();
 
 		function rpc(method, args, sessionId, requestOptions) {
@@ -1525,7 +1662,12 @@ window.__ModuleLoader__.load({
                         // sidebar seat. Retry this specific readiness error only.
                         if (!/sidebarRight: no session surface is mounted/.test(String(error.message || error)) || Date.now() >= deadline) throw error;
                         await new Promise(resolve => window.setTimeout(resolve, 100));
-                        if (ctx.sessions.list.getSnapshot().current !== scope.sessionId) return;
+                        // 0.2.0 没有顶层 current，主会话只在 byId 行上以 mainView retain
+                        // 表示；0.1.5 才用快照的 current。会话已切换则这次重试打开的 tab
+                        // 不再属于它。
+                        const snapshotNow = ctx.sessions.list.getSnapshot();
+                        const main = Object.values(snapshotNow.byId || {}).find(function (row) { return row && row.retainedBy && (row.retainedBy.mainView ?? 0) > 0; });
+                        if (main ? main.id !== scope.sessionId : snapshotNow.current !== scope.sessionId) return;
                     }
                 }
             })().catch(error => tavernErrorHub.report("打开酒馆侧栏", error)).finally(() => tavernSidebarOpens.delete(key));
@@ -2454,7 +2596,7 @@ window.__ModuleLoader__.load({
 			const timeoutMs = Math.max(100, Number(options.timeoutMs || 8000));
 			const retryDelays = Array.isArray(options.retryDelays) && options.retryDelays.length ? options.retryDelays : [0, 150, 350, 700, 1200, 1800, 2500];
 			const isUnknownSession = typeof options.isUnknownSession === "function" ? options.isUnknownSession : function (error) {
-				return /sessions\.select: unknown session/i.test(String(error && error.message || error || ""));
+				return /sessions\.(select|retain): unknown session/i.test(String(error && error.message || error || ""));
 			};
 			const active = new Map();
 
@@ -2478,7 +2620,14 @@ window.__ModuleLoader__.load({
 					attempt += 1;
 					await sleep(Math.min(delay, remaining));
 				}
-				if (!ready(sessionId)) throw new Error("DSH Session 列表同步超时，请刷新页面后重试：" + sessionId);
+				if (ready(sessionId)) return;
+				// 区分两种结局：宿主列表始终没有这一行（会话不在了 / 已被删），还是行在但
+				// binding 没跟上（新建会话的 scope 尚未 retain）。前者刷新页面也没用，
+				// 必须让用户去删掉这条历史记录，否则只能反复重试同一次超时。
+				const missing = !options.summary(sessionId);
+				throw new Error(missing
+					? "DSH 会话 " + sessionId + " 已不在宿主列表中（可能已被删除），请删除这条历史记录后重试；若刚更新过请先刷新页面。"
+					: "DSH Session 列表同步超时，请刷新页面后重试：" + sessionId);
 			}
 
 			function wait(sessionId) {
@@ -2490,10 +2639,10 @@ window.__ModuleLoader__.load({
 			}
 
 			async function open(sessionId) {
-				try { options.open(sessionId); return; }
+				try { await options.open(sessionId); return; }
 				catch (error) { if (!isUnknownSession(error)) throw error; }
 				await wait(sessionId);
-				options.open(sessionId);
+				await options.open(sessionId);
 			}
 
 			return Object.freeze({ ready: ready, wait: wait, open: open });
@@ -3143,7 +3292,7 @@ window.__ModuleLoader__.load({
         }
 
 		function tavernStaticAssetShim() {
-			return '<script data-dsh-tavern-static-cache>(function(){function proxy(value){var source=String(value||"");return /^https:\\/\\//i.test(source)?"/api/dsh-tavern/static-assets?url="+encodeURIComponent(source)+(/\\.[cm]?js(?:[?#]|$)/i.test(source)?"&host=2":""):source;}function css(value){return String(value||"").replace(/url\\(\\s*(?:(["\\\'])(https:\\/\\/[^"\\\']+)\\1|(https:\\/\\/[^"\\\')\\s]+))\\s*\\)/gi,function(_,quote,quoted,bare){quote=quote||"";return "url("+quote+proxy(quoted||bare)+quote+")";});}window.__dshTavernStaticAssetUrl=proxy;var nativeSet=Element.prototype.setAttribute;Element.prototype.setAttribute=function(name,value){var key=String(name||"").toLowerCase(),tag=String(this.tagName||"").toLowerCase();if(!(key==="src"&&/^(video|audio|source|iframe|frame)$/.test(tag))&&(key==="src"||key==="poster"||(key==="href"&&tag==="link"))&&/^https:\\/\\//i.test(String(value||"")))value=proxy(value);else if(key==="style")value=css(value);return nativeSet.call(this,name,value);};[["HTMLImageElement","src"],["HTMLScriptElement","src"],["HTMLVideoElement","poster"],["HTMLLinkElement","href"]].forEach(function(row){var Type=window[row[0]],descriptor=Type&&Object.getOwnPropertyDescriptor(Type.prototype,row[1]);if(!descriptor||!descriptor.set||!descriptor.get)return;try{Object.defineProperty(Type.prototype,row[1],{configurable:descriptor.configurable,enumerable:descriptor.enumerable,get:descriptor.get,set:function(value){return descriptor.set.call(this,proxy(value));}});}catch(e){}});if(window.CSSStyleDeclaration&&CSSStyleDeclaration.prototype.setProperty){var nativeProperty=CSSStyleDeclaration.prototype.setProperty;CSSStyleDeclaration.prototype.setProperty=function(name,value,priority){return nativeProperty.call(this,name,css(value),priority);};}new MutationObserver(function(records){records.forEach(function(record){var node=record.target;if(!node||node.nodeType!==1)return;["src","poster"].forEach(function(name){if(name==="src"&&/^(video|audio|source|iframe|frame)$/i.test(node.tagName))return;var value=node.getAttribute&&node.getAttribute(name);if(/^https:\\/\\//i.test(String(value||"")))nativeSet.call(node,name,proxy(value));});if(String(node.tagName||"").toLowerCase()==="link"){var href=node.getAttribute("href");if(/^https:\\/\\//i.test(String(href||"")))nativeSet.call(node,"href",proxy(href));}var style=node.getAttribute&&node.getAttribute("style");if(style&&/https:\\/\\//i.test(style)){var next=css(style);if(next!==style)nativeSet.call(node,"style",next);}});}).observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:["src","href","poster","style"]});})();<\/script>';
+			return '<script data-dsh-tavern-static-cache>(function(){function proxy(value){var source=String(value||"");return /^https:\\/\\//i.test(source)?"/api/dsh-tavern/static-assets?url="+encodeURIComponent(source)+(/\\.[cm]?js(?:[?#]|$)/i.test(source)?"&host=2":""):source;}function css(value){return String(value||"").replace(/url\\(\\s*(?:(["\\\'])(https:\\/\\/[^"\\\']+)\\1|(https:\\/\\/[^"\\\')\\s]+))\\s*\\)/gi,function(_,quote,quoted,bare){quote=quote||"";return "url("+quote+proxy(quoted||bare)+quote+")";});}window.__dshTavernStaticAssetUrl=proxy;var nativeSet=Element.prototype.setAttribute;Element.prototype.setAttribute=function(name,value){var key=String(name||"").toLowerCase(),tag=String(this.tagName||"").toLowerCase();if(!(key==="src"&&/^(video|audio|source|iframe|frame)$/.test(tag))&&(key==="src"||key==="poster"||(key==="href"&&tag==="link"))&&/^https:\\/\\//i.test(String(value||"")))value=proxy(value);else if(key==="style")value=css(value);return nativeSet.call(this,name,value);};var nativeGet=Element.prototype.getAttribute,PROXY="/api/dsh-tavern/static-assets?url=";Element.prototype.getAttribute=function(name){var value=nativeGet.call(this,name);if(typeof value!=="string"||value.indexOf(PROXY)!==0)return value;var key=String(name||"").toLowerCase();if(key!=="src"&&key!=="poster"&&key!=="href")return value;var raw=value.slice(PROXY.length),amp=raw.indexOf("&");if(amp>=0)raw=raw.slice(0,amp);try{return decodeURIComponent(raw);}catch(e){return value;}};[["HTMLImageElement","src"],["HTMLScriptElement","src"],["HTMLVideoElement","poster"],["HTMLLinkElement","href"]].forEach(function(row){var Type=window[row[0]],descriptor=Type&&Object.getOwnPropertyDescriptor(Type.prototype,row[1]);if(!descriptor||!descriptor.set||!descriptor.get)return;try{Object.defineProperty(Type.prototype,row[1],{configurable:descriptor.configurable,enumerable:descriptor.enumerable,get:descriptor.get,set:function(value){return descriptor.set.call(this,proxy(value));}});}catch(e){}});if(window.CSSStyleDeclaration&&CSSStyleDeclaration.prototype.setProperty){var nativeProperty=CSSStyleDeclaration.prototype.setProperty;CSSStyleDeclaration.prototype.setProperty=function(name,value,priority){return nativeProperty.call(this,name,css(value),priority);};}new MutationObserver(function(records){records.forEach(function(record){var node=record.target;if(!node||node.nodeType!==1)return;["src","poster"].forEach(function(name){if(name==="src"&&/^(video|audio|source|iframe|frame)$/i.test(node.tagName))return;var value=node.getAttribute&&nativeGet.call(node,name);if(/^https:\\/\\//i.test(String(value||"")))nativeSet.call(node,name,proxy(value));});if(String(node.tagName||"").toLowerCase()==="link"){var href=nativeGet.call(node,"href");if(/^https:\\/\\//i.test(String(href||"")))nativeSet.call(node,"href",proxy(href));}var style=node.getAttribute&&nativeGet.call(node,"style");if(style&&/https:\\/\\//i.test(style)){var next=css(style);if(next!==style)nativeSet.call(node,"style",next);}});}).observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:["src","href","poster","style"]});})();<\/script>';
 		}
 
 		function tavernIconDependencies() {
@@ -4711,6 +4860,39 @@ function tavernModelRefusalNotice(text) {
 		    host.removeEventListener("focus", renew);
 		  };
 		}
+
+		// The opening preview renders card panels inline in the preview frame, while card host scripts run through the
+		// preview window proxy whose parent is the frame itself. Panels then dispatch confirm events on the real app
+		// document (window.parent.document) where no card listener exists. Mirror those events synchronously into the
+		// preview document so preview-scope host scripts can answer them in the same dispatch.
+		function installTavernPreviewHostEventRelay(parentWindow, frameWindow) {
+		  let parentDocument = null;
+		  try { parentDocument = parentWindow && parentWindow.document; } catch (error) { parentDocument = null; }
+		  if (!parentDocument || parentDocument === frameWindow.document) return function () {};
+		  if (parentDocument.__dshTavernPreviewEventRelay) return parentDocument.__dshTavernPreviewEventRelay.release;
+		  const originalDispatch = parentDocument.dispatchEvent;
+		  const release = function () {
+		    if (Object.getOwnPropertyDescriptor(parentDocument, "dispatchEvent")?.value === dispatch) delete parentDocument.dispatchEvent;
+		    delete parentDocument.__dshTavernPreviewEventRelay;
+		  };
+		  const dispatch = function (event) {
+		    let result;
+		    try { result = originalDispatch.call(parentDocument, event); } finally {
+		      try {
+		        const detail = event && event.detail;
+		        if (event && typeof event.type === "string" && !String(event.type).startsWith("dsh-") && detail && typeof detail === "object") {
+		          frameWindow.document.dispatchEvent(new frameWindow.CustomEvent(event.type, { detail: detail }));
+		        }
+		      } catch (error) { /* 预览帧已卸载时静默放弃 */ }
+		    }
+		    return result;
+		  };
+		  try {
+		    Object.defineProperty(parentDocument, "dispatchEvent", { configurable: true, value: dispatch });
+		    parentDocument.__dshTavernPreviewEventRelay = { release: release };
+		  } catch (error) { return function () {}; }
+		  return release;
+		}
 		// Shared lifetime rules for frame scripts and every opening input adapter.
 		// Self-contained because the same module runs in serialized card documents.
 		function createTavernFrameLifecycle(win, doc = win.document) {
@@ -5779,7 +5961,7 @@ function tavernModelRefusalNotice(text) {
 				+ (input && input.helperContext && input.helperContext.openingHost ? '<script data-dsh-tavern-session-opening>(' + installSessionOpeningBridge.toString() + ')(' + token + ',' + JSON.stringify(Object.assign({}, input.helperContext.openingHost, { extensionSettings: input.helperContext.extensionSettings || {} })).replace(/</g, '\\u003c') + ');<\/script>' : '')
 				+ (input && input.helperContext ? '<script data-dsh-tavern-frame-variable-aliases>(' + installTavernFrameVariableAliases.toString() + ')();<\/script>' : '')
 				+ (input && input.helperContext && input.persistent === true && input.preserveInstance !== true ? '<script data-dsh-tavern-status-refresh>(' + installTavernStatusRefresh.toString() + ')(' + token + ');<\/script>' : '')
-				+ (input && input.openingPreview ? '<script data-dsh-tavern-opening-preview>(function(){const install=()=>(' + installOpeningPreviewBridge.toString() + ')(' + token + ',' + JSON.stringify(input.openingPreview).replace(/</g, '\\u003c') + ');if(window.__dshTavernHelperReady)window.__dshTavernHelperReady.then(install);else install();})();<\/script>' : '')
+				+ (input && input.openingPreview ? '<script data-dsh-tavern-opening-preview>(function(){const releaseRelay=(' + installTavernPreviewHostEventRelay.toString() + ')(window.parent,window);if(typeof window.addEventListener==="function"){window.addEventListener("pagehide",releaseRelay,{once:true});window.addEventListener("unload",releaseRelay,{once:true});}const install=()=>(' + installOpeningPreviewBridge.toString() + ')(' + token + ',' + JSON.stringify(input.openingPreview).replace(/</g, '\\u003c') + ');if(window.__dshTavernHelperReady)window.__dshTavernHelperReady.then(install);else install();})();<\/script>' : '')
 				+ (preparationRuntime && input.trustedCardMode === true ? '<script data-dsh-tavern-opening-host>(function(){const release=(' + installTavernTrustedHostFacade.toString() + ')(window.parent,window,10);window.addEventListener("pagehide",release,{once:true});window.addEventListener("unload",release,{once:true});})();<\/script>' : '')
 				// Viewers without the execution lease still receive live variables. Legacy
 				// status panels read parent.Mvu; expose their Helper API below the executor.
@@ -8996,7 +9178,58 @@ function bindTavernFontZoom(node, win) {
 				releaseBarrier = Promise.all([releaseBarrier, request]).then(function () {});
 				return request;
 			}
+			// Card scripts read the card's worldbook and MVU applies its [InitVar]
+			// entry inside the chat-level initialization that CHAT_CHANGED triggers.
+			// MVU runs that initialization once and skips it when the chat identity
+			// or its own enablement is not ready yet, so an opening could be read
+			// with no initial variables until the player sent a first message. While
+			// MVU reports that its initial variables are still missing, announce the
+			// chat again a bounded number of times so the scripts re-run it.
+			let chatAnnouncements = 0;
+			let chatAnnounceTimer = null;
+			let chatAnnounceWaiting = false;
+			const chatAnnounceDelays = [1500, 4000, 9000];
+			function cancelChatAnnouncements() {
+				chatAnnounceWaiting = false;
+				chatAnnouncements = 0;
+				if (chatAnnounceTimer !== null) hostWindow.clearTimeout(chatAnnounceTimer);
+				chatAnnounceTimer = null;
+			}
+			function announceChat(force) {
+				if (!active || !runtime || !input) return Promise.resolve();
+				const chatId = String(input.view && input.view.chatId || "");
+				if (!chatId) return Promise.resolve();
+				const context = input.view && input.view.tavernHelper;
+				if (force !== true) return Promise.resolve(runtime.emit("CHAT_CHANGED", [chatId], context));
+				// MVU remembers the chat it last initialized and ignores a repeated
+				// CHAT_CHANGED for that same chat, so announcing the current chat again
+				// cannot re-run its chat-level initialization. Announce an identity it
+				// cannot adopt first — that only resets the chat it tracks, because its
+				// own current-chat guard rejects the transition — and then the real chat,
+				// which performs a genuine re-initialization and applies [InitVar].
+				return Promise.resolve()
+					.then(function () { return runtime.emit("CHAT_CHANGED", [""], context); })
+					.then(function () { return runtime.emit("CHAT_CHANGED", [chatId], context); });
+			}
+			function scheduleChatAnnouncement() {
+				if (chatAnnounceTimer !== null || !chatAnnounceWaiting) return;
+				if (!active || !runtime || !input) return;
+				if (chatAnnouncements >= chatAnnounceDelays.length) return;
+				const delay = chatAnnounceDelays[chatAnnouncements];
+				chatAnnouncements += 1;
+				chatAnnounceTimer = hostWindow.setTimeout(function () {
+					chatAnnounceTimer = null;
+					Promise.resolve()
+						.then(function () { return announceChat(true); })
+						.catch(function () {})
+						.then(function () {
+							void claimWork();
+							scheduleChatAnnouncement();
+						});
+				}, delay);
+			}
 			function dispose() {
+				cancelChatAnnouncements();
 				const previousLease = lease;
 				lease = null;
                 delivery = null;
@@ -9028,14 +9261,20 @@ function bindTavernFontZoom(node, win) {
 						if (lease !== currentLease) return;
 						if (options && options.onMvuLoadState) options.onMvuLoadState(state);
 						void claimWork();
+						// "evaluating" means MVU is loaded and subscribed but its initial
+						// variables are still unsaved; "error" here is that same wait having
+						// timed out. Both mean the chat-level initialization needs another run.
+						const phase = String(state && state.phase || "");
+						if (phase === "ready") cancelChatAnnouncements();
+						else if (phase === "evaluating" || phase === "error") {
+							chatAnnounceWaiting = true;
+							scheduleChatAnnouncement();
+						}
 					},
 					onReady: function (readySessionId) {
 						if (lease !== currentLease || !active || !readySessionId || !input || input.sessionId !== readySessionId) return;
-						const chatId = String(input.view && input.view.chatId || "");
-						// MVU uses this identity to invalidate older asynchronous initialization.
-						// An absent ID cancels the real chat's startup without initializing a replacement.
-						if (!chatId) { void claimWork(); return; }
-						return Promise.resolve(runtime.emit("CHAT_CHANGED", [chatId], input.view && input.view.tavernHelper)).finally(function () { void claimWork(); });
+						if (!String(input.view && input.view.chatId || "")) { void claimWork(); return; }
+						return announceChat().finally(function () { void claimWork(); });
 					}
 				});
 				if (signals && typeof signals.subscribe === "function") {
@@ -9406,7 +9645,7 @@ function bindTavernFontZoom(node, win) {
 				listeners.forEach(function (listener) { listener(); });
 			}
 			function selectedOwner() {
-				let id = String(sessions.list.getSnapshot().current || "");
+				let id = String(tavernMainSessionId(sessions) || "");
 				const seen = new Set();
 				while (id) {
 					if (seen.has(id) || seen.size >= 32) return "";
@@ -9455,7 +9694,7 @@ function bindTavernFontZoom(node, win) {
 			}
 			function createRecord(sessionId) {
 				const record = { sessionId: sessionId, viewState: null, loadState: null, fresh: false, foregroundRunning: sessions.list.getSnapshot().byId?.[sessionId]?.running === true, stopView: null };
-				record.templatePanel = createServerTemplatePanel({ window: hostWindow, rpc: options.rpc || rpc, isActive: () => current === record && String(sessions.list.getSnapshot().current || "") === record.sessionId });
+				record.templatePanel = createServerTemplatePanel({ window: hostWindow, rpc: options.rpc || rpc, isActive: () => current === record && tavernMainSessionId(sessions) === record.sessionId });
 				record.execution = (options.createExecution || createTavernScriptExecutionModule)({
 					window: hostWindow, rpc: options.rpc || rpc, executeSlash: options.executeSlash,
 					signals: options.signals || tavernSessionSignals,
@@ -9487,7 +9726,7 @@ function bindTavernFontZoom(node, win) {
 				if ((current ? current.sessionId : "") === sessionId) {
                     // Child agents keep the root executor alive, but its card UI
                     // belongs only to the actual root conversation surface.
-                    const visible = String(sessions.list.getSnapshot().current || "") === sessionId;
+                    const visible = tavernMainSessionId(sessions) === sessionId;
                     if (current?.execution.setForeground) current.execution.setForeground(visible);
                     if (current && !visible) current.templatePanel.close();
                     return;
@@ -9498,7 +9737,7 @@ function bindTavernFontZoom(node, win) {
 				retention.select(sessionId);
 				hostWindow.__dshTavernSelectedSessionId = sessionId;
 				current = sessionId ? records.get(sessionId) || createRecord(sessionId) : null;
-                if (current && current.execution.setForeground) current.execution.setForeground(String(sessions.list.getSnapshot().current || "") === sessionId);
+                if (current && current.execution.setForeground) current.execution.setForeground(tavernMainSessionId(sessions) === sessionId);
 				if (previous) {
 					// Do not retire from a cached idle view: the settlement-start
 					// notification may still be in flight when navigation happens.
@@ -12605,7 +12844,7 @@ function bindTavernFontZoom(node, win) {
 				const time = Number.isFinite(Number(data.time)) ? new Date(Number(data.time)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
 				return React.createElement("div", { className: "dsh-tavern-user-row" },
 					React.createElement("div", { className: "dsh-tavern-user-stack" }, renderedImages, (text !== "" || extras.length > 0) ? React.createElement("div", { className: "dsh-tavern-user-bubble" }, liveState.view?.inputTemplateDisplays?.[turn] ? React.createElement(TavernMessageFrame, {content:liveState.view.inputTemplateDisplays[turn],sessionId:props.sessionId,turn:turn,partIndex:"user-template",frameOwner:props.frameOwner,eager:true}) : React.createElement("div", { style: { whiteSpace: "pre-wrap" } }, text), extras) : null),
-					React.createElement("div", { className: "dsh-tavern-user-actions" }, time ? React.createElement("span", null, time) : null, React.createElement(DshUi.Tooltip, { label: copied ? "已复制" : "复制", side: "bottom" }, React.createElement("button", { type: "button", className: "dsh-tavern-user-copy", "aria-label": copied ? "已复制" : "复制", onClick: copy }, React.createElement(copied ? DshUi.IconCheckOutline16 : DshUi.IconCopyOutline16, null))))
+					React.createElement("div", { className: "dsh-tavern-user-actions" }, time ? React.createElement("span", null, time) : null, React.createElement(DshUi.Tooltip, { label: copied ? "已复制" : "复制", side: "bottom" }, React.createElement("button", { type: "button", className: "dsh-tavern-user-copy", "aria-label": copied ? "已复制" : "复制", onClick: copy }, React.createElement(copied ? DshUi.IconCheckOutlineRegular : DshUi.IconCopyOutlineRegular, null))))
 				);
 			}
 			// While a picture is being made: a placeholder frame where it will appear
@@ -13024,7 +13263,7 @@ function bindTavernFontZoom(node, win) {
 				}
 				return React.createElement(DshUi.Tooltip, { label: forking ? "正在分叉…" : "从这一轮分叉", side: "bottom" },
 					React.createElement("button", { type: "button", className: "dsh-tavern-message-fork", "aria-label": "从这一轮分叉", disabled: forking, onClick: fork },
-						React.createElement(DshUi.IconBranchOutline16, null)));
+						React.createElement(DshUi.IconBranchOutlineRegular, null)));
 			}
 			function TavernIllustrateAssistantAction(props) {
 				const liveState = useScopedLiveTavernView(props.sessionId, String(props.messageId || ""), [["mode"], ["releaseCapabilities"], ["forkTurnsByMessageId", String(props.messageId || "")]]);
@@ -13034,7 +13273,11 @@ function bindTavernFontZoom(node, win) {
 				return shown ? React.createElement(SceneImageAction, { key: props.sessionId + ":" + turn, sessionId: props.sessionId, turn: turn }) : null;
 			}
 			function register(input) {
-				const scriptOwner = createTavernScriptSessionOwner({ sessions: input.ctx.sessions, executeSlash: createTavernFrameSlashExecutor(input.ctx) });
+				// uiWorkspace 由 dsh-client-ui-workspace 提供；缺失时（老宿主/未加载）退化为 sessions.retain。
+				function resolveUiWorkspace() {
+					try { return input.ctx.get("uiWorkspace") || null; } catch (_) { return null; }
+				}
+				const scriptOwner = createTavernScriptSessionOwner({ sessions: createSessionCompat(input.ctx.sessions, resolveUiWorkspace()), executeSlash: createTavernFrameSlashExecutor(input.ctx) });
 				const executeSlash = createTavernFrameSlashExecutor(input.ctx);
 				input.ctx.effect(function () {
 					scriptOwner.start();
@@ -13674,13 +13917,7 @@ function bindTavernFontZoom(node, win) {
                 playPrewarmRef.current = createConversationPrewarmModule({ resolveWorkspace: playWorkspaceResolverRef.current });
             }
 			if (sessionListRecoveryRef.current === null) {
-				sessionListRecoveryRef.current = createSessionListRecoveryModule({
-					summary: function (sessionId) { return props.sessions.list.getSnapshot().byId[sessionId]; },
-					binding: function (sessionId) { return props.sessions.binding(sessionId); },
-					refresh: function () { return typeof props.sessions.refresh === "function" ? props.sessions.refresh() : Promise.resolve(); },
-					open: function (sessionId) { props.sessions.open(sessionId); },
-					isUnknownSession: isUnknownSessionSelectError
-				});
+				sessionListRecoveryRef.current = createSessionListRecoveryModule(sessionListAdapters(props.sessions));
 			}
 			const currentSummary = current ? summaries[current] : null;
 			const readyTavernSession = current && summaries[current] && summaries[current].blank === false && history.some(function (entry) { return entry.sessionId === current && isPlayMode(entry.mode); }) ? current : "";
@@ -13690,7 +13927,8 @@ function bindTavernFontZoom(node, win) {
 				if (!current || !summaries[current] || !props.sessions.binding(current)) return;
 				const latest = tavernErrorHub.getSnapshot()[0];
 				if (!latest || latest.source !== "左侧栏操作") return;
-				if (latest.message === "DSH Session 列表同步超时，请刷新页面后重试：" + current) setError("");
+				if (latest.message === "DSH Session 列表同步超时，请刷新页面后重试：" + current
+					|| (latest.message && latest.message.indexOf("已不在宿主列表中") >= 0 && latest.message.indexOf(current) >= 0)) setError("");
 			}, [current, summaries]);
 			function call(method, args, requestOptions) { return rpc(method, args, undefined, requestOptions); }
 			function isMissingUpdateApiError(error) {
@@ -13942,14 +14180,29 @@ function bindTavernFontZoom(node, win) {
 			async function waitForSessionSummary(sessionId) {
 				await sessionListRecoveryRef.current.wait(sessionId);
 			}
-			function isUnknownSessionSelectError(error) {
-				return /sessions\.select: unknown session/i.test(String(error && error.message || error || ""));
-			}
 			async function openSessionWhenReady(sessionId) {
-				await sessionListRecoveryRef.current.open(sessionId);
+				await openSessionOrRepair(sessionId);
 				await call("markConversationOpened", { sessionId: sessionId });
 				await refresh(["sessions"]);
 				setError("");
+			}
+			// A turn the live Agent numbered twice leaves the stored log unreadable and DSH
+			// refuses to open it. Ask the host to repair that one log, then open again.
+			async function openSessionOrRepair(sessionId) {
+				try {
+					await sessionListRecoveryRef.current.open(sessionId);
+					return;
+				} catch (openError) {
+					let repaired = false;
+					try {
+						const result = await call("repairSessionLog", { sessionId: sessionId });
+						repaired = Boolean(result && result.repaired);
+					} catch (repairError) {
+						// A host without the repair route reports the original open failure.
+					}
+					if (!repaired) throw openError;
+					await sessionListRecoveryRef.current.open(sessionId);
+				}
 			}
 			async function finishPendingOpen(pending) {
 				await openSessionWhenReady(pending.sessionId);
@@ -14674,6 +14927,10 @@ function bindTavernFontZoom(node, win) {
 			const ctx = input.ctx;
 			const slots = input.slots;
 			const uiConversation = ctx.get("uiConversation") || ctx.get("conversation");
+			// uiWorkspace 由 dsh-client-ui-workspace 提供；缺失时（老宿主/未加载）退化为 sessions.retain。
+			function resolveUiWorkspace() {
+				try { return ctx.get("uiWorkspace") || null; } catch (_) { return null; }
+			}
 			ctx.effect(function () {
 				document.body.classList.add("dsh-tavern-shell-active");
 				const releaseLandingStyles = installTavernLandingStyles(document);
@@ -14715,7 +14972,7 @@ function bindTavernFontZoom(node, win) {
 				function (props) { sidebarWide = Boolean(props.wide); return React.createElement(TavernSidebar, Object.assign({}, props, {
 					collapsed: !props.wide,
 					embedded: true,
-					sessions: ctx.sessions,
+					sessions: createSessionCompat(ctx.sessions, resolveUiWorkspace(ctx)),
 					workspaces: ctx.workspaces,
 					conversationHost: createConversationHostAdapter(ctx),
                     executeSlash: createTavernFrameSlashExecutor(ctx),
@@ -14901,7 +15158,7 @@ function bindTavernFontZoom(node, win) {
 									else openSceneImagePreview(shot.url, event.currentTarget, null, null, { urls: urls, index: urls.indexOf(shot.url) });
 								} }, h("img", { src: shot.url, alt: shot.version.description || "插图", loading: "lazy" })),
 								picking ? h("label", { className: "dsh-tavern-gallery-pick" }, h("input", { type: "checkbox", "aria-label": "选择第 " + shot.item.turn + " 轮插图", checked: Boolean(picked[shot.id]), disabled: busy, onChange: function (event) { toggle(shot, event.target.checked); } }))
-									: h("button", { type: "button", className: "dsh-tavern-gallery-delete", "aria-label": "删除这张图片", title: "删除这张图片", disabled: busy, onClick: function () { void remove([shot]); } }, h(DshUi.IconTrashOutline16, null)));
+									: h("button", { type: "button", className: "dsh-tavern-gallery-delete", "aria-label": "删除这张图片", title: "删除这张图片", disabled: busy, onClick: function () { void remove([shot]); } }, h(DshUi.IconTrashOutlineRegular, null)));
 						})));
 				}));
 		}
@@ -20367,6 +20624,9 @@ function bindTavernFontZoom(node, win) {
 		exports.tavernDataChangeAffects = tavernDataChangeAffects;
 		exports.createLiveTavernViewModule = createLiveTavernViewModule;
         exports.createSessionViewReader = createSessionViewReader;
+		exports.createSessionCompat = createSessionCompat;
+		exports.tavernMainSessionId = tavernMainSessionId;
+		exports.sessionListAdapters = sessionListAdapters;
 		exports.applyBodyRegenerationResult = applyBodyRegenerationResult;
 		exports.createTavernCoordinationEventModule = createTavernCoordinationEventModule;
 		exports.createTavernCoordinationConnection = createTavernCoordinationConnection;

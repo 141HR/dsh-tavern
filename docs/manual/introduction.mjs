@@ -122,11 +122,11 @@ export const installation = `
 
 ### 第 1 步：安装适配的 Desktop 版本
 
-1. 打开 [DSH Desktop v2.0.13 下载页](https://github.com/anywhere-labs/dsh-desktop/releases/tag/v2.0.13)。
-2. 展开页面中的 **Assets**，下载适合自己 Windows / macOS 系统和处理器的安装包，不要下载 **Source code**。
-3. 安装并打开 DSH Desktop。已经安装的用户，先确认版本是 **2.0.13**。
+1. 打开 [DSH 下载页面](https://www.deepseek.com/harness/)。
+2. 按页面提示下载适合自己 Windows / macOS 系统和处理器的安装包，不要下载 **Source code**。
+3. 安装并打开 DSH Desktop。已经安装的用户，先确认版本是 **0.2.1-rc.2**。
 
-本项目当前要求 Desktop 内置的 DSH 为 **{{dshVersion}}**，对应的 Desktop 版本是 **2.0.13**。其他版本不一定兼容，安装器检测到不匹配会停止。请使用这里指定的适配版本，不要因为提示有新版就先升级 Desktop。
+本项目当前要求 Desktop 内置的 DSH 为 **{{dshVersion}}**，对应的 Desktop 版本是 **0.2.1-rc.2**。其他版本不一定兼容，安装器检测到不匹配会停止。请使用这里指定的适配版本，不要因为提示有新版就先升级 Desktop。
 
 ### 第 2 步：从 Desktop 打开 DSH 终端
 
@@ -134,7 +134,7 @@ export const installation = `
 
 **下一步的命令就粘贴在这个窗口里，不是发到 DSH 的聊天输入框里。** 请从 Desktop 的入口打开，以便使用它提供的运行环境。
 
-下面的操作位置截图来自旧版 Desktop，供辨认入口；实际安装请使用上面指定的 **2.0.13**。
+下面的操作位置截图来自旧版 Desktop，供辨认入口；实际安装请使用上面指定的 **0.2.1-rc.2**。
 
 截图：打开终端
 
@@ -316,7 +316,7 @@ dsh-tavern --help
 
 ### 第 1 步：安装适配的 DSHA
 
-下载 **[DSHA v0.1.5-rc2](https://github.com/DSH-APP/DSHA/releases/tag/v0.1.5-rc2)**，它内置本项目要求的 DSH {{dshVersion}}。Android 11 及以上使用标准包 \`dsha-0.1.5-rc2.apk\`，更早的系统可尝试兼容包 \`dsha-0.1.5-rc2low.apk\`。
+下载 **[DSHA v0.1.5-rc2](https://github.com/DSH-APP/DSHA/releases/tag/v0.1.5-rc2)**，它内置 DSH 0.1.5-rc.2，仅适用于旧版 Tavern；本适配分支要求 DSH {{dshVersion}}，不能使用该 DSHA 版本。Android 11 及以上使用标准包 \`dsha-0.1.5-rc2.apk\`，更早的系统可尝试兼容包 \`dsha-0.1.5-rc2low.apk\`。
 
 安装后打开 DSHA，配置模型并成功启动一次。旧的 DSHA 1.2.0-rc1.4 内置版本不符合要求，不能直接用于这次安装。
 
@@ -581,7 +581,7 @@ DSHA 窗口白屏时先点顶部 **刷新**，仍不正常可点 **直接打开*
 export const pluginInstallation = `
 ## 适用条件
 
-已安装 **DSH 0.1.5-rc.2、Node.js 22.19+、pnpm**，准备新建独立的 \`tavern\` Profile。当前先支持普通 DSH CLI 的新安装。
+已安装 **DSH 0.2.1-rc.2、Node.js 22.19+、pnpm**，准备新建独立的 \`tavern\` Profile。当前先支持普通 DSH CLI 的新安装。
 
 已通过专用安装器安装的 CLI、Desktop 或 Android 酒馆，请继续使用各自原有的更新方式，不要向同一个 Profile 叠装。其他安装方式见[安装与启动](#a02)。
 

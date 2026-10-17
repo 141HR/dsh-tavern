@@ -1,24 +1,27 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { adaptedDshVersion } from './dsh-compatibility.mjs'
 
-// Fixed DSH 0.1.5-rc.2 only. Keep its existing setting, persistence and rendering.
+// DSH 0.2.1 centralizes each font role's schema, controls and validation in
+// FONT_SIZE_SPECS. Raise only the text role; code and terminal keep host limits.
+const textSpec = indent => `variable: "--dsh-content-font-size",\n${indent}min: 10,\n${indent}max: 22,`
 const replacements = {
   'index.js': [
-    ['const FONT_SIZE_MAX = 17;', 'const FONT_SIZE_MAX = 32;'],
-    ['.min(12).max(17).default(14)', '.min(12).max(32).default(14)'],
+    ['const FONT_SIZE_MAX = 22;', 'const FONT_SIZE_MAX = 32;'],
+    [textSpec('\t\t'), textSpec('\t\t').replace('max: 22,', 'max: 32,')],
   ],
   'client.js': [
-    ['.min(12).max(17).default(14)', '.min(12).max(32).default(14)'],
-    ['disabled: fontSize >= 17,', 'disabled: fontSize >= 32,'],
-    ['px > 17) throw new Error(`font size ${px} is outside 12..17`)', 'px > 32) throw new Error(`font size ${px} is outside 12..32`)'],
-    ['parsed <= 17 ? parsed : 14', 'parsed <= 32 ? parsed : 14'],
+    [textSpec('\t\t\t\t'), textSpec('\t\t\t\t').replace('max: 22,', 'max: 32,')],
   ],
 }
 
 export function patchThemeFontLimit(directory) {
   const manifest = JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8'))
-  if (manifest.name !== '@deepseek-ai/dsh-client-ui-theme' || manifest.version !== '0.1.5-rc.2') {
-    throw new Error('字号补丁仅适用于 dsh-client-ui-theme 0.1.5-rc.2')
+  // 0.2.0-rc.2 适配：版本闸跟随 config/dsh-compatibility.json 的 adaptedDshVersion，
+  // 不再写死 0.1.5-rc.2——写死会让 0.2.0 宿主抛错，被 profile-installation.mjs:305-308
+  // 捕获后 rollback 整个安装。
+  if (manifest.name !== '@deepseek-ai/dsh-client-ui-theme' || manifest.version !== adaptedDshVersion) {
+    throw new Error(`字号补丁仅适用于 dsh-client-ui-theme ${adaptedDshVersion}`)
   }
   // Validate every anchor before writing; repeated installation is a no-op.
   const changes = Object.entries(replacements).map(([name, pairs]) => {

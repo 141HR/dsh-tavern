@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { installCliRuntime, migrateCliHome, cliRuntimeCommand } from '../bin/cli-runtime.mjs'
-import { adaptedDshVersion, dshCompatibilityNotice } from '../bin/dsh-compatibility.mjs'
+import { adaptedDshVersion, dshCompatibilityNotice, desktopReleasesUrl, dshaReleasesUrl } from '../bin/dsh-compatibility.mjs'
 
 function temporary(t) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'tavern-runtime-test-'))
@@ -93,7 +93,9 @@ for (const host of ['desktop', 'android']) {
     assert.equal(migrateCliHome({ source, target }), false)
     const notice = dshCompatibilityNotice('99.0.0', host)
     assert.match(notice, /已停止安装/)
-    assert.match(notice, /https:\/\/github.com\//)
+    // 0.2.0-rc.2 适配：Desktop 的下载地址换成官方 https://www.deepseek.com/harness/，
+    // 断言改为跟随 config/dsh-compatibility.json 的字段，不再假设发布页在 GitHub。
+    assert.ok(notice.includes(host === 'desktop' ? desktopReleasesUrl : dshaReleasesUrl), notice)
   })
 }
 

@@ -364,15 +364,17 @@ for (const rewindFails of [false, true]) test('后台 Surface 回退失败时停
   if (rewindFails) { await assert.rejects(pending, /后台历史回退失败/); assert.equal(appendCalls.length, 0); assert.equal(createCalls, 0); assert.equal(followups, 0); return }
   const result = await pending
   assert.equal(result.traceSessionId, 'old-candidate')
-  assert.equal(result.traceBoundary, rewindFails ? 7 : 8)
+  assert.equal(result.traceBoundary, rewindFails ? 7 : 12)
   assert.equal(resumeCalls, 1)
   assert.equal(createCalls, 0)
   if (rewindFails) { assert.equal(appendCalls.length, 0); return }
-  assert.equal(appendCalls.length, 1)
-  assert.equal(appendCalls[0].type, 'assistant/message')
-  assert.deepEqual(appendCalls[0].data.message.content, [])
-  assert.deepEqual(appendCalls[0].options.surfaceOp, { op: 'replace', start: 3, end: 4 })
-  assert.deepEqual(appendCalls[0].options.sourceEventSeqs, [3, 4])
+  // The replacement lands after the closed turn, so the rewind opens a turn for
+  // it and closes it again: released V4 reads the replacement at the log tail.
+  assert.deepEqual(appendCalls.map(call => call.type), ['turn/start', 'step/start', 'assistant/message', 'step/end', 'turn/end'])
+  const written = appendCalls.find(call => call.type === 'assistant/message')
+  assert.deepEqual(written.data.message.content, [])
+  assert.deepEqual(written.options.surfaceOp, { op: 'replace', start: 3, end: 4 })
+  assert.deepEqual(written.options.sourceEventSeqs, [3, 4])
 })
 
 test('整段回退失败时改用新的后台会话，旧会话退休 (#164)', async () => {
