@@ -1175,6 +1175,26 @@
 					document.body.classList.remove("dsh-tavern-shell-active");
 				};
 			}, "dsh-tavern: shell marker");
+			// Keep the native account menu, but present its launcher as Settings.
+			ctx.effect(function () {
+				const originals = new Map();
+				function sync() {
+					for (const button of document.querySelectorAll('[data-slot="settings.launcher"] button[data-signed-out]')) {
+						if (!originals.has(button)) originals.set(button, button.getAttribute("aria-label"));
+						if (button.getAttribute("aria-label") !== "设置") button.setAttribute("aria-label", "设置");
+					}
+				}
+				const observer = new MutationObserver(sync);
+				observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label"] });
+				sync();
+				return function () {
+					observer.disconnect();
+					for (const [button, label] of originals) {
+						if (label === null) button.removeAttribute("aria-label");
+						else button.setAttribute("aria-label", label);
+					}
+				};
+			}, "dsh-tavern: settings launcher label");
 			// Until the session list first loads, the host cannot tell whether it will
 			// restore the last conversation, so it paints the hero and then jumps away.
 			// Keep the hero blank while the list is pending.
