@@ -14215,10 +14215,24 @@ function bindTavernFontZoom(node, win) {
 		        info.message && !dismissed ? React.createElement('div', { role: 'status' }, info.message,
 		            React.createElement('button', { type: 'button', className: 'dsh-tavern-btn', onClick: function () { hostCompatibilityNotice.dismiss(info); setDismissed(true); } }, '此版本不再提示')) : null);
 		}
-		// A game's settings and status tabs open once per page, when the game first becomes ready.
-		// Readiness flickers while the session list refreshes (after the first turn, when the
-		// sidebar remounts); reopening then would cover the tab the player brought forward, such as the stage.
-		const tavernSettingsTabsOpened = new Set();
+		// Entering a game opens its settings and status tabs (the 「进入游戏时打开酒馆状态」 setting, on by default).
+		// Only a switch to another game reopens them: readiness flickers while the session list refreshes
+		// (after the first turn, when the sidebar remounts), and reopening then would cover the tab the
+		// player brought forward, such as the stage.
+		let tavernSettingsTabsShownFor = "";
+		// Hosts that open a tab without expanding a collapsed right column still show the panel.
+		function expandTavernRightColumn(ctx) {
+			try {
+				const column = typeof ctx.get === "function" ? ctx.get("sidebarRight") : null;
+				if (column && typeof column.isExpanded === "function" && column.isExpanded() === false && typeof column.toggleExpanded === "function") column.toggleExpanded();
+			} catch (_) {}
+		}
+		const tavernAutoOpenStatus = (function () {
+			let enabled = true, loaded = null;
+			function load() { loaded = rpc("getTavernSettings").then(function (result) { enabled = !(result && result.settings && result.settings.autoOpenStatusPanel === false); }, function () {}); return loaded; }
+			if (typeof window.addEventListener === "function") window.addEventListener("dsh-tavern-settings-changed", function () { void load(); });
+			return { read: function () { return (loaded || load()).then(function () { return enabled; }); } };
+		})();
 
 		function TavernSidebar(props) {
             const askConfirm = useTavernConfirm(props.sessionId || props.scope?.sessionId);
@@ -15460,7 +15474,7 @@ function bindTavernFontZoom(node, win) {
 					toggleSidebar: function () { if (props.wide) ctx.layout.toggleSidebar(); else props.expandSidebar(); },
 					// Entering a game or the card workspace opens these tabs beside it. On phone-width
 					// layouts the right column covers the story, so leave it closed and show the story (#213).
-					openConversationSettingsTab: async function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); if (tavernSettingsTabsOpened.has(sessionId)) return; tavernSettingsTabsOpened.add(sessionId); await openTavernSidebarTab(ctx, { type: "dsh-tavern:conversation-settings" }, { sessionId: sessionId }); await openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId: sessionId }); },
+					openConversationSettingsTab: async function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); if (tavernSettingsTabsShownFor === sessionId) return; tavernSettingsTabsShownFor = sessionId; if (!await tavernAutoOpenStatus.read()) return; await openTavernSidebarTab(ctx, { type: "dsh-tavern:conversation-settings" }, { sessionId: sessionId }); await openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId: sessionId }); expandTavernRightColumn(ctx); },
 					openCardLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:cards", meta: null }, { sessionId: sessionId }); },
 					openPresetLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:presets" }, { sessionId: sessionId }); },
 					openWorldBookLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:worldbooks" }, { sessionId: sessionId }); },
@@ -16298,6 +16312,8 @@ function bindTavernFontZoom(node, win) {
                         state.settings ? h(GlobalPlayDefaults, { settings: state.settings }) : null,
                         h(TavernConversationWritingSkills, { globalDefaults: true })),
                     group("显示与交互", "",
+                        state.settings ? h(SettingSwitch, { settings: state.settings, name: "autoOpenStatusPanel", title: "进入游戏时打开酒馆状态",
+                            description: "进入或切换到一局游戏时，右侧面板自动展开并显示本局设置和酒馆状态。关闭后右侧面板保持你上次的样子。" }) : null,
                         state.settings ? h(SettingSwitch, { settings: state.settings, name: "castPresentation", title: "对话头像",
                             description: "后台结算时顺带标注每句台词的说话人和情绪，台词显示成带头像的一行。主角用人物卡头像，其他人物用首字头像。" }) : null,
                         h(TavernSpeechSettings),
