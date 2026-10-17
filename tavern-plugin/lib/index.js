@@ -44,6 +44,7 @@ import { createInputFieldsProjection } from './domain/input-fields-projection.js
 import { createScopedMessages, isScopedMessages } from './domain/scoped-messages.js'
 import {registerVariableReadTool} from './domain/read-variables.js'
 import { createBackgroundSessionRetirement, installRetiredBackgroundFilter } from './domain/background-session-retirement.js'
+import { createBackgroundCatalogBackfill } from './domain/background-catalog.js'
 import { createCardMemory, CARD_MEMORY_TOOLS } from '../packages/dsh-tavern-card-memory/index.js'
 import { projectPlayerContent } from './domain/player-input-content.js'
 import { installSkillCatalogSessionScope } from './domain/skill-catalog-session-scope.js'
@@ -2548,6 +2549,9 @@ export async function apply(ctx) {
 
   const backgroundRetirement = createBackgroundSessionRetirement(profileData, { readState: taskStateReader.forSession, isRunning: id => agentRegistry.get(id)?.status === 'running' })
   ctx.effect(() => installRetiredBackgroundFilter(ctx.get('subagents'), backgroundRetirement, ctx.get('sessionQuery')))
+  // Games whose background agents predate their catalog entry get them listed when opened.
+  const backgroundCatalog = createBackgroundCatalogBackfill({ agents: agentRegistry, sessionQuery: ctx.get('sessionQuery'),
+    onListed: parentId => sessionSignals.publish(parentId, { kind: 'subagents', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) }) })
   const runtimePresetSnapshots = new Map()
   const BACKGROUND_TOOLS = [...WORLD_BOOK_FILTER_TOOLS, POSTURE_SUBMIT_TOOL, CHARACTER_DESIGN_READ_TOOL, CHARACTER_DESIGN_SAVE_TOOL, CHARACTER_DESIGN_REUSE_TOOL, MVU_SUBMIT_UPDATE_TOOL, CANDIDATE_SUBMIT_TOOL, SCRIPT_READ_TOOL, SCRIPT_POINT_TOOL, LEDGER_SUBMIT_TOOL]
   const backgroundAgentRunner = createBackgroundAgentRunner({
@@ -4750,6 +4754,7 @@ export async function apply(ctx) {
       case 'getSession': {
         // A save opened for the first time in this process is checked once, while nothing runs.
         await reconcileWhenIdle(args && args.sessionId, { once: true })
+        void backgroundCatalog(str(args && args.sessionId))
         if(args?.fullView === true)templateHistoryFrom.set(args.sessionId,0)
         else if(Number.isSafeInteger(args?.historyFrom) && args.historyFrom >= 0)templateHistoryFrom.set(args.sessionId,args.historyFrom)
         return sessionViews.response(args || {})
