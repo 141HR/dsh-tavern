@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "f8618abf9a4df2521e28b09ddcb25ecd0dcfeb9e",
-  "releaseSequence": 660,
+  "revision": "7afcb1cdca1fd48438fbc04f145001eed8ac3bb7",
+  "releaseSequence": 661,
   "version": "2.7.0",
   "files": [
     {
@@ -81,8 +81,8 @@
     },
     {
       "path": "bin/dsh-tavern.mjs",
-      "sha256": "dba5b55fb286f473efed2f5443e3accdc520d3be5c5571c7dfaaf7c2bf918efd",
-      "size": 4277
+      "sha256": "7bfb48ded52703ad6096e64ea0973b00018d2fd6a1cebd6454272a14a18edaef",
+      "size": 4884
     },
     {
       "path": "bin/import-user-home.mjs",
