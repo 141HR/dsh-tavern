@@ -19,7 +19,7 @@ ZIP 压缩包，后缀 `.dshcard`。分四块：卡本体（兼容 CHARX）、�
 ```
 大肥鱼.dshcard
 ├─ card.json              Character Card V3，和 CHARX 完全相同；酒馆助手脚本也在这里
-├─ packs/<名字>/          所有素材，一个子目录一个包，结构沿用 Galgame 分支的 dsh-asset-pack（manifest.json、media/、credits/……）
+├─ assets/<名字>/         所有素材，一个子目录一个包，结构沿用 Galgame 分支的 dsh-asset-pack（manifest.json、media/、credits/……）
 ├─ scripts/<名字>.js      DSH 卡脚本：沙箱里运行，可以用 DSH 能力（第 2 层）
 ├─ plugins/<插件名>/      随卡 DSH 插件：package.json、index.mjs、client.js、assets/（第 3 层）
 └─ dsh.json               DSH 清单（见下）
@@ -30,14 +30,16 @@ ZIP 压缩包，后缀 `.dshcard`。分四块：卡本体（兼容 CHARX）、�
 | 放什么 | 放哪 | Tavern 怎么对待 |
 |---|---|---|
 | 卡的文字设定、酒馆助手脚本 | `card.json` | 和导入普通卡一样；脚本在沙箱运行 |
-| 所有素材 | `packs/` | **不解读内容**，只存储、校验、按地址提供 |
-| 其中供其他前端用的头像、表情、背景 | `card.json` 的 `data.assets` 指向 `packs/` 里的文件 | 导入为 Tavern 的角色素材（头像、28 种情绪立绘、背景） |
+| 所有素材 | `assets/<包名>/` | **不解读内容**，只存储、校验、按地址提供 |
+| 其中供其他前端用的头像、表情、背景 | `card.json` 的 `data.assets` 指向 `assets/<包名>/` 里的文件 | 导入为 Tavern 的角色素材（头像、28 种情绪立绘、背景） |
 | DSH 卡脚本 | `scripts/` | 沙箱运行，不用确认 |
 | DSH 插件 | `plugins/` | 确认后才加载，只在本卡生效 |
 
-**目录名随意，标识在包里**：一张卡可以带好几个包（大肥鱼带了 4 个：本体加 3 个通用包），所以 `packs/` 下按包分子目录；子目录名只是为了好认（`dafeiyu`、`china-backgrounds`），不是标识。包的标识、版本、摘要写在包自己的 `manifest.json` 里，Tavern 认包、去重都看它，不看目录名。
+**目录名随意，标识在包里**：一张卡可以带好几个包（大肥鱼带了 4 个：本体加 3 个通用包），所以 `assets/` 下按包分子目录；子目录名只是为了好认（`dafeiyu`、`china-backgrounds`），不是标识。包的标识、版本、摘要写在包自己的 `manifest.json` 里，Tavern 认包、去重都看它，不看目录名。
 
-**素材只放一份**：CCv3 的 `data.assets` 直接指向素材包里的文件（`embeded://packs/dafeiyu/media/<摘要>.png`），不另外复制到 `assets/`。CCv3 规范只是建议放在 `assets/{类型}/images/`（SHOULD，不是 MUST）；RisuAI 导入 CHARX 时会把包里每个文件按路径登记，任意路径都能解析（`src/ts/process/processzip.ts` 的 `CharXImporter`）。Tavern 自己的角色素材（玩家上传、ST 立绘包导入的）导出时也存成一个素材包，`format` 为 `dsh-cast`。只导出 CHARX（不带素材包）时，仍按规范的 `assets/` 路径写。
+**和 CHARX 共用 `assets/`**：CHARX 的惯例是 `assets/{类型}/images/…`，类型是 `icon`、`emotion`、`background`、`user_icon`、`other`。所以这几个名字不能当包名（还有以 `x_` 开头的，留给 CCv3 自定义类型）。这样 `.dshcard` 和 Tavern 导出的 CHARX 素材都在 `assets/` 下，路径不会撞。
+
+**素材只放一份**：CCv3 的 `data.assets` 直接指向素材包里的文件（`embeded://assets/dafeiyu/media/<摘要>.png`），不另外复制一份。CCv3 规范只是建议放在 `assets/{类型}/images/`（SHOULD，不是 MUST）；RisuAI 导入 CHARX 时会把包里每个文件按路径登记，任意路径都能解析（`src/ts/process/processzip.ts` 的 `CharXImporter`）。Tavern 自己的角色素材（玩家上传、ST 立绘包导入的）导出时也存成一个素材包，`format` 为 `dsh-cast`。只导出 CHARX（不带素材包）时，按规范的 `assets/{类型}/images/` 写。
 
 为什么 DSH 卡脚本单独放、不塞进 `card.json`：它用到的 `DSH` 对象在 ST、RisuAI 里不存在，放进 `card.json` 会让导出的 CHARX 在别处报错。单独放，导出 CHARX 时自然丢掉，`card.json` 始终是一张在哪都能跑的卡。
 
@@ -66,7 +68,7 @@ ZIP 压缩包，后缀 `.dshcard`。分四块：卡本体（兼容 CHARX）、�
   ],
   "packs": [
     { "id": "af7b2c46-…", "title": "中国通用背景", "format": "dsh-asset-pack", "contentHash": "…",
-      "bytes": 44360250, "path": "packs/china-backgrounds/", "credits": ["packs/china-backgrounds/credits/CREDITS.md"],
+      "bytes": 44360250, "path": "assets/china-backgrounds/", "credits": ["assets/china-backgrounds/credits/CREDITS.md"],
       "url": "https://…/china-backgrounds.zip" }
   ]
 }
@@ -192,13 +194,13 @@ packs/<包 id>/figures/  sprites/  bundles/  credits/
 - `dsh.json` 写卡的标识、版本和 4 个素材包（id、format、contentHash、署名文件）；
 - `packs/` 原样放入。
 
-得到 `dafeiyu.dshcard`（288 MB）和去掉素材包的 `dafeiyu.charx`（16 MB）。试改时把头像和情绪图复制进了 `assets/`；按"素材只放一份"的结论，应直接指向 `packs/` 里的原文件，能省下这 16 MB 的重复。用现在的导入代码试：
+得到 `dafeiyu.dshcard`（288 MB）和去掉素材包的 `dafeiyu.charx`（16 MB）。试改时把头像和情绪图另复制了一份；按"素材只放一份"的结论，应直接指向素材包里的原文件，能省下这 16 MB 的重复。用现在的导入代码试：
 - **CHARX 版能导入**：14 种情绪认出 9 种当立绘，Tavern 自带的舞台和对话头像直接可用；`crashed`、`drooling`、`eating`、`singing` 没有对应，原样保留。试的过程中发现 `crying` 抢在 `sad` 前面占了"难过"，已修复：按名字贴近程度排序。
 - **`.dshcard` 导入失败**：现在的 zip 读取有 50 MB 上限，并且要整包读进内存。这印证了实施步骤 1、3 必须先做。
 
 ### 对格式的结论
 
-1. **素材包直接采用分支的 `dsh-asset-pack` 结构**，不另造：按内容寻址、清单带每个文件的摘要，正是存储层要的。`.dshcard` 的 `packs/<id>/` 原样放它。
+1. **素材包直接采用分支的 `dsh-asset-pack` 结构**，不另造：按内容寻址、清单带每个文件的摘要，正是存储层要的。`.dshcard` 的 `assets/<包名>/` 原样放它（分支卡包里的 `packs/<id>/` 导入时按 `dsh-tavern-card-bundle.json` 照认）。
 2. **Tavern 不解读素材包的内容**，只认四样：`format`、文件与摘要、署名许可、包 id。服装、分层立绘、Live2D、日夜变体、导演说明属于声明这个 `format` 的插件（这里是 Galgame 插件）。Tavern 自己的角色素材保持简单（头像、28 种情绪立绘、背景、声音），保证不装插件时也能用。
 3. **同一张卡分三级可用**：
    - 在 ST、RisuAI 里是一张普通卡（CHARX 部分）；
