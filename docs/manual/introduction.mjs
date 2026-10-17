@@ -1,12 +1,12 @@
 // Commands mirror docs/installation.md; tests guard against drift.
 export const installCommands = {
-  desktopWindows: "$env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://cdn.jsdelivr.net/gh/moyutegong/dsh-tavern@main/install.ps1')); Invoke-Expression $tavernInstaller",
-  desktopMac: 'curl -fsSL https://cdn.jsdelivr.net/gh/moyutegong/dsh-tavern@main/install.sh | DSH_TAVERN_HOST=desktop sh',
-  cliWindows: "$env:DSH_TAVERN_HOST='cli'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://cdn.jsdelivr.net/gh/moyutegong/dsh-tavern@main/install.ps1')); Invoke-Expression $tavernInstaller",
-  cliUnix: 'curl -fsSL https://cdn.jsdelivr.net/gh/moyutegong/dsh-tavern@main/install.sh | DSH_TAVERN_HOST=cli sh',
+  desktopWindows: "$env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.ps1')); Invoke-Expression $tavernInstaller",
+  desktopMac: 'curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | DSH_TAVERN_HOST=desktop sh',
+  cliWindows: "$env:DSH_TAVERN_HOST='cli'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.ps1')); Invoke-Expression $tavernInstaller",
+  cliUnix: 'curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | DSH_TAVERN_HOST=cli sh',
   // Pin the bootstrap itself so jsDelivr cannot serve an older @main script.
   // The bootstrap still installs or updates the application from current main.
-  android: 'node -e "fetch(\'https://cdn.jsdelivr.net/gh/moyutegong/dsh-tavern@69d74f5/android/setup.sh\').then(async r=>{if(!r.ok)throw Error(\'HTTP \'+r.status);require(\'fs\').writeFileSync(\'/tmp/dsh-tavern-setup.sh\',await r.text())}).then(()=>{const r=require(\'child_process\').spawnSync(\'bash\',[\'/tmp/dsh-tavern-setup.sh\'],{stdio:\'inherit\'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"',
+  android: 'node -e "fetch(\'https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@69d74f5/android/setup.sh\').then(async r=>{if(!r.ok)throw Error(\'HTTP \'+r.status);require(\'fs\').writeFileSync(\'/tmp/dsh-tavern-setup.sh\',await r.text())}).then(()=>{const r=require(\'child_process\').spawnSync(\'bash\',[\'/tmp/dsh-tavern-setup.sh\'],{stdio:\'inherit\'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"',
 }
 export const androidAgentPrompt = '请帮我安装 DSH Tavern。只需要原样执行下面这一条命令，等待它结束，然后把最后的结果告诉我；不要拆解步骤，也不要修改命令：\n\n' + installCommands.android
 const code = (language, text) => '\n```' + language + '\n' + text + '\n```\n'
@@ -97,7 +97,7 @@ export const installation = `
 
 ### 第 1 步：下载安装包
 
-[下载 Windows 一键在线安装 EXE](https://github.com/moyutegong/dsh-tavern/releases/download/v2.6/DSH-Tavern-Desktop-2.0.13-x64-Setup8.exe)
+[下载 Windows 一键在线安装 EXE](https://github.com/flizzywine/dsh-tavern/releases/download/v2.6/DSH-Tavern-Desktop-2.0.13-x64-Setup8.exe)
 
 下载的文件名是 \`DSH-Tavern-Desktop-2.0.13-x64-Setup8.exe\`。这是在线安装器，安装时仍需要联网。
 
@@ -294,7 +294,7 @@ dsh-tavern --help
 
 ### 第 1 步：下载并安装 APK
 
-[下载 DSH Tavern Android APK](https://github.com/moyutegong/dsh-tavern/releases/download/v2.1/dsh-tavern-android-release.apk)
+[下载 DSH Tavern Android APK](https://github.com/flizzywine/dsh-tavern/releases/download/v2.1/dsh-tavern-android-release.apk)
 
 下载后打开 APK，按照 Android 提示，允许当前浏览器或文件管理器安装应用，然后完成安装。
 
@@ -537,7 +537,7 @@ Desktop 安装和更新会自动配置 [dsh-pocket](https://github.com/shaobeich
 
 重新下载 A 中的修复版安装包，先保存操作、关闭已打开的酒馆，再按原安装位置修复。不要继续使用旧版 \`Setup.exe\`。重新运行安装包会关闭所选安装的旧进程，并联网更新酒馆。
 
-启动错误可查看安装目录的 \`launcher-error.txt\`；首次联网安装问题可查看数据目录的 \`first-install.log\`。详细说明见 [Windows 安装与启动入口](https://github.com/moyutegong/dsh-tavern/blob/main/docs/installation.md#windows-一键安装版)。
+启动错误可查看安装目录的 \`launcher-error.txt\`；首次联网安装问题可查看数据目录的 \`first-install.log\`。详细说明见 [Windows 安装与启动入口](https://github.com/flizzywine/dsh-tavern/blob/main/docs/installation.md#windows-一键安装版)。
 
 ### Windows 旧便携版找不到入口，或原安装目录不可用
 
@@ -567,15 +567,15 @@ DSHA 窗口白屏时先点顶部 **刷新**，仍不正常可点 **直接打开*
 
 浏览器显示 \`dsh web authentication required; reopen the URL printed by dsh web.\`，表示缺少登录凭证，不代表安装失败。回到 **DSHA → 启动 → 进入 → 酒馆工作台** 即可，不必重装。
 
-必须用外部浏览器时，从 DSHA 本次启动日志的 **本机打开** 复制完整地址，包括 \`?token=\` 后的全部内容，在同一台 Android 设备的浏览器打开，再进入酒馆工作台。MuMu 用户在模拟器里的浏览器操作。详见 [Android 认证排错](https://github.com/moyutegong/dsh-tavern/blob/main/docs/android-install.md#浏览器提示需要认证怎么办)。
+必须用外部浏览器时，从 DSHA 本次启动日志的 **本机打开** 复制完整地址，包括 \`?token=\` 后的全部内容，在同一台 Android 设备的浏览器打开，再进入酒馆工作台。MuMu 用户在模拟器里的浏览器操作。详见 [Android 认证排错](https://github.com/flizzywine/dsh-tavern/blob/main/docs/android-install.md#浏览器提示需要认证怎么办)。
 
 ### 能打开酒馆，但发送后没有回复
 
 这时先检查[文字模型配置](#a03)和服务返回的错误。能进入界面但不能生成，不等于安装失败，无需先重装。
 
-更多问题见[常见问题](#n08)与[排错日志](#n04)。需要手动安装或查找高级目录配置时，参考[完整安装说明](https://github.com/moyutegong/dsh-tavern/blob/main/docs/installation.md)。
+更多问题见[常见问题](#n08)与[排错日志](#n04)。需要手动安装或查找高级目录配置时，参考[完整安装说明](https://github.com/flizzywine/dsh-tavern/blob/main/docs/installation.md)。
 
-安装包校验：[Android APK SHA-256 文件](https://github.com/moyutegong/dsh-tavern/releases/download/v2.1/dsh-tavern-android-release.apk.sha256)。Windows EXE SHA-256：\`a21e2ea4bc7bb8d1154b6d133c3bd6c6ca139006c74140527925104731d02951\`。
+安装包校验：[Android APK SHA-256 文件](https://github.com/flizzywine/dsh-tavern/releases/download/v2.1/dsh-tavern-android-release.apk.sha256)。Windows EXE SHA-256：\`a21e2ea4bc7bb8d1154b6d133c3bd6c6ca139006c74140527925104731d02951\`。
 `
 
 export const pluginInstallation = `
@@ -589,7 +589,7 @@ export const pluginInstallation = `
 
 需要 Git。在终端运行：
 
-` + code('bash', 'dsh plugin --profile tavern add github:moyutegong/dsh-tavern') + `
+` + code('bash', 'dsh plugin --profile tavern add github:flizzywine/dsh-tavern') + `
 
 DSH 会创建 Profile、安装完整运行包并启用酒馆。运行包包含 Web 配置、侧栏、人物卡功能、预设和 Skill，无需自行构建。酒馆使用当前 DSH，启动时检查适配版本，不会另装或升级宿主。
 

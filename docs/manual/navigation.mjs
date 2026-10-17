@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { pluginInstallation, appearance } from './introduction.mjs'
 
 // Plugin developer docs have one source in docs/; the site renders it as is.
-const REPO = 'https://github.com/moyutegong/dsh-tavern/blob/main/'
+const REPO = 'https://github.com/flizzywine/dsh-tavern/blob/main/'
 const sitePages = { 'plugin-api.md': 'plugin-api', 'plugin-recipes.md': 'plugin-recipes' }
 export function developerDoc(file) {
   return readFileSync(new URL('../' + file, import.meta.url), 'utf8')
