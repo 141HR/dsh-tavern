@@ -1,10 +1,11 @@
 // Shrink a built 大肥鱼.dshcard for distribution: PNG pictures become WebP, music and sound
 // effects are re-encoded as Ogg Opus, each only where it saves enough. Packs stay
 // content-addressed: a re-encoded file gets a new hash, and every reference to it (the
-// pack manifest, figures, sprites, the card's own assets) follows. Live2D bundles are
-// left as they are; the card plugin is refreshed from ./plugin. Needs cwebp and ffmpeg (with libopus) on PATH.
+// pack manifest, figures, sprites, the card's own assets) follows. With --drop-live2d the
+// Live2D models go (the sample card shows static standing pictures); other bundles stay.
+// The card plugin is refreshed from ./plugin. Needs cwebp and ffmpeg (with libopus) on PATH.
 //
-//   node examples/dafeiyu-card/compress.mjs 大肥鱼.dshcard 大肥鱼.min.dshcard
+//   node examples/dafeiyu-card/compress.mjs 大肥鱼.dshcard 大肥鱼.min.dshcard --drop-live2d
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -16,7 +17,8 @@ import { writeZipEntries } from '../../tavern-plugin/lib/domain/zip-entries.js'
 import { packContentHash } from '../../tavern-plugin/lib/domain/asset-packs.js'
 
 const run = promisify(execFile)
-const [source, target] = process.argv.slice(2)
+const [source, target] = process.argv.slice(2).filter(arg => !arg.startsWith('--'))
+const dropLive2d = process.argv.includes('--drop-live2d')
 if (!source || !target) { console.error('用法：node compress.mjs <输入.dshcard> <输出.dshcard>'); process.exit(1) }
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
@@ -45,6 +47,30 @@ const dsh = JSON.parse(files.get('dsh.json').toString('utf8'))
 // The card plugin always comes from ./plugin, so a distributed card never carries a stale copy.
 const pluginDir = path.join(path.dirname(new URL(import.meta.url).pathname), 'plugin')
 for (const file of ['client.js', 'index.mjs', 'package.json']) files.set('plugins/galgame/' + file, await readFile(path.join(pluginDir, file)))
+
+// Live2D models: their bundle files, the manifest's bundle entries and each outfit's binding.
+if (dropLive2d) {
+  for (const pack of dsh.packs) {
+    const manifestPath = pack.path + 'manifest.json'
+    const manifest = JSON.parse(files.get(manifestPath).toString('utf8'))
+    const keys = Object.entries(manifest.bundles || {}).filter(([, bundle]) => bundle.kind === 'live2d').map(([key]) => key)
+    if (!keys.length) continue
+    for (const key of keys) {
+      delete manifest.bundles[key]
+      for (const file of [...files.keys()]) if (file.startsWith(pack.path + 'bundles/' + key + '/')) files.delete(file)
+    }
+    for (const id of manifest.figures || []) {
+      const figurePath = pack.path + 'figures/' + id + '.json'
+      if (!files.has(figurePath)) continue
+      const figure = JSON.parse(files.get(figurePath).toString('utf8'))
+      for (const outfit of figure.outfits || []) if (keys.includes(outfit.live2d?.bundleKey)) delete outfit.live2d
+      if (figure.appearance === 'live2d') figure.appearance = 'sprite'
+      files.set(figurePath, Buffer.from(JSON.stringify(figure)))
+    }
+    files.set(manifestPath, Buffer.from(JSON.stringify(manifest, null, 2)))
+    console.log('去掉 Live2D：' + keys.join('、'))
+  }
+}
 
 // Old hash → { hash, ext } for every re-encoded media file, across all packs.
 const renamed = new Map()
