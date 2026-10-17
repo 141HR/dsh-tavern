@@ -163,6 +163,7 @@ import { createManualLedger } from './domain/manual-ledger.js'
 import { POSTURE_SUBMIT_TOOL, POSTURE_SUBMIT_TOOL_NAME, lastSubmittedPosture, normalizePostureSubmission } from './domain/posture-submission.js'
 import { createCastPresentation } from './domain/cast-presentation.js'
 import { createCastAssets } from './domain/cast-assets.js'
+import { createSettlementItems } from './domain/background-pipeline.js'
 import { TAVERN_COMPATIBILITY_CAPABILITIES, createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
 import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics, sanitizeModuleFailure, sanitizeMvuLoadDiagnostic, redactMvuLoadError } from './domain/mvu-diagnostics.js'
 import { createPlayChatDebugReference, readPlayChatDebugTurn } from './domain/play-chat-debug.js'
@@ -2448,8 +2449,7 @@ export async function apply(ctx) {
     resolveWebSearch: async input => (await backgroundConfigForSession(input.sessionId))?.webSearchEnabled === true,
     backgroundTools: BACKGROUND_TOOLS,
     // Set up after the runner: plugin tools are read when a background Session is set up.
-    pluginSettlement: () => pluginApi.settlement,
-    castSettlement: () => castPresentation.settlement,
+    settlementItems: () => settlementItems,
     pluginCandidate: () => pluginApi.candidate,
     sharedTools: [sharedWorldbookSearch(searchWorldbook), {
       tool: HISTORY_RECALL_TOOL,
@@ -2624,6 +2624,8 @@ export async function apply(ctx) {
     data: pluginData,
     publish: sessionId => sessionSignals.publish(sessionId, { kind: 'cast', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
   })
+  // Work riding on the main settlement call: Tavern's own items first, then plugins.
+  const settlementItems = createSettlementItems({ items: () => [castPresentation.settlement], plugins: () => pluginApi.settlement })
   const castAssets = createCastAssets({ store: profileData })
   function castAssetView(cardPath, manifest) {
     const key = castAssets.keyOf(cardPath)
@@ -3384,7 +3386,7 @@ export async function apply(ctx) {
             throw error
           }
           result = { posture: mvuResult.posture }
-        } else if (!backgroundTasksSettings.posture && !backgroundTasksSettings.characterDesign && !await castPresentation.settlement.wanted()) {
+        } else if (!backgroundTasksSettings.posture && !backgroundTasksSettings.characterDesign && !await settlementItems.wanted()) {
           result = {}
         } else if (await settleByPlugin()) {
           // A plugin replaced this settlement; its validated result is committed like Tavern's own.

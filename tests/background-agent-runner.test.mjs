@@ -1,3 +1,4 @@
+import { createSettlementItems } from '../tavern-plugin/lib/domain/background-pipeline.js'
 
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -533,7 +534,7 @@ test('插件结算工具：随后台会话固定注册，只在结算任务里�
   const runner = createBackgroundAgentRunner({
     id: () => 'background-plugin-tools',
     backgroundTools: [{ name: 'posture_submit', parameters: { type: 'object' } }, { name: 'candidate_submit', parameters: { type: 'object' } }],
-    pluginSettlement: () => pluginSettlement,
+    settlementItems: () => createSettlementItems({ plugins: () => pluginSettlement }),
     pluginCandidate: () => ({ sections: async ({ gameId }) => [{ text: gameId + ' 候选多给探索选项' }] }),
     agents: {
       get: () => ({ id: 'parent', session: { header: {} } }),
@@ -633,8 +634,7 @@ test('结算任务的固定工具顺序与本轮任务文字：Tavern 工具、�
   const runner = createBackgroundAgentRunner({
     id: () => 'background-order',
     backgroundTools: [{ name: 'posture_submit', parameters: { type: 'object' } }, { name: 'mvu_submit_update', parameters: { type: 'object' } }],
-    castSettlement: () => castSettlement,
-    pluginSettlement: () => pluginSettlement,
+    settlementItems: () => createSettlementItems({ items: () => [castSettlement], plugins: () => pluginSettlement }),
     agents: {
       get: () => ({ id: 'parent', session: { header: {} } }),
       async create(options) {
