@@ -3,6 +3,7 @@ import { inputAttachments, projectPlayerContent } from './player-input-content.j
 import { resolveRuntimePresetMacros } from './runtime-presets.js'
 import { createEphemeralCompatibilityRequest, isCompatibilityConversationRequest } from './compatibility-request.js'
 import { projectRuntimePresetRequest } from './runtime-preset-lifecycle.js'
+import { STORY_SUBMIT_PROMPT, STORY_SUBMIT_TOOL_NAME } from './story-tool-submission.js'
 import { markRequestHandled, requestHandledBy } from './request-lineage.js'
 import { inputKind } from './session-turn-input.js'
 import { isProducerSource, isSystemPromptSource } from './message-source.js'
@@ -433,6 +434,9 @@ export function createNativePlayOrchestrationStrategy(options) {
       sections.unshift(...front)
       frontTexts.set(input.sessionId, front.map(section => section.text))
       renderedFronts.set(input.sessionId, createHash('sha256').update(JSON.stringify(front.map(section => section.text))).digest('hex'))
+      // The submission contract travels with the tool, not with the preset: it is
+      // appended after the front so turning the switch off restores the saved prompt.
+      if (visible.has(STORY_SUBMIT_TOOL_NAME)) sections.push({ name: 'tavern:story-tool-submission', text: STORY_SUBMIT_PROMPT })
     }
     assembly.sections = sections
     if (Array.isArray(assembly.contexts)) assembly.contexts = assembly.contexts.filter(section => section.name !== 'approval:policy')

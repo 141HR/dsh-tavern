@@ -172,6 +172,7 @@ import { createPresetLibrary } from './domain/preset-library.js'
 import { createForegroundOrchestrationStrategies } from './domain/foreground-orchestration-strategies.js'
 import { clearFailedTurnSurface, rollbackAvailability, reshadowRolledBackRounds, interruptedSurfaceTurns } from './domain/rollback-surface.js'
 import { assistantResultForTurn } from './domain/session-turn-result.js'
+import { createStorySubmissionTool, foldStorySubmission, STORY_SUBMIT_TOOL_NAME } from './domain/story-tool-submission.js'
 import { forkTurnsByMessageId as forkTargetsFromSession } from './domain/conversation-fork-targets.js'
 import { createTavernRetryLimiter } from './domain/tavern-retry-limiter.js'
 import { lastTavernHelperVariables, projectTavernHelperContext, hydrateTavernHelperMessages, replaceTavernHelperVariables, HELPER_MESSAGE_COLD_WINDOW } from './domain/tavern-helper-context.js'
@@ -2688,7 +2689,7 @@ export async function apply(ctx) {
   const pluginApi = createTavernPluginApi({
     ctx,
     logger: console,
-    reservedToolNames: [...BACKGROUND_TOOLS, HISTORY_RECALL_TOOL].map(tool => tool?.name).concat(['character_design_finish', 'worldbook_search', 'web_search', 'skill']).filter(Boolean),
+    reservedToolNames: [...BACKGROUND_TOOLS, HISTORY_RECALL_TOOL].map(tool => tool?.name).concat([STORY_SUBMIT_TOOL_NAME, 'character_design_finish', 'worldbook_search', 'web_search', 'skill']).filter(Boolean),
     media: pluginMedia,
     data: pluginData,
     ...pluginTurns,
@@ -3750,6 +3751,7 @@ export async function apply(ctx) {
   const foregroundFrameSessionAdapter = createForegroundFrameSessionAdapter({ id: randomUUID })
   const turnOrchestrator = createTurnOrchestrator({
     captureSceneWorldbook,
+    storyToolCall: async () => (await readTavernSettings()).storyToolCall,
     store: {
       chatForSession,
       storyContextForSession: sessionId => storyContext({ sessionId }),
@@ -4840,6 +4842,7 @@ export async function apply(ctx) {
   }
 
   function replaceAssistantReply(session, result, bodyText) {
+    if (result !== null && result.storyToolSubmission) return foldStorySubmission(session, result, bodyText)
     if (result === null || result.text === bodyText) return
     const previous = result.event && result.event.data && result.event.data.message
     if (previous === null || typeof previous !== 'object') return
@@ -4922,7 +4925,7 @@ export async function apply(ctx) {
   }
 
   const skillGatedTools = createSkillGatedTools()
-  const controlledToolNames = new Set(['tavern_read_variables', ...CARD_MEMORY_TOOLS, 'bash', 'pwsh', ...dshFileToolNames, 'skill', 'tavern_read_skill_reference', 'web_search', 'tavern_save_skill', ...cordisToolNames, 'tavern_user_profile_read', 'tavern_user_profile_save', 'tavern_user_profile_confirm', 'tavern_read_card', 'tavern_read_card_raw', 'tavern_search_card', 'tavern_replace_card_text', 'tavern_mvu_overview', 'tavern_apply_mvu', 'tavern_read_play_chat', 'tavern_read_script', 'tavern_recall_history', 'worldbook_search', 'tavern_read_worldbook', 'tavern_update_worldbook', 'tavern_read_preset', 'tavern_update_preset', 'tavern_read_regex_library', 'tavern_copy_card', 'tavern_update_card', 'tavern_restore_card', 'tavern_validate_card', 'tavern_test_response'])
+  const controlledToolNames = new Set([STORY_SUBMIT_TOOL_NAME, 'tavern_read_variables', ...CARD_MEMORY_TOOLS, 'bash', 'pwsh', ...dshFileToolNames, 'skill', 'tavern_read_skill_reference', 'web_search', 'tavern_save_skill', ...cordisToolNames, 'tavern_user_profile_read', 'tavern_user_profile_save', 'tavern_user_profile_confirm', 'tavern_read_card', 'tavern_read_card_raw', 'tavern_search_card', 'tavern_replace_card_text', 'tavern_mvu_overview', 'tavern_apply_mvu', 'tavern_read_play_chat', 'tavern_read_script', 'tavern_recall_history', 'worldbook_search', 'tavern_read_worldbook', 'tavern_update_worldbook', 'tavern_read_preset', 'tavern_update_preset', 'tavern_read_regex_library', 'tavern_copy_card', 'tavern_update_card', 'tavern_restore_card', 'tavern_validate_card', 'tavern_test_response'])
   const foregroundStrategies = createForegroundOrchestrationStrategies({
     compatibility: {
       beforeTurn: async function (input) {
@@ -5054,6 +5057,11 @@ export async function apply(ctx) {
   // ---------- 模型可选工具 ----------
   const tools = ctx.get('tools')
   if (tools !== undefined) {
+    tools.register(defineTool(createStorySubmissionTool({
+      chatForSession,
+      enabled: async () => (await readTavernSettings()).storyToolCall,
+      isBackground: function (sessionId) { return backgroundAgentRunner.owns(sessionId) }
+    })))
     registerGameplayTools({
       activeTurnOf,
       cardResponseTest,
