@@ -27,25 +27,26 @@ function figurePng([r, g, b], width = 120, height = 200) {
 // The stage: right panel, character material, full-screen reader that can send the next input.
 export async function castStageChecks({ page, step, output, report }) {
   await step('插件舞台：导演插件定下的地点和时间画在舞台上，可选回内置舞台', async () => {
-    await page.getByText('舞台', { exact: true }).filter({ visible: true }).last().click()
+    await page.getByText('酒馆状态', { exact: true }).filter({ visible: true }).last().click()
     const choice = page.getByRole('combobox', { name: '舞台样式' })
     assert.equal(await choice.inputValue(), 'tavern-plugin-director:scene', '装了插件舞台时默认用它')
-    await page.locator('.dsh-tavern-stage-tab').getByText('酒馆大堂 · 夜晚', { exact: true }).waitFor()
+    await page.locator('.dsh-tavern-stage-section').getByText('酒馆大堂 · 夜晚', { exact: true }).waitFor()
     await page.waitForTimeout(400)
     await page.screenshot({ path: join(output, 'cast-stage-plugin.png') })
     await choice.selectOption('dsh-tavern:builtin')
     report.castStagePlugin = true
   })
   await step('舞台：右侧小舞台按台词换人，导入立绘包后显示立绘', async () => {
-    const scene = page.locator('.dsh-tavern-stage-tab .dsh-tavern-stage-scene')
+    const scene = page.locator('.dsh-tavern-stage-section .dsh-tavern-stage-scene')
     await scene.waitFor()
     // Opens at the turn's last annotated line.
-    await page.locator('.dsh-tavern-stage-tab .dsh-tavern-stage-name').filter({ hasText: '你' }).waitFor()
+    await page.locator('.dsh-tavern-stage-section .dsh-tavern-stage-name').filter({ hasText: '你' }).waitFor()
     await page.getByRole('button', { name: '上一句', exact: true }).first().click()
-    await page.locator('.dsh-tavern-stage-tab .dsh-tavern-stage-name').filter({ hasText: '店主' }).waitFor()
+    await page.locator('.dsh-tavern-stage-section .dsh-tavern-stage-name').filter({ hasText: '店主' }).waitFor()
     assert.equal(await scene.locator('.dsh-tavern-stage-figure-letter').first().textContent(), '店')
     const pack = writeZipEntries([{ path: '店主/joy.png', content: figurePng([214, 140, 92]) }, { path: '店主/neutral.png', content: figurePng([150, 150, 170]) }, { path: 'notes.txt', content: 'x' }])
     const chooser = page.waitForEvent('filechooser')
+    await page.getByText('角色素材', { exact: true }).filter({ visible: true }).first().click()
     await page.getByRole('button', { name: '导入 ST 立绘包', exact: true }).click()
     await (await chooser).setFiles({ name: 'pack.zip', mimeType: 'application/zip', buffer: pack })
     await page.getByText('导入 2 张立绘（店主），跳过 1 个文件').waitFor()
@@ -108,7 +109,7 @@ export async function castSpeechChecks({ page, step, output, report }) {
       assert.deepEqual(requests[0].body, { model: 'tts-1', input: '欢迎回来，这是你的奖励。', voice: 'alloy', response_format: 'mp3' })
       assert.equal(requests[0].authorization, 'Bearer sk-e2e')
 
-      await page.getByText('舞台', { exact: true }).filter({ visible: true }).last().click()
+      await page.getByText('酒馆状态', { exact: true }).filter({ visible: true }).last().click()
       const voice = page.getByLabel('店主 的声音', { exact: true })
       await voice.fill('onyx')
       await voice.press('Enter')
@@ -236,11 +237,11 @@ export async function dshCardPlayChecks({ page, step, output, report }) {
     await composer.waitFor()
     // A new game opens its settings and status tabs first; open the stage after that.
     await page.getByText(/人物设计档案/).filter({ visible: true }).first().waitFor()
-    await page.getByText('舞台', { exact: true }).filter({ visible: true }).last().click()
+    await page.getByText('酒馆状态', { exact: true }).filter({ visible: true }).last().click()
     const choice = page.getByRole('combobox', { name: '舞台样式' })
     await choice.locator('option', { hasText: '大肥鱼舞台' }).waitFor({ state: 'attached' })
     await choice.selectOption({ label: '大肥鱼舞台（dsh-card-dafeiyu-galgame）' })
-    const tab = page.locator('.dsh-tavern-stage-tab')
+    const tab = page.locator('.dsh-tavern-stage-section')
     // The opening scene comes from the card: living room at night, its music, the maid outfit.
     await tab.getByText(/^现代客厅 · ♪ /).waitFor()
     const portrait = tab.locator('img[alt="大肥鱼"]')
@@ -268,7 +269,7 @@ export async function dshCardPlayChecks({ page, step, output, report }) {
     assert.equal(directed.result.time, 'night')
     report.dafeiyu.directed = { background: directed.result.background.name, outfit: directed.result.figure.outfit, music: directed.result.music.name }
     // The stage stays in front while background agents run; it shows the new outfit by itself.
-    await page.waitForFunction(([selector, before]) => { const image = document.querySelector(selector); return image && image.offsetParent && image.getAttribute('src') !== before }, ['.dsh-tavern-stage-tab img[alt="大肥鱼"]', opening], { timeout: 30000 })
+    await page.waitForFunction(([selector, before]) => { const image = document.querySelector(selector); return image && image.offsetParent && image.getAttribute('src') !== before }, ['.dsh-tavern-stage-section img[alt="大肥鱼"]', opening], { timeout: 30000 })
     await page.getByRole('button', { name: '全屏舞台', exact: true }).click()
     await page.waitForTimeout(800)
     await page.screenshot({ path: join(output, 'dafeiyu-stage.png') })
@@ -289,7 +290,7 @@ async function importArchive(page, name, bytes) {
 // Run last: it plays one more turn from the full-screen stage.
 export async function castStageInputChecks({ page, step, report }) {
   await step('舞台全屏：在最后一句后直接发送下一轮', async () => {
-    await page.getByText('舞台', { exact: true }).filter({ visible: true }).last().click()
+    await page.getByText('酒馆状态', { exact: true }).filter({ visible: true }).last().click()
     await page.getByRole('button', { name: '全屏舞台', exact: true }).click()
     const overlay = page.locator('.dsh-tavern-stage-overlay')
     await overlay.waitFor()

@@ -2824,7 +2824,12 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
 [data-ds-dark-theme] .dsh-tavern-cast-name { color: hsl(var(--dsh-cast-hue, 210) 60% 70%); }
 
 /* 舞台（docs/design/cast-presentation.md）：同一局故事的另一种看法，右侧小舞台可展开全屏。 */
-.dsh-tavern-stage-tab .dsh-tavern-status-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dsh-tavern-stage-section { display: flex; flex-direction: column; gap: 10px; }
+.dsh-tavern-stage-head { display: flex; align-items: center; gap: 8px; }
+.dsh-tavern-stage-head > .dsh-tavern-btn { margin-left: auto; }
+.dsh-tavern-stage-head .dsh-tavern-stage-view-switch { margin-left: auto; }
+.dsh-tavern-stage-head .dsh-tavern-stage-view-switch + .dsh-tavern-btn { margin-left: 0; }
+.dsh-tavern-stage-cast > summary { cursor: pointer; font-size: 13px; color: var(--dsw-alias-text-l2); }
 .dsh-tavern-stage-view-switch { margin-left: auto; max-width: 10em; font: inherit; font-size: 12px; }
 .dsh-tavern-stage-body { display: flex; flex-direction: column; gap: 14px; }
 .dsh-tavern-stage-scene { position: relative; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; cursor: pointer; user-select: none; background: linear-gradient(180deg, #2b2f3a 0%, #1b1e26 100%); color: #f4f1ea; }

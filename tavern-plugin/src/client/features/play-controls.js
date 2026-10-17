@@ -317,6 +317,7 @@
 					h("div", { className: "dsh-tavern-status-settle" }, h("span", { className: "dsh-tavern-status-dot " + (view.settleStatus || "idle") }), statusText)
 				),
 					h("div", { className: "dsh-tavern-status-body" },
+                        props.submitStage ? h(TavernStageSection, { sessionId: props.sessionId, submit: props.submitStage, generating: running }) : null,
                         h(TavernBackgroundWait, {sessionId:props.sessionId, activity:view.activity}),
                         h(TavernSaveUpgrade, {key:props.sessionId,sessionId:props.sessionId,busy:running || view.activity?.busy || view.settleStatus === "running"}),
 					["story", "script"].includes(view.mode || "story") && view.requestMode !== "sillytavern" && view.cardUpdate ? h("section", { className: "dsh-tavern-status-section" },
@@ -458,7 +459,7 @@
 					function () { return selector(chat.getSnapshot()); }
 				);
 			}
-			return h(TavernStatusPanel, { sessionId: props.sessionId, useSession: useSession, useChat: useChat, executeSlash: props.executeSlash, openStyleTab: props.openStyleTab });
+			return h(TavernStatusPanel, { sessionId: props.sessionId, useSession: useSession, useChat: useChat, executeSlash: props.executeSlash, openStyleTab: props.openStyleTab, submitStage: props.submitStage });
 		}
 
 		const candidatePanel = { value: null, listeners: new Set() };
@@ -1535,7 +1536,7 @@
 			const slots = input.slots;
 			const uiConversation = ctx.get("uiConversation") || ctx.get("conversation");
 			const executeSlash = createTavernFrameSlashExecutor(ctx);
-            // The stage: another view of the same game, in the right panel (docs/design/cast-presentation.md).
+            // The stage: another view of the same game, at the top of 酒馆状态 (docs/design/cast-presentation.md).
             const submitTavernStageInput = function (sessionId, text) {
                 const scope = ctx.sessions.scope(sessionId);
                 const conversation = ctx.get("conversation");
@@ -1544,10 +1545,6 @@
                 input.setDraft(text);
                 return Promise.resolve(input.submit("queue"));
             };
-            ctx.effect(() => ctx.betterSidebar.registerTab({
-                id: "dsh-tavern:stage", title: "舞台", order: 7, single: true,
-                component: props => React.createElement(TavernStageTab, { sessionId: props.scope.sessionId, submit: submitTavernStageInput })
-            }), "dsh-tavern: stage tab");
             ctx.effect(() => ctx.betterSidebar.registerTab({
                 id: "dsh-tavern:conversation-settings", title: "本局设置", order: 8, single: true,
                 component: props => React.createElement(TavernConversationSettingsTab, { sessionId: props.scope.sessionId, sessions: ctx.sessions })
@@ -1585,7 +1582,7 @@
 				order: 7,
 				single: true,
 				component: function (props) {
-					return React.createElement(TavernStatusTab, { sessions: ctx.sessions, uiConversation: uiConversation, sessionId: props.scope.sessionId, executeSlash: executeSlash, openStyleTab: function (type, meta) { openTavernSidebarTab(ctx, { type: type, meta: meta }, { sessionId: props.scope.sessionId }); } });
+					return React.createElement(TavernStatusTab, { sessions: ctx.sessions, uiConversation: uiConversation, sessionId: props.scope.sessionId, executeSlash: executeSlash, submitStage: submitTavernStageInput, openStyleTab: function (type, meta) { openTavernSidebarTab(ctx, { type: type, meta: meta }, { sessionId: props.scope.sessionId }); } });
 				}
 			}), "dsh-tavern: Better Sidebar status tab");
 			ctx.effect(() => slots.inject("conversation.session.header.utilities", () => slots.register(

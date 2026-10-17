@@ -299,32 +299,35 @@
 				notice ? h("p", { role: "status", className: "dsh-tavern-settings-desc" }, notice) : null);
 		}
 
-		function TavernStageTab(props) {
+		/**
+		 * The stage at the top of 酒馆状态, like a card's status bar: shown for games that have one
+		 * (「对话头像」 on, or a card that brings its own stage), absent otherwise.
+		 */
+		function TavernStageSection(props) {
 			const h = React.createElement;
 			const stage = useTavernCastStage(props.sessionId);
-			const enabled = Boolean(stage.data && stage.data.enabled !== false);
 			const reader = useTavernStageReader(stage.data, true);
 			const [fullscreen, setFullscreen] = React.useState(false);
 			const choice = useTavernStageView(props.sessionId);
 			const reading = useTavernStageReading();
 			const beat = reader.beats[reader.index];
-			React.useEffect(function () {
-				if (reading.on && beat && !fullscreen) void tavernSpeech.speak(tavernBeatSpeech(props.sessionId, beat));
-			}, [reader.index, reader.turn, reading.on, fullscreen]);
 			const data = stage.data;
-			if (!data) return h("aside", { className: "dsh-tavern-status dsh-tavern-stage-tab", "aria-label": "舞台" }, h("p", { className: "dsh-tavern-settings-desc" }, stage.error || "正在读取舞台…"));
-			return h("aside", { className: "dsh-tavern-status dsh-tavern-stage-tab", "aria-label": "舞台" },
-				h("div", { className: "dsh-tavern-status-head" }, h("strong", null, "舞台"),
+			const shown = Boolean(data && data.enabled !== false);
+			React.useEffect(function () {
+				if (shown && reading.on && beat && !fullscreen) void tavernSpeech.speak(tavernBeatSpeech(props.sessionId, beat));
+			}, [reader.index, reader.turn, reading.on, fullscreen, shown]);
+			if (!shown) return null;
+			return h("section", { className: "dsh-tavern-status-section dsh-tavern-stage-section", "aria-label": "舞台" },
+				h("div", { className: "dsh-tavern-stage-head" }, h("span", { className: "dsh-tavern-status-label" }, "舞台"),
 					h(TavernStageViewSwitch, { choice: choice }),
 					h("button", { type: "button", className: "dsh-tavern-btn", onClick: function () { setFullscreen(true); } }, "全屏舞台")),
-				h("div", { className: "dsh-tavern-status-body dsh-tavern-stage-body" },
-				!enabled ? h("p", { className: "dsh-tavern-settings-desc" }, "在「设置 → DSH Tavern → 显示与交互」打开「对话头像」后，后台会标注每句台词的说话人和情绪，舞台才会换人、换表情。") : null,
 				h(TavernStageSceneView, { view: choice.view, sessionId: props.sessionId, data: data, beats: reader.beats, index: reader.index, onAdvance: function () { reader.setIndex(function (value) { return Math.min(reader.beats.length - 1, value + 1); }); },
 					footer: h("div", { className: "dsh-tavern-stage-controls", onClick: function (event) { event.stopPropagation(); } },
 						h("button", { type: "button", "aria-label": "上一句", disabled: reader.index <= 0, onClick: function () { reader.setIndex(function (value) { return Math.max(0, value - 1); }); } }, "‹"),
 						h("span", { className: "dsh-tavern-stage-progress" }, reader.beats.length ? (reader.index + 1) + " / " + reader.beats.length : ""),
 						h("button", { type: "button", "aria-label": "下一句", disabled: reader.index >= reader.beats.length - 1, onClick: function () { reader.setIndex(function (value) { return Math.min(reader.beats.length - 1, value + 1); }); } }, "›"),
 						h(TavernStageReadButton, { reading: reading })) }),
-				h(TavernCastManager, { sessionId: props.sessionId, data: data, onCast: function (cast) { stage.setData(Object.assign({}, data, { cast: cast })); } })),
+				h("details", { className: "dsh-tavern-stage-cast" }, h("summary", null, "角色素材"),
+					h(TavernCastManager, { sessionId: props.sessionId, data: data, onCast: function (cast) { stage.setData(Object.assign({}, data, { cast: cast })); } })),
 				fullscreen ? require("react-dom").createPortal(h(TavernStageFullscreen, { view: choice.view, sessionId: props.sessionId, data: data, generating: props.generating, onSubmit: function (text) { return props.submit(props.sessionId, text); }, onClose: function () { setFullscreen(false); } }), document.body) : null);
 		}
