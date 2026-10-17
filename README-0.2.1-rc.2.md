@@ -1,12 +1,13 @@
-# DSH 0.2.1 官方桌面测试版
+# DSH 0.2.1 测试版
 
 这是面向测试用户的预发布版本，使用 `0.2.1版本` 分支。原有安装方式仍保留在 [README 快速开始](README.md#快速开始)，本页仅提供额外的测试版安装方法。
 
 ## 支持范围
 
-- 宿主仅支持**官方 DeepSeek Harness 0.2.1-rc.2**，从[官网下载](https://deepseek.com/harness/)。安装器会核对内置 DSH 版本，不匹配时停止安装。
+- 桌面宿主支持**官方 DeepSeek Harness 0.2.1-rc.2**，从[官网下载](https://deepseek.com/harness/)。安装器会核对内置 DSH 版本，不匹配时停止安装。
 - macOS（Apple 芯片）和 Windows（64 位）官方桌面；macOS 已本机验证，Windows 安装流程待测试用户验证。
-- 暂不支持社区 DSH Desktop、DSHA、Android APK、Linux 或独立命令行宿主。下面的命令只是把酒馆安装到官方桌面。
+- 另提供独立命令行版，锁定 DSH 0.2.1-rc.2，在浏览器使用酒馆，不需要安装官方桌面。
+- 暂不支持社区 DSH Desktop、DSHA 或 Android APK。桌面与命令行安装方法分别见下文。
 - 本轮不发布一键 EXE 安装包，不要使用原有 EXE 安装这个测试版。
 
 ## 安装前
@@ -32,6 +33,29 @@ $env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString
 ```
 
 看到安装成功后，重新打开官方 DeepSeek Harness，即可进入酒馆。侧栏版本处显示“测试版 · DSH 0.2.1”。
+
+## 独立命令行版（浏览器使用）
+
+先准备 Node.js 22.19 或更高版本以及 pnpm。安装器下载锁定版本的独立 DSH，不修改全局 DSH，不需要官方桌面。
+
+macOS / Linux 终端：
+
+```sh
+curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.sh' -o /tmp/dsh-tavern-testing-install.sh && DSH_TAVERN_HOST=cli DSH_TAVERN_CLI_HOME="$HOME/.dsh-tavern-testing" sh /tmp/dsh-tavern-testing-install.sh
+```
+
+Windows PowerShell：
+
+```powershell
+$env:DSH_TAVERN_HOST='cli'
+$env:DSH_TAVERN_CLI_HOME=Join-Path $HOME '.dsh-tavern-testing'
+$tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.ps1'))
+Invoke-Expression $tavernInstaller
+```
+
+安装后运行 `dsh-tavern start`，按输出地址在浏览器打开；`dsh-tavern stop` 停止，`dsh-tavern status` 查看状态，`dsh-tavern update` 更新。若命令尚未进入 PATH，进入安装目录下的 `apps/dsh-tavern`，运行 `node bin/dsh-tavern.mjs start`。
+
+上述命令使用专用测试目录 `.dsh-tavern-testing`，与官方桌面的 `.dsh` 分开。首次安装会尝试复制默认 `.dsh` 中的旧命令行酒馆数据（仅识别标记为 CLI 的配置），保留源数据；后续两套数据独立变化，不自动同步。自定义旧目录可设置 `DSH_TAVERN_LEGACY_DSH_HOME`，复制前先停止旧酒馆。已有命令行版的 `dsh-tavern` 命令入口会被测试版替换并备份；如需同时使用，分别用各安装目录中的 `node bin/dsh-tavern.mjs` 操作。
 
 ## 独立 profile 切换（实验功能）
 

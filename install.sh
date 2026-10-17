@@ -11,8 +11,8 @@ export pnpm_config_update_notifier=false
 
 INSTALL_HOST=${DSH_TAVERN_HOST:-desktop}
 case ${INSTALL_HOST} in
-  desktop) ;;
-  *) echo "安装失败：测试版仅支持官方 DeepSeek Harness Desktop，不支持宿主 ${INSTALL_HOST}" >&2; exit 1 ;;
+  desktop|cli) ;;
+  *) echo "安装失败：测试版支持官方桌面和独立命令行，不支持宿主 ${INSTALL_HOST}" >&2; exit 1 ;;
 esac
 
 REPOSITORY=${DSH_TAVERN_REPOSITORY:-flizzywine/dsh-tavern}

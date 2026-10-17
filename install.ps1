@@ -3,7 +3,7 @@ $PreviousConsoleOutputEncoding = [Console]::OutputEncoding
 $PreviousOutputEncoding = $OutputEncoding
 
 $InstallHost = if ($env:DSH_TAVERN_HOST) { $env:DSH_TAVERN_HOST } else { 'desktop' }
-if ($InstallHost -ne 'desktop') { throw "测试版仅支持官方 DeepSeek Harness Desktop，不支持宿主：$InstallHost" }
+if ($InstallHost -notin @('desktop', 'cli')) { throw "测试版支持官方桌面和独立命令行，不支持宿主：$InstallHost" }
 
 $Repository = if ($env:DSH_TAVERN_REPOSITORY) { $env:DSH_TAVERN_REPOSITORY } else { 'flizzywine/dsh-tavern' }
 $RepositoryUrl = if ($env:DSH_TAVERN_GIT_URL) { $env:DSH_TAVERN_GIT_URL } else { "https://github.com/$Repository.git" }
