@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "cb84530ca68ce6b8bbde1bb84c438c8a8a7c3310",
-  "releaseSequence": 649,
+  "revision": "ad21a0f501cd5e361dbb3c7d64043e1db5597179",
+  "releaseSequence": 650,
   "version": "2.7.0",
   "files": [
     {
@@ -55,6 +55,11 @@
       "size": 7898
     },
     {
+      "path": "bin/desktop-profile-installation.mjs",
+      "sha256": "4f5a4071299fb301649344dec94aabdb805af10cbf76d4b3ca92329b5811231c",
+      "size": 6554
+    },
+    {
       "path": "bin/download.cjs",
       "sha256": "c44dd6da3e3089d9113d31703ea61d9599bf43d0e8d4f2550da25c3af90297a2",
       "size": 17033
@@ -81,8 +86,8 @@
     },
     {
       "path": "bin/import-user-home.mjs",
-      "sha256": "fd306e2953cdb9b037a0b6b317beefa2530eb5ced639d17a64aecb89f5bdf92f",
-      "size": 9889
+      "sha256": "9ca8ff72fc668d1932cbf1d1e0c1e34f04ded879e7ee1250b542616a3eb1402c",
+      "size": 10092
     },
     {
       "path": "bin/installation-process.mjs",
@@ -91,8 +96,8 @@
     },
     {
       "path": "bin/installation-receipt.mjs",
-      "sha256": "6a0460f749b92c512ff13719cd6948d9f518d40a396f74db60f7a75e3a47253d",
-      "size": 2370
+      "sha256": "997956a599791052cd6294942fde9d1ce56f9045905868801557a5d4e855d472",
+      "size": 2337
     },
     {
       "path": "bin/installation-state.cjs",
@@ -101,8 +106,8 @@
     },
     {
       "path": "bin/launcher-environment.mjs",
-      "sha256": "80dd5933f399f013302230d06d1a543dbfd25c1c45df70c96feb358bcbca6424",
-      "size": 12084
+      "sha256": "33cfb240057cb3aefd535c5d030d864ac7597f2cdb5667468d68cd3d67ff424e",
+      "size": 11856
     },
     {
       "path": "bin/launcher-settings.mjs",
@@ -136,13 +141,13 @@
     },
     {
       "path": "bin/profile-configuration.mjs",
-      "sha256": "ec1c4a9a190dd6d0989a75f44390817199ef76d572a7ccab247bbe3008d24582",
-      "size": 14002
+      "sha256": "282cb5ec57503ada1e895520b21decc8726ad3bdad24f8288e2bb99b33bc02d8",
+      "size": 14056
     },
     {
       "path": "bin/profile-installation.mjs",
-      "sha256": "00e1532f3657e575674327589492a69ec3dc104744e9bd3d276d026f99d7a1c9",
-      "size": 19528
+      "sha256": "5c9da89e84be53abf6d6776178524a37b64ae723eb5be2441ee2df448405e358",
+      "size": 19428
     },
     {
       "path": "bin/prune-installed-files.mjs",
@@ -201,8 +206,8 @@
     },
     {
       "path": "bin/validate-desktop-profile.mjs",
-      "sha256": "6f73cad3d3ec5e503586469c696b3817f7ae8abfa848b3eeaf4a1820fa588847",
-      "size": 1435
+      "sha256": "fe30ed8d95bceb954177c6e3eeccd3420c08a82123042595ae29f43f85922c42",
+      "size": 1497
     },
     {
       "path": "bin/vendor-dream-skin.mjs",
@@ -266,13 +271,13 @@
     },
     {
       "path": "install.ps1",
-      "sha256": "9dfc50607a1440a6b6d45140d45469d8cb559ba8111609a5b9d619ef89842317",
-      "size": 77267
+      "sha256": "885fa82795b70bcb231b6be99ebfd19fcb822d5dccdc0671764fafaaa2f83b60",
+      "size": 77349
     },
     {
       "path": "install.sh",
-      "sha256": "f3b9d7c7ebb91936752eee4e6175051573149d698f886afe60c006dcb3354138",
-      "size": 59626
+      "sha256": "81e18f542760682322d790cce975245c4ab99d40d24ac29a8af25f45edf098ec",
+      "size": 59699
     },
     {
       "path": "package.json",
@@ -4361,8 +4366,8 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/README.md",
-      "sha256": "1dce00c9b34b81a4d11366520cdb9dfe6a52c09ab3ee8699dc90db6972ff21ff",
-      "size": 2384
+      "sha256": "b8d2eee49b58659960c8657055de4eb28de560729c60967982a64fab54c285e9",
+      "size": 2303
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-card-memory/index.js",
