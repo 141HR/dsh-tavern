@@ -137,18 +137,14 @@
 				React.createElement(TavernStagePluginScene, { view: props.view, input: input, fallback: builtin }));
 		}
 
-		function useTavernStageReader(data, startAtLatestLine) {
+		// A new turn is read from its first beat; beats added to the same turn keep the reader's place.
+		function useTavernStageReader(data) {
 			const turns = data && Array.isArray(data.turns) ? data.turns : [];
 			const latest = turns.length ? turns[turns.length - 1] : null;
 			const beats = React.useMemo(function () { return latest ? tavernStageBeats(latest) : []; }, [latest && latest.turn, latest && latest.text, latest && JSON.stringify(latest.lines)]);
-			const initial = function () {
-				if (!startAtLatestLine) return 0;
-				for (let at = beats.length - 1; at >= 0; at -= 1) if (beats[at].kind === "line") return at;
-				return Math.max(0, beats.length - 1);
-			};
-			const [index, setIndex] = React.useState(initial);
-			const key = latest ? latest.turn + ":" + beats.length : "";
-			React.useEffect(function () { setIndex(initial()); }, [key]);
+			const [index, setIndex] = React.useState(0);
+			const key = latest ? latest.turn + ":" + (beats[0] ? beats[0].text : "") : "";
+			React.useEffect(function () { setIndex(0); }, [key]);
 			return { beats: beats, index: Math.min(index, Math.max(0, beats.length - 1)), setIndex: setIndex, turn: latest && latest.turn };
 		}
 
@@ -178,7 +174,7 @@
 
 		function TavernStageFullscreen(props) {
 			const h = React.createElement;
-			const reader = useTavernStageReader(props.data, false);
+			const reader = useTavernStageReader(props.data);
 			const [auto, setAuto] = React.useState(false);
 			const reading = useTavernStageReading();
 			const [draft, setDraft] = React.useState("");
@@ -307,7 +303,7 @@
 		function TavernStageSection(props) {
 			const h = React.createElement;
 			const stage = useTavernCastStage(props.sessionId);
-			const reader = useTavernStageReader(stage.data, true);
+			const reader = useTavernStageReader(stage.data);
 			const [fullscreen, setFullscreen] = React.useState(false);
 			const choice = useTavernStageView(props.sessionId);
 			const reading = useTavernStageReading();

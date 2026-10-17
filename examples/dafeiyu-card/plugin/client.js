@@ -38,9 +38,10 @@ window.__ModuleLoader__.load({
         scene && scene.background ? h('div', { style: { position: 'absolute', top: 10, left: 12, fontSize: 12, padding: '2px 10px', borderRadius: 12, background: 'rgba(0,0,0,.4)' } },
           scene.background.name + (scene.music ? ' · ♪ ' + scene.music.name : '')) : null,
         portrait ? h('img', { src: portrait, alt: figure.names[0], style: { position: 'absolute', bottom: 96, left: '50%', transform: 'translateX(-50%)' + (speaking ? ' translateY(-4px)' : ''), maxHeight: '62%', maxWidth: '80%', objectFit: 'contain', transition: 'transform .3s', filter: beat && beat.kind === 'line' && !speaking ? 'brightness(.75)' : 'none' } }) : null,
-        h('div', { style: { position: 'absolute', left: 12, right: 12, bottom: 12, minHeight: 80, padding: '10px 14px', borderRadius: 8, background: 'rgba(10,20,40,.72)' } },
-          beat && beat.kind === 'line' ? h('div', { style: { fontWeight: 600, marginBottom: 4, color: speaking ? '#8fb7ff' : '#fff' } }, beat.speaker) : null,
-          h('div', { style: { lineHeight: 1.6, fontStyle: beat && beat.kind === 'narration' ? 'italic' : 'normal' } }, beat ? beat.text : '还没有可以演出的正文'),
+        // A fixed-height box: the pager stays put however long the line is; a long line scrolls inside.
+        h('div', { style: { position: 'absolute', left: 12, right: 12, bottom: 12, height: fullscreen ? 168 : 128, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', padding: '10px 14px', borderRadius: 8, background: 'rgba(10,20,40,.72)' } },
+          beat && beat.kind === 'line' ? h('div', { style: { flex: 'none', fontWeight: 600, marginBottom: 4, color: speaking ? '#8fb7ff' : '#fff' } }, beat.speaker) : null,
+          h('div', { style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', lineHeight: 1.6, fontStyle: beat && beat.kind === 'narration' ? 'italic' : 'normal' } }, beat ? beat.text : '还没有可以演出的正文'),
           footer))
     }
 

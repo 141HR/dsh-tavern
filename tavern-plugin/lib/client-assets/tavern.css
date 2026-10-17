@@ -2847,16 +2847,16 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
 .dsh-tavern-stage-figure.is-dim { filter: brightness(.55) saturate(.8); }
 .dsh-tavern-stage-figure.is-speaking { transform: translateY(-1.5%); }
 .dsh-tavern-stage-figure-letter { margin-bottom: 8%; width: min(46%, 120px); aspect-ratio: 1; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: clamp(20px, 5vw, 48px); font-weight: 600; color: #fff; background: hsl(var(--dsh-cast-hue, 210) 45% 52%); box-shadow: 0 6px 24px rgba(0,0,0,.35); }
-.dsh-tavern-stage-textbox { position: absolute; left: 3%; right: 3%; bottom: 3%; min-height: 24%; padding: 10px 14px; border-radius: 10px; background: rgba(12, 14, 20, .72); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.12); display: flex; flex-direction: column; gap: 4px; }
+.dsh-tavern-stage-textbox { position: absolute; left: 3%; right: 3%; bottom: 3%; height: 30%; min-height: 96px; padding: 10px 14px; border-radius: 10px; background: rgba(12, 14, 20, .72); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.12); display: flex; flex-direction: column; gap: 4px; }
 .dsh-tavern-stage-textbox.is-empty { align-items: center; justify-content: center; color: rgba(244,241,234,.7); font-size: 13px; }
 .dsh-tavern-stage-name { display: flex; align-items: baseline; gap: 8px; font-weight: 600; font-size: 14px; color: hsl(var(--dsh-cast-hue, 210) 70% 75%); }
-.dsh-tavern-stage-text { font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; animation: dsh-tavern-stage-fade .25s ease both; }
+.dsh-tavern-stage-text { flex: 1 1 auto; min-height: 0; overflow-y: auto; font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; animation: dsh-tavern-stage-fade .25s ease both; }
 .dsh-tavern-stage-text.is-narration { color: rgba(244,241,234,.86); }
-.dsh-tavern-stage-scene.is-fullscreen .dsh-tavern-stage-textbox { left: 50%; right: auto; width: min(960px, 92vw); transform: translateX(-50%); bottom: 88px; min-height: 140px; padding: 16px 22px; }
+.dsh-tavern-stage-scene.is-fullscreen .dsh-tavern-stage-textbox { left: 50%; right: auto; width: min(960px, 92vw); transform: translateX(-50%); bottom: 88px; height: 168px; padding: 16px 22px; }
 .dsh-tavern-stage-scene.is-fullscreen .dsh-tavern-stage-text { font-size: 18px; }
 .dsh-tavern-stage-scene.is-fullscreen .dsh-tavern-stage-name { font-size: 17px; }
 .dsh-tavern-stage-scene.is-fullscreen .dsh-tavern-stage-figures { inset: 4% 0 96px 0; }
-.dsh-tavern-stage-controls { display: flex; align-items: center; gap: 6px; margin-top: auto; font-size: 12px; color: rgba(244,241,234,.7); }
+.dsh-tavern-stage-controls { flex: none; display: flex; align-items: center; gap: 6px; margin-top: auto; font-size: 12px; color: rgba(244,241,234,.7); }
 .dsh-tavern-stage-controls button { min-width: 28px; height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: inherit; cursor: pointer; }
 .dsh-tavern-stage-controls button:disabled { opacity: .35; cursor: default; }
 .dsh-tavern-stage-controls button.is-on { background: rgba(255,255,255,.22); color: #fff; }
