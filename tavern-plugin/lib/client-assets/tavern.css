@@ -970,8 +970,10 @@ body.dsh-tavern-shell-active [data-dsh-panel-host] { overflow: clip; }
 .dsh-tavern-choice-trigger:disabled { opacity: .5; cursor: not-allowed; }
 
 .dsh-tavern-image-preview { position: fixed; inset: 0; box-sizing: border-box; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 64px 20px 20px; border: 0; background: rgba(0,0,0,.92); overflow: hidden; }
-.dsh-tavern-image-preview.is-compact { display: grid; place-items: center; }
-.dsh-tavern-image-preview.is-compact img { width: auto; height: auto; max-width: min(360px, 90vw); max-height: min(360px, 70dvh); border-radius: 16px; background: #f4f2ee; }
+/* An avatar floats over the page as it is: no dark cover, just the picture with a shadow. */
+.dsh-tavern-image-preview.is-compact { display: grid; place-items: center; background: transparent; }
+.dsh-tavern-image-preview.is-compact::backdrop { background: transparent; }
+.dsh-tavern-image-preview.is-compact img { width: auto; height: auto; max-width: min(360px, 90vw); max-height: min(360px, 70dvh); border-radius: 16px; background: #f4f2ee; box-shadow: 0 12px 40px rgba(0,0,0,.28), 0 0 0 1px rgba(0,0,0,.06); }
 .dsh-tavern-image-preview::backdrop { background: rgba(0,0,0,.8); }
 .dsh-tavern-image-preview img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .dsh-tavern-image-preview button { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); min-height: 40px; padding: 8px 16px; border: 1px solid #aaa; border-radius: 8px; background: #fff; color: #111; cursor: pointer; font-size: 16px; }
