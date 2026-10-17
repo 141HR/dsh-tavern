@@ -27,7 +27,7 @@ function figurePng([r, g, b], width = 120, height = 200) {
 // The stage: right panel, character material, full-screen reader that can send the next input.
 export async function castStageChecks({ page, step, output, report }) {
   await step('插件舞台：导演插件定下的地点和时间画在舞台上，可选回内置舞台', async () => {
-    await page.getByRole('button', { name: '舞台', exact: true }).filter({ visible: true }).first().click()
+    await page.getByText('舞台', { exact: true }).filter({ visible: true }).last().click()
     const choice = page.getByRole('combobox', { name: '舞台样式' })
     assert.equal(await choice.inputValue(), 'tavern-plugin-director:scene', '装了插件舞台时默认用它')
     await page.locator('.dsh-tavern-stage-tab').getByText('酒馆大堂 · 夜晚', { exact: true }).waitFor()
@@ -108,7 +108,7 @@ export async function castSpeechChecks({ page, step, output, report }) {
       assert.deepEqual(requests[0].body, { model: 'tts-1', input: '欢迎回来，这是你的奖励。', voice: 'alloy', response_format: 'mp3' })
       assert.equal(requests[0].authorization, 'Bearer sk-e2e')
 
-      await page.getByRole('button', { name: '舞台', exact: true }).filter({ visible: true }).first().click()
+      await page.getByText('舞台', { exact: true }).filter({ visible: true }).last().click()
       const voice = page.getByLabel('店主 的声音', { exact: true })
       await voice.fill('onyx')
       await voice.press('Enter')
@@ -236,7 +236,7 @@ export async function dshCardPlayChecks({ page, step, output, report }) {
     await composer.waitFor()
     // A new game opens its settings and status tabs first; open the stage after that.
     await page.getByText(/人物设计档案/).filter({ visible: true }).first().waitFor()
-    await page.getByRole('button', { name: '舞台', exact: true }).filter({ visible: true }).first().click()
+    await page.getByText('舞台', { exact: true }).filter({ visible: true }).last().click()
     const choice = page.getByRole('combobox', { name: '舞台样式' })
     await choice.locator('option', { hasText: '大肥鱼舞台' }).waitFor({ state: 'attached' })
     await choice.selectOption({ label: '大肥鱼舞台（dsh-card-dafeiyu-galgame）' })
@@ -289,7 +289,7 @@ async function importArchive(page, name, bytes) {
 // Run last: it plays one more turn from the full-screen stage.
 export async function castStageInputChecks({ page, step, report }) {
   await step('舞台全屏：在最后一句后直接发送下一轮', async () => {
-    await page.getByRole('button', { name: '舞台', exact: true }).filter({ visible: true }).first().click()
+    await page.getByText('舞台', { exact: true }).filter({ visible: true }).last().click()
     await page.getByRole('button', { name: '全屏舞台', exact: true }).click()
     const overlay = page.locator('.dsh-tavern-stage-overlay')
     await overlay.waitFor()

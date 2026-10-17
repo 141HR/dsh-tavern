@@ -1,25 +1,6 @@
 		// The stage (docs/design/cast-presentation.md): another view of the same story. A small
 		// stage in the right panel, expandable to a full-screen visual-novel reader. It only reads
 		// the story text, its dialogue annotations and the card's character material.
-		const tavernCastSettings = (function () {
-			let enabled = null, loading = null;
-			const listeners = new Set();
-			function load() {
-				if (loading) return loading;
-				loading = rpc("getTavernSettings").then(function (result) { enabled = result.settings && result.settings.castPresentation === true; },
-					function () { enabled = false; }).finally(function () { loading = null; listeners.forEach(function (listener) { listener(); }); });
-				return loading;
-			}
-			if (typeof window.addEventListener === "function") window.addEventListener("dsh-tavern-settings-changed", function () { void load(); });
-			return {
-				subscribe: function (listener) { listeners.add(listener); if (enabled === null) void load(); return function () { listeners.delete(listener); }; },
-				get: function () { return enabled === true; }
-			};
-		})();
-		function useTavernCastEnabled() {
-			return React.useSyncExternalStore(tavernCastSettings.subscribe, tavernCastSettings.get);
-		}
-
 		function useTavernCastStage(sessionId) {
 			const live = useLiveTavernView(sessionId, "cast-stage", [["settlementTurn"], ["updatedAt"]]);
 			const turnKey = live.view ? String(live.view.settlementTurn || 0) + ":" + String(live.view.updatedAt || 0) : "";

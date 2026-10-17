@@ -11882,25 +11882,6 @@ function bindTavernFontZoom(node, win) {
 		// The stage (docs/design/cast-presentation.md): another view of the same story. A small
 		// stage in the right panel, expandable to a full-screen visual-novel reader. It only reads
 		// the story text, its dialogue annotations and the card's character material.
-		const tavernCastSettings = (function () {
-			let enabled = null, loading = null;
-			const listeners = new Set();
-			function load() {
-				if (loading) return loading;
-				loading = rpc("getTavernSettings").then(function (result) { enabled = result.settings && result.settings.castPresentation === true; },
-					function () { enabled = false; }).finally(function () { loading = null; listeners.forEach(function (listener) { listener(); }); });
-				return loading;
-			}
-			if (typeof window.addEventListener === "function") window.addEventListener("dsh-tavern-settings-changed", function () { void load(); });
-			return {
-				subscribe: function (listener) { listeners.add(listener); if (enabled === null) void load(); return function () { listeners.delete(listener); }; },
-				get: function () { return enabled === true; }
-			};
-		})();
-		function useTavernCastEnabled() {
-			return React.useSyncExternalStore(tavernCastSettings.subscribe, tavernCastSettings.get);
-		}
-
 		function useTavernCastStage(sessionId) {
 			const live = useLiveTavernView(sessionId, "cast-stage", [["settlementTurn"], ["updatedAt"]]);
 			const turnKey = live.view ? String(live.view.settlementTurn || 0) + ":" + String(live.view.updatedAt || 0) : "";
@@ -14220,7 +14201,8 @@ function bindTavernFontZoom(node, win) {
 		// (after the first turn, when the sidebar remounts), and reopening then would cover the tab the
 		// player brought forward, such as the stage.
 		let tavernSettingsTabsShownFor = "";
-		// A game whose card brings its own stage (a DSH card's plugin) opens on that stage.
+		// The stage has no header button: a game with a stage (「对话头像」 on, or a card that brings its own,
+		// such as a DSH card's plugin) opens on it; it can also be opened from the sidebar's + menu.
 		async function tavernCardStageFor(sessionId) {
 			try {
 				await tavernCardPluginScopes.load();
@@ -14236,10 +14218,14 @@ function bindTavernFontZoom(node, win) {
 			} catch (_) {}
 		}
 		const tavernAutoOpenStatus = (function () {
-			let enabled = true, loaded = null;
-			function load() { loaded = rpc("getTavernSettings").then(function (result) { enabled = !(result && result.settings && result.settings.autoOpenStatusPanel === false); }, function () {}); return loaded; }
+			let enabled = true, stage = false, loaded = null;
+			function load() { loaded = rpc("getTavernSettings").then(function (result) { const settings = result && result.settings || {}; enabled = settings.autoOpenStatusPanel !== false; stage = settings.castPresentation === true; }, function () {}); return loaded; }
 			if (typeof window.addEventListener === "function") window.addEventListener("dsh-tavern-settings-changed", function () { void load(); });
-			return { read: function () { return (loaded || load()).then(function () { return enabled; }); } };
+			return {
+				read: function () { return (loaded || load()).then(function () { return enabled; }); },
+				// With 「对话头像」 on every game has a stage.
+				stage: function () { return (loaded || load()).then(function () { return stage; }); }
+			};
 		})();
 
 		function TavernSidebar(props) {
@@ -15482,7 +15468,7 @@ function bindTavernFontZoom(node, win) {
 					toggleSidebar: function () { if (props.wide) ctx.layout.toggleSidebar(); else props.expandSidebar(); },
 					// Entering a game or the card workspace opens these tabs beside it. On phone-width
 					// layouts the right column covers the story, so leave it closed and show the story (#213).
-					openConversationSettingsTab: async function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); if (tavernSettingsTabsShownFor === sessionId) return; tavernSettingsTabsShownFor = sessionId; if (!await tavernAutoOpenStatus.read()) return; await openTavernSidebarTab(ctx, { type: "dsh-tavern:conversation-settings" }, { sessionId: sessionId }); await openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId: sessionId }); if (await tavernCardStageFor(sessionId)) await openTavernSidebarTab(ctx, { type: "dsh-tavern:stage" }, { sessionId: sessionId }); expandTavernRightColumn(ctx); },
+					openConversationSettingsTab: async function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); if (tavernSettingsTabsShownFor === sessionId) return; tavernSettingsTabsShownFor = sessionId; if (!await tavernAutoOpenStatus.read()) return; await openTavernSidebarTab(ctx, { type: "dsh-tavern:conversation-settings" }, { sessionId: sessionId }); await openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId: sessionId }); if (await tavernAutoOpenStatus.stage() || await tavernCardStageFor(sessionId)) await openTavernSidebarTab(ctx, { type: "dsh-tavern:stage" }, { sessionId: sessionId }); expandTavernRightColumn(ctx); },
 					openCardLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:cards", meta: null }, { sessionId: sessionId }); },
 					openPresetLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:presets" }, { sessionId: sessionId }); },
 					openWorldBookLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:worldbooks" }, { sessionId: sessionId }); },
@@ -20103,22 +20089,6 @@ function bindTavernFontZoom(node, win) {
                         h(TavernConversationPlugins, { key: owner + ":plugins", sessionId: owner }))) : h("p", null, "请选择一个游玩对话。")));
         }
 
-        function TavernStageAction(props) {
-            const owner = props.sessions.subagentAddress(props.sessionId)?.parentSessionId || props.sessionId;
-            const mode = useTavernSessionMode(owner);
-            useTavernUiExtensions();
-            const scopes = useTavernCardPluginScopes();
-            // A card that brings its own stage shows the entry even with 「对话头像」 off.
-            const cardStage = tavernUiExtensions.stageViews().some(function (entry) { return scopes[entry.owner] && tavernPluginAllowed(entry.owner, owner); });
-            const enabled = useTavernCastEnabled() || cardStage;
-            if (!enabled || !isPlayMode(mode)) return null;
-            return React.createElement("button", { type: "button", className: "dsh-tavern-btn dsh-tavern-header-settings", "aria-label": "舞台", title: "打开舞台", onClick: () => props.open(owner) },
-                React.createElement("svg", { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },
-                    React.createElement("path", { d: "M3 5h18v11H3zM8 20h8M12 16v4" }),
-                    React.createElement("circle", { cx: 12, cy: 10, r: 2.5 })),
-                React.createElement("span", { className: "dsh-tavern-header-action-label" }, "舞台"));
-        }
-
         function TavernConversationSettingsAction(props) {
             const owner = props.sessions.subagentAddress(props.sessionId)?.parentSessionId || props.sessionId;
             const mode = useTavernSessionMode(owner);
@@ -20682,10 +20652,6 @@ function bindTavernFontZoom(node, win) {
                 id: "dsh-tavern:stage", title: "舞台", order: 7, single: true,
                 component: props => React.createElement(TavernStageTab, { sessionId: props.scope.sessionId, submit: submitTavernStageInput })
             }), "dsh-tavern: stage tab");
-            ctx.effect(() => slots.inject("conversation.session.header.utilities", () => slots.register(
-                { name: "conversation.session.header.utilities", id: "dsh-tavern-stage", order: 79 },
-                props => React.createElement(TavernStageAction, { ...props, sessions: ctx.sessions, open: sessionId => openTavernSidebarTab(ctx, { type: "dsh-tavern:stage" }, { sessionId }) })
-            )), "dsh-tavern: stage action");
             ctx.effect(() => ctx.betterSidebar.registerTab({
                 id: "dsh-tavern:conversation-settings", title: "本局设置", order: 8, single: true,
                 component: props => React.createElement(TavernConversationSettingsTab, { sessionId: props.scope.sessionId, sessions: ctx.sessions })
