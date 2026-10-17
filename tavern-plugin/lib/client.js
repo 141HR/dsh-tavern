@@ -18634,19 +18634,18 @@ function bindTavernFontZoom(node, win) {
                 } catch (err) { setError(String(err.message || err)); }
                 finally { setRequestBusy(false); }
             }
-            if (!state && !error || state?.storage === "current" && state?.sessions?.ready && !started) return null;
+            if (!state && !error || state?.storage === "current" && state?.sessions?.ready) return null;
             const h = React.createElement;
             const busy = requestBusy || state?.phase === "running";
-            const complete = state?.storage === "current" && state?.sessions?.ready && state.phase === "completed";
-            const stage = {sessions:"正在检查会话日志升级…",reading:"正在读取剧情与变量…",converting:"正在升级存储并读回存档…",verifying:"正在校验剧情、变量和历史版本…"}[state?.stage] || "正在升级…";
-            return h("section", {className:"dsh-tavern-status-section", "aria-label":"存档升级"},
-                h("div", {className:"dsh-tavern-status-label"}, "存档升级"),
-                h("div", {className:"dsh-tavern-status-empty"}, complete ? "会话日志和剧情存储均已升级。旧文件和历史版本已保留。" : "统一升级本局的会话日志与剧情存储，保留正文、变量、分支和历史版本。旧文件保留原样；升级后的新进度写入新版存档。"),
+            const stage = {sessions:"正在检查会话日志迁移…",reading:"正在读取剧情与变量…",converting:"正在迁移存储并读回存档…",verifying:"正在校验剧情、变量和历史版本…"}[state?.stage] || "正在迁移…";
+            return h("section", {className:"dsh-tavern-status-section", "aria-label":"存档迁移"},
+                h("div", {className:"dsh-tavern-status-label"}, "存档迁移"),
+                h("div", {className:"dsh-tavern-status-empty"}, "统一迁移本局的会话日志与剧情存储，保留正文、变量、分支和历史版本。旧文件保留原样；迁移后的新进度写入新版存档。"),
                 busy ? h("div", {role:"status"}, stage + " 大存档可能需要较长时间，暂时不要关闭或重启酒馆。") : null,
                 error || state?.phase === "failed" ? h("div", {className:"dsh-card-error",role:"alert"}, error || state.error) : null,
-                !state ? h("button", {className:"dsh-tavern-btn",onClick:()=>setRefresh(value=>value+1)}, "重新检查存档升级") :
-                !complete ? h("button", {type:"button",className:"dsh-tavern-btn",disabled:busy || props.busy,onClick:migrate}, busy ? "升级中…" : state.phase === "failed" ? "重试升级" : "升级存档") : null,
-                !busy && props.busy && !complete ? h("div", {className:"dsh-tavern-status-empty"}, "请等待本轮游玩和后台结算完成后再升级。") : null
+                !state ? h("button", {className:"dsh-tavern-btn",onClick:()=>setRefresh(value=>value+1)}, "重新检查存档迁移") :
+                h("button", {type:"button",className:"dsh-tavern-btn",disabled:busy || props.busy,onClick:migrate}, busy ? "迁移中…" : state.phase === "failed" ? "重试迁移" : "迁移存档"),
+                !busy && props.busy ? h("div", {className:"dsh-tavern-status-empty"}, "请等待本轮游玩和后台结算完成后再迁移。") : null
             );
         }
 

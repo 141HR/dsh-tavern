@@ -584,8 +584,8 @@ try {
     await inspectScreen()
     assert.deepEqual(await readFile(legacySession.oldFile), legacySession.bytes)
     assert.equal(parseSessionLog(await readFile(legacySession.newFile)).header.version, 4)
-    const migration=page.getByRole('region',{name:'存档升级',exact:true})
-    const button=migration.getByRole('button',{name:'升级存档',exact:true})
+    const migration=page.getByRole('region',{name:'存档迁移',exact:true})
+    const button=migration.getByRole('button',{name:'迁移存档',exact:true})
     await button.waitFor()
     await page.screenshot({path:join(output,'migration-before.png'),fullPage:true})
     await page.setViewportSize({width:390,height:844})
@@ -595,7 +595,7 @@ try {
     await page.screenshot({path:join(output,'migration-mobile.png'),fullPage:true})
     const started=Date.now()
     await button.click()
-    await migration.getByText('会话日志和剧情存储均已升级。旧文件和历史版本已保留。',{exact:true}).waitFor()
+    await migration.waitFor({state:'hidden'})
     const migrated=createChatJournalStore({dataRoot:data})
     for(let i=0;i<history.length;i++)assert.deepEqual(await migrated.readRevision(original.id,i+1),history[i])
     // Live iframe diagnostics can change when the viewport changes; migration
@@ -607,7 +607,7 @@ try {
     await page.screenshot({path:join(output,'migration-complete.png'),fullPage:true})
     await page.reload({waitUntil:'domcontentloaded'})
     await inspectScreen()
-    assert.equal(await page.getByRole('button',{name:'升级存档',exact:true}).count(),0)
+    assert.equal(await page.getByRole('button',{name:'迁移存档',exact:true}).count(),0)
     await assertNativeStorage()
   })
   if (process.argv.includes('--settlement-performance')) {
