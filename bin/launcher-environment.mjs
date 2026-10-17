@@ -21,15 +21,8 @@ export const LEGACY_DSH_ROOT = process.env.DSH_TAVERN_LEGACY_DSH_HOME || process
 export const DSH_ROOT = path.resolve(RUNTIME_HOST === 'cli'
   ? (process.env.DSH_TAVERN_CLI_HOME || (installation.host === 'cli' && installation.dshHome) || path.join(os.homedir(), '.dsh-tavern'))
   : (process.env.DSH_HOME || path.join(os.homedir(), '.dsh')))
-// A bridge installation owns tavern even when Desktop currently shows its original profile.
-export function installedProfile(host, home) {
-  if (host !== 'desktop') return 'tavern'
-  try {
-    const manifest = JSON.parse(readFileSync(path.join(home, 'profiles', 'tavern', 'package.json'), 'utf8'))
-    if (manifest.dshTavern?.profileBridge === true) return 'tavern'
-  } catch (error) { if (error.code !== 'ENOENT') throw error }
-  return 'desktop'
-}
+// All new testing installations own a separate tavern profile.
+export function installedProfile() { return 'tavern' }
 export const PROFILE = installedProfile(RUNTIME_HOST, DSH_ROOT)
 export const CLI_RUNTIME_ROOT = path.join(DSH_ROOT, 'runtime')
 export function runtimeEnvironment({ installation = true } = {}) {
@@ -80,6 +73,8 @@ export const TAVERN_SIDEBAR_DEFAULTS = {
 }
 export const REQUIRED_SOURCE_FILES = [
   'package.json',
+  'bin/desktop-profile-installation.mjs',
+  'tavern-plugin/packages/dsh-profile-bridge/lib/helper.mjs',
   'cordis.patch.yml',
   path.join('config', 'legacy-profile-patch-v0.6.yml'),
   'pnpm-workspace.yaml',

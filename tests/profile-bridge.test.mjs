@@ -25,7 +25,7 @@ test('仍有进程时超时退出，不发送结束进程信号',async()=>{await
 test('桥接安装更新始终写 tavern，不取决于 desktop 当前是否是链接', async t => {
  const { installedProfile } = await import('../bin/launcher-environment.mjs')
  const r=fixture(t);const home=join(r.profilesRoot,'home');mkdirSync(join(home,'profiles/tavern'),{recursive:true})
- assert.equal(installedProfile('desktop',home),'desktop')
+ assert.equal(installedProfile('desktop',home),'tavern')
  writeFileSync(join(home,'profiles/tavern/package.json'),JSON.stringify({dshTavern:{profileBridge:true}}))
  assert.equal(installedProfile('desktop',home),'tavern')
  assert.equal(installedProfile('cli',home),'tavern')

@@ -57,11 +57,21 @@ Invoke-Expression $tavernInstaller
 
 上述命令使用专用测试目录 `.dsh-tavern-testing`，与官方桌面的 `.dsh` 分开。首次安装会尝试复制默认 `.dsh` 中的旧命令行酒馆数据（仅识别标记为 CLI 的配置），保留源数据；后续两套数据独立变化，不自动同步。自定义旧目录可设置 `DSH_TAVERN_LEGACY_DSH_HOME`，复制前先停止旧酒馆。已有命令行版的 `dsh-tavern` 命令入口会被测试版替换并备份；如需同时使用，分别用各安装目录中的 `node bin/dsh-tavern.mjs` 操作。
 
-## 独立 profile 切换（实验功能）
+## 桌面版：独立 tavern 与原版切换
 
-本分支另附 [Profile 桥接兼容插件](tavern-plugin/packages/dsh-profile-bridge/README.md)，已在 macOS 官方桌面 0.2.1-rc.2 验证酒馆与原版配置往返。它通过目录链接加载独立 `tavern`，保留原版 `desktop`；需正常退出应用后完成切换，再手动启动。
+桌面安装会自动将酒馆装到独立 `profiles/tavern`，再让官方桌面的 `profiles/desktop` 入口链接到它。安装后启动即进入酒馆；这不是官方原生 profile 选择器。
 
-**上面的安装命令尚不会自动启用桥接。** 已手动配置桥接的安装会根据 `tavern` 配置中的标记继续更新酒馆目录，避免覆盖原版配置。Windows 桥接尚未实机验证，使用方法、备份要求见插件说明。
+两边都保留 **设置 → 配置档案**：
+
+- 酒馆切回原版：点击“还原为独立 profile”。
+- 原版切回酒馆：选择 `tavern`，点击“使用它”。
+- 点击后在两分钟内正常退出桌面，稍后重新启动。插件不强制结束进程，超时取消切换。
+
+安装前必须完整退出官方桌面；安装过程中不要重新打开。每次安装保留完整配置目录备份，位置显示在安装日志中：`.dsh/backups/profile-bridge-install-*`。原版配置另保留在 `profiles/desktop.fresh-*`，供切换入口还原；不要删除这些目录。存档正文、历史和附件不因 profile 切换而搬动；配置独立不代表账号或全部宿主数据隔离。
+
+已有测试版若占用了 `desktop`，安装器会将当前酒馆配置复制到 `tavern`，并查找原版目录备份或成对的配置文件备份。找不到原版备份时停止，不覆盖现有 profile；需先恢复原版 desktop 备份，再重试。安装失败会恢复之前的 profile 入口和目录，失败现场及备份仍保留；中断后的未完成目录事务在下次安装时恢复。
+
+重新运行安装命令会继续更新独立 `tavern`，安装成功后默认进入酒馆。macOS 桥接已实机验证；Windows junction 切换仍待实机验证。实现与来源见 [桥接插件说明](tavern-plugin/packages/dsh-profile-bridge/README.md)。
 
 ## 从旧命令行版或自定义目录继承数据
 
