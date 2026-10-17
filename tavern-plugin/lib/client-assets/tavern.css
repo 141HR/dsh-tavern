@@ -2534,12 +2534,20 @@ button.dsh-tavern-play-fullscreen {
   html.dsh-tavern-viewport-pinned.dsh-tavern-seat-scroll [data-composer-seat] { overflow-y: auto; overscroll-behavior: contain; }
   body.dsh-tavern-shell-active .dsh-tavern-candidate-error-banner { max-height: calc(var(--dsh-vv-height, 100dvh) * .2); overflow-y: auto; }
   body.dsh-tavern-shell-active [data-composer-card] :is(textarea, [contenteditable="true"]) { font-size: 16px !important; }
-  body.dsh-tavern-shell-active [data-composer-card] button { min-width: 40px; min-height: 40px; }
+  /* 触控命中区放大到 40px，可见底色仍按宿主原尺寸画在内容区（#215）：
+     宿主的 + 和附件按钮带圆形底色，直接放大会变成大灰块，挤压时还会变成竖条。 */
+  body.dsh-tavern-shell-active [data-composer-card] button { min-width: 40px; min-height: 40px; flex-shrink: 0; }
+  body.dsh-tavern-shell-active [data-composer-card] :is(button[aria-label="Commands"], button[aria-label="Add attachment"]) { padding: 6px; background-clip: content-box; }
   body.dsh-tavern-shell-active :is([data-sidebar-right-panel], .dsh-tavern-picker-overlay, .dsh-tavern-prompt, .dsh-tavern-group-manager, .dsh-ejs-editor, [role="dialog"]:has(> nav[class*="_nav"]))
     :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select) { font-size: 16px; max-width: 100%; box-sizing: border-box; }
   body.dsh-tavern-shell-active :is([data-sidebar-right-panel]) :is(button, summary, select) { min-height: 40px; }
-  body.dsh-tavern-shell-active :is([data-sidebar-right-expand], [data-sidebar-right-toggle], [data-sidebar-right-mode], [data-dockkit-tab-close], [data-dockkit-add-tab]) {
+  body.dsh-tavern-shell-active :is([data-sidebar-right-expand], [data-sidebar-right-toggle], [data-sidebar-right-mode], [data-dockkit-add-tab]) {
     box-sizing: border-box; width: 40px; height: 40px; min-width: 40px; flex-shrink: 0; opacity: 1;
+  }
+  /* 标签内的关闭按钮只扩大命中区，不占标签高度，否则 × 被挤出标签（#215）。 */
+  body.dsh-tavern-shell-active [data-dockkit-strip] [data-dockkit-tab-close] {
+    box-sizing: border-box; width: 40px; height: 40px; min-width: 40px; min-height: 40px; margin: -10px; padding: 10px;
+    background-clip: content-box; flex-shrink: 0; opacity: 1;
   }
   body.dsh-tavern-shell-active [data-dockkit-strip] { min-height: 44px; }
   body.dsh-tavern-shell-active .dsh-tavern-side-row-more { opacity: 1; min-width: 40px; min-height: 40px; }
