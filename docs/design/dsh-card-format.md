@@ -21,7 +21,7 @@ ZIP 压缩包，后缀 `.dshcard`。分四块：卡本体（兼容 CHARX）、�
 ├─ card.json              Character Card V3，和 CHARX 完全相同；酒馆助手脚本也在这里
 ├─ assets/<名字>/         所有素材，一个子目录一个包，结构沿用 Galgame 分支的 dsh-asset-pack（manifest.json、media/、credits/……）
 ├─ plugins/<插件名>/      随卡 DSH 插件：package.json、index.mjs、client.js、assets/
-├─ presets/<名字>.json    （可选）卡推荐的预设（SillyTavern 预设 JSON），见下文「开局默认」
+├─ presets/<名字>.json    （可选）卡推荐的预设（SillyTavern 预设 JSON），见下文「开局默认」；文件名用 ASCII，预设库里显示的名字写在 `title`
 └─ dsh.json               DSH 清单（见下）
 ```
 
@@ -81,7 +81,7 @@ ZIP 压缩包，后缀 `.dshcard`。分四块：卡本体（兼容 CHARX）、�
 
 ```json
 "defaults": {
-  "preset": "presets/大肥鱼 · 舞台演出.json",
+  "preset": { "path": "presets/dafeiyu-stage.json", "title": "大肥鱼 · 舞台演出" },
   "settings": { "statusBarPlacement": "sidebar", "backgroundTasks": { "posture": true, "variables": true }, "webSearch": false, "sceneImages": false }
 }
 ```

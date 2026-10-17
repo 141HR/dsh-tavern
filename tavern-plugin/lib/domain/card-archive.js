@@ -106,10 +106,13 @@ export async function readCardArchive(zip) {
 async function startDefaults(zip, value) {
   if (!value || typeof value !== 'object') return null
   const result = {}
-  if (typeof value.preset === 'string' && value.preset) {
-    const file = path.posix.normalize(value.preset)
-    if (!/^presets\/[^/]+\.json$/i.test(file) || !zip.entries.has(file)) throw invalid('dsh.json 的 defaults.preset 应指向包内 presets/ 下的 JSON 预设：' + value.preset)
-    result.preset = { name: file.slice('presets/'.length), text: (await zip.readBuffer(zip.entries.get(file), 4 * 1024 * 1024)).toString('utf8') }
+  // "presets/x.json", or { path, title } to give the preset a readable name in the library.
+  const preset = typeof value.preset === 'string' ? { path: value.preset } : value.preset && typeof value.preset === 'object' ? value.preset : null
+  if (preset && typeof preset.path === 'string' && preset.path) {
+    const file = path.posix.normalize(preset.path)
+    if (!/^presets\/[^/]+\.json$/i.test(file) || !zip.entries.has(file)) throw invalid('dsh.json 的 defaults.preset 应指向包内 presets/ 下的 JSON 预设：' + preset.path)
+    const title = typeof preset.title === 'string' ? preset.title.replace(/[\\/:*?"<>|\r\n]/g, ' ').trim().slice(0, 80) : ''
+    result.preset = { name: (title || file.slice('presets/'.length).replace(/\.json$/i, '')) + '.json', text: (await zip.readBuffer(zip.entries.get(file), 4 * 1024 * 1024)).toString('utf8') }
   }
   const settings = startSettings(value.settings)
   if (settings) result.settings = settings
