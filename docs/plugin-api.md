@@ -558,7 +558,15 @@ Tavern 的 Skill：`listSkills` 返回 `[{ name, source, description }]`，`sour
 
 ### `getCastAssets({ gameId })`
 
-这局人物卡的角色素材：`{ player, card: { name, imageUrl }, characters: [{ name, aliases, avatarUrl, sprites, voices }] }`。`player` 是玩家名；`sprites` 是 `{ 情绪名: 图片地址 }`；`voices` 是 `{ 配音渠道: 声音 }`；地址都可以直接放进 `<img src>`。素材由玩家在舞台页上传或导入 ST 立绘包，跟着人物卡走，所有用这张卡的局共用。找人物时同时比对 `name` 和 `aliases`。
+这局人物卡的角色素材：`{ player, card: { name, imageUrl }, characters: [{ name, aliases, avatarUrl, avatars, sprites, voices }] }`。`player` 是玩家名；`avatars` 是各情绪的头像、`sprites` 是各情绪的立绘，都是 `{ 情绪名: 图片地址 }`；`voices` 是 `{ 配音渠道: 声音 }`；地址都可以直接放进 `<img src>`。素材由玩家在舞台页上传或导入 ST 立绘包，跟着人物卡走，所有用这张卡的局共用。找人物时同时比对 `name` 和 `aliases`。
+
+### `castAssetSource({ name, characters })`（第 2 版）
+
+把插件自己掌握的人物图片并入这局的角色素材，例如 DSH 人物卡素材包里的表情头像。`characters({ gameId })` 返回 `[{ name, aliases?, avatarUrl?, avatars?, sprites? }]`，`avatars`、`sprites` 是 `{ 情绪名: 图片地址 }`，情绪名用台词标注的 28 个。地址要能直接放进 `<img src>`（`/` 开头、`http(s)://` 或 `data:image/`），其他的丢掉。
+
+- 并入后 `getCastAssets`、舞台、正文头像都会用到：正文里每句台词旁的头像按这句的情绪取 `avatars`，没有再取 `sprites`、`avatarUrl`。
+- 和玩家自己的素材是同一人物时（比对 `name` 和 `aliases`），玩家的图片优先，插件只补玩家没有的；只由插件提供的人物不能在「角色素材」里清除。
+- 每次读取都会调用，出错时跳过这个来源并记入插件错误；玩家在本局关闭插件后不再提供。
 
 ### `listCardPacks({ gameId })`、`readCardPackFile({ gameId, pack, path })`
 

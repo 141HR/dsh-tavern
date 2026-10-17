@@ -771,6 +771,34 @@ test('台词标注与角色素材：插件读取某轮当前版本的标注和�
   assert.equal(seen.length, 1)
 })
 
+test('角色素材来源：插件交出的人物经校验后并入本局角色素材；坏来源记入插件错误，关闭的插件不提供', { skip: !cordis }, async t => {
+  let disabled = []
+  const h = await harness(t, { data: { readSettings: async () => ({ disabled }), updateSettings: async () => {} } })
+  const seen = []
+  const fiber = await h.root.plugin({ name: 'card-figure', inject: ['tavern'], apply(ctx) {
+    ctx.tavern.castAssetSource({ name: 'figure', characters: async context => { seen.push(context); return [
+      { name: ' 大肥鱼 ', aliases: ['肥鱼', 3], avatarUrl: '/calm', avatars: { joy: '/joy', shy: 'javascript:alert(1)' }, sprites: { joy: 'https://x/joy.png' } },
+      { name: '' },
+    ] } })
+    ctx.tavern.castAssetSource({ name: 'broken', characters: async () => { throw new Error('读不到素材包') } })
+    assert.throws(() => ctx.tavern.castAssetSource({ name: 'figure', characters: () => [] }), /已注册/)
+    assert.throws(() => ctx.tavern.castAssetSource({ name: 'x' }), /characters 必须是函数/)
+  } })
+  await tick()
+  assert.deepEqual(await h.api.castAssetSources({ gameId: 'game-1' }), [
+    { name: '大肥鱼', aliases: ['肥鱼'], avatarUrl: '/calm', avatars: { joy: '/joy' }, sprites: { joy: 'https://x/joy.png' }, plugin: 'card-figure' }])
+  assert.deepEqual(seen, [{ gameId: 'game-1' }])
+  const panel = await h.api.gamePlugins('game-1')
+  assert.deepEqual(panel.plugins[0].uses, [{ stage: '演出', mode: '添加' }])
+  assert.match(panel.errors[0].message, /读不到素材包/)
+  disabled = ['card-figure']
+  assert.deepEqual(await h.api.castAssetSources({ gameId: 'game-1' }), [])
+  disabled = []
+  fiber.dispose()
+  await tick()
+  assert.deepEqual(await h.api.castAssetSources({ gameId: 'game-1' }), [])
+})
+
 test('配音渠道：插件注册的渠道带上归属，合成超时或出错记入插件错误；synthesizeSpeech 按本局人物声音合成', { skip: !cordis }, async t => {
   const lines = []
   const h = await harness(t, { synthesizeSpeech: async (sessionId, line) => { lines.push([sessionId, line]); return line.narration ? { skip: true } : { url: '/api/dsh-tavern/speech-audio?id=x.mp3', mediaType: 'audio/mpeg' } } })

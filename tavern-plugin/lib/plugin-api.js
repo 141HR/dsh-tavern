@@ -18,6 +18,7 @@ const MAX_TOOL_CALLS_PER_SETTLEMENT = 8
 const MAX_WORLDBOOK_ENTRIES = 20
 const MAX_WORLDBOOK_ENTRY = 4000
 const MAX_POOL_ENTRIES = 200
+const MAX_CAST_SOURCE_CHARACTERS = 50
 // Read on every send, settlement and world book search: a slow plugin must not hold the game up.
 const POOL_TIMEOUT_MS = 5000
 const POOL_ENTRY_ID = /^[A-Za-z0-9._-]{1,64}$/
@@ -115,6 +116,7 @@ export function createTavernPluginApi(deps) {
   const settlementTools = new Map()
   const worldbookSources = new Map()
   const worldbookPools = new Map()
+  const castSources = new Map()
   const handlers = new Map()
   const candidateSections = new Map()
   const compactionSections = new Map()
@@ -304,6 +306,15 @@ export function createTavernPluginApi(deps) {
     async getCastAssets({ gameId } = {}) {
       const game = await requireGame(gameId)
       return (await deps.readCastAssets?.(game.sessionId)) ?? null
+    },
+
+    // Characters a plugin offers to this game's cast: avatars and expression sprites it keeps itself
+    // (a DSH card's packs, say). The player's own assets win; what the player lacks is filled from these.
+    castAssetSource({ name, characters } = {}) {
+      const owner = ownerOf(this)
+      sectionName(name)
+      if (typeof characters !== 'function') throw new TypeError('characters 必须是函数')
+      return register.call(this, castSources, owner + '\u0000' + name, { owner, name, characters }, 'tavern.castAssetSource()', '角色素材来源 ' + name + ' 已注册')
     },
 
     // The asset packs this game's card carries (DSH cards): opaque data the plugin reading their
@@ -997,6 +1008,7 @@ export function createTavernPluginApi(deps) {
     for (const entry of timelineHandlers) use(entry.owner, '生命周期', '观察')
     for (const entry of removedHandlers) use(entry.owner, '生命周期', '观察')
     for (const entry of castHandlers) use(entry.owner, '演出', '观察')
+    for (const entry of castSources.values()) use(entry.owner, '演出', '添加')
     for (const entry of speechProviders.values()) use(entry.owner, '配音', '添加')
     for (const entry of [...sections.values(), ...turnSections.values(), ...worldbookSources.values()]) use(entry.owner, '上下文', '添加')
     for (const entry of worldbookPools.values()) use(entry.owner, '世界书', '添加')
@@ -1163,6 +1175,29 @@ export function createTavernPluginApi(deps) {
     return collectSections(compactionSections, { gameId }, '压缩说明段落', (await choicesFor(gameId)).disabled)
   }
 
+  /** Seam: the characters plugins offer to a game's cast, checked; a failing source is skipped. */
+  async function castAssetSources({ gameId }) {
+    const { disabled } = await choicesFor(gameId).catch(() => ({ disabled: new Set() }))
+    const url = value => typeof value === 'string' && value.length <= 4096 && /^(\/|https?:\/\/|data:image\/)/.test(value) ? value : ''
+    const text = (value, max) => typeof value === 'string' && value.trim() && value.trim().length <= max ? value.trim() : ''
+    const pictures = map => Object.fromEntries(Object.entries(map && typeof map === 'object' ? map : {}).slice(0, 64)
+      .map(([emotion, value]) => [text(emotion, 40), url(value)]).filter(([emotion, value]) => emotion && value))
+    const result = []
+    const entries = Array.from(castSources.values()).filter(entry => !disabled.has(entry.owner)).sort((a, b) => a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name))
+    for (const entry of entries) {
+      let list
+      try { list = await bounded(entry.characters({ gameId }), '角色素材来源 ' + entry.name) }
+      catch (error) { recordError(gameId, entry.owner, '角色素材来源 ' + entry.name, error); continue }
+      for (const item of Array.isArray(list) ? list.slice(0, MAX_CAST_SOURCE_CHARACTERS) : []) {
+        const name = text(item?.name, 60)
+        if (!name) continue
+        result.push({ name, aliases: (Array.isArray(item.aliases) ? item.aliases : []).map(alias => text(alias, 60)).filter(Boolean).slice(0, 20),
+          avatarUrl: url(item.avatarUrl), avatars: pictures(item.avatars), sprites: pictures(item.sprites), plugin: entry.owner })
+      }
+    }
+    return result
+  }
+
   /** Seam: what the background settlement task offers the model on behalf of plugins. */
   const settlement = Object.freeze({
     /** Tool definitions, in a stable order: they sit in the cached request prefix. */
@@ -1207,7 +1242,7 @@ export function createTavernPluginApi(deps) {
     return entry ? entry.modes.slice() : null
   }
 
-  return Object.freeze({ service, toolModesFor, callHandler, turnState, exportGame, importGame, turnSettled, castAnnotated, gameRemoved,
+  return Object.freeze({ service, toolModesFor, callHandler, turnState, exportGame, importGame, turnSettled, castAnnotated, castAssetSources, gameRemoved,
     speechProviders: () => Array.from(speechProviders.values()), timelineChanged, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
     runSettlementTasks, manualTaskFor, runManualTask, stopTasks, runningTask, gamePlugins, setGamePlugin, pluginGameSettings })
 }

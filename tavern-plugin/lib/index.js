@@ -2744,8 +2744,23 @@ export async function apply(ctx) {
   function castAssetView(cardPath, manifest) {
     const key = castAssets.keyOf(cardPath)
     const url = file => file ? '/api/dsh-tavern/cast-asset?' + new URLSearchParams({ card: key, file }).toString() : ''
-    return manifest.characters.map(character => ({ name: character.name, aliases: character.aliases || [], avatarUrl: url(character.avatar), voices: character.voices || {},
+    return manifest.characters.map(character => ({ name: character.name, aliases: character.aliases || [], avatarUrl: url(character.avatar), avatars: {}, voices: character.voices || {},
       sprites: Object.fromEntries(Object.entries(character.sprites || {}).map(([emotion, file]) => [emotion, url(file)])) }))
+  }
+  // The cast as everyone sees it: the player's own assets, then what plugins offer (a DSH card's packs).
+  // A character both have keeps the player's pictures and fills only what the player left empty.
+  async function castView(sessionId, cardPath, manifest) {
+    const own = castAssetView(cardPath, manifest)
+    const offered = await pluginApi.castAssetSources({ gameId: str(sessionId) }).catch(() => [])
+    const names = character => [character.name, ...character.aliases]
+    for (const item of offered) {
+      const match = own.find(character => names(character).some(name => names(item).includes(name)))
+      if (!match) { own.push({ ...item, voices: {} }); continue }
+      if (!match.avatarUrl) match.avatarUrl = item.avatarUrl
+      match.avatars = { ...item.avatars, ...match.avatars }
+      match.sprites = { ...item.sprites, ...match.sprites }
+    }
+    return own
   }
   async function cardStageOn(sessionId) {
     const card = await castCardOf(sessionId).catch(() => null)
@@ -2773,7 +2788,7 @@ export async function apply(ctx) {
     // The stage is the card's choice: off for ordinary cards, on when the player or the card turned it on.
     return { enabled: manifest.stage === true, player: card.player, card: { name: card.name, imageUrl: '/api/dsh-tavern/card-image?path=' + encodeURIComponent(card.path) },
       background: background ? '/api/dsh-tavern/cast-asset?' + new URLSearchParams({ card: castAssets.keyOf(card.path), file: background.file }).toString() : '',
-      cast: castAssetView(card.path, manifest), turns }
+      cast: await castView(sessionId, card.path, manifest), turns }
   }
   // One line in its speaker's voice on the chosen channel; { skip } when voicing is off or narration is silent.
   async function speakLine(sessionId, { speaker, text, emotion, narration } = {}) {
@@ -2799,7 +2814,7 @@ export async function apply(ctx) {
     const card = await castCardOf(sessionId)
     const result = await edit(card.path, card)
     const manifest = result?.cast || result
-    return { ...(result?.cast ? { imported: result.imported, skipped: result.skipped, characters: result.characters } : {}), cast: castAssetView(card.path, manifest) }
+    return { ...(result?.cast ? { imported: result.imported, skipped: result.skipped, characters: result.characters } : {}), cast: await castView(sessionId, card.path, manifest) }
   }
   // ---------- 插件接口：读人物卡与历史、改变量、后台任务（docs/plugin-api.md） ----------
   const pluginStoryTurn = message => Number(message?.turn || (message?.greeting ? 1 : 0))
@@ -2906,7 +2921,7 @@ export async function apply(ctx) {
     readCastAssets: async sessionId => {
       const card = await castCardOf(sessionId)
       return { player: card.player, card: { name: card.name, imageUrl: '/api/dsh-tavern/card-image?path=' + encodeURIComponent(card.path) },
-        characters: castAssetView(card.path, await castAssets.read(card.path)) }
+        characters: await castView(sessionId, card.path, await castAssets.read(card.path)) }
     },
     readActivity: async sessionId => {
       const chat = await taskStateReader.forSession(sessionId)
@@ -4444,7 +4459,13 @@ export async function apply(ctx) {
       case 'listSceneImageModels': return await enabledSceneIllustrations().listModels(args)
       case 'testSceneImageGeneration': return await enabledSceneIllustrations().testGenerate()
       case 'pluginMediaForTurn': return await pluginMediaForTurn(args && args.sessionId, args && args.turn)
-      case 'castForTurns': return await castPresentation.forTurns(str(args && args.sessionId), args && args.turns)
+      // The lines come with the cast, so the story shows each speaker's picture for the line's emotion.
+      case 'castForTurns': {
+        const sessionId = str(args && args.sessionId)
+        const result = await castPresentation.forTurns(sessionId, args && args.turns)
+        const card = await castCardOf(sessionId).catch(() => null)
+        return { ...result, characters: card ? await castView(sessionId, card.path, await castAssets.read(card.path)) : [] }
+      }
       case 'castStage': return await castStage(args && args.sessionId, args && args.count)
       case 'castSetImage': return await castEdit(args && args.sessionId, cardPath => castAssets.setImage({ cardPath, name: args.name, slot: args.slot, bytes: Buffer.from(str(args.data), 'base64') }))
       case 'castRemoveImage': return await castEdit(args && args.sessionId, cardPath => castAssets.removeImage({ cardPath, name: args.name, slot: args.slot }))

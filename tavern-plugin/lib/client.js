@@ -11860,7 +11860,7 @@ function bindTavernFontZoom(node, win) {
 			const entries = new Map();
 			function entryFor(sessionId) {
 				let entry = entries.get(sessionId);
-				if (!entry) { entry = { version: 0, generation: 0, enabled: true, turns: new Map(), queued: new Set(), timer: null, listeners: new Set(), stop: null }; entries.set(sessionId, entry); }
+				if (!entry) { entry = { version: 0, generation: 0, enabled: true, characters: [], turns: new Map(), queued: new Set(), timer: null, listeners: new Set(), stop: null }; entries.set(sessionId, entry); }
 				return entry;
 			}
 			function notify(entry) { entry.version += 1; Array.from(entry.listeners).forEach(function (listener) { listener(); }); }
@@ -11886,6 +11886,7 @@ function bindTavernFontZoom(node, win) {
 					rpc("castForTurns", { turns: turns }, sessionId).then(function (result) {
 						if (entries.get(sessionId) !== entry || entry.generation !== generation) return;
 						entry.enabled = result.enabled !== false;
+						if (Array.isArray(result.characters)) entry.characters = result.characters;
 						turns.forEach(function (item) { entry.turns.set(item, Array.isArray(result.turns && result.turns[item]) ? result.turns[item] : []); });
 						notify(entry);
 					}, function () {
@@ -11909,10 +11910,14 @@ function bindTavernFontZoom(node, win) {
 					if (!entry.listeners.size) { entry.stop(); if (entry.timer !== null) window.clearTimeout(entry.timer); entries.delete(sessionId); }
 				};
 			}
-			if (typeof window.addEventListener === "function") window.addEventListener("dsh-tavern-settings-changed", function () { Array.from(entries.keys()).forEach(invalidate); });
+			if (typeof window.addEventListener === "function") {
+				window.addEventListener("dsh-tavern-settings-changed", function () { Array.from(entries.keys()).forEach(invalidate); });
+				window.addEventListener("dsh-tavern-cast-assets-changed", function () { Array.from(entries.keys()).forEach(invalidate); });
+			}
 			return {
 				subscribe: subscribe, load: load,
 				version: function (sessionId) { return entries.get(sessionId) ? entries.get(sessionId).version : 0; },
+				characters: function (sessionId) { const entry = entries.get(sessionId); return entry ? entry.characters : []; },
 				lines: function (sessionId, turn) { const entry = entries.get(sessionId); return entry && entry.turns.get(turn) || null; }
 			};
 		})();
@@ -11979,6 +11984,13 @@ function bindTavernFontZoom(node, win) {
 			return speech && speech.enabled ? React.createElement(TavernSpeakButton, props) : null;
 		}
 
+		// The picture beside a line: the speaker's avatar for its emotion, that emotion's sprite, their avatar, the card image.
+		function tavernCastLineAvatar(cast, name, emotion) {
+			const character = tavernCastCharacter(cast.characters, name);
+			const avatars = character && character.avatars || {}, sprites = character && character.sprites || {};
+			return avatars[emotion] || sprites[emotion] || character && character.avatarUrl || (cast.characterName && name === cast.characterName ? cast.characterImageUrl : "");
+		}
+
 		/** Render text with annotated lines as speaker rows; falls back to the plain renderer. */
 		function renderTavernCastText(text, key, renderText, cast) {
 			const segments = cast && tavernCastSegments(text, cast.lines);
@@ -11986,9 +11998,8 @@ function bindTavernFontZoom(node, win) {
 			const h = React.createElement;
 			return h(React.Fragment, { key: key }, segments.map(function (segment, index) {
 				if (segment.kind === "text") return segment.text.trim() ? renderText(segment.text, index) : null;
-				const own = cast.characterName && segment.speaker === cast.characterName;
 				return h("div", { key: index, className: "dsh-tavern-cast-line" },
-					h(TavernCastAvatar, { speaker: segment.speaker, imageUrl: own ? cast.characterImageUrl : "" }),
+					h(TavernCastAvatar, { speaker: segment.speaker, imageUrl: tavernCastLineAvatar(cast, segment.speaker, segment.emotion) }),
 					h("div", { className: "dsh-tavern-cast-body" },
 						h("div", { className: "dsh-tavern-cast-head" },
 							h("span", { className: "dsh-tavern-cast-name", style: { "--dsh-cast-hue": tavernCastHue(segment.speaker) } }, segment.speaker),
@@ -12043,7 +12054,7 @@ function bindTavernFontZoom(node, win) {
 			const character = tavernCastCharacter(data.cast, name);
 			const sprites = character ? character.sprites || {} : {};
 			const sprite = sprites[emotion] || sprites.neutral || Object.values(sprites)[0] || "";
-			const avatar = character && character.avatarUrl || (name === data.card.name ? data.card.imageUrl : "");
+			const avatar = character && (character.avatars || {})[emotion] || character && character.avatarUrl || (name === data.card.name ? data.card.imageUrl : "");
 			return preferAvatar ? avatar || sprite : sprite || avatar;
 		}
 
@@ -12252,7 +12263,7 @@ function bindTavernFontZoom(node, win) {
 			(data.turns || []).forEach(function (turn) { (turn.lines || []).forEach(function (line) { add(line.speaker); }); });
 			async function run(method, args, done) {
 				setBusy(true); setNotice("");
-				try { const result = await rpc(method, args, props.sessionId); props.onCast(result.cast); setNotice(done(result)); }
+				try { const result = await rpc(method, args, props.sessionId); props.onCast(result.cast); window.dispatchEvent(new CustomEvent("dsh-tavern-cast-assets-changed")); setNotice(done(result)); }
 				catch (error) { setNotice("失败：" + String(error.message || error)); }
 				finally { setBusy(false); }
 			}
@@ -12291,7 +12302,7 @@ function bindTavernFontZoom(node, win) {
 							onSave: function (provider, voice) { void run("castSetVoice", { name: name, provider: provider, voice: voice }, function () { return voice ? "已保存 " + name + " 的声音" : "已清除 " + name + " 的声音"; }); } }),
 						h("button", { type: "button", disabled: busy, onClick: function () { upload(name, "avatar"); } }, "换头像"),
 						h("button", { type: "button", disabled: busy, onClick: function () { upload(name, emotion); } }, "加" + TAVERN_CAST_EMOTIONS[emotion] + "立绘"),
-						character ? h("button", { type: "button", disabled: busy, onClick: function () { void run("castRemoveCharacter", { name: character.name }, function () { return "已清除 " + character.name + " 的素材"; }); } }, "清除") : null);
+						character && !character.plugin ? h("button", { type: "button", disabled: busy, onClick: function () { void run("castRemoveCharacter", { name: character.name }, function () { return "已清除 " + character.name + " 的素材"; }); } }, "清除") : null);
 				})),
 				notice ? h("p", { role: "status", className: "dsh-tavern-settings-desc" }, notice) : null);
 		}
@@ -13716,7 +13727,7 @@ function bindTavernFontZoom(node, win) {
 				const pluginMedia = useTavernPluginMedia(props.sessionId, storyTurn, playView && settled);
 				const castLines = useTavernCast(props.sessionId, storyTurn, playView && settled);
 				const castCard = liveState.view && liveState.view.card;
-				const cast = castLines ? { sessionId: props.sessionId, lines: castLines, characterName: castCard && castCard.name || "",
+				const cast = castLines ? { sessionId: props.sessionId, lines: castLines, characters: tavernCastStore.characters(props.sessionId), characterName: castCard && castCard.name || "",
 					characterImageUrl: castCard && castCard.path ? "/api/dsh-tavern/card-image?path=" + encodeURIComponent(castCard.path) : "" } : null;
 				const sceneImagesEnabled = Boolean(liveState.view && liveState.view.releaseCapabilities && liveState.view.releaseCapabilities.sceneImages);
 				const sceneShown = sceneImagesEnabled && settled && playView;

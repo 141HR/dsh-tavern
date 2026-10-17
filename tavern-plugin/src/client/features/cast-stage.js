@@ -43,7 +43,7 @@
 			const character = tavernCastCharacter(data.cast, name);
 			const sprites = character ? character.sprites || {} : {};
 			const sprite = sprites[emotion] || sprites.neutral || Object.values(sprites)[0] || "";
-			const avatar = character && character.avatarUrl || (name === data.card.name ? data.card.imageUrl : "");
+			const avatar = character && (character.avatars || {})[emotion] || character && character.avatarUrl || (name === data.card.name ? data.card.imageUrl : "");
 			return preferAvatar ? avatar || sprite : sprite || avatar;
 		}
 
@@ -252,7 +252,7 @@
 			(data.turns || []).forEach(function (turn) { (turn.lines || []).forEach(function (line) { add(line.speaker); }); });
 			async function run(method, args, done) {
 				setBusy(true); setNotice("");
-				try { const result = await rpc(method, args, props.sessionId); props.onCast(result.cast); setNotice(done(result)); }
+				try { const result = await rpc(method, args, props.sessionId); props.onCast(result.cast); window.dispatchEvent(new CustomEvent("dsh-tavern-cast-assets-changed")); setNotice(done(result)); }
 				catch (error) { setNotice("失败：" + String(error.message || error)); }
 				finally { setBusy(false); }
 			}
@@ -291,7 +291,7 @@
 							onSave: function (provider, voice) { void run("castSetVoice", { name: name, provider: provider, voice: voice }, function () { return voice ? "已保存 " + name + " 的声音" : "已清除 " + name + " 的声音"; }); } }),
 						h("button", { type: "button", disabled: busy, onClick: function () { upload(name, "avatar"); } }, "换头像"),
 						h("button", { type: "button", disabled: busy, onClick: function () { upload(name, emotion); } }, "加" + TAVERN_CAST_EMOTIONS[emotion] + "立绘"),
-						character ? h("button", { type: "button", disabled: busy, onClick: function () { void run("castRemoveCharacter", { name: character.name }, function () { return "已清除 " + character.name + " 的素材"; }); } }, "清除") : null);
+						character && !character.plugin ? h("button", { type: "button", disabled: busy, onClick: function () { void run("castRemoveCharacter", { name: character.name }, function () { return "已清除 " + character.name + " 的素材"; }); } }, "清除") : null);
 				})),
 				notice ? h("p", { role: "status", className: "dsh-tavern-settings-desc" }, notice) : null);
 		}
