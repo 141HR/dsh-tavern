@@ -114,6 +114,7 @@ import { legacyImageConfigurationReader } from './domain/image-generation-host.j
 import { createPluginMedia, publicPluginMedia, pluginFileMediaType } from './domain/plugin-media.js'
 import { createPluginData } from './domain/plugin-data.js'
 import { createPluginTurnReader } from './domain/plugin-turns.js'
+import { createPluginVariableWriter } from './domain/plugin-variables.js'
 import { createTavernPluginApi } from './plugin-api.js'
 import { createSceneWorldbooks, sceneWorldbookBinding } from './domain/scene-worldbook.js'
 import { createSceneImageDiagnostics, createSceneImageHostLogger, recordSceneImageInteraction } from './domain/scene-image-diagnostics.js'
@@ -2697,26 +2698,14 @@ export async function apply(ctx) {
         text: projectedSceneText(source, macroState), rawText: source }
     })
   }
-  // The latest turn's shown variables; refused while a turn is written or settled.
-  async function writePluginVariables(material, variables) {
-    const sessionId = material.sessionId
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const state = await sessionStateForSession(sessionId)
-      if (!state || state.regenInProgress || backgroundTasks.activity(state).busy || agentRegistry.get(sessionId)?.phase?.kind === 'running') {
-        throw Object.assign(new Error('正文生成或后台处理进行中，请稍后再改变量'), { code: 'TAVERN_PLUGIN_BUSY' })
-      }
-      const selected = await chatSliceForSession(sessionId, [material.index], ['_storageRevision'])
-      const row = selected?.chat?.messages?.[0]
-      if (!row || row.role !== 'assistant' || pluginStoryTurn(row) !== material.turn) throw Object.assign(new Error('这一轮已经变化'), { code: 'TAVERN_PLUGIN_STALE_VERSION' })
-      const next = Array.isArray(row.variables) ? row.variables.slice() : []
-      next[Math.max(0, Number(row.swipeId) || 0)] = variables
-      const saved = await patchChat(selected.chat.id, selected.chat._storageRevision,
-        [{ op: 'set', path: ['messages', material.index, 'variables'], value: JSON.parse(JSON.stringify(next)) }], { source: 'plugin.variables' })
-      if (saved) return
-      if (await pluginTurns.currentKey(sessionId, material.turn) !== material.key) break
-    }
-    throw Object.assign(new Error('存档刚刚变化，变量没有写入，请重新读取后再试'), { code: 'TAVERN_PLUGIN_STALE_VERSION' })
-  }
+  const writePluginVariables = createPluginVariableWriter({
+    readState: sessionStateForSession,
+    readSlice: chatSliceForSession,
+    activity: state => backgroundTasks.activity(state),
+    generating: sessionId => agentRegistry.get(sessionId)?.phase?.kind === 'running',
+    currentKey: (sessionId, turn) => pluginTurns.currentKey(sessionId, turn),
+    patch: patchChat
+  })
   // A plugin's one-off task: a fresh background Session, never the resident one settlement uses.
   async function runPluginTask({ gameId, owner, prompt, tools, call, signal }) {
     const selection = backgroundModelSelection(await backgroundConfigForSession(gameId))
@@ -3578,12 +3567,11 @@ export async function apply(ctx) {
     ])
   }
   async function inPluginTaskOperation(chatId, work) {
-    let taskRun = null
-    try { taskRun = await backgroundTasks.begin(await taskStateReader.read(chatId), 'plugin-task') }
-    catch (error) { console.warn('dsh-tavern: 插件任务未登记为后台任务:', str(error?.message || error)) }
-    try { await work() }
-    finally { if (taskRun) await taskRun.commit({ stateChanged: false }).catch(error => console.warn('dsh-tavern: 插件任务收尾失败:', str(error?.message || error))) }
+    const taskRun = await backgroundTasks.begin(await taskStateReader.read(chatId), 'plugin-task')
+    try { await work(taskRun.operationId) }
+    finally { await taskRun.commit({ stateChanged: false }).catch(error => console.warn('dsh-tavern: 插件任务收尾失败:', str(error?.message || error))) }
   }
+
   const pluginTaskJobs = new Map()
   // A manual plugin task: an exclusive background task, like the ledger; returns once started.
   async function startPluginTask(sessionId, key, input) {
@@ -3593,7 +3581,7 @@ export async function apply(ctx) {
     if (pluginTaskJobs.has(chat.id)) throw new Error('已有插件任务在运行，请等它完成')
     await pluginApi.manualTaskFor(chat.sessionId, key, input)
     const taskRun = await backgroundTasks.begin(chat, 'plugin-task')
-    const job = pluginApi.runManualTask({ gameId: chat.sessionId, key, input, signal: new AbortController().signal,
+    const job = pluginApi.runManualTask({ gameId: chat.sessionId, key, input, operationId: taskRun.operationId, signal: new AbortController().signal,
       onStart: label => pluginSettlementProgress.begin(chat.sessionId, label) })
       .catch(error => console.warn('dsh-tavern: 插件任务失败:', str(error?.message || error)))
       .finally(async () => {

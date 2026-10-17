@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { publicPluginMedia, pluginMediaSession } from './domain/plugin-media.js'
 
 // The public `tavern` service for third-party DSH plugins (docs/plugin-api.md).
@@ -117,6 +118,7 @@ export function createTavernPluginApi(deps) {
   const toolScopes = new Map()
   // The plugin task running in each game (one at a time), and settlement phases already run per text version.
   const taskRuns = new Map()
+  const taskContext = new AsyncLocalStorage()
   const phasesRan = new Set()
   const attachedOwners = new Set()
   const errors = new Map()
@@ -407,7 +409,19 @@ export function createTavernPluginApi(deps) {
       if (variables === null || typeof variables !== 'object' || Array.isArray(variables)) throw new TypeError('variables 必须是对象')
       const json = JSON.stringify(variables)
       if (json.length > MAX_VARIABLES) throw new Error('variables 不能超过 1 MB')
-      await deps.writeVariables(material, JSON.parse(json))
+      const task = taskContext.getStore()
+      // Captured async context is not authority: stopped/finished callbacks must
+      // not regain write access once the game becomes idle or a new task starts.
+      const taskOperation = () => {
+        if (!task) return null
+        if (task.owner !== owner || task.gameId !== material.sessionId || task.textVersion !== material.key
+          || task.phase === 'before' || task.signal.aborted || taskRuns.get(task.gameId) !== task.run || !task.operationId) {
+          throw Object.assign(new Error('插件任务已结束或不属于这一轮'), { code: 'TAVERN_PLUGIN_STALE_VERSION' })
+        }
+        return task.operationId
+      }
+      taskOperation()
+      await deps.writeVariables(material, JSON.parse(json), { taskOperation })
       await changed(material.sessionId)
       return { turn: material.turn, textVersion: material.key }
     },
@@ -619,7 +633,7 @@ export function createTavernPluginApi(deps) {
   }
 
   /** One plugin task under Tavern's watch: bounded, stoppable, its failure recorded for the panel. */
-  async function executeTask(entry, kind, context, signal, onStart) {
+  async function executeTask(entry, kind, context, signal, onStart, operationId) {
     const controller = new AbortController()
     const combined = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal
     const run = { plugin: entry.owner, task: entry.name, title: entry.title, kind, startedAt: Date.now(), controller }
@@ -629,7 +643,9 @@ export function createTavernPluginApi(deps) {
     const runAgent = (input = {}) => runTaskAs(entry.owner, { ...input, gameId: context.gameId, signal: combined })
     try {
       combined.throwIfAborted()
-      await bounded(untilAborted(entry.run({ ...structuredClone(context), signal: combined, runAgent }), combined), stage,
+      const scope = { owner: entry.owner, gameId: context.gameId, textVersion: context.textVersion, phase: context.phase, run, signal: combined, operationId }
+      const work = taskContext.run(scope, () => entry.run({ ...structuredClone(context), signal: combined, runAgent }))
+      await bounded(untilAborted(work, combined), stage,
         kind === 'manual' ? MANUAL_TASK_TIMEOUT_MS : SETTLEMENT_TASK_TIMEOUT_MS)
       return true
     } catch (error) {
@@ -664,16 +680,22 @@ export function createTavernPluginApi(deps) {
     if (phasesRan.has(id)) return
     phasesRan.add(id)
     if (phasesRan.size > 2000) phasesRan.delete(phasesRan.values().next().value)
-    const work = async () => {
+    let started = false
+    const work = async operationId => {
+      started = true
       for (const entry of tasks) {
         if (signal?.aborted) return
         // Read again for each task: an earlier one may have changed the variables.
         const current = phase === 'before' ? await deps.readPendingTurn(gameId) : await deps.readLatestSettledTurn(gameId)
         if (!current || current.key !== material.key) return
-        await executeTask(entry, 'settlement', { ...(await snapshotOf(current)), phase }, signal, onStart)
+        await executeTask(entry, 'settlement', { ...(await snapshotOf(current)), phase }, signal, onStart, operationId)
       }
     }
-    await (around ? around(work) : work())
+    try { await (around ? around(work) : work()) }
+    catch (error) {
+      if (!started) phasesRan.delete(id)
+      throw error
+    }
   }
 
   /** The manual task `key` as the player may start it in this game; throws when it can't run. */
@@ -688,11 +710,11 @@ export function createTavernPluginApi(deps) {
   }
 
   /** Seam: run a manual task Tavern has admitted (see manualTaskFor); resolves true when it succeeded. */
-  async function runManualTask({ gameId, key, input, signal, onStart }) {
+  async function runManualTask({ gameId, key, input, signal, onStart, operationId }) {
     const entry = await manualTaskFor(gameId, key, input)
     const material = await deps.readLatestSettledTurn(gameId)
     const context = material ? await snapshotOf(material) : { gameId, turn: null, textVersion: null, text: '', rawText: '', card: null, variables: null }
-    return executeTask(entry, 'manual', { ...context, input: typeof input === 'string' ? input.trim() : '' }, signal, onStart)
+    return executeTask(entry, 'manual', { ...context, input: typeof input === 'string' ? input.trim() : '' }, signal, onStart, operationId)
   }
 
   function stopTasks(gameId) {
