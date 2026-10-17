@@ -10762,13 +10762,14 @@ function bindTavernFontZoom(node, win) {
 					if (typeof listener !== "function") throw new TypeError("watchTurnState 需要 listener 函数");
 					const owner = ownerOf(this), getTurnState = service.getTurnState;
 					return owned(this, function () {
-						let disposed = false, queued = false, last = "", running;
+						let disposed = false, queued = false, last = "", running, generation = 0;
 						function refresh() {
 							if (queued || disposed) return;
 							queued = true;
+							const request = ++generation;
 							Promise.resolve().then(function () { queued = false; return disposed ? null : getTurnState(gameId); }).then(function (state) {
 								const text = JSON.stringify(state);
-								if (disposed || !state || text === last) return;
+								if (disposed || request !== generation || !state || text === last) return;
 								last = text;
 								try { listener(state); } catch (error) { try { tavernErrorHub.report("插件 " + owner, error); } catch (_) {} }
 							}, function () {});

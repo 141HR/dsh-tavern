@@ -237,3 +237,28 @@ test('人物卡列表视图：插件视图拿到筛选后的卡片和动作，�
   assert.equal(grid.children[1].children[0].props.disabled, true)
   assert.equal(grid.children[0].children[2], null)
 })
+
+ test('回合订阅忽略迟到的旧响应，卸载后不再通知', async () => {
+  const requests = [], seen = []
+  let signal
+  const ui = loadWith({
+    rpc: () => new Promise(resolve => requests.push(resolve)),
+    liveTavernView: { subscribe(_id, listener) { signal = listener; listener(); return () => {} } }
+  })
+  const stop = ui.service.watchTurnState('g', state => seen.push(state))
+  const flush = () => new Promise(resolve => setImmediate(resolve))
+  await flush()
+  signal()
+  await flush()
+  requests[1]({ state: { gameId: 'g', turn: 2, busy: false } })
+  await flush()
+  requests[0]({ state: { gameId: 'g', turn: 1, busy: true } })
+  await flush()
+  assert.deepEqual(seen, [{ gameId: 'g', turn: 2, busy: false }])
+  signal()
+  await flush()
+  stop()
+  requests[2]({ state: { gameId: 'g', turn: 3, busy: true } })
+  await flush()
+  assert.equal(seen.length, 1)
+})
