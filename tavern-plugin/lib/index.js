@@ -672,6 +672,7 @@ export async function apply(ctx) {
     return (idx !== undefined && typeof idx === 'object') ? idx : { cards: [], chats: [] }
   }
   async function writeIndex(idx) { await writeJson('index.json', idx) }
+  async function updateIndex(updater) { return await profileData.updateJson('index.json', value => updater(value || { cards: [], chats: [] })) }
   const fileResources = createFileResourceStore({ dataRoot })
   const resourceWorkspaceProjection = createResourceWorkspaceProjection({ root: dataRoot + '/resources' })
   const mobileCardImport = createMobileCardImport({ runtimeHost: process.env.DSH_TAVERN_RUNTIME_HOST })
@@ -934,7 +935,7 @@ export async function apply(ctx) {
       readLinks: async function () { return await readJson('sessions.json') },
       updateLinks: async function (updater) { return await profileData.updateJson('sessions.json', updater) },
       readIndex,
-      writeIndex,
+      updateIndex,
       readChat,
       readChatState: id => chatPersistence.readSessionState(id, {scoped:true}),
       readBackgroundConfig: chatPersistence.readBackgroundConfig,
@@ -1014,7 +1015,7 @@ export async function apply(ctx) {
     cardOrganization,
     resources: fileResources,
     presets: runtimePresets,
-    chats: { readIndex, writeIndex, readChat, writeChat },
+    chats: { readIndex, updateIndex, readChat, writeChat },
     operations: {
       read: async function () { return await readJson('resource-graph-operation.json') },
       write: async function (operation) { await writeJson('resource-graph-operation.json', operation) },
@@ -1234,9 +1235,9 @@ export async function apply(ctx) {
     return structuredClone(variables)
   }
   async function syncCardName(cardPath, cardName) {
-    const idx = await readIndex()
-    idx.chats = (idx.chats || []).map(function (item) { return item.cardPath === cardPath ? Object.assign({}, item, { cardName: cardName }) : item })
-    await writeIndex(idx)
+    const idx = await updateIndex(current => ({ ...current,
+      chats: (current.chats || []).map(item => item.cardPath === cardPath ? { ...item, cardName } : item)
+    }))
     for (const item of (idx.chats || []).filter(function (entry) { return entry.cardPath === cardPath })) {
       const linked = await readChat(item.id)
       if (linked !== undefined && linked.cardName !== cardName) {
@@ -3796,11 +3797,9 @@ export async function apply(ctx) {
     const card = cardPreparation.project(workspace)
     const cardPath = await fileResources.importCard({ name: card.name + '.json', text: JSON.stringify(workspace.raw, null, 2) }, workspace)
     card.path = cardPath
-    const idx = await readIndex()
-    for (const row of idx.chats || []) {
-      if (row.id === chat.id) { row.cardPath = cardPath; row.cardName = card.name }
-    }
-    await writeIndex(idx)
+    await updateIndex(current => ({ ...current,
+      chats: (current.chats || []).map(row => row.id === chat.id ? { ...row, cardPath, cardName: card.name } : row)
+    }))
     return { path: cardPath, card }
   }
   const foregroundFrameBuilder = createForegroundFrameBuilder()
