@@ -119,20 +119,37 @@ test('人物卡列表视图：插件视图拿到筛选后的卡片和动作，�
   // Tavern's own grid: covers and names; a broken card cannot start a game; corner holds @ and ⋯.
   stored.set('dsh-tavern-card-list-view', 'dsh-tavern:grid')
   managing = false
-  const gridOf = place => { const t = List(props(place)).children[1].children[0]; return t.type(t.props) }
-  let grid = gridOf('library')
-  assert.equal(grid.props.className, 'dsh-tavern-card-grid')
+  // The grid view is a component: render it once more to get its toolbar and grid.
+  const viewOf = place => { const body = List(props(place)).children[1].children[0]; const element = body.type(body.props); return element.type(element.props) }
+  let view = viewOf('library')
+  let [toolbar, grid] = view.children
+  assert.equal(grid.props.className, 'dsh-tavern-card-grid', '人物卡库默认 4 列')
+  assert.equal(grid.props.style['--dsh-tavern-card-grid-cols'], '4')
+  assert.equal(toolbar.children[0].children[1].props.value, '4')
+  assert.equal(toolbar.children[2].children[0], '2 张')
   const [first, second] = grid.children
   const open = first.children[0]
   assert.equal(open.children[0].props.src, '/api/dsh-tavern/card-image?path=' + encodeURIComponent('cards/甲.png'))
-  assert.equal(open.children[1].children[0], '甲')
+  const copy = open.children[1].children
+  assert.equal(copy[0].children[0], '甲')
+  assert.equal(copy[1].children[0], '文件：甲.png')
+  assert.equal(copy[2].children[0], '已绑定剧本：剧本一')
+  assert.equal(second.children[0].children[1].children[2].children[0], '自由故事（未绑定剧本）')
   assert.equal(second.children[0].children[0].children[0], '乙')
   assert.deepEqual(first.children[2].children, ['@甲', 'menu:甲'])
   open.props.onClick()
   assert.deepEqual(opened.slice(-1), ['cards/甲.png'])
-  grid = gridOf('play')
+  toolbar.children[0].children[1].props.onChange({ target: { value: '3' } })
+  assert.equal(stored.get('dsh-tavern-card-grid-cols-library'), '3', '列数按位置记住')
+  view = viewOf('play')
+  ;[toolbar, grid] = view.children
+  assert.equal(grid.props.className, 'dsh-tavern-card-grid dense', '开始游玩默认 6 列，高密度只显示名称')
+  assert.equal(grid.children[0].children[0].children[1].children[1], null)
   assert.equal(grid.children[1].children[0].props.disabled, true)
   assert.equal(grid.children[0].children[2], null)
+  stored.set('tavern-card-grid-cols-play', '5')
+  stored.delete('dsh-tavern-card-grid-cols-play')
+  assert.equal(viewOf('play').children[1].props.style['--dsh-tavern-card-grid-cols'], '5', '沿用插件原来记住的列数')
 })
 
  test('回合订阅忽略迟到的旧响应，卸载后不再通知', async () => {

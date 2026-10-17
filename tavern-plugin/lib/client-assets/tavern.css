@@ -350,16 +350,27 @@ body.dsh-tavern-shell-active span:has(.dsh-tavern-hero-lockup) + span { display:
 .dsh-tavern-card-view-switch { display: flex; gap: 4px; margin: 6px 12px; }
 .dsh-tavern-card-view-switch button { padding: 3px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 999px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; cursor: pointer; }
 .dsh-tavern-card-view-switch button[aria-pressed="true"] { border-color: var(--dsh-tavern-accent); color: var(--dsw-alias-label-primary); background: color-mix(in srgb, var(--dsh-tavern-accent) 10%, transparent); }
-.dsh-tavern-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; padding: 4px 12px 12px; }
+.dsh-tavern-card-grid { display: grid; grid-template-columns: repeat(var(--dsh-tavern-card-grid-cols, 4), minmax(0, 1fr)); gap: 10px; align-items: start; padding: 4px 12px 12px; }
+.dsh-tavern-card-grid-tools { display: flex; align-items: center; gap: 8px; padding: 2px 12px 8px; font-size: 12px; color: var(--dsw-alias-text-l2); }
+.dsh-tavern-card-grid-tools label { display: inline-flex; align-items: center; gap: 4px; }
+.dsh-tavern-card-grid-tools select { font: inherit; }
+.dsh-tavern-card-grid-count { margin-left: auto; }
+.dsh-tavern-card-grid-empty { padding: 24px 8px; text-align: center; opacity: .6; }
 .dsh-tavern-card-grid-item { position: relative; min-width: 0; }
-.dsh-tavern-card-grid-open { position: relative; display: block; width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: color-mix(in srgb, var(--dsh-tavern-accent) 8%, transparent); color: #fff; font: inherit; text-align: left; cursor: pointer; }
+.dsh-tavern-card-grid-open { position: relative; display: flex; flex-direction: column; width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: color-mix(in srgb, var(--dsh-tavern-accent) 8%, transparent); color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .dsh-tavern-card-grid-open:hover { border-color: var(--dsh-tavern-accent); }
 .dsh-tavern-card-grid-open:disabled { cursor: default; }
 .dsh-tavern-card-grid-item.selected .dsh-tavern-card-grid-open { border-color: var(--dsh-tavern-accent); box-shadow: 0 0 0 2px var(--dsh-tavern-accent); }
 .dsh-tavern-card-grid-item.broken .dsh-tavern-card-grid-open { opacity: .55; }
 .dsh-tavern-card-grid-cover { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; object-position: top center; }
 .dsh-tavern-card-grid-cover.placeholder { display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 600; color: var(--dsh-tavern-accent); }
-.dsh-tavern-card-grid-name { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 8px 6px; background: linear-gradient(transparent, rgba(0,0,0,.72)); font-size: 12px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.dsh-tavern-card-grid-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 8px 10px; }
+.dsh-tavern-card-grid-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dsh-tavern-card-grid-meta { font-size: 11px; color: var(--dsw-alias-text-l2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dsh-tavern-card-grid.dense .dsh-tavern-card-grid-copy { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 8px 6px; background: linear-gradient(transparent, rgba(0,0,0,.72)); color: #fff; }
+.dsh-tavern-card-grid.dense .dsh-tavern-card-grid-name { font-size: 12px; white-space: normal; line-height: 1.3; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+/* The play picker is 1.3 times wider while it shows the grid. */
+.dsh-tavern-card-picker:has(.dsh-tavern-card-grid) { width: min(1118px, calc(100vw - 48px)); }
 .dsh-tavern-card-grid-check { position: absolute; top: 6px; left: 6px; z-index: 1; }
 .dsh-tavern-card-grid-corner { position: absolute; top: 4px; right: 4px; z-index: 1; display: flex; gap: 2px; border-radius: 8px; background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 85%, transparent); }
 .dsh-tavern-greeting-preview { display: block; width: 100%; height: min(52vh, 560px); overflow: auto; overflow-anchor: none; box-sizing: border-box; margin: 8px 0; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-specific-sidebar-fill); }

@@ -495,22 +495,53 @@
 		}
 
 		// Tavern's own grid of covers, built on the same render input plugin views get.
-		// Adapted from swp-z/dsh-tavern-card-grid (MIT); no column setting, the width decides.
-		function renderTavernCardGrid(input) {
+		// Taken in full from swp-z/dsh-tavern-card-grid (MIT): 2–6 columns per place, remembered;
+		// six columns turn dense (the name over the cover); file name and bound script below.
+		const TAVERN_CARD_GRID_COLUMNS = [2, 3, 4, 5, 6];
+		function readTavernCardGridColumns(place) {
+			const fallback = place === "play" ? 6 : 4;
+			try {
+				// The plugin's own key, so its users keep their setting.
+				const stored = window.localStorage.getItem("dsh-tavern-card-grid-cols-" + place) || window.localStorage.getItem("tavern-card-grid-cols-" + place);
+				return Math.min(6, Math.max(2, Number(stored) || fallback));
+			} catch (_) { return fallback; }
+		}
+		function TavernCardGrid(props) {
 			const h = React.createElement;
-			return h("div", { className: "dsh-tavern-card-grid" }, input.cards.map(function (card) {
+			const input = props.input;
+			const [columns, setColumns] = React.useState(function () { return readTavernCardGridColumns(input.place); });
+			const dense = columns >= 6;
+			function changeColumns(next) {
+				setColumns(next);
+				try { window.localStorage.setItem("dsh-tavern-card-grid-cols-" + input.place, String(next)); } catch (_) {}
+			}
+			const toolbar = h("div", { className: "dsh-tavern-card-grid-tools" },
+				h("label", null, "每行",
+					h("select", { value: String(columns), "aria-label": "每行列数", onChange: function (event) { changeColumns(Number(event.target.value) || columns); } },
+						TAVERN_CARD_GRID_COLUMNS.map(function (count) { return h("option", { key: count, value: String(count) }, count + " 列"); }))),
+				h("span", null, dense ? "高密度：只显示名称" : "名称 / 文件名 / 剧本"),
+				h("span", { className: "dsh-tavern-card-grid-count" }, input.cards.length + " 张"));
+			if (!input.cards.length) return h("div", null, toolbar, h("div", { className: "dsh-tavern-card-grid-empty" }, "没有匹配的人物卡"));
+			return h("div", null, toolbar, h("div", { className: "dsh-tavern-card-grid" + (dense ? " dense" : ""), style: { "--dsh-tavern-card-grid-cols": String(columns) } }, input.cards.map(function (card) {
 				const selected = input.isSelected(card.path);
 				const corner = [input.mention(card.path), input.menu(card.path)].filter(Boolean);
+				const script = card.script && card.script.title ? card.script.title : "";
 				return h("div", { key: card.path, className: "dsh-tavern-card-grid-item" + (selected ? " selected" : "") + (card.error ? " broken" : "") },
 					h("button", { type: "button", className: "dsh-tavern-card-grid-open", title: card.error || card.name, "aria-pressed": input.selecting ? selected : undefined,
 						disabled: input.busy || (!input.selecting && input.place === "play" && Boolean(card.error)), onClick: function () { input.open(card.path); } },
 						card.imageUrl ? h("img", { className: "dsh-tavern-card-grid-cover", src: card.imageUrl, alt: "", loading: "lazy" })
 							: h("span", { className: "dsh-tavern-card-grid-cover placeholder", "aria-hidden": "true" }, Array.from(String(card.name || "").replace(/^[^\p{L}\p{N}]+/u, ""))[0] || "?"),
-						h("span", { className: "dsh-tavern-card-grid-name" }, card.name)),
+						h("span", { className: "dsh-tavern-card-grid-copy" },
+							h("span", { className: "dsh-tavern-card-grid-name" }, card.name),
+							dense ? null : h("span", { className: "dsh-tavern-card-grid-meta", title: card.fileName }, card.fileName ? "文件：" + card.fileName : ""),
+							dense ? null : h("span", { className: "dsh-tavern-card-grid-meta", title: script || "自由故事" }, script ? "已绑定剧本：" + script : "自由故事（未绑定剧本）"))),
 					input.selecting ? h("input", { type: "checkbox", className: "dsh-tavern-card-batch-checkbox dsh-tavern-card-grid-check", checked: selected, disabled: input.busy,
 						"aria-label": "选择人物卡：" + card.name, onChange: function () { input.toggle(card.path); } }) : null,
 					corner.length ? h("span", { className: "dsh-tavern-card-grid-corner" }, corner) : null);
-			}));
+			})));
+		}
+		function renderTavernCardGrid(input) {
+			return React.createElement(TavernCardGrid, { input: input });
 		}
 		const TAVERN_CARD_GRID_VIEW = { key: "dsh-tavern:grid", owner: "DSH Tavern", label: "宫格", render: renderTavernCardGrid };
 
