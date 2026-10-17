@@ -45,6 +45,7 @@ import { createScopedMessages, isScopedMessages } from './domain/scoped-messages
 import {registerVariableReadTool} from './domain/read-variables.js'
 import { createBackgroundSessionRetirement, installRetiredBackgroundFilter } from './domain/background-session-retirement.js'
 import { createBackgroundCatalogBackfill } from './domain/background-catalog.js'
+import { createGameTitles } from './domain/game-titles.js'
 import { createCardMemory, CARD_MEMORY_TOOLS } from '../packages/dsh-tavern-card-memory/index.js'
 import { projectPlayerContent } from './domain/player-input-content.js'
 import { installSkillCatalogSessionScope } from './domain/skill-catalog-session-scope.js'
@@ -273,6 +274,8 @@ export async function apply(ctx) {
   const llm = ctx.get('llm')
   const agentRegistry = ctx.get('agents')
   const sessionStore = ctx.get('sessions')
+  // New games are named after their card until the first turn (domain/game-titles.js).
+  const gameTitles = createGameTitles({ sessionTitle: () => ctx.get('sessionTitle'), sessions: sessionStore })
   ctx.effect(() => installTavernTokenMeter(ctx.get('tokenMeter')))
   ctx.effect(() => installHostProjectionReplay(ctx.get('sessionProjections')))
   if (llm === undefined || agentRegistry === undefined || sessionStore === undefined) {
@@ -2222,7 +2225,12 @@ export async function apply(ctx) {
       const source = await chatForSession(preparation.sourceSessionId)
       if (!source || !sessionOpeningDescriptor(source, await readChatCard(source)) || Number(source.tavernHelperLifecycleRevision || 0) !== preparation.sourceLifecycleRevision) throw new Error('原对话已变化，请重新选择开场')
     }
-    return await requestPerformance.stage('initializeConversation', () => conversationInitialization.start({ cardPath, sessionId, mode, openingId, userName, requestMode, preparation, cardTask }))
+    const started = await requestPerformance.stage('initializeConversation', () => conversationInitialization.start({ cardPath, sessionId, mode, openingId, userName, requestMode, preparation, cardTask }))
+    if (groupOfMode(mode || 'story') === 'play') {
+      const chat = await chatForSession(sessionId).catch(() => null)
+      gameTitles.name(sessionId, chat?.cardName)
+    }
+    return started
   }
 
   async function scriptPreviewOf(chat) {
@@ -3784,6 +3792,7 @@ export async function apply(ctx) {
         void candidateWorldbookPreparation.warm(latest.sessionId)
         void worldbookPrefilter.start(chatId)
         void pluginApi.turnSettled(latest.sessionId).catch(error => console.warn('dsh-tavern: 插件轮次通知失败:', str(error?.message || error)))
+        void gameTitles.afterTurn(latest.sessionId, latest.cardName)
         void sceneIllustrations?.autoGenerate(latest.sessionId).catch(error => console.warn('dsh-tavern: 自动生图未执行:', str(error?.message || error)))
       }
     } catch {
