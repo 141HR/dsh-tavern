@@ -119,11 +119,11 @@
 
 **方式一：一键安装包（推荐）**
 
-**[下载 Windows 安装包](https://github.com/flizzywine/dsh-tavern/releases/download/v2.6/DSH-Tavern-Desktop-2.0.13-x64-Setup8.exe)**（x64），双击运行，保持联网，按提示完成。以后从桌面「DSH Tavern」快捷方式打开，无需另装 Node.js 或 DSH Desktop。[图文教程 →](https://flizzywine.github.io/dsh-tavern/#a02--section-2)
+本分支的一键包已改为官方 DeepSeek Harness 宿主，尚未发布新的 EXE。完成 Windows 构建验证后，从 Releases 下载；测试构建见 Actions 的 `Windows Setup` 产物。当前可使用下面的官方桌面版安装方式。
 
-**方式二：借助 DSH Desktop**
+**方式二：使用官方 DeepSeek Harness**
 
-先安装 **[DSH Desktop 0.2.1-rc.2](https://www.deepseek.com/harness/)**，在 **设置 → 通用设置 → 打开 DSH 终端** 中运行下面的命令。装完用[侧边栏 Tavern 启动](#桌面版从侧边栏启动dsh-tavern-launcher)或 `dsh-tavern start` 打开酒馆（0.2.1 桌面版没有 Profile 切换器）。[图文教程 →](https://flizzywine.github.io/dsh-tavern/#a02--section-3)
+先安装 **[官方 DeepSeek Harness 0.2.1-rc.2](https://www.deepseek.com/harness/)**，退出桌面应用后，在系统终端中运行下面的命令。装完重新打开官方桌面应用，即可进入酒馆。[图文教程 →](https://flizzywine.github.io/dsh-tavern/#a02--section-3)
 
 ```powershell
 $env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.ps1')); Invoke-Expression $tavernInstaller
@@ -139,13 +139,13 @@ $env:DSH_TAVERN_HOST='cli'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((Ne
 
 ### macOS
 
-先安装 **[DSH Desktop 0.2.1-rc.2](https://www.deepseek.com/harness/)**，在 **设置 → 通用设置 → 打开 DSH 终端** 中运行：
+先安装 **[官方 DeepSeek Harness 0.2.1-rc.2](https://www.deepseek.com/harness/)**，退出桌面应用后，在系统终端中运行：
 
 ```bash
 curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | DSH_TAVERN_HOST=desktop sh
 ```
 
-装完用[侧边栏 Tavern 启动](#桌面版从侧边栏启动dsh-tavern-launcher)或 `dsh-tavern start` 打开酒馆。[图文教程 →](https://flizzywine.github.io/dsh-tavern/#a02--section-3)
+装完重新打开官方桌面应用，即可进入酒馆。[图文教程 →](https://flizzywine.github.io/dsh-tavern/#a02--section-3)
 
 ### Linux
 
@@ -181,16 +181,6 @@ curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | D
 **更新与重装：**在酒馆里点「更新到最新版」即可更新。需要重装时，重新运行原来的安装包或命令，只替换程序，人物卡、聊天和设置都会保留。[详细说明 →](https://flizzywine.github.io/dsh-tavern/#a02--section-9)
 
 安装失败时看[常见故障](https://flizzywine.github.io/dsh-tavern/#a02--section-11)；macOS 命令行安装、已有 DSH 的[插件安装](https://flizzywine.github.io/dsh-tavern/#plugin-installation)等见[完整安装指南](https://flizzywine.github.io/dsh-tavern/#a02)（宿主适配 DSH **0.2.1-rc.2**）。
-
-### 桌面版：从侧边栏启动（dsh-tavern-launcher）
-
-不想走托盘菜单的话，可以把「启动 Tavern」直接放进桌面版的侧边栏。在 DSH 终端里执行：
-
-```bash
-dsh plugin --profile desktop add link:<本仓库路径>/desktop-launcher
-```
-
-装完刷新一次桌面 GUI 页面，侧边栏「+」菜单里会出现 **Tavern**：一键启动 / 停止服务，并把酒馆界面内嵌在侧边栏，或在新窗口打开。实现说明与排障见 [desktop-launcher/README.md](desktop-launcher/README.md)。
 
 ## 交流与反馈
 

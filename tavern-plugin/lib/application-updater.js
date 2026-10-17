@@ -180,11 +180,11 @@ export function createApplicationUpdater(options) {
   const dataRoot = path.resolve(options.dataRoot)
   const sourceRoot = path.resolve(options.sourceRoot)
   const dshHome = path.resolve(options.dshHome || path.join(dataRoot, '../../..'))
-  const profileManifest = path.join(dshHome, 'profiles', 'tavern', 'package.json')
   const execPath = options.execPath || process.execPath
   const hostDependencyAnchor = options.hostDependencyAnchor || ''
   const platform = options.platform || process.platform
   const runtimeHost = options.runtimeHost || process.env.DSH_TAVERN_RUNTIME_HOST
+  const profileManifest = path.join(dshHome, 'profiles', (runtimeHost || (process.versions.electron ? 'desktop' : 'cli')) === 'desktop' ? 'desktop' : 'tavern', 'package.json')
   const spawnProcess = options.spawnProcess || spawn
   const now = typeof options.now === 'function' ? options.now : Date.now
   const isProcessAlive = typeof options.isProcessAlive === 'function' ? options.isProcessAlive : processIsAlive
