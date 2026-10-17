@@ -411,7 +411,8 @@ body.dsh-tavern-shell-active span:has(.dsh-tavern-hero-lockup) + span { display:
 .dsh-tavern-library-search { box-sizing: border-box; width: calc(100% - 24px); margin: 10px 12px 2px; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-specific-input-major); color: inherit; }
 .dsh-tavern-library-card { width: 100%; padding: 9px 10px; border: 0; border-radius: 8px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .dsh-tavern-library-card:hover { background: var(--dsw-alias-interactive-bg-hover); }
-.dsh-tavern-library-card b,.dsh-tavern-library-card span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-tavern-library-card span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-tavern-library-card b { display: block; overflow: hidden; overflow-wrap: anywhere; }
 .dsh-tavern-library-card span { margin-top: 3px; color: var(--dsw-alias-label-secondary); font-size: 10px; }
 .dsh-tavern-library-card-row { display: flex; align-items: center; gap: 6px; }
 .dsh-tavern-library-card-row .dsh-tavern-library-card { flex: 1; min-width: 0; }
@@ -1630,9 +1631,11 @@ header .nL4_yW_moreButton { display: none !important; }
   letter-spacing: -0.24px;
   line-height: 1.27;
   color: var(--dsw-alias-label-primary);
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .dsh-tavern-card-library .dsh-tavern-library-card span {
   margin-top: 0;
