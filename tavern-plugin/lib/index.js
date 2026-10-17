@@ -356,6 +356,7 @@ export async function apply(ctx) {
   const regexLibrary = createRegexLibrary({ store: profileData })
   const userPreferenceProfile = createUserPreferenceProfile({ store: profileData })
   const sceneWorldbooks = TAVERN_RELEASE_CAPABILITIES.sceneImages ? createSceneWorldbooks({ store: profileData }) : null
+  const sceneWorldbookArchive = sceneWorldbooks || createSceneWorldbooks({ store: profileData })
   const imageHostDiagnostic = createSceneImageHostLogger(ctx.logger)
   const sceneDiagnostics = TAVERN_RELEASE_CAPABILITIES.sceneImages ? createSceneImageDiagnostics(profileData, { onDiagnostic: imageHostDiagnostic }) : null
   async function captureSceneWorldbook(chat, card, preparedBook, turn) {
@@ -1376,9 +1377,8 @@ export async function apply(ctx) {
       if (options.images !== false) {
         const files = await gameFootprint.readSceneFiles(chat.id)
         for (const file of files) attachmentRefs(JSON.parse(file.content.toString('utf8')), media, new Set(['deletedVersions']))
-        const digest = chat.sceneOpeningWorldbook?.digest
-        const book = digest ? (sceneWorldbooks ? await sceneWorldbooks.exportSnapshot(digest) : null) ?? await gameFootprint.readSceneWorldbook(digest) : null
-        scene = { files, worldbooks: book ? [{ digest, content: book }] : [], attachments: [] }
+        const worldbooks = await sceneWorldbookArchive.exportForSave([chat, ...revisions.map(item => item.state)])
+        scene = { files, worldbooks, attachments: [] }
       }
       const attachments = []
       for (const ref of media.values()) {
