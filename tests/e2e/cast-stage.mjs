@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { readZipEntries, writeZipEntries } from '../../tavern-plugin/lib/domain/zip-entries.js'
 
 import { crc32, deflateSync } from 'node:zlib'
@@ -183,20 +185,17 @@ export async function castCardFileChecks({ page, step, report, savedChat }) {
     assert.equal((await page.request.get(fileUrl('../card.json'))).status(), 404)
     report.dshCard = { imported: true }
 
-    // A card that carries a plugin: kept aside on import, loaded once the player turns it on, confined to its card.
+    // A card that carries a plugin: on with the card, confined to it, off from the card library.
     const pluginCard = writeZipEntries([{ path: 'card.json', content: JSON.stringify({ ...card, data: { ...card.data, name: '插件卡验收' } }) },
       { path: 'dsh.json', content: JSON.stringify({ ...dsh, card: { ...dsh.card, title: '插件卡验收' }, packs: [], plugins: [{ name: 'e2e-card-plugin', path: 'plugins/ping/', purpose: '验收' }] }) },
       { path: 'plugins/ping/package.json', content: JSON.stringify({ name: 'dsh-e2e-card-ping', private: true, type: 'module', exports: { '.': './index.mjs' } }) },
       { path: 'plugins/ping/index.mjs', content: "export const name = 'dsh-e2e-card-ping'\nexport const inject = ['tavern']\nexport function apply(ctx) { ctx.tavern.handle('e2e-card/ping', async ({ gameId }) => ({ pong: true, gameId: gameId || '' })) }\n" }])
     const withPlugin = await importArchive(page, '插件卡验收.dshcard', pluginCard)
-    assert.deepEqual(withPlugin.plugins.map(item => [item.name, item.enabled]), [['dsh-e2e-card-ping', false]])
+    assert.deepEqual(withPlugin.plugins.map(item => [item.name, item.enabled]), [['dsh-e2e-card-ping', true]], '导入即启用')
     const call = (method, args) => page.evaluate(async ([method, args]) => (await fetch('/api/dsh-tavern/' + method, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(args) })).json(), [method, args])
-    assert.equal((await call('callPluginHandler', { name: 'e2e-card/ping', args: {} })).ok, false, '没启用时不加载')
-    const enabled = await call('setCardPlugins', { path: withPlugin.path, enabled: true })
-    assert.equal(enabled.ok, true, JSON.stringify(enabled))
     let pong = null
     for (let attempt = 0; attempt < 60 && !pong?.ok; attempt++) { await page.waitForTimeout(500); pong = await call('callPluginHandler', { name: 'e2e-card/ping', args: {} }) }
-    assert.deepEqual(pong.result, { pong: true, gameId: '' }, '启用后宿主侧几秒内加载')
+    assert.deepEqual(pong.result, { pong: true, gameId: '' }, '导入后宿主侧几秒内加载')
     const scopes = await call('cardPluginScopes', {})
     assert.equal(scopes.scopes['dsh-e2e-card-ping'], withPlugin.path)
     const sessionId = (await savedChat()).sessionId
@@ -206,26 +205,22 @@ export async function castCardFileChecks({ page, step, report, savedChat }) {
     for (let attempt = 0; attempt < 60 && pong?.ok; attempt++) { await page.waitForTimeout(500); pong = await call('callPluginHandler', { name: 'e2e-card/ping', args: {} }) }
     assert.equal(pong.ok, false, '停用后卸载')
     report.dshCard.plugin = true
-    if (process.env.TAVERN_E2E_DSHCARD) {
-      const big = await readFile(process.env.TAVERN_E2E_DSHCARD)
-      const started = Date.now()
-      const real = await importArchive(page, process.env.TAVERN_E2E_DSHCARD.split('/').pop(), big)
-      report.dshCard.real = { name: real.name, ms: Date.now() - started, sprites: real.assets?.sprites, packs: real.packs.map(item => item.title + ' ' + item.files) }
-      assert.ok(real.packs.length > 0)
-    }
   })
 }
 
-// 大肥鱼.dshcard (examples/dafeiyu-card, built from the fork's bundle): import, turn its plugin on,
+// 大肥鱼.dshcard (examples/dafeiyu-card): import it with its plugin,
 // play a turn, and see the card plugin's stage. Runs last: it opens a game of another card.
+const DEMO_CARD = fileURLToPath(new URL('../../examples/dafeiyu-card/大肥鱼.dshcard', import.meta.url))
+
 export async function dshCardPlayChecks({ page, step, output, report }) {
-  if (!process.env.TAVERN_E2E_DSHCARD) return
-  await step('大肥鱼 DSH 人物卡：导入并启用卡内插件，开局后舞台由卡内插件导演', async () => {
+  const cardFile = process.env.TAVERN_E2E_DSHCARD || (existsSync(DEMO_CARD) ? DEMO_CARD : '')
+  if (!cardFile) return
+  await step('大肥鱼 DSH 人物卡：导入即带上卡内插件，开局后舞台由卡内插件导演', async () => {
     const started = Date.now()
-    const card = await importArchive(page, '大肥鱼.dshcard', await readFile(process.env.TAVERN_E2E_DSHCARD))
+    const card = await importArchive(page, '大肥鱼.dshcard', await readFile(cardFile))
     report.dafeiyu = { importMs: Date.now() - started, sprites: card.assets?.sprites, packs: card.packs.map(item => item.title + ' ' + item.files), plugins: card.plugins.map(item => item.name) }
     const call = (method, args) => page.evaluate(async ([method, args]) => (await fetch('/api/dsh-tavern/' + method, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(args) })).json(), [method, args])
-    assert.equal((await call('setCardPlugins', { path: card.path, enabled: true })).ok, true)
+    assert.deepEqual(card.plugins.map(item => item.enabled), [true])
     let reply = null
     for (let attempt = 0; attempt < 60; attempt++) {
       reply = await call('callPluginHandler', { name: 'dsh-card-dafeiyu-galgame/scene', args: {} })
