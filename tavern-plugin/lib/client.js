@@ -20137,10 +20137,9 @@ function bindTavernFontZoom(node, win) {
                 h("h3", null, entry.title),
                 entry.fields.map(field => h(TavernPluginSettingField, { key: field.key, field: field, value: entry.values[field.key], busy: busy,
                     onChange: value => change({ setting: { plugin: entry.plugin, key: field.key, value: value } }) }))));
-            if (!data || (!data.plugins.length && !data.errors.length && !(data.tasks && data.tasks.settlement.length))) {
-                if (data && pluginSettings.length) return h(React.Fragment, null, settingsBlock, error ? h("p", { role: "alert" }, "保存失败：" + error) : null);
-                return error ? h("p", { role: "alert" }, "插件信息读取失败：" + error) : null;
-            }
+            // The options plugins add sit with the game's own settings; the switches stay under 高级.
+            if (props.part === "settings") return pluginSettings.length ? h(React.Fragment, null, settingsBlock, error ? h("p", { role: "alert" }, "保存失败：" + error) : null) : null;
+            if (!data || (!data.plugins.length && !data.errors.length && !(data.tasks && data.tasks.settlement.length))) return error ? h("p", { role: "alert" }, "插件信息读取失败：" + error) : null;
             const usesText = uses => uses.map(item => item.stage + "·" + item.mode).join("、");
             const settlementTasks = data.tasks ? data.tasks.settlement : [];
             // Swap with the neighbour in the same phase; the whole order is saved, so it holds for new tasks too.
@@ -20150,7 +20149,7 @@ function bindTavernFontZoom(node, win) {
                 void change({ taskOrder: order });
             }
             const canMove = (index, step) => settlementTasks[index + step]?.phase === settlementTasks[index].phase;
-            return h(React.Fragment, null, settingsBlock, h("section", { className: "dsh-local-section dsh-tavern-game-plugins" }, h("h3", null, "插件"),
+            return h("section", { className: "dsh-local-section dsh-tavern-game-plugins" }, h("h3", null, "插件"),
                 h("p", { className: "dsh-local-help" }, "本局用到的第三方插件。关掉后，它不再参与本局的提示词、结算和通知；已经挂上的内容保留。"),
                 data.plugins.map(plugin => h("label", { key: plugin.name, className: "dsh-tavern-background-task" },
                     h("span", null, plugin.name, h("span", { className: "dsh-tavern-settings-desc" }, usesText(plugin.uses))),
@@ -20177,7 +20176,7 @@ function bindTavernFontZoom(node, win) {
                     data.errors.map((item, index) => h("p", { key: index, className: "dsh-tavern-settings-desc" },
                         new Date(item.at).toLocaleTimeString() + " · " + item.plugin + " · " + item.stage + "：" + item.message)),
                     h("button", { type: "button", className: "dsh-tavern-btn", onClick: load }, "刷新")) : null,
-                error ? h("p", { role: "alert" }, "保存失败：" + error) : null));
+                error ? h("p", { role: "alert" }, "保存失败：" + error) : null);
         }
 
         // One option a plugin added to this game's settings (tavern.gameSettings), drawn like Tavern's own.
@@ -20263,6 +20262,7 @@ function bindTavernFontZoom(node, win) {
                         h(UserPreferenceProfileTab, { key: owner + ":profile", scope: { sessionId: owner }, conversationOnly: true }),
                         h(TavernStatusBarSetting, { key: owner + ":status", sessionId: owner })),
                     h(TavernConversationBackgroundModel, { key: owner, sessionId: owner }),
+                    h(TavernConversationPlugins, { key: owner + ":plugin-settings", sessionId: owner, part: "settings" }),
                     h("details", { className: "dsh-local-advanced" }, h("summary", null, "高级"),
                         h(TavernConversationWritingSkills, { key: owner + ":skills", sessionId: owner }),
                         h(TavernConversationPlugins, { key: owner + ":plugins", sessionId: owner }))) : h("p", null, "请选择一个游玩对话。")));
