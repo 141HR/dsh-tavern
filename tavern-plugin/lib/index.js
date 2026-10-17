@@ -1529,7 +1529,7 @@ export async function apply(ctx) {
         if (save.scene) {
           for (const file of save.scene.files) await profileData.writeBytes('scene-images/' + createHash('sha256').update(chatId).digest('hex') + '/' + rename(file.path),
             Buffer.from(JSON.stringify(renameJson(JSON.parse(file.content.toString('utf8'))))))
-          for (const book of save.scene.worldbooks) if (/^[a-zA-Z0-9_-]+$/.test(book.digest)) await profileData.writeBytes('scene-images/worldbooks/' + book.digest + '.json', book.content)
+          await sceneWorldbookArchive.importForSave(chatId, [save.chat, ...save.revisions.map(item => item.state)], save.scene.worldbooks)
         }
         // 7. Plugin data and media, re-keyed to the new game's text versions; their content is the plugins' own.
         if (save.plugins) {
@@ -1558,6 +1558,7 @@ export async function apply(ctx) {
           try { await rm(path.dirname(ctx.get('sessionPersistence').locate({ id: sessionId, cwd }).path), { recursive: true, force: true }) } catch {}
         }
         if (written) try { await conversationRegistry.remove(chatId) } catch {}
+        try { await sceneWorldbookArchive.forgetChat(chatId) } catch {}
         try { await rm(path.join(dataRoot, 'scene-images', createHash('sha256').update(chatId).digest('hex')), { recursive: true, force: true }) } catch {}
         throw error
       }
