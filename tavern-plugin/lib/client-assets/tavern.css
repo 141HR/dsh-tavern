@@ -2882,13 +2882,8 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
 /* Voiced dialogue */
 .dsh-tavern-speak { border: 0; background: transparent; cursor: pointer; padding: 0 4px; font-size: 12px; line-height: 1; opacity: .65; }
 .dsh-tavern-speak:hover, .dsh-tavern-speak.is-playing { opacity: 1; }
-.dsh-tavern-speech-form { display: grid; gap: 8px; padding: 4px 0 8px; }
-.dsh-tavern-speech-field { display: grid; grid-template-columns: 7em minmax(0, 1fr); align-items: center; gap: 8px; font-size: 13px; }
-.dsh-tavern-speech-field input, .dsh-tavern-speech-field select { min-width: 0; font: inherit; }
-.dsh-tavern-speech-actions { display: flex; gap: 8px; }
 .dsh-tavern-cast-voice { display: inline-flex; align-items: center; gap: 2px; }
 .dsh-tavern-cast-voice input { width: 9em; min-width: 0; font: inherit; font-size: 12px; }
-@media (max-width: 520px) { .dsh-tavern-speech-field { grid-template-columns: 1fr; gap: 2px; } }
 
 /* A card's own plugins in the card library */
 .dsh-tavern-card-plugins { margin: 8px 12px; padding: 10px 12px; border: 1px solid var(--dsh-tavern-border, rgba(127,127,127,.3)); border-radius: 8px; }

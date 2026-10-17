@@ -991,6 +991,14 @@ window.__ModuleLoader__.load({
 				}, function () {});
 				return function () { active = false; if (typeof dispose === "function") dispose(); };
 			}, "dsh-tavern: scene image settings section");
+			ctx.effect(function () {
+				return slots.inject("settings.section", function () { return slots.register({
+					name: "settings.section",
+					id: "dsh-tavern-speech",
+					order: 112,
+					label: function () { return "配音"; }
+				}, function () { return React.createElement("div", { className: "dsh-tavern-settings-section dsh-tavern-global-settings" }, React.createElement(TavernSpeechSettings, null)); }); });
+			}, "dsh-tavern: speech settings section");
 
 			ctx.effect(function () {
 				const dispose = ctx.betterSidebar.registerTab({ id: "dsh-tavern:system-prompts", title: "系统提示词", order: 5, single: true, component: SystemPromptSidebarTab });
