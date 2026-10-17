@@ -27,11 +27,22 @@ function usage() {
   console.log('用法：dsh-tavern install [--host cli|desktop|android] | {update|start|open|stop|restart|status}')
 }
 
+// A detached in-app update has no console; keep its trail next to its status file.
+function updateDiagnostic(event, details = {}) {
+  if (process.argv[2] !== 'update') return
+  // Read the two flags leniently: invalid arguments are themselves worth recording.
+  const flag = name => { const args = process.argv.slice(3), at = args.indexOf(name); return at >= 0 ? args[at + 1] : args.find(arg => arg.startsWith(name + '='))?.slice(name.length + 1) }
+  const statusFile = flag('--status-file')
+  if (statusFile && path.isAbsolute(statusFile)) recordUpdateDiagnostic(path.dirname(statusFile), { attemptId: flag('--attempt-id'), event, ...details })
+}
+
 async function main() {
   const action = process.argv[2] || 'status'
+  updateDiagnostic('updater.started', { execPath: process.execPath, electron: process.versions.electron || '', runtimeHost: RUNTIME_HOST, cwd: process.cwd() })
   if (RUNTIME_HOST === 'desktop' && ['install', 'update'].includes(action)) {
     const executable = officialDesktop.discover()
     if (!process.versions.electron || path.resolve(process.execPath) !== path.resolve(executable)) {
+      updateDiagnostic('updater.relaunch', { executable })
       const setup = spawnSync(executable, ['--expose-internals', fileURLToPath(new URL('./official-desktop-runtime.cjs', import.meta.url)), DSH_ROOT],
         { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8' })
       if (setup.error || setup.status !== 0) throw new Error(setup.error?.message || setup.stderr || '官方 Desktop 环境准备失败')
@@ -85,14 +96,10 @@ async function main() {
 
 const isEntrypoint = process.argv[1] && realpathSync(SCRIPT_PATH) === realpathSync(path.resolve(process.argv[1]))
 if (isEntrypoint) {
+  process.once('exit', code => updateDiagnostic('updater.exit', { code }))
   main().catch((error) => {
     const message = error instanceof Error ? error.message : String(error)
-    // A detached in-app update has no console; keep its failure next to its status file.
-    if (process.argv[2] === 'update') {
-      let options = {}
-      try { options = parseUpdateOptions(process.argv.slice(3)) } catch {}
-      if (options.statusFile) recordUpdateDiagnostic(path.dirname(options.statusFile), { attemptId: options.attemptId, event: 'updater.failed', error: message })
-    }
+    updateDiagnostic('updater.failed', { error: message })
     fail(message)
   })
 }
