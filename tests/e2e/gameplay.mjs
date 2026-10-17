@@ -311,7 +311,8 @@ try {
   if(process.argv.includes('--native-format'))await step('确认新局直接写入原生分页存档',assertNativeStorage)
   if (process.argv.includes('--text-colors')) {
     await step('实际正文挂载主题对白高亮', async () => {
-      await page.locator('.dsh-tavern-colored-markdown').waitFor()
+      // A trusted card's script layer keeps a hidden copy of the body beside the shown one.
+      await page.locator('.dsh-tavern-colored-markdown').filter({ visible: true }).first().waitFor()
       const state=await page.evaluate(()=>({api:typeof Highlight,css:typeof CSS.highlights,styles:document.querySelectorAll('style[data-dsh-tavern-text-colors]').length,ranges:[...CSS.highlights.values()].reduce((n,h)=>n+h.size,0)}))
       report.textColors=state
       assert.ok(state.styles>0,'正文必须挂载高亮样式')
