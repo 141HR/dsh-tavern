@@ -1442,13 +1442,12 @@ export async function apply(ctx) {
     if (!/^[a-zA-Z0-9_-]+$/.test(sourceChatId) || !/^[a-zA-Z0-9_-]+$/.test(sourceSessionId)) throw new Error('存档包里的游戏编号无效')
     if (importingGameSaves.has(sourceChatId)) throw new Error('这份存档正在导入，请稍候')
     importingGameSaves.add(sourceChatId)
+    let importedResources
     try {
       const chatId = uid('chat'), sessionId = 'session-' + randomUUID()
-      // 1. Card: reuse an identical local card; otherwise import the packaged one as a new card.
-      const { cardPath, importedCard } = await prepareGameSaveResources(save)
-      if (save.script && (save.chat.mode || 'story') === 'script' && !await fileResources.scriptForCard(cardPath)) {
-        await importScript(cardPath, { name: str(save.script.path).split('/').pop() || '剧本.txt', text: str(save.script.text) })
-      }
+      // 1. Reuse matching resources; isolate conflicting cards and scripts.
+      importedResources = await prepareGameSaveResources(save)
+      const { cardPath } = importedResources
       // 2. Images: store each picture here, then point every reference at the stored copy.
       const replacedRefs = new Map()
       for (const attachment of save.scene?.attachments || []) {
@@ -1553,18 +1552,20 @@ export async function apply(ctx) {
           await pluginApi.importGame({ targetChatId: chatId, targetSessionId: sessionId, keyMap: pluginKeys, data: save.plugins.data, media: save.plugins.media,
             attachment: ref => files.has(ref.attachmentId) ? { ...ref, ...files.get(ref.attachmentId) } : null })
         }
+        await conversationRegistry.publish(saved)
       } catch (error) {
         if (created) {
           try { await (await ctx.get('workspaceRegistry')?.resolveByPath(cwd))?.detachSession(sessionId) } catch {}
           try { await rm(path.dirname(ctx.get('sessionPersistence').locate({ id: sessionId, cwd }).path), { recursive: true, force: true }) } catch {}
         }
         if (written) try { await conversationRegistry.remove(chatId) } catch {}
-        if (importedCard) try { await fileResources.remove(importedCard) } catch {}
         try { await rm(path.join(dataRoot, 'scene-images', createHash('sha256').update(chatId).digest('hex')), { recursive: true, force: true }) } catch {}
         throw error
       }
-      await conversationRegistry.publish(saved)
       return { chatId, sessionId, cardPath, title: saved.title, revisions: save.revisions.length, images: replacedRefs.size }
+    } catch (error) {
+      try { await importedResources?.rollback() } catch {}
+      throw error
     } finally { importingGameSaves.delete(sourceChatId) }
   }
   async function exportTavernLogs(sessionId) {
