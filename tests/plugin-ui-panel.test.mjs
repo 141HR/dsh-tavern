@@ -114,6 +114,7 @@ test('人物卡列表视图：插件视图拿到筛选后的卡片和动作，�
   dispose()
   tree = List(props('library'))
   assert.deepEqual(tree.children[0].children.map(button => button.children[0]), ['列表', '宫格'])
+  assert.equal(tree.children[0].props.className, 'dsh-tavern-card-view-switch dsh-tavern-segmented')
   assert.equal(tree.children[1], 'builtin')
 
   // Tavern's own grid: covers and names; a broken card cannot start a game; corner holds @ and ⋯.
@@ -125,26 +126,26 @@ test('人物卡列表视图：插件视图拿到筛选后的卡片和动作，�
   let [toolbar, grid] = view.children
   assert.equal(grid.props.className, 'dsh-tavern-card-grid', '人物卡库默认 4 列')
   assert.equal(grid.props.style['--dsh-tavern-card-grid-cols'], '4')
-  assert.equal(toolbar.children[0].children[1].props.value, '4')
+  const columns = toolbar.children[1].children
+  assert.deepEqual(columns.map(button => button.props['aria-pressed']), [false, false, true, false, false])
   assert.equal(toolbar.children[2].children[0], '2 张')
   const [first, second] = grid.children
   const open = first.children[0]
   assert.equal(open.children[0].props.src, '/api/dsh-tavern/card-image?path=' + encodeURIComponent('cards/甲.png'))
   const copy = open.children[1].children
+  assert.equal(copy.length, 1, '卡片上只显示名字')
   assert.equal(copy[0].children[0], '甲')
-  assert.equal(copy[1].children[0], '文件：甲.png')
-  assert.equal(copy[2].children[0], '已绑定剧本：剧本一')
-  assert.equal(second.children[0].children[1].children[2].children[0], '自由故事（未绑定剧本）')
+  assert.equal(open.props.title, '甲\n文件：甲.png\n剧本：剧本一', '文件名和剧本在悬停提示里')
+  assert.equal(second.children[0].props.title, '坏了', '坏卡的提示是错误原因')
   assert.equal(second.children[0].children[0].children[0], '乙')
   assert.deepEqual(first.children[2].children, ['@甲', 'menu:甲'])
   open.props.onClick()
   assert.deepEqual(opened.slice(-1), ['cards/甲.png'])
-  toolbar.children[0].children[1].props.onChange({ target: { value: '3' } })
+  columns[1].props.onClick()
   assert.equal(stored.get('dsh-tavern-card-grid-cols-library'), '3', '列数按位置记住')
   view = viewOf('play')
   ;[toolbar, grid] = view.children
-  assert.equal(grid.props.className, 'dsh-tavern-card-grid dense', '开始游玩默认 6 列，高密度只显示名称')
-  assert.equal(grid.children[0].children[0].children[1].children[1], null)
+  assert.equal(grid.props.className, 'dsh-tavern-card-grid dense', '开始游玩默认 6 列，名字更紧凑')
   assert.equal(grid.children[1].children[0].props.disabled, true)
   assert.equal(grid.children[0].children[2], null)
   stored.set('tavern-card-grid-cols-play', '5')
