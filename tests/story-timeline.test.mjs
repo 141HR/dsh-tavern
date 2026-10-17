@@ -306,3 +306,18 @@ test('变量重试推进版本后，延后的重新结算接续时仍能提交',
   assert.equal(result.value.status, 'committed')
   assert.equal(timeline.inspect({ chat: current }).revision, 3)
 })
+
+test('裁剪旧 operation 时保留仍在运行或延后的任务', () => {
+  const { timeline, chat } = harness()
+  const settlement = timeline.apply({ chat, intent: { kind: 'agent.begin', role: 'settlement' } })
+  const current = settlement.chat
+  for (let index = 0; index < 85; index++) {
+    current.timeline.operations['old-' + index] = { id: 'old-' + index, kind: 'body', role: 'body', status: 'completed', createdAt: 5000 + index }
+  }
+  const begun = timeline.apply({ chat: current, intent: { kind: 'body.begin', turn: 1, userText: '继续' } })
+  const operations = begun.chat.timeline.operations
+  assert.equal(operations[settlement.value.operationId]?.status, 'running')
+  assert.equal(operations[begun.value.operationId]?.status, 'running')
+  assert.equal(operations['old-0'], undefined, '已完成的旧记录照常裁剪')
+  assert.equal(Object.keys(operations).filter(id => id.startsWith('old-')).length, 80)
+})

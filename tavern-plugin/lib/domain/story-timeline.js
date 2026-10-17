@@ -155,7 +155,11 @@ export function createStoryTimeline(options = {}) {
 
   function trimOperations(timeline) {
     const entries = Object.values(timeline.operations).sort(function (left, right) { return (Number(right.createdAt) || 0) - (Number(left.createdAt) || 0) })
-    for (const operation of entries.slice(80)) delete timeline.operations[operation.id]
+    // Only finished history is trimmed: an old running or deferred operation (and the
+    // round it belongs to) must still be found when it completes or resumes.
+    const retained = new Set(entries.filter(operation => ['running', 'deferred'].includes(operation.status))
+      .flatMap(operation => [operation.id, operation.roundOperationId].filter(Boolean)))
+    for (const operation of entries.slice(80)) if (!retained.has(operation.id)) delete timeline.operations[operation.id]
   }
 
   function operationValue(operation, participant) {
