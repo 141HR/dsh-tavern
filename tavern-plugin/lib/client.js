@@ -14990,6 +14990,28 @@ function bindTavernFontZoom(node, win) {
                     message ? h("p", { role: "status" }, message) : null);
             }
 
+            // A model-compatibility switch, not a per-game preference: it applies to every game from its next turn.
+            function StoryToolCallSettings({ settings }) {
+                const h = React.createElement;
+                const [enabled, setEnabled] = React.useState(settings.storyToolCall === true), [busy, setBusy] = React.useState(false), [message, setMessage] = React.useState("");
+                async function save(value) {
+                    setBusy(true); setMessage("");
+                    try {
+                        const result = await rpc("updateTavernSettings", { patch: { storyToolCall: value } });
+                        setEnabled(result.settings.storyToolCall === true);
+                        setMessage("已保存，所有游戏下一轮生效");
+                    } catch (err) { setMessage("保存失败：" + String(err.message || err)); }
+                    finally { setBusy(false); }
+                }
+                return h("section", { className: "dsh-tavern-settings-group" },
+                    h("label", { className: "dsh-tavern-settings-row" },
+                        h("span", { className: "dsh-tavern-settings-copy" },
+                            h("strong", null, "正文走工具调用"),
+                            h("p", { className: "dsh-tavern-settings-desc" }, "让模型通过工具调用提交正文，可缓解 Gemini 等模型在正文中途截断或拒答。需要模型支持工具调用；正文生成完成后一次性显示。")),
+                        h("input", { type: "checkbox", role: "switch", "aria-label": "正文走工具调用", checked: enabled, disabled: busy, onChange: event => save(event.target.checked) })),
+                    message ? h("div", { className: "dsh-tavern-settings-row", role: "status" }, h("span", { className: "dsh-tavern-settings-desc" }, message)) : null);
+            }
+
             function TavernSettingsSection() {
                 const [state, setState] = React.useState({ loading: true, busy: false, defaultForegroundModel: null, defaultBackgroundModel: null, defaultWorkbenchModel: null, defaultImageModel: null, sceneImages: false, notice: "", settings: null, modelCatalog: [], error: "" });
                 React.useEffect(function () {
@@ -15031,6 +15053,7 @@ function bindTavernFontZoom(node, win) {
                         h(DisplayPreferencesSettings),
                         h(CandidatePreferencesSettings)),
                     group("高级", "",
+                        state.settings ? h(StoryToolCallSettings, { settings: state.settings }) : null,
                         h(PromptTemplateSettingsEntry),
                         h(ContextCompactionSettings)),
                     state.error ? React.createElement("div", { className: "dsh-tavern-settings-error", role: "alert" }, "保存失败：" + state.error) : null
@@ -18786,34 +18809,6 @@ function bindTavernFontZoom(node, win) {
                 h("div", { role: "status", className: "dsh-local-feedback" }, busy ? "保存中…" : ""));
         }
 
-		function TavernStoryToolCallSetting(props) {
-			const [busy, setBusy] = React.useState(false);
-			const running = props.useSession(function (snapshot) { return snapshot.running === true; });
-			const live = useLiveTavernView(props.sessionId, "story-tool-call:" + String(running));
-			const enabled = !!(live.view && live.view.storyToolCallEnabled === true);
-			const blocked = busy || running || !live.view;
-			React.useEffect(function () { setBusy(false); }, [props.sessionId]);
-			async function toggle() {
-				if (blocked) return;
-				setBusy(true);
-				try {
-					await rpc("setStoryToolCallEnabled", { enabled: !enabled }, props.sessionId);
-					liveTavernView.invalidate(props.sessionId);
-					notifyTavernDataChanged(["sessions"], "story-tool-call");
-				} catch (err) {
-					tavernErrorHub.report("正文走工具调用设置", err);
-				} finally { setBusy(false); }
-			}
-			return React.createElement("button", {
-				type: "button",
-				role: "menuitemcheckbox",
-				"aria-checked": enabled,
-				disabled: blocked,
-				title: "仅对当前对话生效，需模型支持工具调用；从下一轮生成生效，正文生成完成后一次性显示",
-				onClick: toggle
-			}, busy ? "正文走工具调用：设置中…" : (enabled ? "正文走工具调用：开" : "正文走工具调用：关"));
-		}
-
 		function TavernMoreActions(props) {
 			const [open, setOpen] = React.useState(false);
 			const [placement, setPlacement] = React.useState(null);
@@ -18845,7 +18840,6 @@ function bindTavernFontZoom(node, win) {
 			return React.createElement("div", { className: "dsh-tavern-more-actions", ref: root },
 				React.createElement("button", { ref: trigger, type: "button", className: "dsh-tavern-choice-trigger", "aria-haspopup": "menu", "aria-expanded": open, onClick: function () { setOpen(function (value) { return !value; }); } }, "更多 ▾"),
 				React.createElement("div", { className: "dsh-tavern-more-menu", role: "menu", hidden: !open, style: placement || undefined, onClick: function (event) { if (event.target && event.target.closest && event.target.closest("button:not(:disabled)")) setOpen(false); } },
-					React.createElement(TavernStoryToolCallSetting, Object.assign({}, props, { key: props.sessionId })),
                     React.createElement(TavernStopBackgroundAction, Object.assign({}, props, { inMenu: true })),
 					React.createElement(TavernEditBodyAction, props),
 					React.createElement(TavernRollbackAction, props),

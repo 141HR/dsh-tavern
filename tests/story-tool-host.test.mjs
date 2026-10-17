@@ -51,9 +51,10 @@ async function createStoryHost(bootModule) {
   const selection = { provider: 'story-fixture', model: 'text' }
 
   // The chat backing the session; toggled per run to exercise the gate.
-  const chatStore = { chat: { storyToolCallEnabled: true } }
+  const chatStore = { chat: { mode: 'story' }, enabled: true }
   ctx.tools.register(defineTool(createStorySubmissionTool({
     chatForSession: () => chatStore.chat,
+    enabled: async () => chatStore.enabled,
     isBackground: () => false
   })))
   // A read-only query tool used to prove the loop re-requests before submitting.
@@ -91,7 +92,8 @@ async function createStoryHost(bootModule) {
    * @param {{ chat?: any }} [options]
    */
   async function runTurn(plan, options = {}) {
-    chatStore.chat = options.chat || { storyToolCallEnabled: true }
+    chatStore.chat = options.chat || { mode: 'story' }
+    chatStore.enabled = options.enabled !== false
     state.plan = plan
     state.index = 0
     state.requests = 0
@@ -187,10 +189,10 @@ test('两轮工具正文保留合法上下文配对，下一轮能读取前一�
   assert.equal(receipt.content[0].text, '第一轮：雨水扑进房间。')
 })
 
-test('未开启 storyToolCallEnabled 时 submit_story 执行拒绝且不构成提交', native, async t => {
+test('未开启全局正文走工具调用时 submit_story 执行拒绝且不构成提交', native, async t => {
   const host = await createStoryHost(BOOT_MODULE)
   t.after(() => host.dispose())
-  const result = await host.runTurn([{ kind: 'tool', name: 'submit_story', args: { content: '正文' } }], { chat: { storyToolCallEnabled: false } })
+  const result = await host.runTurn([{ kind: 'tool', name: 'submit_story', args: { content: '正文' } }], { enabled: false })
 
   const submission = host.storySubmissionForTurn(result.session, 1)
   assert.equal(submission, null, '未开启提交时不应识别到任何 story 提交')

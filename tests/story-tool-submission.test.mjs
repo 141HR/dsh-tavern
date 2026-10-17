@@ -63,16 +63,18 @@ test('Session 快照重放和结束事件仍可提取正文，不依赖内存提
 })
 
 test('工具仅允许已开启的前台 story/script，拒绝空正文、后台、失效宿主和已结束回合', async () => {
-  let chat = { mode: 'story', storyToolCallEnabled: true }, background = false, concluded = 0
-  const tool = createStorySubmissionTool({ chatForSession: async () => chat, isBackground: () => background })
+  let chat = { mode: 'story' }, enabled = true, background = false, concluded = 0
+  const tool = createStorySubmissionTool({ chatForSession: async () => chat, enabled: async () => enabled, isBackground: () => background })
   const session = { id: 'game', events: [{ type: 'turn/start', data: { turn: 1 } }] }
   const exec = { agent: { session }, signal: new AbortController().signal, concludeTurn() { concluded++ } }
   assert.equal(await tool.execute({ content: '正文' }, exec), '正文')
   assert.equal(concluded, 1)
   assert.equal(tool.isConcurrencySafe(), false)
   for (const content of ['', '  ', null, 123]) await assert.rejects(tool.execute({ content }, exec), /正文不能为空/)
-  for (chat of [{}, { mode: 'card', storyToolCallEnabled: true }, { mode: 'story', storyToolCallEnabled: false }]) await assert.rejects(tool.execute({ content: '正文' }, exec), /未开启/)
-  chat = { mode: 'script', storyToolCallEnabled: true }
+  for (chat of [undefined, { mode: 'card' }]) await assert.rejects(tool.execute({ content: '正文' }, exec), /未开启/)
+  chat = { mode: 'story' }; enabled = false
+  await assert.rejects(tool.execute({ content: '正文' }, exec), /未开启/)
+  chat = { mode: 'script' }; enabled = true
   assert.equal(await tool.execute({ content: '剧本正文' }, exec), '剧本正文')
   background = true
   await assert.rejects(tool.execute({ content: '正文' }, exec), /前台游玩/)
@@ -86,7 +88,7 @@ test('工具仅允许已开启的前台 story/script，拒绝空正文、后台�
 
 test('同轮重放相同正文幂等，冲突正文不覆盖已成功提交内容', async () => {
   const session = fixture('已提交')
-  const tool = createStorySubmissionTool({ chatForSession: async () => ({ mode: 'story', storyToolCallEnabled: true }) })
+  const tool = createStorySubmissionTool({ chatForSession: async () => ({ mode: 'story' }), enabled: async () => true })
   let concluded = 0
   const exec = { agent: { session }, concludeTurn() { concluded++ } }
   assert.equal(await tool.execute({ content: '已提交' }, exec), '已提交')
@@ -95,10 +97,10 @@ test('同轮重放相同正文幂等，冲突正文不覆盖已成功提交内�
   assert.equal(storySubmissionForTurn(session, 2).text, '已提交')
 })
 
-test('系统指令只随游玩开关启用，不影响 card 或旧存档', async () => {
+test('系统指令跟随 submit_story 是否可见，不影响 card 或旧存档', async () => {
   for (const mode of ['story', 'script', 'card']) for (const enabled of [false, true]) {
-    const chat = { mode, storyToolCallEnabled: enabled }
-    const strategy = createNativePlayOrchestrationStrategy({ modeFor: async () => mode, visibleTools: async () => storyToolCallEnabled(chat) ? ['submit_story', 'tavern_recall_history'] : ['tavern_recall_history'], controlledToolNames: new Set(['submit_story']), modePrompt: () => 'card', cardSystemPrompt: () => '卡片', workspaceContext: () => '', resolvePreset: async () => null })
+    const chat = { mode }
+    const strategy = createNativePlayOrchestrationStrategy({ modeFor: async () => mode, visibleTools: async () => storyToolCallEnabled(chat, enabled) ? ['submit_story', 'tavern_recall_history'] : ['tavern_recall_history'], controlledToolNames: new Set(['submit_story']), modePrompt: () => 'card', cardSystemPrompt: () => '卡片', workspaceContext: () => '', resolvePreset: async () => null })
     const assembly = await strategy.assembleSystemPrompt({ tools: [{ name: 'submit_story' }, { name: 'tavern_recall_history' }], sections: [], fixedSystemSections: [{ name: 'tavern:base', text: '底座' }] }, { chat, sessionId: 'game' })
     assert.equal(assembly.tools.some(tool => tool.name === 'submit_story'), mode !== 'card' && enabled)
     assert.equal(assembly.sections.some(section => section.name === 'tavern:story-tool-submission'), mode !== 'card' && enabled)
@@ -107,40 +109,16 @@ test('系统指令只随游玩开关启用，不影响 card 或旧存档', async
   assert.equal(storyToolCallEnabled({ mode: 'story' }), false)
 })
 
-test('会话状态投影保留正文工具开关，工具可见性判定不受收窄读取影响', async () => {
-  const { projectChatSessionState } = await import('../tavern-plugin/lib/domain/chat-session-state.js')
-  // The foreground orchestrator reads its chats through the scoped state
-  // projection; a header-only toggle must survive that whitelist.
-  assert.equal(projectChatSessionState({ id: 'c', mode: 'story', storyToolCallEnabled: true, messages: [] }).storyToolCallEnabled, true)
-  assert.equal(projectChatSessionState({ id: 'c', mode: 'story', storyToolCallEnabled: false, messages: [] }).storyToolCallEnabled, false)
-  assert.equal(projectChatSessionState({ id: 'c', mode: 'story', messages: [] }).storyToolCallEnabled, undefined)
-  assert.equal(storyToolCallEnabled(projectChatSessionState({ id: 'c', mode: 'script', storyToolCallEnabled: true, messages: [] })), true)
+test('全局设置保存正文走工具调用开关，默认关闭，只接受布尔值', async () => {
+  const { applyTavernSettingsPatch, presentTavernSettings } = await import('../tavern-plugin/lib/domain/tavern-settings.js')
+  assert.equal(presentTavernSettings({}, {}).storyToolCall, false)
+  const saved = applyTavernSettingsPatch({}, { storyToolCall: true })
+  assert.equal(presentTavernSettings(saved, {}).storyToolCall, true)
+  assert.throws(() => applyTavernSettingsPatch({}, { storyToolCall: 'true' }), /布尔值/)
 })
 
 const server = await readFile(new URL('../tavern-plugin/lib/index.js', import.meta.url), 'utf8')
 const hooks = await readFile(new URL('../tavern-plugin/lib/hooks/turn-lifecycle.js', import.meta.url), 'utf8')
-const client = await readFile(new URL('../tavern-plugin/src/client/features/play-controls.js', import.meta.url), 'utf8')
-
-test('真实 setter 独立保存当前对话，拒绝错误参数、工作台和运行中修改', async () => {
-  const chats = new Map([['a', { mode: 'story' }], ['b', { mode: 'script' }], ['card', { mode: 'card' }]])
-  const sessions = new Map(), writes = []
-  const context = { chatForSession: async id => chats.get(id), agentRegistry: new Map(), sessionStore: sessions, activeStoryTurn, writeChat: async (chat, options) => writes.push([chat, options]) }
-  const start = server.indexOf('  async function setStoryToolCallEnabled(')
-  vm.runInNewContext(server.slice(start, server.indexOf('  async function setRequestMode(', start)) + '; this.toggle = setStoryToolCallEnabled', context)
-  assert.equal(await context.toggle('a', true), true)
-  assert.equal(chats.get('a').storyToolCallEnabled, true)
-  assert.equal(chats.get('b').storyToolCallEnabled, undefined)
-  assert.equal(writes[0][1].source, 'story-tool-call.set')
-  assert.equal(await context.toggle('a', false), false)
-  await assert.rejects(context.toggle('a', 'true'), /布尔值/)
-  await assert.rejects(context.toggle('missing', true), /没有绑定/)
-  await assert.rejects(context.toggle('card', true), /卡片工作台/)
-  sessions.set('a', { events: [{ type: 'turn/start', data: { turn: 2 } }] })
-  await assert.rejects(context.toggle('a', true), /等待当前生成/)
-  assert.equal(chats.get('a').storyToolCallEnabled, false)
-  assert.match(server, /case 'setStoryToolCallEnabled':/)
-  assert.match(server, /storyToolCallEnabled: chat.storyToolCallEnabled === true/)
-})
 
 test('真实收尾 hook 将工具正文交给现有保存链路，并把调用与回执折叠成保存后的正文', async () => {
   let hook, saved, replacements = []
@@ -194,29 +172,3 @@ test('折叠后上下文只剩一条普通正文，回合结果、回退都按�
   assert.deepEqual(rollback.shadowedSeqs, [input.seq, visible[1].seq])
 })
 
-test('菜单开关携带 sessionId，加载或生成中禁用，失败不改变服务端值', async () => {
-  let current = { mode: 'story', storyToolCallEnabled: false }, running = false, calls = [], errors = [], busy = false
-  const context = { React: { useState: () => [busy, value => { busy = value }], useEffect() {}, createElement: (type, props, ...children) => ({ type, props, children }) },
-    useLiveTavernView: () => ({ view: current }), liveTavernView: { invalidate(id) { calls.push(['invalidate', id]) } },
-    rpc: async (method, args, id) => { calls.push([method, args.enabled, id]); current.storyToolCallEnabled = args.enabled }, notifyTavernDataChanged() {}, tavernErrorHub: { report(_name, error) { errors.push(error.message) } } }
-  const start = client.indexOf('function TavernStoryToolCallSetting(')
-  vm.runInNewContext(client.slice(start, client.indexOf('function TavernMoreActions(', start)) + '; this.render = TavernStoryToolCallSetting', context)
-  const props = { sessionId: 'game-a', useSession: selector => selector({ running }) }
-  let button = context.render(props)
-  assert.equal(button.props.role, 'menuitemcheckbox')
-  assert.equal(button.props['aria-checked'], false)
-  assert.match(button.children.join(''), /正文走工具调用：关/)
-  await button.props.onClick()
-  assert.deepEqual(calls[0], ['setStoryToolCallEnabled', true, 'game-a'])
-  assert.equal(context.render(props).props['aria-checked'], true)
-  running = true
-  assert.equal(context.render(props).props.disabled, true)
-  running = false; current = null
-  assert.equal(context.render(props).props.disabled, true)
-  current = { storyToolCallEnabled: true }
-  context.rpc = async () => { throw new Error('保存失败') }
-  await context.render(props).props.onClick()
-  assert.deepEqual(errors, ['保存失败'])
-  assert.equal(current.storyToolCallEnabled, true)
-  assert.equal(busy, false)
-})

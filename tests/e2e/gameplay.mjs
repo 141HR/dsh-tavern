@@ -483,11 +483,16 @@ try {
     await surfaceRecoveryChecks({ page, step, savedChat, output, report, root, restartServer })
   } else {
   if (storyToolScenario) await step('开启正文走工具调用', async () => {
-    await page.getByRole('button', { name: '更多 ▾', exact: true }).click()
-    await page.getByRole('menuitemcheckbox', { name: '正文走工具调用：关', exact: true }).click()
-    await page.getByRole('button', { name: '更多 ▾', exact: true }).click()
-    await page.getByRole('menuitemcheckbox', { name: '正文走工具调用：开', exact: true }).waitFor()
-    await page.getByRole('button', { name: '更多 ▾', exact: true }).click()
+    // A global switch: DSH settings → DSH Tavern → 高级.
+    const chatUrl = page.url()
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.getByText('DSH Tavern', { exact: true }).first().click()
+    const toggle = page.getByRole('switch', { name: '正文走工具调用', exact: true })
+    await toggle.click()
+    await page.getByText('已保存，所有游戏下一轮生效').waitFor()
+    assert.equal(await toggle.isChecked(), true)
+    await page.goto(chatUrl)
+    await page.getByRole('textbox', { name: /发消息|Message/ }).waitFor()
   })
   await step('玩一轮，确认正文、金币与人物姿势', async () => {
     const composer = page.getByRole('textbox', { name: /发消息|Message/ })

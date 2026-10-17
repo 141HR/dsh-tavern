@@ -56,6 +56,10 @@ export function applyTavernSettingsPatch(current, patch) {
     if (!['after-fill', 'after-send'].includes(input.candidateDismissMode)) throw new Error('无效的候选项收起方式')
     next.candidateDismissMode = input.candidateDismissMode
   }
+  if (Object.hasOwn(input, 'storyToolCall')) {
+    if (typeof input.storyToolCall !== 'boolean') throw new Error('正文走工具调用设置必须是布尔值')
+    next.storyToolCall = input.storyToolCall
+  }
   if (Object.hasOwn(input, 'contextCompaction')) next.contextCompaction = { ...compactionPolicy(input.contextCompaction), revision: Date.now() }
   if (Object.prototype.hasOwnProperty.call(input, 'backgroundTasks')) {
     next.backgroundTasks = normalizeBackgroundTasks({ ...normalizeBackgroundTasks(next.backgroundTasks), ...object(input.backgroundTasks) })
@@ -126,6 +130,7 @@ export function presentTavernSettings(document, defaults) {
     contextCompaction: compactionPolicy(object(document).contextCompaction),
     hideContextAndReasoning: object(document).hideContextAndReasoning !== false,
     candidateDismissMode: object(document).candidateDismissMode === 'after-fill' ? 'after-fill' : 'after-send',
+    storyToolCall: object(document).storyToolCall === true,
     compatibilityMode: false,
     sillyModeEnabled: false,
     webSearchEnabled: object(document).webSearchEnabled === true,

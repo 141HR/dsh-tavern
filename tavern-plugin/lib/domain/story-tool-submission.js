@@ -11,8 +11,9 @@ export const STORY_SUBMIT_PROMPT = [
   '</output_method>'
 ].join('\n')
 
-export function storyToolCallEnabled(chat) {
-  return !!chat && (!chat.mode || chat.mode === 'story' || chat.mode === 'script') && chat.storyToolCallEnabled === true
+/** A global switch (Tavern settings); it applies to story and script play only. */
+export function storyToolCallEnabled(chat, enabled) {
+  return enabled === true && !!chat && (!chat.mode || chat.mode === 'story' || chat.mode === 'script')
 }
 
 function validContent(content) {
@@ -86,7 +87,7 @@ export function activeStoryTurn(session) {
 }
 
 /** Executed exclusively by the host; the durable tool result is the receipt. */
-export function createStorySubmissionTool({ chatForSession, isBackground = () => false }) {
+export function createStorySubmissionTool({ chatForSession, enabled, isBackground = () => false }) {
   return {
     name: STORY_SUBMIT_TOOL_NAME,
     description: '提交本轮完整最终正文。全部正文放入 content；成功后结束本轮，不再补充回复。',
@@ -99,7 +100,7 @@ export function createStorySubmissionTool({ chatForSession, isBackground = () =>
       const sessionId = session?.id || ''
       if (!sessionId || isBackground(sessionId)) throw new Error('正文提交只用于前台游玩回合')
       const chat = await chatForSession(sessionId)
-      if (!storyToolCallEnabled(chat)) throw new Error('当前对话未开启正文走工具调用')
+      if (!storyToolCallEnabled(chat, await enabled())) throw new Error('未开启正文走工具调用')
       const turn = activeStoryTurn(session)
       if (turn === null) throw new Error('当前没有正在生成的游玩回合')
       const content = validContent(args?.content)
