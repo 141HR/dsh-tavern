@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "9cf5087a5fd4c92fbd3014d426f1c90718aaa6af",
-  "releaseSequence": 653,
+  "revision": "e5e58fe7362e7dfd29db55f79cc4032910a5addb",
+  "releaseSequence": 654,
   "version": "2.7.0",
   "files": [
     {
@@ -76,13 +76,13 @@
     },
     {
       "path": "bin/dsh-tavern-update-helper.mjs",
-      "sha256": "caede4d68cf4731b785cf41f9c6867d8ecaede20bf69cefa7cb2c3ad1b257693",
-      "size": 765
+      "sha256": "71cc396cc36a3c9b0cb571c075b467e4031068b8db6663ef24a7277bf6240948",
+      "size": 888
     },
     {
       "path": "bin/dsh-tavern.mjs",
-      "sha256": "f8ba7432d1aecac504b2bbca815ddd65b2de3883a80e430988920703bc43f418",
-      "size": 3777
+      "sha256": "dba5b55fb286f473efed2f5443e3accdc520d3be5c5571c7dfaaf7c2bf918efd",
+      "size": 4277
     },
     {
       "path": "bin/import-user-home.mjs",
@@ -101,8 +101,8 @@
     },
     {
       "path": "bin/installation-state.cjs",
-      "sha256": "2baa11efc73f20129b64009ea34704fc725d319b8c41bac8f0098f6687a913f2",
-      "size": 18171
+      "sha256": "71aadf22bb8dc1cf95ccf8e0f5ad95297f8a863924db39c83a6ea2c2203116c7",
+      "size": 18528
     },
     {
       "path": "bin/launcher-environment.mjs",
@@ -136,8 +136,8 @@
     },
     {
       "path": "bin/portable-fs.mjs",
-      "sha256": "54e130dc0eaf9f6a524e90374495f07dfdcbdd101ac7a55cf0dfce6b9df004f2",
-      "size": 2301
+      "sha256": "c544b907928b71322c26d476e24a8d19b7bc992f11605f4cff268473615ca208",
+      "size": 2643
     },
     {
       "path": "bin/profile-configuration.mjs",
@@ -271,13 +271,13 @@
     },
     {
       "path": "install.ps1",
-      "sha256": "885fa82795b70bcb231b6be99ebfd19fcb822d5dccdc0671764fafaaa2f83b60",
-      "size": 77349
+      "sha256": "12d182de88acd8d4064b562fa5d23544f786ec47cedfaa0c7880873ece97f44f",
+      "size": 79467
     },
     {
       "path": "install.sh",
-      "sha256": "81e18f542760682322d790cce975245c4ab99d40d24ac29a8af25f45edf098ec",
-      "size": 59699
+      "sha256": "ac3142ce03b8c775cb12aa1a1645a6feb225554d3c048018ab915fc6bd31ab05",
+      "size": 60056
     },
     {
       "path": "package.json",
@@ -411,8 +411,8 @@
     },
     {
       "path": "tavern-plugin/lib/application-updater.js",
-      "sha256": "8bc50b97a9c3d0589d339b937ec8ad8ca10ef7e8551ff00e7238d44b92ea9415",
-      "size": 37795
+      "sha256": "95b504d380a5c11461219db1e20d8aac619711524058ca7678e0e0ca29426b57",
+      "size": 38519
     },
     {
       "path": "tavern-plugin/lib/background-agent-runner.js",
