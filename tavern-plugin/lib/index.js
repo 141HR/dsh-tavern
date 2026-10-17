@@ -748,9 +748,7 @@ export async function apply(ctx) {
   }
   async function importScript(cardPath, payload) {
     const prepared = prepareTextImport(payload, '剧本文件为空')
-    const existing = (await listSources()).find(function (source) { return source.title === prepared.name })
-    const materialPath = existing ? existing.path : await fileResources.importText('source', prepared)
-    await fileResources.bindMaterial(cardPath, materialPath)
+    await fileResources.importBoundScript(cardPath, prepared)
     const script = await readScript(cardPath)
     return { path: script.path, title: script.title, sourceChars: script.sourceChars, chunkSize: 500, chunkCount: script.chunks.length, importedAt: Date.now() }
   }
