@@ -858,10 +858,15 @@ try {
   # A pending optional version check can keep pnpm alive after it prints Done.
   $env:pnpm_config_update_notifier = 'false'
   if ($InstallHost -eq 'desktop') {
+    # Custom install folders are found through the running app or its uninstall entry.
+    $RegisteredDesktop = @(Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+      'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+      Where-Object { $_.DisplayName -like 'DeepSeek Harness*' -and $_.InstallLocation } | ForEach-Object { Join-Path $_.InstallLocation 'DeepSeek Harness.exe' })
+    $RunningDesktop = @(Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue | ForEach-Object { $_.Path })
     $OfficialDesktopExecutable = @($env:DSH_DESKTOP_NODE_EXECUTABLE, $env:DSH_DESKTOP_APP_EXECUTABLE,
       (Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness\DeepSeek Harness.exe'),
-      (Join-Path $env:ProgramFiles 'DeepSeek Harness\DeepSeek Harness.exe')) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
-    if (-not $OfficialDesktopExecutable) { throw '请先安装官方 DeepSeek Harness：https://deepseek.com/harness/' }
+      (Join-Path $env:ProgramFiles 'DeepSeek Harness\DeepSeek Harness.exe')) + $RegisteredDesktop + $RunningDesktop | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
+    if (-not $OfficialDesktopExecutable) { throw '请先安装官方 DeepSeek Harness：https://deepseek.com/harness/ （装在其他位置时，可用 DSH_DESKTOP_APP_EXECUTABLE 指定程序路径）' }
     New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
     $OfficialDesktopModuleSource = @'
 // Shared bootstrap for the official desktop, shell installers and the Windows bundle.
@@ -918,8 +923,21 @@ if (require.main === module) {
     $PreviousElectronNode = $env:ELECTRON_RUN_AS_NODE
     try {
       $env:ELECTRON_RUN_AS_NODE = '1'
-      $DesktopEnvironment = (& $OfficialDesktopExecutable --expose-internals $OfficialDesktopModule $DshRoot) -join "`n"
-      if ($LASTEXITCODE -ne 0) { throw '官方桌面运行环境校验失败' }
+      # The desktop app is a GUI-subsystem program: & neither waits for it nor sets
+      # $LASTEXITCODE, so the check failed every time. Run it as a waited child process.
+      $DesktopStart = New-Object System.Diagnostics.ProcessStartInfo
+      $DesktopStart.FileName = $OfficialDesktopExecutable
+      $DesktopStart.Arguments = (@('--expose-internals', $OfficialDesktopModule, $DshRoot) | ForEach-Object { '"' + ($_ -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"' }) -join ' '
+      $DesktopStart.UseShellExecute = $false
+      $DesktopStart.CreateNoWindow = $true
+      $DesktopStart.RedirectStandardOutput = $true
+      $DesktopStart.RedirectStandardError = $true
+      $DesktopStart.StandardOutputEncoding = $DesktopStart.StandardErrorEncoding = New-Object Text.UTF8Encoding($false)
+      $DesktopProcess = [System.Diagnostics.Process]::Start($DesktopStart)
+      $DesktopErrors = $DesktopProcess.StandardError.ReadToEndAsync()
+      $DesktopEnvironment = $DesktopProcess.StandardOutput.ReadToEnd()
+      $DesktopProcess.WaitForExit()
+      if ($DesktopProcess.ExitCode -ne 0) { throw ('官方桌面运行环境校验失败：' + $DesktopErrors.Result.Trim()) }
       ($DesktopEnvironment | ConvertFrom-Json).PSObject.Properties | ForEach-Object { [Environment]::SetEnvironmentVariable($_.Name, [string]$_.Value, 'Process') }
     } finally { $env:ELECTRON_RUN_AS_NODE = $PreviousElectronNode }
   }
