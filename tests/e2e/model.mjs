@@ -13,6 +13,10 @@ export function apply(ctx) {
     async *stream(input) {
       if (process.env.TAVERN_E2E_COMPACTION_DIR) { yield* compactionStream(input); return }
       const tools = new Set((input.tools || []).map(tool => tool.name))
+      // Every settlement request verbatim, to compare refactors of the background pipeline.
+      if (process.env.TAVERN_E2E_SETTLEMENT_DUMP && JSON.stringify(input.messages || []).includes('任务类型：状态结算')) {
+        await appendFile(process.env.TAVERN_E2E_SETTLEMENT_DUMP, JSON.stringify({ system: input.system, tools: (input.tools || []).map(tool => tool.name), messages: input.messages }) + '\n')
+      }
       if (process.env.TAVERN_E2E_MEMORY_AUDIT) {
         await appendFile(process.env.TAVERN_E2E_MEMORY_AUDIT, JSON.stringify({ system: input.system, messages: input.messages, tools: input.tools }) + '\n')
         if (tools.has('tavern_memory_search')) {

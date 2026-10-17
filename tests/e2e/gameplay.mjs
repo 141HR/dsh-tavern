@@ -215,6 +215,7 @@ try {
           TAVERN_E2E_BACKGROUND_DIR: (process.argv.includes('--background-lifecycle') || process.argv.includes('--background-failure')) ? output : '',
           TAVERN_E2E_REQUEST_AUDIT: join(output, 'preset-requests.jsonl'),
           TAVERN_E2E_STORY_TOOL_LOG: storyToolScenario ? join(output, 'story-tool.jsonl') : '',
+          TAVERN_E2E_SETTLEMENT_DUMP: process.env.TAVERN_E2E_SETTLEMENT_DUMP || '',
           TAVERN_E2E_CAST: castScenario ? '1' : '',
           TAVERN_E2E_MEMORY_AUDIT: process.argv.includes('--card-memory') ? join(output, 'memory-requests.jsonl') : '',
           TAVERN_E2E_SCENE_AUDIT: process.argv.includes('--scene-add') ? join(output, 'scene-requests.jsonl') : '',
