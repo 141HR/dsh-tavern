@@ -8,7 +8,8 @@ import path from 'node:path'
 import { guardSource } from '../tavern-plugin/lib/domain/user-plugins.js'
 import { createTavernPluginApi } from '../tavern-plugin/lib/plugin-api.js'
 
-for (const asyncApply of [false, true]) test('插件初始化失败撤销提示词和 effect：' + (asyncApply ? 'async' : 'sync'), async t => {
+for (const behavior of ['sync-failure', 'async-failure', 'success']) test('插件子作用域初始化与清理：' + behavior, async t => {
+  const asyncApply = behavior === 'async-failure'
   const require = createRequire(pathToFileURL(process.env.DSH_BOOT_MODULE))
   const { Context } = await import(pathToFileURL(require.resolve('@deepseek-ai/cordis')).href)
   const root = new Context()
@@ -27,13 +28,19 @@ for (const asyncApply of [false, true]) test('插件初始化失败撤销提示�
   await writeFile(path.join(dir, 'plugin.mjs'), `export const inject=['tavern','probe']; export ${asyncApply ? 'async ' : ''}function apply(ctx) {
     ctx.tavern.promptSection({name:'partial',text:'should disappear'});
     ctx.effect(() => { ctx.probe.active++; return () => {ctx.probe.active--} });
-    ${asyncApply ? 'await Promise.resolve();' : ''}throw Error('startup failed');
+    ${asyncApply ? 'await Promise.resolve();' : ''}${behavior === 'success' ? '' : "throw Error('startup failed');"}
   }`)
   await writeFile(path.join(dir, 'guard.mjs'), guardSource({ folder: 'broken', name: 'broken', main: './plugin.mjs' }))
   const guard = await import(pathToFileURL(path.join(dir, 'guard.mjs')).href)
   const loaded = root.plugin(guard)
   fibers.push(loaded)
   await loaded.await()
+  if (behavior === 'success') {
+    assert.equal((await api.promptSections({ gameId: 's' })).length, 1)
+    assert.equal(root.probe.active, 1)
+    await loaded.dispose()
+    fibers.pop()
+  }
   assert.deepEqual(await api.promptSections({ gameId: 's' }), [])
   assert.equal(root.probe.active, 0)
 })
