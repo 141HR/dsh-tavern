@@ -17,6 +17,18 @@ const maxEntries = 2000
 // of that turn is drawn with; the opening (turn 0) is always kept.
 export const SCENE_WORLDBOOK_KEEP_TURNS = 50
 
+function saveReferences(states) {
+  const refs = new Map()
+  const add = (ref, turn) => { if (validRef(ref)) refs.set(ref.digest + ':' + turn, { digest: ref.digest, turn }) }
+  for (const state of states) {
+    add(state.sceneOpeningWorldbook, 0)
+    for (const message of state.messages || []) {
+      if (message?.role === 'assistant') add(message.sceneWorldbook, Number(message.turn || (message.greeting ? 1 : 0)))
+    }
+  }
+  return [...refs.values()]
+}
+
 /** Freeze auxiliary setting data before a body is generated. This does not
  * activate entries or add them to the foreground prompt. Equal books share one file. */
 export function createSceneWorldbooks({ store, keepTurns = SCENE_WORLDBOOK_KEEP_TURNS }) {
@@ -104,6 +116,17 @@ export function createSceneWorldbooks({ store, keepTurns = SCENE_WORLDBOOK_KEEP_
     const value = await load(id)
     return value && value.version === 1 && digest(value) === id ? Buffer.from(JSON.stringify(value)) : null
   }
+  async function exportForSave(states) {
+    return serial(async () => {
+      const snapshots = []
+      for (const id of new Set(saveReferences(states).map(ref => ref.digest))) {
+        const content = await exportSnapshot(id)
+        if (content) snapshots.push({ digest: id, content })
+      }
+      return snapshots
+    })
+  }
+
   // Which snapshots each game still needs, by turn. Snapshots this game no
   // longer needs are deleted unless another game still lists them; an entry
   // file goes when no snapshot counts it any more. Snapshots written before
@@ -158,7 +181,7 @@ export function createSceneWorldbooks({ store, keepTurns = SCENE_WORLDBOOK_KEEP_
       if (refs.length) await store.writeJson(refsPath(targetChatId), { version: 1, refs })
     })
   }
-  return { capture, read, exportSnapshot, forgetChat, copyRefs }
+  return { capture, read, exportSnapshot, exportForSave, forgetChat, copyRefs }
 }
 
 /** Bind only the original bodies. An edited/new swipe must not inherit an

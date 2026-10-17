@@ -116,3 +116,18 @@ test('only the latest turns keep their snapshots; shared snapshots and entries s
   await api.forgetChat('b')
   assert.equal(await exists('scene-images/worldbooks/' + refs[0].digest + '.json'), false)
 })
+
+test('存档带齐开局、逐轮及可回退历史的快照，并输出可独立读取的内容', async t => {
+  const { api } = await fixture(t)
+  const opening = await api.capture({ worldBook: book('开局') })
+  const current = await api.capture({ worldBook: book('新正文设定') })
+  const historical = await api.capture({ worldBook: book('旧正文设定') })
+  const states = [{ sceneOpeningWorldbook: opening, messages: [{ role: 'assistant', turn: 1, sceneWorldbook: current }] },
+    { sceneOpeningWorldbook: opening, messages: [{ role: 'assistant', turn: 1, sceneWorldbook: historical }] }]
+  const packed = await api.exportForSave(states)
+  assert.equal(packed.length, 3)
+  assert.deepEqual(new Set(packed.map(item => item.digest)), new Set([opening.digest, current.digest, historical.digest]))
+  const other = await fixture(t)
+  for (const item of packed) await other.store.writeBytes('scene-images/worldbooks/' + item.digest + '.json', item.content)
+  for (const ref of [opening, current, historical]) assert.deepEqual(await other.api.read(ref), await api.read(ref))
+})
