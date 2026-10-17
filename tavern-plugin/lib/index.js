@@ -161,6 +161,8 @@ import { createLedgerEditor } from './domain/ledger-editor.js'
 import { readLedger, LEDGER_SUBMIT_TOOL } from './domain/story-ledger.js'
 import { createManualLedger } from './domain/manual-ledger.js'
 import { POSTURE_SUBMIT_TOOL, POSTURE_SUBMIT_TOOL_NAME, lastSubmittedPosture, normalizePostureSubmission } from './domain/posture-submission.js'
+import { createCastPresentation } from './domain/cast-presentation.js'
+import { createCastAssets } from './domain/cast-assets.js'
 import { TAVERN_COMPATIBILITY_CAPABILITIES, createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
 import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics, sanitizeModuleFailure, sanitizeMvuLoadDiagnostic, redactMvuLoadError } from './domain/mvu-diagnostics.js'
 import { createPlayChatDebugReference, readPlayChatDebugTurn } from './domain/play-chat-debug.js'
@@ -2454,6 +2456,7 @@ export async function apply(ctx) {
     backgroundTools: BACKGROUND_TOOLS,
     // Set up after the runner: plugin tools are read when a background Session is set up.
     pluginSettlement: () => pluginApi.settlement,
+    castSettlement: () => castPresentation.settlement,
     pluginCandidate: () => pluginApi.candidate,
     sharedTools: [sharedWorldbookSearch(searchWorldbook), {
       tool: HISTORY_RECALL_TOOL,
@@ -2621,6 +2624,46 @@ export async function apply(ctx) {
     worldbooks: sceneWorldbooks
   })
   const pluginSettlementProgress = createPluginSettlementProgress()
+  // Dialogue speakers and emotions, annotated by settlement (docs/design/cast-presentation.md).
+  const castPresentation = createCastPresentation({
+    enabled: async () => (await readTavernSettings()).castPresentation === true,
+    turns: pluginTurns,
+    data: pluginData,
+    publish: sessionId => sessionSignals.publish(sessionId, { kind: 'cast', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
+  })
+  const castAssets = createCastAssets({ store: profileData })
+  function castAssetView(cardPath, manifest) {
+    const key = castAssets.keyOf(cardPath)
+    const url = file => file ? '/api/dsh-tavern/cast-asset?' + new URLSearchParams({ card: key, file }).toString() : ''
+    return manifest.characters.map(character => ({ name: character.name, aliases: character.aliases || [], avatarUrl: url(character.avatar),
+      sprites: Object.fromEntries(Object.entries(character.sprites || {}).map(([emotion, file]) => [emotion, url(file)])) }))
+  }
+  async function castCardOf(sessionId) {
+    const header = await chatHeaderForSession(str(sessionId), ['cardPath', 'cardName', 'mode', 'macroState'])
+    if (!header || !header.cardPath || !['story', 'script'].includes(header.mode || 'story')) throw new Error('这一局没有绑定人物卡')
+    return { path: str(header.cardPath), name: str(header.cardName), player: str(header.macroState && header.macroState.userName).trim() || '你' }
+  }
+  // The stage reads the latest turns as plain text, with their annotations and the card's cast.
+  async function castStage(sessionId, count) {
+    const card = await castCardOf(sessionId)
+    const state = await sessionStateForSession(str(sessionId))
+    const storyTurns = [...new Set((state?.messages || []).filter(message => message?.role === 'assistant').map(message => Number(message.turn || (message.greeting ? 1 : 0))).filter(turn => turn > 0))]
+    const wanted = storyTurns.slice(-Math.max(1, Math.min(10, Number(count) || 5)))
+    const annotated = await castPresentation.forTurns(str(sessionId), wanted)
+    const turns = []
+    for (const turn of wanted) {
+      const material = await pluginTurns.readTurn(str(sessionId), turn).catch(() => null) || (turn === wanted.at(-1) ? await pluginTurns.readPendingTurn(str(sessionId)).catch(() => null) : null)
+      if (material && material.turn === turn) turns.push({ turn, text: material.text, lines: annotated.turns[turn] || [] })
+    }
+    return { enabled: annotated.enabled, player: card.player, card: { name: card.name, imageUrl: '/api/dsh-tavern/card-image?path=' + encodeURIComponent(card.path) },
+      cast: castAssetView(card.path, await castAssets.read(card.path)), turns }
+  }
+  async function castEdit(sessionId, edit) {
+    const card = await castCardOf(sessionId)
+    const result = await edit(card.path, card)
+    const manifest = result?.cast || result
+    return { ...(result?.cast ? { imported: result.imported, skipped: result.skipped, characters: result.characters } : {}), cast: castAssetView(card.path, manifest) }
+  }
   // ---------- 插件接口：读人物卡与历史、改变量、后台任务（docs/plugin-api.md） ----------
   const pluginStoryTurn = message => Number(message?.turn || (message?.greeting ? 1 : 0))
   const pluginSource = message => str(message?.projectionText ?? message?.sourceText ?? message?.text)
@@ -3348,7 +3391,7 @@ export async function apply(ctx) {
             throw error
           }
           result = { posture: mvuResult.posture }
-        } else if (!backgroundTasksSettings.posture && !backgroundTasksSettings.characterDesign) {
+        } else if (!backgroundTasksSettings.posture && !backgroundTasksSettings.characterDesign && !await castPresentation.settlement.wanted()) {
           result = {}
         } else if (await settleByPlugin()) {
           // A plugin replaced this settlement; its validated result is committed like Tavern's own.
@@ -4227,6 +4270,13 @@ export async function apply(ctx) {
       case 'listSceneImageModels': return await enabledSceneIllustrations().listModels(args)
       case 'testSceneImageGeneration': return await enabledSceneIllustrations().testGenerate()
       case 'pluginMediaForTurn': return await pluginMediaForTurn(args && args.sessionId, args && args.turn)
+      case 'castForTurns': return await castPresentation.forTurns(str(args && args.sessionId), args && args.turns)
+      case 'castStage': return await castStage(args && args.sessionId, args && args.count)
+      case 'castSetImage': return await castEdit(args && args.sessionId, cardPath => castAssets.setImage({ cardPath, name: args.name, slot: args.slot, bytes: Buffer.from(str(args.data), 'base64') }))
+      case 'castRemoveImage': return await castEdit(args && args.sessionId, cardPath => castAssets.removeImage({ cardPath, name: args.name, slot: args.slot }))
+      case 'castSetCharacter': return await castEdit(args && args.sessionId, cardPath => castAssets.setCharacter({ cardPath, name: args.name, rename: args.rename, aliases: args.aliases }))
+      case 'castRemoveCharacter': return await castEdit(args && args.sessionId, cardPath => castAssets.removeCharacter({ cardPath, name: args.name }))
+      case 'castImportSpritePack': return await castEdit(args && args.sessionId, (cardPath, card) => castAssets.importSpritePack({ cardPath, name: str(args.name).trim() || card.name || undefined, bytes: Buffer.from(str(args.data), 'base64') }))
       case 'pluginMediaTurns': return await pluginMediaTurns(args && args.sessionId)
       case 'sceneImageStatus': return { illustration: await enabledSceneIllustrations().status(args.sessionId, args.turn) }
       case 'recordSceneImageInteraction': {
@@ -4675,6 +4725,7 @@ export async function apply(ctx) {
 
   registerTavernHttpRoutes({
     ctx,
+    castAssets,
     exposeHandler: handle => { tavernHttpHandle = handle },
     pluginAssets: createPluginAssets({ pluginsDir: userPluginPaths(dataRoot).plugins }),
     dispatch,
