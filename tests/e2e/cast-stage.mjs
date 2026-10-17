@@ -234,6 +234,8 @@ export async function dshCardPlayChecks({ page, step, output, report }) {
     await page.getByRole('button', { name: '开始新游戏', exact: true }).click()
     const composer = page.getByRole('textbox', { name: /发消息|Message/ })
     await composer.waitFor()
+    // A new game opens its settings and status tabs first; open the stage after that.
+    await page.getByText(/人物设计档案/).filter({ visible: true }).first().waitFor()
     await page.getByRole('button', { name: '舞台', exact: true }).filter({ visible: true }).first().click()
     const choice = page.getByRole('combobox', { name: '舞台样式' })
     await choice.locator('option', { hasText: '大肥鱼舞台' }).waitFor({ state: 'attached' })
@@ -265,9 +267,7 @@ export async function dshCardPlayChecks({ page, step, output, report }) {
     assert.equal(directed.result.figure.outfit, 'Claude')
     assert.equal(directed.result.time, 'night')
     report.dafeiyu.directed = { background: directed.result.background.name, outfit: directed.result.figure.outfit, music: directed.result.music.name }
-    // Background subagents may bring the Tasks tab to the front; go back to the stage and see the new outfit.
-    await page.waitForTimeout(1500)
-    await page.getByText('舞台', { exact: true }).filter({ visible: true }).last().click()
+    // The stage stays in front while background agents run; it shows the new outfit by itself.
     await page.waitForFunction(([selector, before]) => { const image = document.querySelector(selector); return image && image.offsetParent && image.getAttribute('src') !== before }, ['.dsh-tavern-stage-tab img[alt="大肥鱼"]', opening], { timeout: 30000 })
     await page.getByRole('button', { name: '全屏舞台', exact: true }).click()
     await page.waitForTimeout(800)

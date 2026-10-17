@@ -20,6 +20,8 @@ import { backgroundLifecycleChecks } from './background-lifecycle.mjs'
 import { cardMemoryChecks } from './card-memory.mjs'
 import {displayRegressionRules, displayRegressionChecks} from './display-regression.mjs'
 import { surfaceRecoveryChecks } from './surface-recovery.mjs'
+import { stringify as stringifyYaml } from 'yaml'
+import { applySidebarDefaults } from '../../bin/launcher-settings.mjs'
 import { castCardFileChecks, castSpeechChecks, castStageChecks, castStageInputChecks, dshCardPlayChecks } from './cast-stage.mjs'
 import { cardVariableUpdateChecks } from './card-variable-update.mjs'
 import { cardUpdateChecks } from './card-update.mjs'
@@ -172,6 +174,8 @@ try {
     }
     await writeFile(join(profile, 'package.json'), JSON.stringify({ name: 'tavern-e2e', private: true,
       dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dsh-web-mobile', 'dsh-better-sidebar', 'dsh-tavern-plugin', 'dsh-tavern-remote'] } } }))
+    // The stage scenario runs with the sidebar a real install gets (no Tasks tab), as players see it.
+    if (castScenario) await writeFile(join(root, 'settings.yaml'), stringifyYaml(applySidebarDefaults({})))
     await writeFile(join(profile, 'cordis.patch.yml'), `- id: agent-default-model\n  config:\n    provider: tavern-e2e\n    model: fixed\n- insert:\n    - id: tavern-e2e-model\n      name: ${JSON.stringify(join(source, 'tests/e2e/model.mjs'))}\n`)
     await mkdir(join(data, 'resources/presets'), { recursive: true })
     for (const key of ['A', 'B']) await writeFile(join(data, `resources/presets/E2E-${key}.json`), JSON.stringify({
