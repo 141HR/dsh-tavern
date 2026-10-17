@@ -2612,7 +2612,10 @@ export async function apply(ctx) {
     enabled: async () => (await readTavernSettings()).castPresentation === true,
     turns: pluginTurns,
     data: pluginData,
-    publish: sessionId => sessionSignals.publish(sessionId, { kind: 'cast', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
+    publish: (sessionId, annotation) => {
+      sessionSignals.publish(sessionId, { kind: 'cast', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
+      pluginApi.castAnnotated(sessionId, annotation)
+    }
   })
   // Work riding on the main settlement call: Tavern's own items first, then plugins.
   const settlementItems = createSettlementItems({ items: () => [castPresentation.settlement], plugins: () => pluginApi.settlement })
@@ -2738,6 +2741,12 @@ export async function apply(ctx) {
       return { url: '/api/dsh-tavern/card-image?path=' + encodeURIComponent(cardPath), mediaType: 'image/png' }
     },
     readHistory: readPluginHistory,
+    readCast: (sessionId, turn) => castPresentation.annotation(sessionId, turn),
+    readCastAssets: async sessionId => {
+      const card = await castCardOf(sessionId)
+      return { player: card.player, card: { name: card.name, imageUrl: '/api/dsh-tavern/card-image?path=' + encodeURIComponent(card.path) },
+        characters: castAssetView(card.path, await castAssets.read(card.path)) }
+    },
     readActivity: async sessionId => {
       const chat = await taskStateReader.forSession(sessionId)
       const activity = chat ? backgroundTasks.activity(chat) : null

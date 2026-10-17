@@ -103,6 +103,7 @@ export function createTavernPluginApi(deps) {
   const settledHandlers = new Set()
   const removedHandlers = new Set()
   const timelineHandlers = new Set()
+  const castHandlers = new Set()
   const sections = new Map()
   const turnSections = new Map()
   const settlementSections = new Map()
@@ -255,6 +256,24 @@ export function createTavernPluginApi(deps) {
       if (typeof handler !== 'function') throw new TypeError('onTimelineChanged 需要一个函数')
       const entry = { owner: ownerOf(this), handler }
       return owned(this, () => { timelineHandlers.add(entry); return () => timelineHandlers.delete(entry) }, 'tavern.onTimelineChanged()')
+    },
+
+    // Who says each quoted line and how they feel (docs/design/cast-presentation.md), annotated by settlement.
+    onCastAnnotated(handler) {
+      if (typeof handler !== 'function') throw new TypeError('onCastAnnotated 需要一个函数')
+      const entry = { owner: ownerOf(this), handler }
+      return owned(this, () => { castHandlers.add(entry); return () => castHandlers.delete(entry) }, 'tavern.onCastAnnotated()')
+    },
+
+    async getCast({ gameId, turn } = {}) {
+      const game = await requireGame(gameId)
+      return (await deps.readCast?.(game.sessionId, positiveTurn(turn))) ?? null
+    },
+
+    // The card's characters with their avatar and expression sprites, as URLs a page can show.
+    async getCastAssets({ gameId } = {}) {
+      const game = await requireGame(gameId)
+      return (await deps.readCastAssets?.(game.sessionId)) ?? null
     },
 
     async saveTurnData({ gameId, turn, textVersion, data } = {}) {
@@ -776,6 +795,12 @@ export function createTavernPluginApi(deps) {
     dispatch(settledHandlers, { ...(await snapshotOf(material)), settledAt: Date.now() }, 'onTurnSettled', (await choicesFor(material.sessionId)).disabled)
   }
 
+  /** Called by Tavern after settlement saved a turn's dialogue annotation. */
+  function castAnnotated(gameId, annotation) {
+    if (!gameId || castHandlers.size === 0) return
+    void choicesFor(gameId).then(({ disabled }) => dispatch(castHandlers, { gameId, ...annotation }, 'onCastAnnotated', disabled))
+  }
+
   function gameRemoved(gameId) {
     if (gameId) dispatch(removedHandlers, { gameId }, 'onGameRemoved')
   }
@@ -871,6 +896,7 @@ export function createTavernPluginApi(deps) {
     for (const entry of settledHandlers) use(entry.owner, '生命周期', '观察')
     for (const entry of timelineHandlers) use(entry.owner, '生命周期', '观察')
     for (const entry of removedHandlers) use(entry.owner, '生命周期', '观察')
+    for (const entry of castHandlers) use(entry.owner, '演出', '观察')
     for (const entry of [...sections.values(), ...turnSections.values(), ...worldbookSources.values()]) use(entry.owner, '上下文', '添加')
     for (const entry of worldbookPools.values()) use(entry.owner, '世界书', '添加')
     for (const entry of [...settlementSections.values(), ...settlementTools.values()]) use(entry.owner, '结算', '添加')
@@ -1046,6 +1072,6 @@ export function createTavernPluginApi(deps) {
     return entry ? entry.modes.slice() : null
   }
 
-  return Object.freeze({ service, toolModesFor, callHandler, turnState, exportGame, importGame, turnSettled, gameRemoved, timelineChanged, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
+  return Object.freeze({ service, toolModesFor, callHandler, turnState, exportGame, importGame, turnSettled, castAnnotated, gameRemoved, timelineChanged, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
     runSettlementTasks, manualTaskFor, runManualTask, stopTasks, runningTask, gamePlugins, setGamePlugin })
 }

@@ -49,7 +49,9 @@
 
 ## 插件接口
 
-- 宿主侧：`getCast({ gameId, turn })` 读某一轮的台词标注；`onCastAnnotated` 标注完成时通知；`getCastAssets({ gameId })` 读角色素材；`synthesizeSpeech({ gameId, speaker, text })`。
-- 浏览器侧：`watchCast(gameId, listener)`、`castAssetUrl(...)`、`playSpeech(...)`。
+已开放（见[插件接口](../plugin-api.md)「演出」与 `registerStageView`）：
 
-接口在对应功能稳定后再加，写进 `docs/plugin-api.md` 的版本记录。
+- 宿主侧：`getCast({ gameId, turn })` 读某一轮当前版本的台词标注；`onCastAnnotated` 标注保存时通知；`getCastAssets({ gameId })` 读角色素材。
+- 浏览器侧：`getStage`、`watchStage` 读舞台数据；`registerStageView` 换舞台画面，Tavern 保留阅读流程，插件失败时退回内置画面。
+
+待做：配音做好后再开放 `synthesizeSpeech` / `playSpeech`。
