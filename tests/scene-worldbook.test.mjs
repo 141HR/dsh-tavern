@@ -131,3 +131,35 @@ test('存档带齐开局、逐轮及可回退历史的快照，并输出可独�
   for (const item of packed) await other.store.writeBytes('scene-images/worldbooks/' + item.digest + '.json', item.content)
   for (const ref of [opening, current, historical]) assert.deepEqual(await other.api.read(ref), await api.read(ref))
 })
+
+test('导入登记快照引用，删除源游戏不影响新游戏且保留原去重布局', async t => {
+  const { api, store } = await fixture(t)
+  const ref = await api.capture({ worldBook: book('共享设定'), chat: { id: 'source' }, turn: 0 })
+  const states = [{ sceneOpeningWorldbook: ref, messages: [] }]
+  const snapshots = await api.exportForSave(states)
+  const manifest = 'scene-images/worldbooks/' + ref.digest + '.json'
+  const before = await store.readJson(manifest)
+  const counts = await store.readJson('scene-images/worldbook-entry-counts.json')
+  await api.importForSave('imported', states, snapshots)
+  assert.deepEqual(await store.readJson(manifest), before)
+  assert.deepEqual(await store.readJson('scene-images/worldbook-entry-counts.json'), counts)
+  await api.forgetChat('source')
+  assert.ok((await api.read(ref)).entries)
+  await api.forgetChat('imported')
+  assert.match((await api.read(ref)).unavailable, /缺失/)
+  assert.deepEqual(await store.readJson('scene-images/worldbook-entry-counts.json'), {})
+})
+
+test('跨机器导入保持快照可读，损坏快照不产生登记或覆盖已有数据', async t => {
+  const source = await fixture(t), target = await fixture(t)
+  const opening = await source.api.capture({ worldBook: book('初始设定') })
+  const later = await source.api.capture({ worldBook: book('后续设定') })
+  const states = [{ sceneOpeningWorldbook: opening, messages: [{ role: 'assistant', turn: 2, sceneWorldbook: later }] }]
+  const snapshots = await source.api.exportForSave(states)
+  await target.api.importForSave('imported', states, snapshots)
+  for (const ref of [opening, later]) assert.deepEqual(await target.api.read(ref), await source.api.read(ref))
+  await assert.rejects(target.api.importForSave('bad', states, [{ ...snapshots[0], content: Buffer.from('{"version":1,"entries":[]}') }]), /校验失败/)
+  assert.equal(await target.store.readJson('scene-images/worldbook-refs/bad.json'), undefined)
+  await target.api.forgetChat('imported')
+  assert.match((await target.api.read(later)).unavailable, /缺失/)
+})
