@@ -2,7 +2,7 @@
 // effects are re-encoded as Ogg Opus, each only where it saves enough. Packs stay
 // content-addressed: a re-encoded file gets a new hash, and every reference to it (the
 // pack manifest, figures, sprites, the card's own assets) follows. Live2D bundles are
-// left as they are. Needs cwebp and ffmpeg (with libopus) on PATH.
+// left as they are; the card plugin is refreshed from ./plugin. Needs cwebp and ffmpeg (with libopus) on PATH.
 //
 //   node examples/dafeiyu-card/compress.mjs 大肥鱼.dshcard 大肥鱼.min.dshcard
 import { execFile } from 'node:child_process'
@@ -42,6 +42,9 @@ const files = new Map()
 for (const entry of zip.entries.values()) files.set(entry.path, await zip.readBuffer(entry, 512 * 1024 * 1024))
 await zip.close()
 const dsh = JSON.parse(files.get('dsh.json').toString('utf8'))
+// The card plugin always comes from ./plugin, so a distributed card never carries a stale copy.
+const pluginDir = path.join(path.dirname(new URL(import.meta.url).pathname), 'plugin')
+for (const file of ['client.js', 'index.mjs', 'package.json']) files.set('plugins/galgame/' + file, await readFile(path.join(pluginDir, file)))
 
 // Old hash → { hash, ext } for every re-encoded media file, across all packs.
 const renamed = new Map()
