@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { CAST_EMOTIONS } from './cast-annotation.js'
 import { readZipEntries } from './zip-entries.js'
-import { emotionSlot as emotionSlotOf } from './card-assets.js'
+import { emotionRank, emotionSlot as emotionSlotOf } from './card-assets.js'
 
 // Per-card character material (docs/design/cast-presentation.md): avatar and expression sprites
 // per character, laid out like a SillyTavern sprite pack so such packs import as they are.
@@ -199,7 +199,9 @@ export function createCastAssets({ store }) {
     const sprites = [], backgrounds = [], extras = [], cast = []
     let avatar = null
     const taken = new Set()
-    for (const emotion of collected.emotions) {
+    // The closest name gets each emotion: 'sad' rather than 'crying' for sadness.
+    const ordered = collected.emotions.map((emotion, index) => ({ emotion, index })).sort((left, right) => emotionRank(left.emotion.name) - emotionRank(right.emotion.name) || left.index - right.index).map(item => item.emotion)
+    for (const emotion of ordered) {
       const slot = emotionSlotOf(emotion.name)
       const file = slot && !taken.has(slot) ? await image(emotion.bytes) : null
       if (file) { taken.add(slot); sprites.push({ slot, file }); continue }
