@@ -90,7 +90,7 @@ import { createBackgroundSuppressionReader } from './domain/background-surface.j
 import { ensureCardWorkspaceMessage } from './domain/card-workspace-message.js'
 import { createPromptTemplateGlobalVariables } from './domain/prompt-template-global-variables.js'
 import { createTavernApiDiagnostics } from './domain/tavern-api-diagnostics.js'
-import { generateHelper, generateHelperRaw, generateHelperCompletion, identifyHelperModelMessages } from './domain/helper-generation.js'
+import { generateHelper, generateHelperRaw, generateHelperCompletion, identifyHelperModelMessages, defaultOrderedRawConfig } from './domain/helper-generation.js'
 import { validateHelperGenerateConfig, resolveHelperGenerationPreset, helperGenerationHistory } from './domain/helper-generation-prompts.js'
 import { createHelperGenerationTasks } from './domain/helper-generation-tasks.js'
 import { createBodyEditor } from './domain/body-editor.js'
@@ -1113,16 +1113,18 @@ export async function apply(ctx) {
   })
   const openingPreparation = createOpeningPreparation({ readCard, worldBooks, extensionSettings: tavernExtensionSettings,
     readRuntimeExtensions: async cardPath => tavernRemoteAssets.pinExtensions(await readCardExtensions(cardPath)),
-    generateRaw: (config, context) => generateHelperRaw(config, { ...context, callModel: opts => callModel({ ...opts, background: true, signal: context.signal }) }),
-    generate: async (config, context) => {
-      validateHelperGenerateConfig(config)
-      const presetSnapshot = await helperGenerationPreset(config.preset_name, context.presetSnapshot)
-      const activeSnapshot = config.preset_name && config.preset_name !== 'in_use'
-        ? await helperGenerationPreset('in_use', context.presetSnapshot) : presetSnapshot
-      context.signal?.throwIfAborted()
-      return generateHelper(config, { ...context, presetSnapshot, presetRegexScripts: activeSnapshot?.regexScripts || [], callModel: opts => callModel({ ...opts, background: true, signal: context.signal }) })
-    }
+    generateRaw: (config, context) => defaultOrderedRawConfig(config) ? openingGenerate(defaultOrderedRawConfig(config), context)
+      : generateHelperRaw(config, { ...context, callModel: opts => callModel({ ...opts, background: true, signal: context.signal }) }),
+    generate: (config, context) => openingGenerate(config, context)
   })
+  async function openingGenerate(config, context) {
+    validateHelperGenerateConfig(config)
+    const presetSnapshot = await helperGenerationPreset(config.preset_name, context.presetSnapshot)
+    const activeSnapshot = config.preset_name && config.preset_name !== 'in_use'
+      ? await helperGenerationPreset('in_use', context.presetSnapshot) : presetSnapshot
+    context.signal?.throwIfAborted()
+    return generateHelper(config, { ...context, presetSnapshot, presetRegexScripts: activeSnapshot?.regexScripts || [], callModel: opts => callModel({ ...opts, background: true, signal: context.signal }) })
+  }
   ctx.effect(() => () => openingPreparation.dispose())
   async function getCardOpenings(cardPath, userName, requestMode, previewTransport) {
     const startedAt = performance.now(), stages = {}
@@ -4039,14 +4041,17 @@ export async function apply(ctx) {
           const backgroundCall = opts => callModel({ ...opts, background: true, signal })
           if (method === 'generateTavernHelperRaw' && args.completion) return { text: await generateHelperCompletion(args.completion, { callModel: backgroundCall, sessionId: chat.sessionId }) }
           const context = { callModel: backgroundCall, sessionId: chat.sessionId, history: helperGenerationHistory(chat) }
-          if (method === 'generateTavernHelperRaw') return { text: await generateHelperRaw(args.config, context) }
-          validateHelperGenerateConfig(args.config)
+          // generateRaw without an order is Tavern Helper's default-order request: build it like generate.
+          const defaultOrder = method === 'generateTavernHelperRaw' ? defaultOrderedRawConfig(args.config) : null
+          if (method === 'generateTavernHelperRaw' && !defaultOrder) return { text: await generateHelperRaw(args.config, context) }
+          const config = defaultOrder || args.config
+          validateHelperGenerateConfig(config)
           const card = await readChatCard(chat)
-          const presetSnapshot = await helperGenerationPreset(args.config.preset_name, chat.runtimePresetSnapshot || null)
+          const presetSnapshot = await helperGenerationPreset(config.preset_name, chat.runtimePresetSnapshot || null)
           const worldBook = await worldBooks.bound(chat.cardPath, card, chat)
           const extensions = await readCardExtensions(chat.cardPath, chat)
           signal.throwIfAborted()
-          return { text: await generateHelper(args.config, { ...context, chat, card, worldBook, presetSnapshot, extensions,
+          return { text: await generateHelper(config, { ...context, chat, card, worldBook, presetSnapshot, extensions,
             presetRegexScripts: chat.runtimePresetSnapshot?.regexScripts || [], characterVariables: extensions?.variables || {} }) }
         }, args?.generationToken)
       }
