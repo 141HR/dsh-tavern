@@ -201,3 +201,16 @@ test('全局世界书覆盖无绑定的新卡、与本地合并并按来源去�
   await assert.rejects(library.setGlobal({ kind: 'card', cardPath: 'cards/命运.json' }, true), /独立世界书/)
   await assert.rejects(library.setGlobal(source, 'true'), /布尔值/)
 })
+
+for (const source of [{ kind: 'standalone', path: 'worldbooks/王都.json' }, { kind: 'card', cardPath: 'cards/命运.json' }]) {
+  test('同一世界书并发新增保留双方条目，失败后仍可更新：' + source.kind, async () => {
+    const { library } = harness()
+    await Promise.all(['甲', '乙'].map(name => library.update(source, { operations: [{ op: 'add', entry: { comment: name, content: name, primaryKeys: [name] } }] })))
+    const entries = (await library.get(source)).view.entries
+    assert.ok(entries.some(entry => entry.content === '甲'))
+    assert.ok(entries.some(entry => entry.content === '乙'))
+    await assert.rejects(library.update(source, { operations: [{ op: 'delete', ref: 'entry:9999' }] }))
+    await library.update(source, { operations: [{ op: 'add', entry: { content: '丙' } }] })
+    assert.ok((await library.get(source)).view.entries.some(entry => entry.content === '丙'))
+  })
+}
