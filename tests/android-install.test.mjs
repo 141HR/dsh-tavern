@@ -104,7 +104,7 @@ test('Android 入口在 Tavern 离线时仍可启动更新或修复', async (t) 
   await writeFile(path.join(appDir, '.dsh-tavern-release.json'), JSON.stringify({ commit: currentCommit }))
   t.mock.method(globalThis, 'fetch', async (url) => {
     const value = String(url).endsWith('/package.json') ? { version: '1.1.0' }
-      : String(url).endsWith('/commits/main') ? { sha: latestCommit }
+      : String(url).endsWith('/commits/0.2.1%E7%89%88%E6%9C%AC') ? { sha: latestCommit }
       : String(url).endsWith(`/compare/${currentCommit}...${latestCommit}`) ? { status: 'ahead', base_commit: { sha: currentCommit } }
       : assert.fail(`unexpected request: ${url}`)
     return new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } })

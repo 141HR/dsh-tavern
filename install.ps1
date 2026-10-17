@@ -2,14 +2,14 @@ $ErrorActionPreference = 'Stop'
 $PreviousConsoleOutputEncoding = [Console]::OutputEncoding
 $PreviousOutputEncoding = $OutputEncoding
 
-$InstallHost = if ($env:DSH_TAVERN_HOST) { $env:DSH_TAVERN_HOST } else { 'cli' }
-if ($InstallHost -notin @('cli', 'desktop')) { throw "不支持的安装宿主：$InstallHost" }
+$InstallHost = if ($env:DSH_TAVERN_HOST) { $env:DSH_TAVERN_HOST } else { 'desktop' }
+if ($InstallHost -ne 'desktop') { throw "测试版仅支持官方 DeepSeek Harness Desktop，不支持宿主：$InstallHost" }
 
 $Repository = if ($env:DSH_TAVERN_REPOSITORY) { $env:DSH_TAVERN_REPOSITORY } else { 'flizzywine/dsh-tavern' }
 $RepositoryUrl = if ($env:DSH_TAVERN_GIT_URL) { $env:DSH_TAVERN_GIT_URL } else { "https://github.com/$Repository.git" }
-$ArchiveUrl = if ($env:DSH_TAVERN_ARCHIVE_URL) { $env:DSH_TAVERN_ARCHIVE_URL } else { "https://codeload.github.com/$Repository/zip/refs/heads/main" }
-$CommitUrl = if ($env:DSH_TAVERN_COMMIT_URL) { $env:DSH_TAVERN_COMMIT_URL } else { "https://api.github.com/repos/$Repository/commits/main" }
-$CdnMetadataUrl = if ($env:DSH_TAVERN_CDN_METADATA_URL) { $env:DSH_TAVERN_CDN_METADATA_URL } else { "https://cdn.jsdelivr.net/gh/$Repository@main/dsh-tavern-runtime.json" }
+$ArchiveUrl = if ($env:DSH_TAVERN_ARCHIVE_URL) { $env:DSH_TAVERN_ARCHIVE_URL } else { "https://codeload.github.com/$Repository/zip/refs/heads/0.2.1%E7%89%88%E6%9C%AC" }
+$CommitUrl = if ($env:DSH_TAVERN_COMMIT_URL) { $env:DSH_TAVERN_COMMIT_URL } else { "https://api.github.com/repos/$Repository/commits/0.2.1%E7%89%88%E6%9C%AC" }
+$CdnMetadataUrl = if ($env:DSH_TAVERN_CDN_METADATA_URL) { $env:DSH_TAVERN_CDN_METADATA_URL } else { "https://cdn.jsdelivr.net/gh/$Repository@0.2.1%E7%89%88%E6%9C%AC/dsh-tavern-runtime.json" }
 $CdnRootUrl = if ($env:DSH_TAVERN_CDN_ROOT_URL) { $env:DSH_TAVERN_CDN_ROOT_URL.TrimEnd('/') } else { "https://cdn.jsdelivr.net/gh/$Repository" }
 $DshRoot = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh' }
 $LegacyDshRoot = if ($env:DSH_TAVERN_LEGACY_DSH_HOME) { $env:DSH_TAVERN_LEGACY_DSH_HOME } else { $DshRoot }
@@ -1110,10 +1110,10 @@ try {
       Write-InstallStatus '下载代码：正在连接 GitHub，使用 Git 增量同步…'
       New-Item -ItemType Directory -Force -Path (Split-Path $SourceCache -Parent) | Out-Null
       if (-not (Test-Path (Join-Path $SourceCache 'HEAD'))) {
-        Invoke-UpdateGit 'git.clone' @('clone', '--progress', '--bare', '--filter=blob:none', '--depth', '1', '--single-branch', '--branch', 'main', $RepositoryUrl, $SourceCache) | Write-Host
+        Invoke-UpdateGit 'git.clone' @('clone', '--progress', '--bare', '--filter=blob:none', '--depth', '1', '--single-branch', '--branch', '0.2.1版本', $RepositoryUrl, $SourceCache) | Write-Host
       }
       Invoke-UpdateGit 'git.remote' @("--git-dir=$SourceCache", 'remote', 'set-url', 'origin', $RepositoryUrl) | Write-Host
-      Invoke-UpdateGit 'git.fetch' @("--git-dir=$SourceCache", 'fetch', '--progress', '--depth', '1', 'origin', 'main') | Write-Host
+      Invoke-UpdateGit 'git.fetch' @("--git-dir=$SourceCache", 'fetch', '--progress', '--depth', '1', 'origin', '0.2.1版本') | Write-Host
       $TargetCommit = (Invoke-UpdateGit 'git.revision' @("--git-dir=$SourceCache", 'rev-parse', 'FETCH_HEAD')).Trim()
       Invoke-UpdateGit 'git.archive' (@('-c', 'core.autocrlf=false', '-c', 'core.eol=lf', "--git-dir=$SourceCache", 'archive', '--format=zip', "--output=$ArchivePath", 'FETCH_HEAD', '--') + $RuntimePaths) | Write-Host
       $UsedGit = $true
