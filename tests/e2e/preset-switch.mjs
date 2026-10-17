@@ -8,6 +8,12 @@ export async function presetSwitch({ page, step, savedChat, inspectRound, output
   let rounds = identity.messages.filter(message => message.role === 'user').length
   for (const [key, gold, edit] of [['A', 50], ['A', 55, true], ['B', 60], ['', 70]]) {
     await step(edit ? '游玩中关闭当前预设的条目，下一轮立即生效' : `本局预设切换至 ${key || '内置'}，继续游玩并刷新`, async () => {
+      // A preset applies only when no reply or background task runs; plugin tasks may still be finishing.
+      for (let attempt = 0; attempt < 60; attempt++) {
+        const state = await page.evaluate(async sessionId => (await (await fetch('/api/dsh-tavern/pluginTurnState', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId }) })).json()).state, identity.sessionId)
+        if (state && !state.busy) break
+        await page.waitForTimeout(500)
+      }
       const before = await savedChat()
       await page.getByText('本局设置', { exact: true }).filter({ visible: true }).first().click()
       const selector = page.getByRole('combobox', { name: '本局预设', exact: true })
