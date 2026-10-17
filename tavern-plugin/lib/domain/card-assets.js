@@ -39,17 +39,23 @@ const EMOTION_WORDS = {
   optimism: ['hopeful'],
   realization: ['恍然大悟']
 }
+// name → [slot, rank]: the emotion's own name or label ranks 0, then synonyms in listed order.
 const EMOTION_INDEX = new Map()
-for (const [slot, label] of Object.entries(CAST_EMOTIONS)) { EMOTION_INDEX.set(slot, slot); EMOTION_INDEX.set(label, slot) }
-for (const [slot, words] of Object.entries(EMOTION_WORDS)) for (const word of words) if (!EMOTION_INDEX.has(word)) EMOTION_INDEX.set(word, slot)
+for (const [slot, label] of Object.entries(CAST_EMOTIONS)) { EMOTION_INDEX.set(slot, [slot, 0]); EMOTION_INDEX.set(label, [slot, 0]) }
+for (const [slot, words] of Object.entries(EMOTION_WORDS)) words.forEach((word, index) => { if (!EMOTION_INDEX.has(word)) EMOTION_INDEX.set(word, [slot, index + 1]) })
 
-/** One of the 28 emotion names for an expression's name, or null. */
-export function emotionSlot(name) {
+function emotionEntry(name) {
   const text = String(name || '').trim().toLowerCase()
   if (!text) return null
   const plain = text.replace(/\.[a-z0-9]+$/, '').replace(/[\s_\-.]*\d+$/, '').replace(/[\s_-]+/g, ' ').trim()
   return EMOTION_INDEX.get(plain) || EMOTION_INDEX.get(plain.replace(/ /g, '')) || null
 }
+
+/** One of the 28 emotion names for an expression's name, or null. */
+export function emotionSlot(name) { return emotionEntry(name)?.[0] || null }
+
+/** How close a name is to its emotion: lower is closer ('sad' beats 'crying' for sadness). */
+export function emotionRank(name) { return emotionEntry(name)?.[1] ?? Infinity }
 
 function extOf(value, fallback = 'bin') {
   const ext = String(value || '').trim().toLowerCase().replace(/^\./, '')
