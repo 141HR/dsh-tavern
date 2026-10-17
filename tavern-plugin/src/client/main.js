@@ -81,6 +81,11 @@ window.__ModuleLoader__.load({
 			return notes.join("；");
 		}
 
+		// Card files the import buttons offer. Browsers know no type for .charx / .dshcard, and some file
+		// dialogs (Safari, some Chrome builds on macOS) grey such files out; the generic binary type keeps
+		// them pickable, and the import checks the format anyway.
+		const TAVERN_CARD_FILE_ACCEPT = ".png,.json,.charx,.dshcard,application/zip,application/octet-stream";
+
 		function parseCardFile(file) {
 			const name = String(file.name || "");
 			if (name.toLowerCase().endsWith(".charx")) {
