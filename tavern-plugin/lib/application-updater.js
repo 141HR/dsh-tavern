@@ -604,7 +604,7 @@ export function createApplicationUpdater(options) {
         cwd: dshHome,
         detached: true,
         windowsHide: true,
-        stdio: platform === 'win32' ? ['ignore', 'ignore', 'pipe'] : 'ignore',
+        stdio: platform === 'win32' ? ['ignore', 'pipe', 'pipe'] : 'ignore',
         env: process.versions.electron
           ? {
               ...launchEnvironment, DSH_HOME: dshHome, ...(installHost === 'cli' ? { DSH_TAVERN_CLI_HOME: dshHome } : {}),
@@ -616,13 +616,19 @@ export function createApplicationUpdater(options) {
               ...(hostDependencyAnchor ? { DSH_TAVERN_HOST_DEPENDENCY_ANCHOR: hostDependencyAnchor } : {}),
             },
       })
+      let launcherPid = Number(child.pid)
       if (typeof child.once === 'function') {
         await new Promise(function (resolve, reject) {
           child.once('spawn', () => { launchObserved = true })
           if (platform === 'win32') {
-            let launchError = ''
+            let launchError = '', launchOutput = ''
+            child.stdout?.on('data', chunk => { launchOutput = (launchOutput + chunk.toString('utf8')).slice(-200) })
             child.stderr?.on('data', chunk => { launchError = (launchError + chunk.toString('utf8')).slice(-6000) })
-            child.once('close', code => code === 0 ? resolve() : reject(new Error(sanitizeUpdateError(launchError.trim() || `Windows 更新器启动失败（退出码 ${code}）`))))
+            child.once('close', code => {
+              // The helper prints the WMI-created updater's PID.
+              launcherPid = Number(launchOutput.trim())
+              code === 0 ? resolve() : reject(new Error(sanitizeUpdateError(launchError.trim() || `Windows 更新器启动失败（退出码 ${code}）`)))
+            })
           } else child.once('spawn', resolve)
           child.once('error', reject)
         })
@@ -635,6 +641,12 @@ export function createApplicationUpdater(options) {
       if (platform !== 'win32' && Number.isInteger(childPid) && childPid > 0) {
         running.pid = childPid
         await writeStatus(value => ({ ...value, pid: childPid }), { attemptId, expectedAttemptId: attemptId, onlyIf: value => value?.phase === 'running' && !value?.supervisorReady })
+      }
+      // An updater that dies before adopting the reservation otherwise leaves a pid:0
+      // lock that only the 1-hour idle limit clears; with its PID, status reclaims it.
+      if (Number.isSafeInteger(launcherPid) && launcherPid > 1) {
+        // Already adopted, or the lock is momentarily busy: the idle limit still applies.
+        try { lease.update({ launcherPid }) } catch {}
       }
     } catch (error) {
       if (!launchObserved) {
