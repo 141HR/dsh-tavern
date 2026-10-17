@@ -1695,7 +1695,7 @@ window.__ModuleLoader__.load({
             const operation = (async function () {
                 const deadline = Date.now() + 10000;
                 for (;;) {
-                    try { ctx.betterSidebar.openTab(seed, scope); return; }
+                    try { ctx.betterSidebar.openTab(seed, scope); return true; }
                     catch (error) {
                         // The session list can restore before DSH mounts its native
                         // sidebar seat. Retry this specific readiness error only.
@@ -1706,10 +1706,10 @@ window.__ModuleLoader__.load({
                         // 不再属于它。
                         const snapshotNow = ctx.sessions.list.getSnapshot();
                         const main = Object.values(snapshotNow.byId || {}).find(function (row) { return row && row.retainedBy && (row.retainedBy.mainView ?? 0) > 0; });
-                        if (main ? main.id !== scope.sessionId : snapshotNow.current !== scope.sessionId) return;
+                        if (main ? main.id !== scope.sessionId : snapshotNow.current !== scope.sessionId) return false;
                     }
                 }
-            })().catch(error => tavernErrorHub.report("打开酒馆侧栏", error)).finally(() => tavernSidebarOpens.delete(key));
+            })().catch(error => { tavernErrorHub.report("打开酒馆侧栏", error); return false; }).finally(() => tavernSidebarOpens.delete(key));
             tavernSidebarOpens.set(key, operation);
             return operation;
         }
@@ -14588,6 +14588,10 @@ function bindTavernFontZoom(node, win) {
 				}, 250);
 				return function () { stopped = true; window.clearTimeout(timer); };
 			}, [openingPicker && openingPicker.card && openingPicker.card.path, openingPicker && openingPicker.userName, openingPicker && openingPicker.preparing, requestMode, compatibilityAvailable]);
+			// Leaving the game (for another game, a card-design chat or the start page) lets coming back open the tabs again.
+			React.useEffect(function () {
+				if (current !== tavernSettingsTabsShownFor) tavernSettingsTabsShownFor = "";
+			}, [current]);
 			React.useEffect(function () {
 				if (!readyTavernSession || typeof props.openConversationSettingsTab !== "function") return;
 				props.openConversationSettingsTab(readyTavernSession);
@@ -15534,7 +15538,16 @@ function bindTavernFontZoom(node, win) {
 					toggleSidebar: function () { if (props.wide) ctx.layout.toggleSidebar(); else props.expandSidebar(); },
 					// Entering a game or the card workspace opens these tabs beside it. On phone-width
 					// layouts the right column covers the story, so leave it closed and show the story (#213).
-					openConversationSettingsTab: async function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); if (tavernSettingsTabsShownFor === sessionId) return; tavernSettingsTabsShownFor = sessionId; if (!await tavernAutoOpenStatus.read()) return; await openTavernSidebarTab(ctx, { type: "dsh-tavern:conversation-settings" }, { sessionId: sessionId }); await openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId: sessionId }); expandTavernRightColumn(ctx); },
+					openConversationSettingsTab: async function (sessionId) {
+						if (narrowLayout()) return closeNarrowSidebar();
+						if (tavernSettingsTabsShownFor === sessionId) return;
+						tavernSettingsTabsShownFor = sessionId;
+						if (!await tavernAutoOpenStatus.read()) return;
+						const opened = await openTavernSidebarTab(ctx, { type: "dsh-tavern:conversation-settings" }, { sessionId: sessionId }) && await openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId: sessionId });
+						// Not opened (the player already moved on, or the host refused): try again next time this game is entered.
+						if (!opened) { if (tavernSettingsTabsShownFor === sessionId) tavernSettingsTabsShownFor = ""; return; }
+						expandTavernRightColumn(ctx);
+					},
 					openCardLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:cards", meta: null }, { sessionId: sessionId }); },
 					openPresetLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:presets" }, { sessionId: sessionId }); },
 					openWorldBookLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:worldbooks" }, { sessionId: sessionId }); },

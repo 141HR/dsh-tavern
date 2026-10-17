@@ -502,7 +502,7 @@ window.__ModuleLoader__.load({
             const operation = (async function () {
                 const deadline = Date.now() + 10000;
                 for (;;) {
-                    try { ctx.betterSidebar.openTab(seed, scope); return; }
+                    try { ctx.betterSidebar.openTab(seed, scope); return true; }
                     catch (error) {
                         // The session list can restore before DSH mounts its native
                         // sidebar seat. Retry this specific readiness error only.
@@ -513,10 +513,10 @@ window.__ModuleLoader__.load({
                         // 不再属于它。
                         const snapshotNow = ctx.sessions.list.getSnapshot();
                         const main = Object.values(snapshotNow.byId || {}).find(function (row) { return row && row.retainedBy && (row.retainedBy.mainView ?? 0) > 0; });
-                        if (main ? main.id !== scope.sessionId : snapshotNow.current !== scope.sessionId) return;
+                        if (main ? main.id !== scope.sessionId : snapshotNow.current !== scope.sessionId) return false;
                     }
                 }
-            })().catch(error => tavernErrorHub.report("打开酒馆侧栏", error)).finally(() => tavernSidebarOpens.delete(key));
+            })().catch(error => { tavernErrorHub.report("打开酒馆侧栏", error); return false; }).finally(() => tavernSidebarOpens.delete(key));
             tavernSidebarOpens.set(key, operation);
             return operation;
         }

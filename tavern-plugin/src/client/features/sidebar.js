@@ -313,6 +313,10 @@
 				}, 250);
 				return function () { stopped = true; window.clearTimeout(timer); };
 			}, [openingPicker && openingPicker.card && openingPicker.card.path, openingPicker && openingPicker.userName, openingPicker && openingPicker.preparing, requestMode, compatibilityAvailable]);
+			// Leaving the game (for another game, a card-design chat or the start page) lets coming back open the tabs again.
+			React.useEffect(function () {
+				if (current !== tavernSettingsTabsShownFor) tavernSettingsTabsShownFor = "";
+			}, [current]);
 			React.useEffect(function () {
 				if (!readyTavernSession || typeof props.openConversationSettingsTab !== "function") return;
 				props.openConversationSettingsTab(readyTavernSession);
@@ -1259,7 +1263,16 @@
 					toggleSidebar: function () { if (props.wide) ctx.layout.toggleSidebar(); else props.expandSidebar(); },
 					// Entering a game or the card workspace opens these tabs beside it. On phone-width
 					// layouts the right column covers the story, so leave it closed and show the story (#213).
-					openConversationSettingsTab: async function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); if (tavernSettingsTabsShownFor === sessionId) return; tavernSettingsTabsShownFor = sessionId; if (!await tavernAutoOpenStatus.read()) return; await openTavernSidebarTab(ctx, { type: "dsh-tavern:conversation-settings" }, { sessionId: sessionId }); await openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId: sessionId }); expandTavernRightColumn(ctx); },
+					openConversationSettingsTab: async function (sessionId) {
+						if (narrowLayout()) return closeNarrowSidebar();
+						if (tavernSettingsTabsShownFor === sessionId) return;
+						tavernSettingsTabsShownFor = sessionId;
+						if (!await tavernAutoOpenStatus.read()) return;
+						const opened = await openTavernSidebarTab(ctx, { type: "dsh-tavern:conversation-settings" }, { sessionId: sessionId }) && await openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId: sessionId });
+						// Not opened (the player already moved on, or the host refused): try again next time this game is entered.
+						if (!opened) { if (tavernSettingsTabsShownFor === sessionId) tavernSettingsTabsShownFor = ""; return; }
+						expandTavernRightColumn(ctx);
+					},
 					openCardLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:cards", meta: null }, { sessionId: sessionId }); },
 					openPresetLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:presets" }, { sessionId: sessionId }); },
 					openWorldBookLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:worldbooks" }, { sessionId: sessionId }); },
