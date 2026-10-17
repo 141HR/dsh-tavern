@@ -44,7 +44,7 @@ function referencedPaths(card) {
  * plugins, info, resolve(uri) }. Pack files are not read here; only the card's own asset files are.
  */
 export async function readCardArchive(zip) {
-  let kind, card, packs = [], plugins = [], info = null
+  let kind, card, packs = [], plugins = [], info = null, defaults = null
   if (zip.entries.has('dsh.json')) {
     kind = 'dshcard'
     const manifest = await readJson(zip, 'dsh.json', 'DSH 人物卡')
@@ -60,6 +60,7 @@ export async function readCardArchive(zip) {
         credits: (Array.isArray(pack.credits) ? pack.credits : []).filter(file => typeof file === 'string' && file.startsWith(prefix)).map(file => file.slice(prefix.length)) })
     }
     plugins = (Array.isArray(manifest.plugins) ? manifest.plugins : []).map(plugin => ({ name: String(plugin?.name || ''), path: String(plugin?.path || ''), purpose: String(plugin?.purpose || '') }))
+    defaults = await startDefaults(zip, manifest.defaults)
   } else if (zip.entries.has('dsh-tavern-card-bundle.json')) {
     // The Galgame fork's bundle: card/card.json, packs/<id>/, a cover beside the card.
     kind = 'bundle'
@@ -95,5 +96,38 @@ export async function readCardArchive(zip) {
     const match = /^data:[^,]*;base64,(.*)$/s.exec(uri)
     return match ? Buffer.from(match[1], 'base64') : undefined
   }
-  return { kind, card, packs, plugins, info, resolve }
+  return { kind, card, packs, plugins, info, defaults, resolve }
+}
+
+/**
+ * What a new game of this card starts with (dsh.json `defaults`): a preset carried in the card
+ * and a few game settings the author knows best. The player's own choices (model, name) never come from a card.
+ */
+async function startDefaults(zip, value) {
+  if (!value || typeof value !== 'object') return null
+  const result = {}
+  if (typeof value.preset === 'string' && value.preset) {
+    const file = path.posix.normalize(value.preset)
+    if (!/^presets\/[^/]+\.json$/i.test(file) || !zip.entries.has(file)) throw invalid('dsh.json 的 defaults.preset 应指向包内 presets/ 下的 JSON 预设：' + value.preset)
+    result.preset = { name: file.slice('presets/'.length), text: (await zip.readBuffer(zip.entries.get(file), 4 * 1024 * 1024)).toString('utf8') }
+  }
+  const settings = startSettings(value.settings)
+  if (settings) result.settings = settings
+  return Object.keys(result).length ? result : null
+}
+
+/** The game settings a card may suggest; anything else is ignored. */
+export function startSettings(value) {
+  if (!value || typeof value !== 'object') return null
+  const result = {}
+  if (value.statusBarPlacement === 'sidebar' || value.statusBarPlacement === 'body') result.statusBarPlacement = value.statusBarPlacement
+  const tasks = value.backgroundTasks && typeof value.backgroundTasks === 'object' ? value.backgroundTasks : null
+  if (tasks) {
+    const picked = {}
+    for (const key of ['posture', 'variables']) if (typeof tasks[key] === 'boolean') picked[key] = tasks[key]
+    if (Object.keys(picked).length) result.backgroundTasks = picked
+  }
+  if (typeof value.webSearch === 'boolean') result.webSearchEnabled = value.webSearch
+  if (typeof value.sceneImages === 'boolean') result.sceneImagesEnabled = value.sceneImages
+  return Object.keys(result).length ? result : null
 }

@@ -179,3 +179,18 @@ test('卡内插件：导入时放在一边不加载；启用后进 plugins/ 并�
   assert.equal(existsSync(join(pluginsDir, folder)), false)
   assert.equal(existsSync(join(dir, 'card-plugins', 'k'.repeat(64))), false)
 })
+
+test('开局默认：dsh.json 指向包内预设，只认少数几项设置，其余忽略', async t => {
+  const { startSettings } = await import('../tavern-plugin/lib/domain/card-archive.js')
+  const dir = await temp(t)
+  const dsh = { format: 'dshcard', formatVersion: 1, packs: [], plugins: [], defaults: { preset: 'presets/舞台.json',
+    settings: { statusBarPlacement: 'body', backgroundTasks: { posture: true, variables: 'x' }, webSearch: false, backgroundModel: { provider: 'p' }, playerName: '作者' } } }
+  const zip = await openZipFile(await zipFile(dir, 'a.dshcard', { 'card.json': '{"spec":"chara_card_v3","data":{"name":"鱼"}}', 'dsh.json': JSON.stringify(dsh), 'presets/舞台.json': '{"prompts":[]}' }))
+  const archive = await readCardArchive(zip)
+  await zip.close()
+  assert.deepEqual(archive.defaults, { preset: { name: '舞台.json', text: '{"prompts":[]}' }, settings: { statusBarPlacement: 'body', backgroundTasks: { posture: true }, webSearchEnabled: false } })
+  assert.equal(startSettings({ playerName: 'x' }), null)
+  const bad = await openZipFile(await zipFile(dir, 'b.dshcard', { 'card.json': '{}', 'dsh.json': JSON.stringify({ ...dsh, defaults: { preset: '../x.json' } }) }))
+  await assert.rejects(readCardArchive(bad), /defaults\.preset/)
+  await bad.close()
+})

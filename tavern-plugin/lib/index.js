@@ -1078,6 +1078,7 @@ export async function apply(ctx) {
       // The card's plugins come on with it, confined to this card; the card library can turn them off.
       const plugins = archive.plugins.length ? await cardPlugins.stage(zip, { cardKey: castAssets.keyOf(imported.path), plugins: archive.plugins }) : []
       let pluginError = ''
+      const defaults = archive.defaults ? await storeStartDefaults(imported.path, archive.defaults) : null
       if (plugins.length) {
         try { await cardPlugins.enable({ cardKey: castAssets.keyOf(imported.path), cardPath: imported.path, plugins }) }
         catch (error) { pluginError = str(error?.message || error) }
@@ -1086,8 +1087,29 @@ export async function apply(ctx) {
       return { ...imported, format: archive.kind, ...(archive.info ? { info: archive.info } : {}),
         ...(packs.length ? { packs: packs.map(({ id, contentHash, title, format, files, reused }) => ({ id, contentHash, title, format, files, reused })) } : {}),
         ...(plugins.length ? { plugins: plugins.map(({ name, purpose, files, bytes }) => ({ name, purpose, files, bytes, enabled: !pluginError })) } : {}),
-        ...(pluginError ? { pluginError } : {}) }
+        ...(pluginError ? { pluginError } : {}),
+        ...(defaults ? { startDefaults: { preset: defaults.presetPath ? defaults.presetPath.split('/').pop() : '', settings: defaults.settings || null } } : {}) }
     } finally { await zip.close() }
+  }
+  // A card's suggested preset goes into the preset library (a new name when one is taken by another file).
+  async function storeStartDefaults(cardPath, defaults) {
+    let presetPath = ''
+    if (defaults.preset) {
+      const base = defaults.preset.name.replace(/\.json$/i, '')
+      const existing = new Map((await presetLibrary.catalog()).presets.map(preset => [preset.path, preset]))
+      for (let index = 0; !presetPath; index++) {
+        const name = (index ? base + ' (' + index + ')' : base) + '.json'
+        const target = 'presets/' + name
+        if (existing.has(target)) {
+          if (await fileResources.readText(target).catch(() => undefined) === defaults.preset.text) presetPath = target
+          continue
+        }
+        presetPath = (await importPreset({ name, text: defaults.preset.text })).path
+      }
+    }
+    const stored = { ...(presetPath ? { presetPath } : {}), ...(defaults.settings ? { settings: defaults.settings } : {}) }
+    await castAssets.setStartDefaults(cardPath, Object.keys(stored).length ? stored : null)
+    return stored
   }
   async function storeImportedCard({ payload, collected }, options = {}) {
     const workspace = cardPreparation.create({ kind: 'import', payload: payload })
@@ -2401,7 +2423,8 @@ export async function apply(ctx) {
     return message.data.content[0].text
   }
   const conversationInitialization = createConversationInitialization({
-    cards: { read: readCard, readChat: readChatCard, script: readScript, extensions: readCardExtensions },
+    cards: { read: readCard, readChat: readChatCard, script: readScript, extensions: readCardExtensions,
+      startDefaults: async cardPath => (await castAssets.read(normalizeResourcePath(cardPath, 'card'))).startDefaults || null },
     chats: { resolve: chatForSession, publish: conversationRegistry.publish, write: writeChat },
     timeline: storyTimeline,
     snapshots: playCardSnapshots,
