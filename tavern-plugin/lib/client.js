@@ -12659,7 +12659,7 @@ function bindTavernFontZoom(node, win) {
 			return React.createElement(React.Fragment, null, image, React.createElement("span", { className: "dsh-tavern-card-list-copy" },
 				React.createElement("b", { title: card.name }, card.name),
 				props.showPath && card.path ? React.createElement("span", { title: card.path, style: { overflowWrap: "anywhere" } }, "文件：" + String(card.path).replace(/\\/g, "/").split("/").pop()) : null,
-				React.createElement("span", { className: card.readError ? "dsh-tavern-dock-error" : undefined }, card.readError || props.detail),
+				card.readError || props.detail ? React.createElement("span", { className: card.readError ? "dsh-tavern-dock-error" : undefined }, card.readError || props.detail) : null,
 				props.extra ? React.createElement("span", null, props.extra) : null
 			));
 		}
@@ -14077,7 +14077,7 @@ function bindTavernFontZoom(node, win) {
 				organization.toolbar(),
 				organization.visible.length ? h(React.Fragment, null, h("div", { className: "dsh-tavern-side-empty", style: { padding: "4px 6px" } }, "已绑定剧本的人物卡将自动按剧本推进；未绑定的按自由故事推进。剧本绑定在“卡片模式”中管理。"), h(TavernCardList, { place: "play", cards: organization.visible, batch: cardBatch, busy: busy, open: function (card) { if (!card.readError) preparePlayConversation(card); }, builtin: function () { return organization.renderCards(function (card) { return h("div", { key: card.path, className: "dsh-tavern-card-pick-wrap" },
 					cardBatch.checkbox(card),
-					h("button", { className: "dsh-tavern-card-pick" + (card.hasImage ? " with-image" : "") + (cardBatch.managing && cardBatch.isSelected(card.path) ? " selected" : ""), disabled: busy || (!cardBatch.managing && Boolean(card.readError)), onClick: function () { if (cardBatch.managing) cardBatch.toggle(card.path); else preparePlayConversation(card); } }, h(TavernCardListContent, { showPath: true, card: card, detail: card.script ? ("剧本：" + card.script.title) : "自由故事（未绑定剧本）" }))
+					h("button", { className: "dsh-tavern-card-pick" + (card.hasImage ? " with-image" : "") + (cardBatch.managing && cardBatch.isSelected(card.path) ? " selected" : ""), disabled: busy || (!cardBatch.managing && Boolean(card.readError)), title: "文件：" + String(card.path).replace(/\\/g, "/").split("/").pop(), onClick: function () { if (cardBatch.managing) cardBatch.toggle(card.path); else preparePlayConversation(card); } }, h(TavernCardListContent, { card: card, detail: card.script ? ("剧本：" + card.script.title) : "" }))
 				); }); } })) : h("div", { className: "dsh-tavern-empty" }, cards.length ? "没有匹配的人物卡" : "还没有人物卡。\n点“导入人物卡”添加 PNG/JSON 卡片。")
 			));
 
