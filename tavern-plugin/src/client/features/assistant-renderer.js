@@ -232,7 +232,8 @@
 		// gallery: { urls, index } pages through several pictures with ‹ › and the arrow keys.
 		function openSceneImagePreview(url, opener, version, onEditPrompt, gallery, label) {
 			const dialog = document.createElement("dialog");
-			dialog.className = "dsh-tavern-image-preview";
+			// A labelled picture (an avatar) is shown at a moderate size, not stretched to the screen.
+			dialog.className = "dsh-tavern-image-preview" + (label ? " is-compact" : "");
 			dialog.setAttribute("aria-label", (label || "场景插画") + "预览");
 			const close = document.createElement("button");
 			close.type = "button";
