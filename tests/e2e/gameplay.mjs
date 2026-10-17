@@ -18,6 +18,7 @@ import { backgroundLifecycleChecks } from './background-lifecycle.mjs'
 import { cardMemoryChecks } from './card-memory.mjs'
 import {displayRegressionRules, displayRegressionChecks} from './display-regression.mjs'
 import { surfaceRecoveryChecks } from './surface-recovery.mjs'
+import { castStageChecks, castStageInputChecks } from './cast-stage.mjs'
 import { cardVariableUpdateChecks } from './card-variable-update.mjs'
 import { cardUpdateChecks } from './card-update.mjs'
 import { sidebarUpgrade } from './sidebar-upgrade.mjs'
@@ -531,6 +532,7 @@ try {
     await page.screenshot({ path: join(output, 'cast-lines.png') })
     report.castLines = true
   })
+  if (castScenario) await castStageChecks({ page, step, output, report })
   await step('刷新后确认同一局、正文和状态均保留', async () => {
     await page.reload({ waitUntil: 'domcontentloaded' })
     await inspectScreen()
@@ -856,6 +858,7 @@ try {
     await assertNativeStorage()
     report.nativeFormat.restart=true
   })
+  if (castScenario) await castStageInputChecks({ page, step, report })
   // Every scenario ends with the story save agreeing with what the model sees (#196).
   if (storyToolScenario) await step('正文均经 submit_story 提交', async () => {
     const submitted = (await readFile(join(output, 'story-tool.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line).content)

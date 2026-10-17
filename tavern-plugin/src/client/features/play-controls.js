@@ -973,6 +973,18 @@
                         h(TavernConversationPlugins, { key: owner + ":plugins", sessionId: owner }))) : h("p", null, "请选择一个游玩对话。")));
         }
 
+        function TavernStageAction(props) {
+            const owner = props.sessions.subagentAddress(props.sessionId)?.parentSessionId || props.sessionId;
+            const mode = useTavernSessionMode(owner);
+            const enabled = useTavernCastEnabled();
+            if (!enabled || !isPlayMode(mode)) return null;
+            return React.createElement("button", { type: "button", className: "dsh-tavern-btn dsh-tavern-header-settings", "aria-label": "舞台", title: "打开舞台", onClick: () => props.open(owner) },
+                React.createElement("svg", { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },
+                    React.createElement("path", { d: "M3 5h18v11H3zM8 20h8M12 16v4" }),
+                    React.createElement("circle", { cx: 12, cy: 10, r: 2.5 })),
+                React.createElement("span", { className: "dsh-tavern-header-action-label" }, "舞台"));
+        }
+
         function TavernConversationSettingsAction(props) {
             const owner = props.sessions.subagentAddress(props.sessionId)?.parentSessionId || props.sessionId;
             const mode = useTavernSessionMode(owner);
@@ -1511,6 +1523,23 @@
 			const slots = input.slots;
 			const uiConversation = ctx.get("uiConversation") || ctx.get("conversation");
 			const executeSlash = createTavernFrameSlashExecutor(ctx);
+            // The stage: another view of the same game, in the right panel (docs/design/cast-presentation.md).
+            const submitTavernStageInput = function (sessionId, text) {
+                const scope = ctx.sessions.scope(sessionId);
+                const conversation = ctx.get("conversation");
+                if (!scope || !conversation) return Promise.reject(new Error("这一局没有在当前页面打开"));
+                const input = conversation.input.for(scope);
+                input.setDraft(text);
+                return Promise.resolve(input.submit("queue"));
+            };
+            ctx.effect(() => ctx.betterSidebar.registerTab({
+                id: "dsh-tavern:stage", title: "舞台", order: 7, single: true,
+                component: props => React.createElement(TavernStageTab, { sessionId: props.scope.sessionId, submit: submitTavernStageInput })
+            }), "dsh-tavern: stage tab");
+            ctx.effect(() => slots.inject("conversation.session.header.utilities", () => slots.register(
+                { name: "conversation.session.header.utilities", id: "dsh-tavern-stage", order: 79 },
+                props => React.createElement(TavernStageAction, { ...props, sessions: ctx.sessions, open: sessionId => openTavernSidebarTab(ctx, { type: "dsh-tavern:stage" }, { sessionId }) })
+            )), "dsh-tavern: stage action");
             ctx.effect(() => ctx.betterSidebar.registerTab({
                 id: "dsh-tavern:conversation-settings", title: "本局设置", order: 8, single: true,
                 component: props => React.createElement(TavernConversationSettingsTab, { sessionId: props.scope.sessionId, sessions: ctx.sessions })
