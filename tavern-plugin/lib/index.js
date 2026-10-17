@@ -142,7 +142,7 @@ import { createCoordinationEventPublisher } from './domain/coordination-event-pu
 import { createSessionSignalTransport } from './domain/session-signal-transport.js'
 import { createCandidateTasks } from './domain/candidate-tasks.js'
 import { extractEpubText } from './domain/epub-text.js'
-import { createFileResourceStore, normalizeResourcePath, resourceKind } from './domain/file-resources.js'
+import { createFileResourceStore, normalizeResourcePath, resourceKind, stripPngTextChunks } from './domain/file-resources.js'
 import { createMobileCardImport } from './domain/mobile-card-import.js'
 import { createForegroundHandoff } from './domain/foreground-handoff.js'
 import { createForegroundFrameBuilder } from './domain/agent-input-frame.js'
@@ -169,6 +169,7 @@ import { POSTURE_SUBMIT_TOOL, POSTURE_SUBMIT_TOOL_NAME, lastSubmittedPosture, no
 import { createCastPresentation } from './domain/cast-presentation.js'
 import { createCastAssets } from './domain/cast-assets.js'
 import { createSpeech } from './domain/speech.js'
+import { buildCharx, cardImport } from './domain/card-assets.js'
 import { createPostureItem, createSettlementItems, plainSettlementPlan, runPipelineStages } from './domain/background-pipeline.js'
 import { TAVERN_COMPATIBILITY_CAPABILITIES, createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
 import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics, sanitizeModuleFailure, sanitizeMvuLoadDiagnostic, redactMvuLoadError } from './domain/mvu-diagnostics.js'
@@ -1037,11 +1038,33 @@ export async function apply(ctx) {
     if (card === undefined) throw new Error('人物卡不存在: ' + chat.cardPath)
     return card
   }
-  async function importCard(payload) {
+  async function importCard(input) {
+    // A CHARX is stored as PNG or JSON; the material any card file carries goes to its character material.
+    const { payload, collected } = cardImport(input)
     const workspace = cardPreparation.create({ kind: 'import', payload: payload })
     const cardPath = await fileResources.importCard(payload, workspace)
     const card = cardPreparation.project(workspace)
-    return { path: cardPath, name: card.name, description: card.description, tags: card.tags }
+    let assets = null
+    if (collected && (collected.emotions.length || collected.backgrounds.length || collected.cover || collected.extras.length || collected.cast.length || collected.skipped)) {
+      try { assets = { ...await castAssets.importCardAssets({ cardPath, name: card.name || '主角', collected }), skipped: collected.skipped } }
+      catch (error) { assets = { error: str(error?.message || error) } }
+    }
+    return { path: cardPath, name: card.name, description: card.description, tags: card.tags, ...(assets ? { assets } : {}) }
+  }
+  // The card as CHARX: Character Card V3 with its character material (docs/design/tavern-to-galgame.md).
+  async function exportCardCharx(input) {
+    const cardPath = normalizeResourcePath(input, 'card')
+    const workspace = await readCardWorkspace(cardPath)
+    if (workspace === undefined) throw Object.assign(new Error('人物卡不存在: ' + cardPath), { code: 'TAVERN_NOT_FOUND' })
+    const document = cardPreparation.present({ card: workspace, as: 'sillytavern-v3', characterBook: await worldBooks.characterBookForCard(cardPath) })
+    const image = await fileResources.readCardImage(cardPath).catch(() => undefined)
+    const manifest = await castAssets.read(cardPath)
+    const files = new Map()
+    for (const file of new Set([...manifest.characters.flatMap(character => [character.avatar, ...Object.values(character.sprites || {})]), ...(manifest.backgrounds || []).map(item => item.file), ...(manifest.extras || []).map(item => item.file)].filter(Boolean))) {
+      files.set(file, await castAssets.readFile(cardPath, file))
+    }
+    const name = str(document?.data?.name || cardPreparation.project(workspace).name || '人物卡')
+    return { name, bytes: buildCharx({ document, cover: image ? stripPngTextChunks(image) : null, manifest, characterName: name, readFile: file => files.get(file) }) }
   }
   const cardSummaries = createCardSummaryCache({
     absolute: cardPath => fileResources.absolute(cardPath),
@@ -2646,8 +2669,11 @@ export async function apply(ctx) {
       const material = await pluginTurns.readTurn(str(sessionId), turn).catch(() => null) || (turn === wanted.at(-1) ? await pluginTurns.readPendingTurn(str(sessionId)).catch(() => null) : null)
       if (material && material.turn === turn) turns.push({ turn, text: material.text, lines: annotated.turns[turn] || [] })
     }
+    const manifest = await castAssets.read(card.path)
+    const background = (manifest.backgrounds || [])[0]
     return { enabled: annotated.enabled, player: card.player, card: { name: card.name, imageUrl: '/api/dsh-tavern/card-image?path=' + encodeURIComponent(card.path) },
-      cast: castAssetView(card.path, await castAssets.read(card.path)), turns }
+      background: background ? '/api/dsh-tavern/cast-asset?' + new URLSearchParams({ card: castAssets.keyOf(card.path), file: background.file }).toString() : '',
+      cast: castAssetView(card.path, manifest), turns }
   }
   // One line in its speaker's voice on the chosen channel; { skip } when voicing is off or narration is silent.
   async function speakLine(sessionId, { speaker, text, emotion, narration } = {}) {
@@ -4753,6 +4779,7 @@ export async function apply(ctx) {
     ctx,
     castAssets,
     speech,
+    exportCardCharx,
     exposeHandler: handle => { tavernHttpHandle = handle },
     pluginAssets: createPluginAssets({ pluginsDir: userPluginPaths(dataRoot).plugins }),
     dispatch,

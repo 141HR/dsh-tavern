@@ -20,7 +20,7 @@ import { backgroundLifecycleChecks } from './background-lifecycle.mjs'
 import { cardMemoryChecks } from './card-memory.mjs'
 import {displayRegressionRules, displayRegressionChecks} from './display-regression.mjs'
 import { surfaceRecoveryChecks } from './surface-recovery.mjs'
-import { castSpeechChecks, castStageChecks, castStageInputChecks } from './cast-stage.mjs'
+import { castCardFileChecks, castSpeechChecks, castStageChecks, castStageInputChecks } from './cast-stage.mjs'
 import { cardVariableUpdateChecks } from './card-variable-update.mjs'
 import { cardUpdateChecks } from './card-update.mjs'
 import { sidebarUpgrade } from './sidebar-upgrade.mjs'
@@ -544,6 +544,7 @@ try {
   })
   if (castScenario) await castStageChecks({ page, step, output, report })
   if (castScenario) await castSpeechChecks({ page, step, output, report })
+  if (castScenario) await castCardFileChecks({ page, step, report })
   await step('刷新后确认同一局、正文和状态均保留', async () => {
     await page.reload({ waitUntil: 'domcontentloaded' })
     await inspectScreen()

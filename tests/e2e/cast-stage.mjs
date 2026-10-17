@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
-import { writeZipEntries } from '../../tavern-plugin/lib/domain/zip-entries.js'
+import { readZipEntries, writeZipEntries } from '../../tavern-plugin/lib/domain/zip-entries.js'
 
 import { crc32, deflateSync } from 'node:zlib'
 
@@ -128,6 +128,35 @@ async function expectRequest(requests, match) {
     await new Promise(resolve => setTimeout(resolve, 100))
   }
   throw new Error('配音服务没有收到预期的请求：' + JSON.stringify(requests.map(request => request.body)))
+}
+
+// A CHARX card brings its expressions and background; exporting writes them back.
+export async function castCardFileChecks({ page, step, report }) {
+  await step('CHARX：导入带立绘和背景的卡，素材进角色素材；导出 CHARX 写回', async () => {
+    const card = { spec: 'chara_card_v3', spec_version: '3.0', data: { name: 'CHARX 验收', description: '带素材的卡', first_mes: '你好。', group_only_greetings: [], assets: [
+      { type: 'icon', uri: 'embeded://assets/icon/images/main.png', name: 'main', ext: 'png' },
+      { type: 'emotion', uri: 'embeded://assets/emotion/images/smile.png', name: 'smile', ext: 'png' },
+      { type: 'emotion', uri: 'embeded://assets/emotion/images/think.png', name: 'thinking', ext: 'png' },
+      { type: 'background', uri: 'embeded://assets/background/images/room.png', name: 'main', ext: 'png' }] } }
+    const file = writeZipEntries([{ path: 'card.json', content: JSON.stringify(card) }, { path: 'assets/icon/images/main.png', content: figurePng([90, 120, 200]) },
+      { path: 'assets/emotion/images/smile.png', content: figurePng([230, 160, 90]) }, { path: 'assets/emotion/images/think.png', content: figurePng([120, 200, 120]) },
+      { path: 'assets/background/images/room.png', content: figurePng([40, 40, 60], 160, 90) }])
+    const call = (method, args) => page.evaluate(async ([method, args]) => (await fetch('/api/dsh-tavern/' + method, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(args) })).json(), [method, args])
+    const imported = await call('importCard', { payload: { kind: 'charx', name: 'CHARX 验收.charx', fileB64: file.toString('base64') } })
+    assert.equal(imported.ok, true, JSON.stringify(imported))
+    assert.deepEqual(imported.card.assets, { sprites: 1, backgrounds: 1, avatars: 0, kept: 1, unmatched: ['thinking'], skipped: 0 })
+    const listed = (await call('listCards', {})).cards.find(item => item.path === imported.card.path)
+    assert.equal(listed.hasImage, true, 'PNG 卡面当作人物卡封面')
+    const exported = await page.request.get(new URL('/api/dsh-tavern/card-charx?path=' + encodeURIComponent(imported.card.path), page.url()).href)
+    assert.equal(exported.status(), 200)
+    const entries = readZipEntries(await exported.body())
+    const written = JSON.parse(entries.get('card.json').toString('utf8'))
+    assert.equal(written.data.name, 'CHARX 验收')
+    assert.equal(written.data.first_mes, '你好。')
+    assert.deepEqual(written.data.assets.map(asset => [asset.type, asset.name]), [['icon', 'main'], ['emotion', 'joy'], ['background', 'main'], ['emotion', 'thinking']])
+    for (const asset of written.data.assets) assert.ok(entries.has(asset.uri.replace('embeded://', '')), asset.uri)
+    report.castCardFile = true
+  })
 }
 
 // Run last: it plays one more turn from the full-screen stage.

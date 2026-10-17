@@ -89,7 +89,8 @@
 			}
 			const shown = present.slice(-3);
 			return h("div", { className: "dsh-tavern-stage-scene" + (props.fullscreen ? " is-fullscreen" : ""), onClick: props.onAdvance },
-				h("div", { className: "dsh-tavern-stage-backdrop", style: data.card.imageUrl ? { "--dsh-stage-backdrop": "url(\"" + data.card.imageUrl + "\")" } : undefined }),
+				data.background ? h("div", { className: "dsh-tavern-stage-backdrop is-scene", style: { "--dsh-stage-backdrop": "url(\"" + data.background + "\")" } })
+					: h("div", { className: "dsh-tavern-stage-backdrop", style: data.card.imageUrl ? { "--dsh-stage-backdrop": "url(\"" + data.card.imageUrl + "\")" } : undefined }),
 				h("div", { className: "dsh-tavern-stage-figures" }, shown.map(function (name) {
 					return h(TavernStageFigure, { key: name, name: name, url: tavernCastImage(data, name, emotions.get(name)), speaking: beat && beat.speaker === name, dim: beat && beat.kind === "line" && beat.speaker !== name });
 				})),
@@ -103,7 +104,7 @@
 
 		/** The stage data as plugins see it (tavernUi.getStage). */
 		function tavernStagePublicData(data) {
-			return { enabled: data.enabled !== false, player: data.player, card: data.card, characters: data.cast || [], turns: data.turns || [] };
+			return { enabled: data.enabled !== false, player: data.player, card: data.card, background: data.background || "", characters: data.cast || [], turns: data.turns || [] };
 		}
 
 		// The look of the stage: Tavern's own, or a plugin's registerStageView; remembered per browser.
