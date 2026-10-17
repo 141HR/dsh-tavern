@@ -92,7 +92,7 @@
 							component: function (props) {
 								const gameId = props.scope && props.scope.sessionId || "";
 								return React.createElement(tavernPluginBoundary(), { owner: owner, fallback: React.createElement("p", { className: "dsh-tavern-plugin-panel-error" }, "插件 " + owner + " 的面板出错了") },
-									gameId ? render({ gameId: gameId, visible: props.visible !== false }) : React.createElement("p", { className: "dsh-tavern-plugin-panel-empty" }, "请先打开一局游戏。"));
+									gameId ? React.createElement(render, { gameId: gameId, visible: props.visible !== false }) : React.createElement("p", { className: "dsh-tavern-plugin-panel-empty" }, "请先打开一局游戏。"));
 							} });
 						panels.set(tabId, owner);
 						changed();
@@ -315,7 +315,7 @@
 			if (item.kind.indexOf("/") > 0) {
 				const renderer = tavernUiExtensions.mediaRenderer(item.kind);
 				if (!renderer) return null;
-				body = h(tavernPluginBoundary(), { owner: renderer.owner }, renderer.render({ item: Object.assign({}, item, { url: item.attachment ? tavernPluginMediaUrl(props.sessionId, item) : "" }), gameId: props.sessionId, turn: props.turn }));
+				body = h(tavernPluginBoundary(), { owner: renderer.owner }, h(renderer.render, { item: Object.assign({}, item, { url: item.attachment ? tavernPluginMediaUrl(props.sessionId, item) : "" }), gameId: props.sessionId, turn: props.turn }));
 			} else if (item.status === "pending") {
 				body = h("div", { className: "dsh-tavern-plugin-media-pending", role: "status" }, typeof item.progress === "number" ? "生成中… " + Math.round(item.progress * 100) + "%" : "生成中…");
 			} else if (item.status === "failed") {
