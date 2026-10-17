@@ -11,7 +11,7 @@
 			return React.createElement(React.Fragment, null, image, React.createElement("span", { className: "dsh-tavern-card-list-copy" },
 				React.createElement("b", { title: card.name }, card.name),
 				props.showPath && card.path ? React.createElement("span", { title: card.path, style: { overflowWrap: "anywhere" } }, "文件：" + String(card.path).replace(/\\/g, "/").split("/").pop()) : null,
-				React.createElement("span", { className: card.readError ? "dsh-tavern-dock-error" : undefined }, card.readError || props.detail),
+				card.readError || props.detail ? React.createElement("span", { className: card.readError ? "dsh-tavern-dock-error" : undefined }, card.readError || props.detail) : null,
 				props.extra ? React.createElement("span", null, props.extra) : null
 			));
 		}
