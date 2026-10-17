@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "9b9fdc9fb312df5a04380f9067f6b35283ef2ea7",
-  "releaseSequence": 647,
+  "revision": "cd2baff359984d1f6bde0edd9773264cb8a44d77",
+  "releaseSequence": 658,
   "version": "2.7.0",
   "files": [
     {
@@ -771,8 +771,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-fork-targets.js",
-      "sha256": "58a37f273b95946ec9b6b83290ce6a204a0034b9f9e9ea44ca3161644346ef8c",
-      "size": 2282
+      "sha256": "9c8d5f24ea1427e4a4e9bd72187bc471184f099f7e8c2e835f78c743ca691004",
+      "size": 2474
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-fork.js",
