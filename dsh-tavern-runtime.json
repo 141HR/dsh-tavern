@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "200eeb1c55f5e5bbc32e7402e14df3ff0b1cbdb8",
-  "releaseSequence": 634,
+  "revision": "5509757f88a8d79245d9960dbe58e7d0062203fa",
+  "releaseSequence": 635,
   "version": "2.7.0",
   "files": [
     {
@@ -461,8 +461,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "ec603abc204286f356c8e009dfa1b4513444d32343276a818e24d0cd0e3b09b4",
-      "size": 1749870
+      "sha256": "1e71a2adca9252c439ff0b2cb9b819f016491b432a324503fe9c10cef6b768b3",
+      "size": 1751317
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -501,8 +501,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/background-pipeline.js",
-      "sha256": "472ee82194f44cadd1c2045ca15931d9b7d769493b5036f126597e8b6c59f476",
-      "size": 4164
+      "sha256": "20a2401f6decf56b3122f9ff4365b8ae707634ec23cb981db5e64c6d9071edc2",
+      "size": 6173
     },
     {
       "path": "tavern-plugin/lib/domain/background-progress.js",
@@ -1091,13 +1091,13 @@
     },
     {
       "path": "tavern-plugin/lib/domain/manual-character-design.js",
-      "sha256": "bb6884d98aea622044e300a91ef4ebe321100045eae884a87bc82e33a8cc1aa8",
-      "size": 7678
+      "sha256": "677e399977fdaa705fa9f94846623f9e0a115c9206f7c99ac5d7f284bd439975",
+      "size": 7192
     },
     {
       "path": "tavern-plugin/lib/domain/manual-ledger.js",
-      "sha256": "74c6c35bd4d324d867c86a01b9044d7a5008a398d45a898bc690b132d175b8f4",
-      "size": 7172
+      "sha256": "07f6d0d31eee912c941a8974a86565a1971e1ec09c861b2ac8e3ceb9247befc0",
+      "size": 6966
     },
     {
       "path": "tavern-plugin/lib/domain/mobile-card-import.js",
@@ -2091,8 +2091,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "e9459829a34e8f82d109016246f0a6fd05c35d776d89c2289bf4d844e651edfe",
-      "size": 332200
+      "sha256": "64828d2062be196e2a024d64e636d655ef9f40ca428a6a9ef72c457416033722",
+      "size": 332477
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -4606,8 +4606,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/play-controls.js",
-      "sha256": "a4311a4e556144a84733cd831bf88db6026e95af93859f81fc5d6f9d76ec7a12",
-      "size": 121690
+      "sha256": "120f0447578dc7c44b471913e0bbe531220b137275df4c84fd35afe59ae3c593",
+      "size": 123137
     },
     {
       "path": "tavern-plugin/src/client/features/plugin-extensions.js",
