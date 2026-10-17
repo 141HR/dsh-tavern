@@ -392,9 +392,15 @@ export function createApplicationUpdater(options) {
     }
     // Status must apply the same stale-lock rule as a new install would; otherwise a
     // lock the installer would reclaim keeps the update button disabled forever.
+    // A reservation is never adopted when the launched updater dies before its first
+    // line of Tavern code; nothing inside it can report that, so say it here.
+    const notAdopted = owner?.state === 'reserved' && owner.launcherPid > 1
     if (owner && installationState.reclaimStaleInstallation(dshHome, owner)) {
       if (current?.phase === 'completed' && current.attemptId === owner.attemptId) return { ...current, ...identity }
-      const interrupted = { phase: 'failed', attemptId: owner.attemptId, repairRequired: true, repairSince: now(), host: await host(), failedAt: now(), error: '上次更新已中断（安装进程均已退出或超过 1 小时无进展），已解除安装锁，可以修复安装。' }
+      if (notAdopted) record('updater.notadopted', { attemptId: owner.attemptId, launcherPid: owner.launcherPid, reservedForMs: now() - (Number(owner.startedAt) || now()) })
+      const interrupted = { phase: 'failed', attemptId: owner.attemptId, repairRequired: true, repairSince: now(), host: await host(), failedAt: now(),
+        error: notAdopted ? '更新进程启动后没有开始安装就退出了，已解除安装锁。可以重试；仍失败时请从外部终端运行安装命令。'
+          : '上次更新已中断（安装进程均已退出或超过 1 小时无进展），已解除安装锁，可以修复安装。' }
       await writeStatus(interrupted, { expectedAttemptId: current?.attemptId })
       return { ...interrupted, ...identity }
     }
@@ -644,6 +650,7 @@ export function createApplicationUpdater(options) {
       }
       // An updater that dies before adopting the reservation otherwise leaves a pid:0
       // lock that only the 1-hour idle limit clears; with its PID, status reclaims it.
+      record('updater.launched', { launcherPid, execPath, electronNode: Boolean(process.versions.electron) })
       if (Number.isSafeInteger(launcherPid) && launcherPid > 1) {
         // Already adopted, or the lock is momentarily busy: the idle limit still applies.
         try { lease.update({ launcherPid }) } catch {}

@@ -338,4 +338,8 @@ test('Windows 更新器启动后，预留锁记下它的进程号，进程未接
   const interrupted = await updater.status()
   assert.equal(interrupted.phase, 'failed')
   assert.equal(interrupted.repairRequired, true)
+  assert.match(interrupted.error, /没有开始安装就退出/)
+  const events = updater.diagnostics().records.map(entry => entry.event)
+  assert.ok(events.includes('updater.launched'))
+  assert.ok(events.includes('updater.notadopted'))
 })
