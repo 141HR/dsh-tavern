@@ -32,7 +32,7 @@ function historicalLog(parsed, catalog) {
 function remapReferences(event, mapping) {
   const copy = structuredClone(event)
   const ref = value => {
-    if (!Number.isInteger(value) || value >= event.seq || mapping[value] === undefined) throw new Error('旧档含无效的消息引用')
+    if (!Number.isInteger(value) || (event.seq >= 0 && value >= event.seq) || mapping[value] === undefined) throw new Error('旧档含无效的消息引用')
     if (mapping[value] >= mapping[event.seq]) throw new Error('开场调整会产生向后的消息引用')
     return mapping[value]
   }
@@ -43,6 +43,7 @@ function remapReferences(event, mapping) {
     copy.surfaceOp.endSeq = ref(copy.surfaceOp.endSeq)
   }
   const data = copy.data
+  if (data?.tavernRestoredCallSeq !== undefined) data.tavernRestoredCallSeq = ref(data.tavernRestoredCallSeq)
   if (Array.isArray(data?.tavernRestoredSurfaceSeqs)) data.tavernRestoredSurfaceSeqs = data.tavernRestoredSurfaceSeqs.map(ref)
   if (copy.type === 'command/done' && data.sourceEventSeq !== undefined) data.sourceEventSeq = ref(data.sourceEventSeq)
   if (copy.type === 'developer/message' && data.headerSeq !== undefined) data.headerSeq = ref(data.headerSeq)
@@ -113,13 +114,65 @@ export function normalizeHistoricalOpening(artifact) {
   for (const event of artifact.events) {
     if ((event.seq < artifact.inheritedEventCount) !== (mapping[event.seq] < inheritedEventCount)) throw new Error('开场调整会跨越分支继承边界')
   }
-  const remapped = events.map((event, seq) => event.seq < 0 ? { ...event, seq } : remapReferences(event, mapping))
+  const remapped = events.map((event, seq) => event.seq < 0 && event.type !== 'tool/call' ? { ...event, seq } : remapReferences(event, mapping))
   if (head) {
     const replacement = remapped[mapping[system.seq]]
     replacement.surfaceOp = { op: 'replace', startSeq: mapping[-1], endSeq: mapping[-1] }
     replacement.sourceEventSeqs = [...new Set([...(replacement.sourceEventSeqs || []), mapping[-1]])]
   }
-  return { ...artifact, inheritedEventCount, events: remapped, upgradeOrigins: events.map(event => event.seq < 0 ? null : (artifact.upgradeOrigins?.[event.seq] ?? event.seq)) }
+  return { ...artifact, inheritedEventCount, events: remapped, upgradeOrigins: events.map(event => event.seq < 0 ? null : (artifact.upgradeOrigins ? artifact.upgradeOrigins[event.seq] : event.seq)) }
+}
+
+// A late system prompt was an ordinary surface node in the old host and could
+// be summarized. V4 reserves a permanent head. Retire that head immediately
+// before the old turn closes, with no intervening model request, then compact
+// the same non-system span. Keep all original rows in the upgrade audit record.
+function normalizeHistoricalCompaction(artifact) {
+  const events = structuredClone(artifact.events), surface = []
+  const firstSystem = events.find(event => event.type === 'system/message')
+  if (!firstSystem || events.find(event => event.surfaceOp)?.seq === firstSystem.seq) return artifact
+  let synthetic = -1, changed = false
+  for (const event of artifact.events) {
+    if (event.type === 'compaction/summary' && event.data.shadowedSeqs.includes(firstSystem.seq)) {
+      const { start, end } = event.data.shadowedRange
+      const a = surface.indexOf(start), b = surface.indexOf(end)
+      if (a < 0 || b < a || !isDeepStrictEqual(surface.slice(a, b + 1), event.data.shadowedSeqs)) throw new Error('旧压缩范围本身不完整，无法无损修复')
+      const remaining = event.data.shadowedSeqs.filter(seq => seq !== firstSystem.seq)
+      const checkpoint = artifact.events[event.seq + 1]
+      const source = checkpoint?.data?.source
+      if (!remaining.length || checkpoint?.type !== 'user/message' || source?.plugin !== 'compact'
+        || source.compactionId !== event.data.compactionId || checkpoint.surfaceOp?.startSeq !== start || checkpoint.surfaceOp.endSeq !== end) throw new Error('旧压缩缺少完整的摘要替换记录')
+      const closing = artifact.events.slice(0, event.seq).findLast(row => row.type === 'step/end')
+      if (!closing || closing.seq < firstSystem.seq || (closing.seq < artifact.inheritedEventCount) !== (event.seq < artifact.inheritedEventCount) || artifact.events.slice(closing.seq + 1, event.seq).some(row => ['step/start', 'request/header', 'request/context', 'system/message'].includes(row.type))) throw new Error('无法安全关闭旧压缩中的系统提示词')
+      const empty = { ...structuredClone(firstSystem), seq: synthetic--, time: closing.time,
+        data: { ...structuredClone(firstSystem.data), turn: closing.data.turn, step: closing.data.step,
+          message: { ...structuredClone(firstSystem.data.message), id: 'tavern-upgrade-compacted-head-' + event.seq, content: [] } },
+        surfaceOp: { op: 'replace', startSeq: firstSystem.seq, endSeq: firstSystem.seq }, sourceEventSeqs: [firstSystem.seq] }
+      events.splice(events.findIndex(row => row.seq === closing.seq), 0, empty)
+      const summary = events.find(row => row.seq === event.seq)
+      summary.data.shadowedSeqs = remaining
+      summary.data.shadowedRange = { start: remaining[0], end: remaining.at(-1) }
+      const replacement = events.find(row => row.seq === checkpoint.seq)
+      replacement.surfaceOp = { op: 'replace', startSeq: remaining[0], endSeq: remaining.at(-1) }
+      changed = true
+    }
+    if (event.surfaceOp === 'append') surface.push(event.seq)
+    else if (event.surfaceOp?.op === 'replace') {
+      const a = surface.indexOf(event.surfaceOp.startSeq), b = surface.indexOf(event.surfaceOp.endSeq)
+      if (a < 0 || b < a) throw new Error('旧档上下文替换范围无效')
+      surface.splice(a, b - a + 1, event.seq)
+    }
+  }
+  if (!changed) return artifact
+  const mapping = []
+  events.forEach((event, seq) => { mapping[event.seq] = seq })
+  const cut = artifact.header.isSeeded ? mapping[artifact.inheritedEventCount] : 0
+  if (cut === undefined) throw new Error('无法保留压缩存档的分支边界')
+  // Synthetic rows have earlier references; their numeric temporary IDs are not
+  // chronological coordinates. remapReferences checks the mapped ordering.
+  return { ...artifact, repairedHistory: true, inheritedEventCount: cut,
+    events: events.map(event => remapReferences(event, mapping)),
+    upgradeOrigins: events.map(event => event.seq < 0 ? null : event.seq) }
 }
 
 export function prepareSessionUpgrade(parsed, migration, children = []) {
@@ -133,7 +186,7 @@ export function prepareSessionUpgrade(parsed, migration, children = []) {
   let normalized = historical
   try { artifact = convert(historical) }
   catch (originalError) {
-    normalized = normalizeHistoricalEdits(normalizeHistoricalOpening(historical))
+    normalized = normalizeHistoricalEdits(normalizeHistoricalOpening(normalizeHistoricalCompaction(historical)))
     if (normalized === historical) throw originalError
     artifact = convert(normalized)
   }
@@ -150,7 +203,7 @@ export function prepareSessionUpgrade(parsed, migration, children = []) {
 function retainUpgradeReferences(original, normalized, target, sourceVersion) {
   const signature = event => JSON.stringify([event.type, event.time, event.data?.turn, event.data?.step,
     event.data?.message?.id ?? event.data?.id, event.type === 'turn/end' ? event.data.reason : undefined])
-  const seqMap = [], storyTurns = []
+  const seqMap = [], storyTurns = [], targetPositions = []
   let cursor = 0
   for (const event of normalized.events) {
     while (cursor < target.events.length && signature(event) !== signature(target.events[cursor])) {
@@ -158,6 +211,7 @@ function retainUpgradeReferences(original, normalized, target, sourceVersion) {
       cursor++ // Native v3→v4 may close an interrupted inherited turn.
     }
     if (cursor >= target.events.length) throw new Error('升级丢失了原始事件位置')
+    targetPositions[event.seq] = cursor
     const source = normalized.upgradeOrigins ? normalized.upgradeOrigins[event.seq] : event.seq
     if (source !== null) {
       seqMap.push([source, cursor])
@@ -169,13 +223,31 @@ function retainUpgradeReferences(original, normalized, target, sourceVersion) {
     }
     cursor++
   }
+  for (const event of target.events) if (event.data?.tavernRestoredCallSeq !== undefined) {
+    const seq = targetPositions[event.data.tavernRestoredCallSeq]
+    if (seq === undefined || target.events[seq]?.type !== 'tool/call') throw new Error('恢复工具调用的历史引用丢失')
+    event.data.tavernRestoredCallSeq = seq
+  }
   return { ...target, events: [...target.events, { seq: target.events.length, time: target.events.at(-1)?.time ?? target.header.createdAt,
-    type: SESSION_UPGRADE_EVENT, ignorable: true, data: { version: 1, sourceVersion, sourceEventCount: original.events.length, seqMap, storyTurns } }] }
+    type: SESSION_UPGRADE_EVENT, ignorable: true, data: { version: 1, sourceVersion, sourceEventCount: original.events.length, seqMap, storyTurns, ...(normalized.repairedHistory ? { repairHistory: structuredClone(original.events) } : {}) } }] }
 }
 
 function assertContentPreserved(before, after) {
   const canonical = value => Array.isArray(value) ? value.map(canonical)
     : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value
+  const surface = artifact => {
+    const nodes = []
+    for (const event of artifact.events) {
+      if (event.surfaceOp === 'append') nodes.push(event.seq)
+      else if (event.surfaceOp?.op === 'replace') {
+        const a = nodes.indexOf(event.surfaceOp.startSeq), b = nodes.indexOf(event.surfaceOp.endSeq)
+        if (a < 0 || b < a) throw new Error('修复前后上下文范围无法核对')
+        nodes.splice(a, b - a + 1, event.seq)
+      }
+    }
+    return nodes.map(seq => artifact.events[seq]).filter(event => !(event.type === 'system/message'
+      && event.data.message.id.startsWith('tavern-upgrade-compacted-head-') && event.data.message.content.length === 0))
+  }
   const messages = artifact => artifact.events.flatMap(event => {
     if (!['system/message', 'user/message', 'assistant/message', 'tool/result'].includes(event.type)) return []
     let message = event.type === 'user/message' ? event.data : event.data.message
@@ -200,6 +272,11 @@ function assertContentPreserved(before, after) {
     if (!remaining.get(value)) throw new Error('迁移未能完整保留原始消息，保留原档')
     remaining.set(value, remaining.get(value) - 1)
   }
+  const repairHistory = after.events.at(-1)?.data?.repairHistory
+  if (repairHistory) {
+    if (!isDeepStrictEqual(repairHistory, before.events)) throw new Error('修复未完整保留原始历史事件')
+    if (!isDeepStrictEqual(messages({ events: surface(before) }), messages({ events: surface(after) }))) throw new Error('修复改变了存档的有效上下文，保留原档')
+  }
   const summaries = artifact => artifact.events.filter(event => event.type === 'compaction/summary').map(event => event.data.summary)
   if (!isDeepStrictEqual(summaries(before), summaries(after))) throw new Error('迁移未能完整保留压缩摘要，保留原档')
 }
@@ -210,7 +287,7 @@ function assertContentPreserved(before, after) {
 // Inherited history stays on its side of the seed marker.
 function normalizeHistoricalEdits(artifact) {
   const events = structuredClone(artifact.events)
-  let turn = null, step = null, changed = false, synthetic = -1
+  let turn = null, step = null, changed = false, restoredTools = false, synthetic = -1
   for (let index = 0; index < events.length; index++) {
     const event = events[index]
     if (event.type === 'turn/start') turn = event.data.turn
@@ -221,10 +298,30 @@ function normalizeHistoricalEdits(artifact) {
     const nextStep = events.slice(index + 1).find(row => row.type === 'step/start')
     const nextTurn = nextStep && events.slice(index + 1, events.indexOf(nextStep)).find(row => row.type === 'turn/start')
     const end = nextStep ? events.indexOf(nextStep) : events.length
-    const replacements = events.slice(index, end).filter(row => ['assistant/message', 'system/message'].includes(row.type) && row.surfaceOp?.op === 'replace')
+    const replacements = events.slice(index, end).filter(row => (['assistant/message', 'system/message'].includes(row.type) && row.surfaceOp?.op === 'replace') || row.type === 'tool/result')
+    const restoredCalls = []
+    // Undo replay wrote an empty tool-result placeholder, followed immediately
+    // by an exact copy of an earlier result. Reuse the recorded call as explicit
+    // restoration history; never infer or run a tool from its name/arguments.
+    for (const placeholder of replacements.filter(row => row.type === 'tool/result' && row.surfaceOp === 'append')) {
+      const at = events.indexOf(placeholder), replacement = events[at + 1]
+      const original = replacement?.sourceEventSeqs?.map(seq => artifact.events[seq]).find(row => row?.type === 'tool/result' && row.seq < placeholder.seq)
+      const call = original?.sourceEventSeqs?.map(seq => artifact.events[seq]).find(row => row?.type === 'tool/call')
+      const expected = original && structuredClone(original.data)
+      if (expected?.message?.content?.[0]?.type === 'tool-result') expected.message.content[0].content = []
+      if (!call || replacement?.surfaceOp?.startSeq !== placeholder.seq || replacement.surfaceOp.endSeq !== placeholder.seq
+        || !isDeepStrictEqual(replacement.data, original.data) || !isDeepStrictEqual(placeholder.data, expected)) {
+        throw new Error('无法证明旧工具记录是完整的撤销回退副本')
+      }
+      restoredTools = true
+      const restoredCall = { ...structuredClone(call), seq: synthetic--, time: placeholder.time,
+        data: { ...structuredClone(call.data), tavernRestoredCallSeq: call.seq } }
+      restoredCalls.push(restoredCall)
+      events.splice(at, 0, restoredCall)
+    }
     const assignedTurn = nextStep?.data.turn ?? (turn ?? Math.max(0, ...events.filter(row => row.type === 'turn/start').map(row => row.data.turn)) + 1)
     const assignedStep = nextStep?.data.step ?? (turn === null ? 1 : Math.max(0, ...events.filter(row => row.type === 'step/start' && row.data.turn === turn).map(row => row.data.step)) + 1)
-    for (const replacement of replacements) { replacement.data.turn = assignedTurn; replacement.data.step = assignedStep }
+    for (const replacement of [...replacements, ...restoredCalls]) { replacement.data.turn = assignedTurn; replacement.data.step = assignedStep }
     const boundaries = []
     if (turn === null) boundaries.push(nextTurn || { seq: synthetic--, time: event.time, type: 'turn/start', data: { turn: assignedTurn } })
     boundaries.push(nextStep || { seq: synthetic--, time: event.time, type: 'step/start', data: { turn: assignedTurn, step: assignedStep } })
@@ -248,7 +345,7 @@ function normalizeHistoricalEdits(artifact) {
   events.forEach((event, seq) => { mapping[event.seq] = seq })
   const cut = artifact.header.isSeeded ? mapping[artifact.inheritedEventCount] : 0
   if (cut === undefined || artifact.events.some(event => (event.seq < artifact.inheritedEventCount) !== (mapping[event.seq] < cut))) throw new Error('正文编辑调整会跨越分支继承边界')
-  return { ...artifact, inheritedEventCount: cut, upgradeOrigins: events.map(event => event.seq < 0 ? null : (artifact.upgradeOrigins ? artifact.upgradeOrigins[event.seq] : event.seq)), events: events.map((event, seq) => event.seq < 0 ? { ...event, seq } : remapReferences(event, mapping)) }
+  return { ...artifact, repairedHistory: artifact.repairedHistory || restoredTools, inheritedEventCount: cut, upgradeOrigins: events.map(event => event.seq < 0 ? null : (artifact.upgradeOrigins ? artifact.upgradeOrigins[event.seq] : event.seq)), events: events.map((event, seq) => event.seq < 0 && event.type !== 'tool/call' ? { ...event, seq } : remapReferences(event, mapping)) }
 }
 
 async function inventory(root) {

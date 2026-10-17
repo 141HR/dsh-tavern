@@ -317,3 +317,60 @@ test('background rewind interprets an old boundary in upgraded coordinates', asy
   const reopened = restoreSessionLog(parseSessionLog(encodeCurrentGeneration({ header: session.header, events: session.snapshotEvents(), inheritedEventCount: 0 }, catalog)), catalog)
   assert.ok(texts(openSession(reopened)).includes('继续故事'))
 })
+
+test('undo restoration preserves copied tool results without inventing an execution', () => {
+  const old = fixture('restored-tool')
+  old.events = old.events.slice(0, 4)
+  const add = (type, data, extra = {}) => old.events.push({ seq: old.events.length, time: 1, type, data: structuredClone(data), ...extra })
+  const assistant = message('assistant', '工具调用正文')
+  assistant.content.push({ type: 'tool-call', id: 'call-restore', name: 'lookup', arguments: '{}' })
+  add('assistant/message', { turn: 1, step: 1, stream: [], message: assistant }, { surfaceOp: 'append' })
+  add('tool/call', { turn: 1, step: 1, callId: 'call-restore', name: 'lookup', arguments: '{}' })
+  const result = { turn: 1, step: 1, message: { id: 'tool-result', role: 'user', source: { kind: 'tool', callId: 'call-restore' }, content: [{ type: 'tool-result', toolCallId: 'call-restore', content: [{ type: 'text', text: '历史工具结果' }] }] } }
+  add('tool/result', result, { surfaceOp: 'append', sourceEventSeqs: [5] })
+  add('step/end', { turn: 1, step: 1 }); add('turn/end', { turn: 1, reason: { kind: 'completed' } })
+  add('assistant/message', { turn: 1, step: 1, stream: [], message: message('assistant', '') }, { surfaceOp: { op: 'replace', startSeq: 4, endSeq: 6 }, sourceEventSeqs: [4, 6] })
+  add('assistant/message', { turn: 1, step: 1, stream: [], message: assistant, tavernRestoredSurfaceSeqs: [9] }, { surfaceOp: { op: 'replace', startSeq: 9, endSeq: 9 }, sourceEventSeqs: [9, 4] })
+  const empty = structuredClone(result); empty.message.content[0].content = []
+  add('tool/result', empty, { surfaceOp: 'append' })
+  add('tool/result', result, { surfaceOp: { op: 'replace', startSeq: 11, endSeq: 11 }, sourceEventSeqs: [11, 6] })
+  const upgraded = prepareSessionUpgrade(old, migration).artifact
+  assert.ok(texts(openSession(upgraded)).includes('历史工具结果'))
+  assert.equal(upgraded.events.filter(e => e.type === 'tool/result').length, 3)
+  const copied = upgraded.events.find(e => e.type === 'tool/call' && e.data.tavernRestoredCallSeq !== undefined)
+  assert.equal(copied.data.callId, 'call-restore')
+  assert.equal(upgraded.events[copied.data.tavernRestoredCallSeq].type, 'tool/call')
+  assert.deepEqual(upgraded.events.at(-1).data.repairHistory, old.events)
+  const missingCall = structuredClone(old)
+  delete missingCall.events[6].sourceEventSeqs
+  assert.throws(() => prepareSessionUpgrade(missingCall, migration), /无法证明旧工具记录/)
+  const modifiedCopy = structuredClone(old)
+  modifiedCopy.events[12].data.message.content[0].content[0].text = '篡改过的结果'
+  assert.throws(() => prepareSessionUpgrade(modifiedCopy, migration), /无法证明旧工具记录/)
+
+})
+
+test('legacy compaction of a late system prompt preserves history and the effective context', () => {
+  const old = fixture('compact-late-system')
+  old.events = [
+    { type: 'user/message', data: message('user', '旧设定'), surfaceOp: 'append' },
+    { type: 'turn/start', data: { turn: 1 } },
+    { type: 'step/start', data: { turn: 1, step: 1 } },
+    { type: 'system/message', data: { turn: 1, step: 1, message: message('system', '已压缩的系统提示词') }, surfaceOp: 'append' },
+    { type: 'assistant/message', data: { turn: 1, step: 1, stream: [], message: message('assistant', '历史正文') }, surfaceOp: 'append' },
+    { type: 'step/end', data: { turn: 1, step: 1 } },
+    { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+    { type: 'compaction/start', data: { compactionId: 'compact-old', turn: null } },
+    { type: 'compaction/summary', data: { compactionId: 'compact-old', summary: [{ type: 'text', text: '完整旧摘要' }], shadowedRange: { start: 0, end: 4 }, shadowedSeqs: [0, 3, 4], shadowedTokenCount: 100, provider: 'fixture', model: 'fixture' } },
+    { type: 'user/message', data: { ...message('user', '完整旧摘要'), source: { kind: 'plugin', plugin: 'compact', compactionId: 'compact-old' } }, surfaceOp: { op: 'replace', startSeq: 0, endSeq: 4 }, sourceEventSeqs: [0, 3, 4, 7, 8] },
+    { type: 'compaction/end', data: { compactionId: 'compact-old', turn: null } },
+  ].map((event, seq) => ({ seq, time: 1, ...event }))
+  const upgraded = prepareSessionUpgrade(old, migration).artifact
+  assert.deepEqual(texts(openSession(upgraded)), ['完整旧摘要'])
+  assert.ok(upgraded.events.some(e => e.data?.message?.content?.[0]?.text === '历史正文'))
+  assert.ok(upgraded.events.some(e => e.data?.message?.content?.[0]?.text === '已压缩的系统提示词'))
+  assert.deepEqual(upgraded.events.at(-1).data.repairHistory, old.events)
+  const broken = structuredClone(old)
+  broken.events[8].data.shadowedSeqs = [0, 3]
+  assert.throws(() => prepareSessionUpgrade(broken, migration), /旧压缩范围本身不完整/)
+})
