@@ -64,6 +64,7 @@ export const NO_POSTURE_REQUIREMENT = '本轮不生成或提交姿势。完成�
 export function createPostureItem({ prompt, tool }) {
   return Object.freeze({
     id: 'tavern.posture',
+    trigger: 'auto',
     tool,
     requirement: () => prompt(),
     protocol: tool.name + ' 是本任务最后一步。'
@@ -87,4 +88,25 @@ export async function runPipelineStages(stages) {
     if (typeof stage.when === 'function' && !await stage.when()) continue
     await stage.run()
   }
+}
+
+// Manual settlement items: the player starts them; each runs as its own background task in the
+// shared background session (the 'character-design' and 'ledger' roles), not inside a turn's settlement.
+export const CHARACTER_DESIGN_ITEM = Object.freeze({
+  id: 'tavern.character-design',
+  trigger: 'manual',
+  requirement: '本次执行用户手动发起的人物设计。设计意见留空时，根据当前剧情和已有档案，自行选择需要建立或补充设计的重要人物；有意见时优先遵循意见。',
+  protocol: '先调用 skill 加载 character-design，再用 character_design_read 按姓名或别名检查本局世界书与已有档案。世界书已有该人物设定时调用 character_design_reuse 复用即可完成，不另建档案；只有缺少设定的新人物或已有设计档案的修订才调用 character_design_save。不得执行变量或姿势结算，不得改写正文。',
+  system() { return this.requirement + this.protocol }
+})
+
+export function createLedgerItem({ rules }) {
+  return Object.freeze({
+    id: 'tavern.ledger',
+    trigger: 'manual',
+    requirement: '本次执行玩家手动发起的台账整理。台账是给玩家查阅的备忘录，整理后下一轮正文会参考一次。',
+    rules,
+    protocol: ({ from, through }) => '阅读给出的剧情（第 ' + from + '–' + through + ' 轮），对照当前台账，调用一次 ledger_submit 提交这些剧情带来的增量；没有变化也提交 {}。不得改写正文、变量或姿势。',
+    system(range) { return this.requirement + this.protocol(range) + '\n\n' + this.rules }
+  })
 }
