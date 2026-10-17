@@ -427,7 +427,7 @@ dsh-tavern open</code></pre></div>
 <ul><li><a href="#b09">持续 Guide</a></li><li><a href="#e01">通过访谈建立长期偏好</a></li><li><a href="#f01">开启并配置场景生图</a></li></ul><nav class="pagination" aria-label="相邻文档"><a class="" href="#a05">← 认识界面</a><a class="" href="#b01">选择人物卡与独立开局 →</a></nav><footer class="article-footer"><span>DSH Tavern 使用文档</span><a class="" href="#help">需要帮助？</a></footer></article><article class="doc-page" id="b01" data-group="play" data-title="选择人物卡与独立开局"><div class="breadcrumb">使用文档 <span>/</span> <a class="" href="#play">游玩模式</a> <span>/</span> 功能说明</div><h1 tabindex="-1">选择人物卡与独立开局</h1><p class="lead">同一张人物卡可以开启多局独立游戏，分别保存故事。</p><figure class="manual-screenshot"><a href="images/manual/card-picker.jpg" target="_blank" rel="noopener noreferrer" aria-label="放大查看选择人物卡与导入存档（新窗口）"><img src="images/manual/card-picker.jpg" alt="选择人物卡与导入存档：选卡器列出公开样例人物卡及剧本绑定状态；“导入存档”菜单可导入 DSH Tavern 存档（.dshsave）或 SillyTavern 聊天记录（.jsonl）。同一张卡可以创建不同游戏。" width="1280" height="720" loading="lazy" decoding="async"></a><figcaption><strong>选择人物卡与导入存档</strong> · 选卡器列出公开样例人物卡及剧本绑定状态；“导入存档”菜单可导入 DSH Tavern 存档（.dshsave）或 SillyTavern 聊天记录（.jsonl）。同一张卡可以创建不同游戏。<small>原创公开样例 · 灯塔小镇（CC0） · 2026-10-10 · 点击图片放大</small></figcaption></figure><p class="screenshot-source">实际应用截图 · DSH 0.1.5-rc.2 / DSH Tavern 2.5.0 · 49ff11b。<a href="examples/manual-demo/README.txt" target="_blank" rel="noopener noreferrer">样例说明 ↗</a> · <a href="examples/manual-demo/lighthouse-card.json" download>下载样例人物卡</a></p><h2 id="b01--section-1">在哪里</h2>
 <p>界面：新建游玩</p>
 <h2 id="b01--section-2">如何使用</h2>
-<ol><li>选择新建游玩，找到要使用的人物卡。</li><li>查看开场并确认，以这张卡开始一局。</li><li>想体验另一条故事时，用同一张卡再新开一局。</li></ol>
+<ol><li>选择新建游玩，找到要使用的人物卡；卡多时可以切到「宫格」按封面找。</li><li>查看开场并确认，以这张卡开始一局。</li><li>想体验另一条故事时，用同一张卡再新开一局。</li></ol>
 <h2 id="b01--section-3">结果与生效范围</h2>
 <p>不同游戏在历史中分别管理，不会合成同一段剧情。</p>
 <h2 id="b01--section-4">注意事项</h2>
@@ -1681,7 +1681,7 @@ new Audio(ctx.tavernUi.assetUrl(&#39;sfx/hit.mp3&#39;)).play()</code></pre></div
 <div class="code-block"><div class="code-heading"><span>js</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>ctx.tavernUi.registerStartGroup({ title: &#39;叙事锚定&#39;, tabs: [&#39;narrative-anchor:settings&#39;, &#39;narrative-anchor:state&#39;, &#39;memory&#39;] })</code></pre></div>
 <ul><li><code>title</code> 1–20 字；<code>tabs</code> 1–20 个侧栏页 id，按顺序显示。带 <code>:</code> 的是侧栏页的完整 id（<code>registerTab</code> 时的 <code>id</code>）；不带 <code>:</code> 的是本插件 <code>registerPanel</code> 的 <code>id</code>。</li><li>插件分组排在 Tavern 自带的「本局」「资料库」「偏好」之后、「插件」之前，按注册顺序。Tavern 自己的页不能移进插件分组；同一页被几个分组声明时只显示在第一个里。</li><li>列出的页没有注册时不显示；整组都没有可显示的页时，整组隐藏。插件卸载时分组自动移除。</li></ul>
 <h3><code>registerCardListView({ id, label, render })</code>（第 2 版）</h3>
-<p>换一种方式显示人物卡列表，例如带封面的宫格。「人物卡库」和「选择人物卡 · 开始游玩」两处都会用到。注册后，列表上方出现「列表 / &lt;label&gt;」切换，用户选哪个，这台浏览器就记住哪个。搜索、分组筛选、批量管理的工具栏（全选、删除、移动分组）仍由 Tavern 显示在列表上方，插件只负责画卡片。</p>
+<p>换一种方式显示人物卡列表，例如按分组排的书架、带更多信息的卡片。「人物卡库」和「选择人物卡 · 开始游玩」两处都会用到。列表上方本来就有 Tavern 自带的「列表 / 宫格」切换，注册后多出一个 <code>&lt;label&gt;</code>，用户选哪个，这台浏览器就记住哪个。搜索、分组筛选、批量管理的工具栏（全选、删除、移动分组）仍由 Tavern 显示在列表上方，插件只负责画卡片。</p>
 <div class="code-block"><div class="code-heading"><span>js</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>ctx.tavernUi.registerCardListView({
   id: &#39;grid&#39;, label: &#39;宫格&#39;,
   render({ place, cards, busy, selecting, isSelected, toggle, open, menu, mention }) {
