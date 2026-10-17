@@ -69,6 +69,21 @@ test('native card workbench starts with no scripted exchange or greeting, and re
   }
 })
 
+// The card workbench reserves an opening turn and fills it with no greeting, so
+// Tavern closes it before the Agent ever runs. The live Agent must learn that turn
+// one is spent: otherwise its own first turn reuses turn one and the stored log can
+// never be reopened ("turn/start does not open the expected turn", exactly the
+// card-history load failure this guards).
+test('native card workbench releases the reserved opening turn to the live Agent', native, async t => {
+  const h = await createInitializationNative(process.env.DSH_BOOT_MODULE)
+  t.after(() => h.dispose())
+  await h.open().start({ ...h.input, mode: 'card' })
+  assert.equal(openingEvents(h.target.session).length, 0)
+  await h.continueInPlace()
+  assert.deepEqual(sessionEvents(h.target.session).filter(e => e.type === 'turn/start').map(e => e.data.turn), [1, 2])
+  assert.equal(sessionEvents(h.target.session).at(-1).type, 'turn/end')
+})
+
 test('native Session and disk Chat journal recover a failed marker once, then actual Agent starts at turn two', native, async t => {
   const h = await createInitializationNative(process.env.DSH_BOOT_MODULE)
   t.after(() => h.dispose())

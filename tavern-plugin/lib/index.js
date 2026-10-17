@@ -54,7 +54,7 @@ import { rescueHistoryNotice } from './domain/chat-history-rescue.js'
 import { readHostCompatibility } from './domain/host-compatibility.js'
 import { installHostSessionPatch, SESSION_PATCH_VERSION } from './domain/host-session-patch.js'
 import { installHostSubprocessPatch } from './domain/host-subprocess-patch.js'
-import { migrateInstalledLegacySessions } from './domain/legacy-session-migration.js'
+import { migrateInstalledLegacySessions, repairStoredSessionLog } from './domain/legacy-session-migration.js'
 import { measureForegroundPressure } from './domain/foreground-context-pressure.js'
 import { replaceSessionSurface } from './domain/session-surface-mutations.js'
 import { createPresetDiagnostics } from './domain/preset-diagnostics.js'
@@ -4337,6 +4337,9 @@ export async function apply(ctx) {
         return { title: saved.title }
       }
       case 'markConversationOpened': return await conversationRegistry.touch(args && args.sessionId, Date.now())
+      // A log the host cannot open is repaired on demand: the client retries the open
+      // once after this reports a rewrite, and untouched logs cost one read.
+      case 'repairSessionLog': return await repairStoredSessionLog(resolveTavernDataRoot(), str(args && args.sessionId), sessionPatch.loadSessionCatalog)
       case 'listMobileCardImports': return await mobileCardImport.list()
       case 'importMobileCard': return { card: await importCard(await mobileCardImport.read(args && args.id)) }
       case 'importCard': return { card: await importCard(args && args.payload) }

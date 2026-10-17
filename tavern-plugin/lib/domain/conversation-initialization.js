@@ -1,5 +1,5 @@
 import { applyOpeningCommand } from './opening-command.js'
-import { closeOpeningTurn, ensureOpeningTurn, sessionEvents, appendSessionEvent } from './session-events.js'
+import { ensureOpeningTurn, releaseOpeningTurn, sessionEvents, appendSessionEvent } from './session-events.js'
 import { nativeOpeningMessageId } from './native-opening.js'
 import { cardOpeningChoices, resolveCardOpening } from './card-openings.js'
 import { projectAgentContent, projectOpeningCommit } from './runtime-content-projection.js'
@@ -326,9 +326,10 @@ export function createConversationInitialization(options) {
       if (target.agent?.phase?.kind === 'idle') target.agent.phase.lastTurn = Math.max(Number(target.agent.phase.lastTurn) || 0, 1)
       await native.flush(target.session)
     } else {
-      // No greeting fills the reserved opening turn, so close it here; the Agent
-      // opens its own first turn and must not collide with a turn left open.
-      closeOpeningTurn(target.session)
+      // No greeting fills the reserved opening turn, so close it here and publish it as
+      // used: the Agent numbers its next turn from the turn it can read, so it continues
+      // after the reserved one instead of colliding with a turn left open.
+      releaseOpeningTurn(target.session, target.agent)
       await native.flush(target.session)
     }
     // Publish the marker in memory only after durable save succeeds.
