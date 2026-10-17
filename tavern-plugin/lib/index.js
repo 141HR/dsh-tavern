@@ -1013,7 +1013,9 @@ export async function apply(ctx) {
     }, { source: 'history-recall', touchUpdatedAt: false })
     return result
   }
+  const castAssets = createCastAssets({ store: profileData })
   resourceGraph = createResourceGraph({
+    castAssets,
     cardOrganization,
     resources: fileResources,
     presets: runtimePresets,
@@ -2614,7 +2616,6 @@ export async function apply(ctx) {
   // Work riding on the main settlement call: Tavern's own items first, then plugins.
   const settlementItems = createSettlementItems({ items: () => [castPresentation.settlement], plugins: () => pluginApi.settlement })
   const postureItem = createPostureItem({ prompt: () => runtimePrompt('posture-settlement'), tool: POSTURE_SUBMIT_TOOL })
-  const castAssets = createCastAssets({ store: profileData })
   function castAssetView(cardPath, manifest) {
     const key = castAssets.keyOf(cardPath)
     const url = file => file ? '/api/dsh-tavern/cast-asset?' + new URLSearchParams({ card: key, file }).toString() : ''

@@ -26,7 +26,11 @@ export function createResourceGraph(options = {}) {
     operation.result = renamed
     await checkpoint(operation, 'resource-renamed')
     const kind = resourceKind(oldPath)
-    if (kind === 'card') await options.cardOrganization?.movePath(renamed.oldPath, renamed.path)
+    if (kind === 'card') {
+      await options.cardOrganization?.movePath(renamed.oldPath, renamed.path)
+      await options.castAssets?.movePath(renamed.oldPath, renamed.path)
+      await checkpoint(operation, 'card-assets-moved')
+    }
     if (kind === 'preset' && presets && typeof presets.rename === 'function') await presets.rename(renamed.oldPath, renamed.path)
     const replacements = new Map([[renamed.oldPath, renamed.path]])
     if (renamed.scriptOldPath && renamed.scriptPath) replacements.set(renamed.scriptOldPath, renamed.scriptPath)
