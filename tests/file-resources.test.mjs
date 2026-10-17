@@ -174,3 +174,24 @@ test('全局世界书选择持久化，重命名跟随、删除清理并保留�
     await assert.rejects(store.setGlobalWorldBook('../bad', true), /路径/)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
+
+test('并发剧本绑定和解绑不覆盖其他卡，独占约束在提交时检查', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'material-bindings-'))
+  try {
+    const store = createFileResourceStore({ dataRoot: root })
+    const a = await store.importCard({ name: 'a.json', text: '{}' }, {})
+    const b = await store.importCard({ name: 'b.json', text: '{}' }, {})
+    const x = await store.importText('source', { name: 'x.txt', text: 'X' })
+    const y = await store.importText('source', { name: 'y.txt', text: 'Y' })
+    await Promise.all([store.bindMaterial(a, x), store.bindMaterial(b, y)])
+    assert.equal(await store.scriptForCard(a), x)
+    assert.equal(await store.scriptForCard(b), y)
+    await Promise.all([store.unbindMaterial(a), store.bindMaterial(b, y)])
+    assert.equal(await store.scriptForCard(a), undefined)
+    assert.equal(await store.scriptForCard(b), y)
+    await store.unbindMaterial(b)
+    const attempts = await Promise.allSettled([store.bindMaterial(a, x), store.bindMaterial(b, x)])
+    assert.equal(attempts.filter(result => result.status === 'fulfilled').length, 1)
+    assert.equal((await store.cardsForMaterial(x)).length, 1)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
