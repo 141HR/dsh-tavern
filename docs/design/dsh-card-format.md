@@ -14,20 +14,33 @@
 
 ## 文件结构
 
-ZIP 压缩包，后缀 `.dshcard`：
+ZIP 压缩包，后缀 `.dshcard`。分四块：卡本体（兼容 CHARX）、素材包（只放数据）、代码（脚本和插件）、清单。
 
 ```
 大肥鱼.dshcard
-├─ card.json              Character Card V3，和 CHARX 完全相同（含 data.assets、酒馆助手脚本）
+├─ card.json              Character Card V3，和 CHARX 完全相同；酒馆助手脚本也在这里
 ├─ assets/…               CCv3 标准素材：icon / emotion / background，路径同 CHARX
-├─ dsh.json               DSH 清单（见下）
-├─ plugins/<插件名>/      随卡 DSH 插件：package.json、index.mjs、client.js、assets/
-├─ dsh/assets/<归属>/…    扩展素材：Live2D、分层立绘、多套服装、音乐、音效……
-└─ dsh/packs/<包 id>.zip  （可选）随卡附带的共用素材包，也可以只在清单里写下载地址
+├─ packs/<包 id>/         素材包，结构沿用 Galgame 分支的 dsh-asset-pack（manifest.json、media/、credits/……）
+├─ scripts/<名字>.js      DSH 卡脚本：沙箱里运行，可以用 DSH 能力（第 2 层）
+├─ plugins/<插件名>/      随卡 DSH 插件：package.json、index.mjs、client.js、assets/（第 3 层）
+└─ dsh.json               DSH 清单（见下）
 ```
+
+**数据和代码分开放**，这是确认机制成立的前提：
+
+| 放什么 | 放哪 | Tavern 怎么对待 |
+|---|---|---|
+| 卡的文字设定、酒馆助手脚本 | `card.json` | 和导入普通卡一样；脚本在沙箱运行 |
+| CCv3 标准素材 | `assets/` | 导入为 Tavern 的角色素材（头像、28 种情绪立绘、背景） |
+| 其他所有素材 | `packs/` | **不解读内容**，只存储、校验、按地址提供 |
+| DSH 卡脚本 | `scripts/` | 沙箱运行，不用确认 |
+| DSH 插件 | `plugins/` | 确认后才加载，只在本卡生效 |
+
+为什么 DSH 卡脚本单独放、不塞进 `card.json`：它用到的 `DSH` 对象在 ST、RisuAI 里不存在，放进 `card.json` 会让导出的 CHARX 在别处报错。单独放，导出 CHARX 时自然丢掉，`card.json` 始终是一张在哪都能跑的卡。
 
 规则：
 - `card.json` 必须能单独成立：去掉其他所有文件，它仍是一张合法的 CCv3 卡。
+- **素材包只放数据**：Tavern 提供包内文件时，按扩展名白名单给类型（图片、音频、视频、字体、JSON、模型和纹理等），一律加 `nosniff`；HTML、SVG、JS 之类能在页面里执行的类型不在酒馆的同一来源下提供，只能作为下载或交给插件自己处理。要运行的东西必须放进 `scripts/` 或 `plugins/`，这样才在摘要和确认范围之内。
 - 文件路径只用 ASCII，大小写敏感，`/` 分隔（同 CHARX）。
 - 支持 ZIP64，单个文件、整个包都可以超过 4 GB 的 ZIP32 限制；Tavern 边读边解压，不整包读进内存。
 
@@ -37,29 +50,30 @@ ZIP 压缩包，后缀 `.dshcard`：
 {
   "format": "dshcard",
   "formatVersion": 1,
-  "card": { "id": "c0ffee00-…", "version": "1.2.0", "title": "大肥鱼" },
+  "card": { "id": "c0ffee00-…", "version": "1.2.0", "title": "大肥鱼", "author": "…" },
   "requires": { "tavernApi": 2 },
+  "scripts": [
+    { "name": "stage-voice", "path": "scripts/stage-voice.js", "purpose": "翻到台词时朗读并切换立绘" }
+  ],
   "plugins": [
     { "name": "dafeiyu-director", "path": "plugins/dafeiyu-director", "version": "1.0.0",
       "sides": ["host", "browser"], "sha256": "…",
       "purpose": "每轮编排舞台：背景、音乐、立绘与镜头",
       "uses": ["runAgent", "network:api.example.com", "cardAssets"] }
   ],
-  "assets": [
-    { "owner": "tavern.cast", "path": "dsh/assets/tavern.cast/manifest.json" },
-    { "owner": "plugin:dafeiyu-director", "path": "dsh/assets/plugin.dafeiyu-director/" }
-  ],
   "packs": [
-    { "id": "af7b2c46-…", "title": "中国通用背景", "sha256": "…", "bytes": 44360250,
-      "path": "dsh/packs/af7b2c46.zip", "url": "https://…/china-backgrounds.zip" }
+    { "id": "af7b2c46-…", "title": "中国通用背景", "format": "dsh-asset-pack", "contentHash": "…",
+      "bytes": 44360250, "path": "packs/af7b2c46-…/", "credits": ["packs/af7b2c46-…/credits/CREDITS.md"],
+      "url": "https://…/china-backgrounds.zip" }
   ]
 }
 ```
 
 - `card.id`：卡的唯一标识，作者第一次导出时生成，之后不变。导入时同 id 视为**更新**。`version` 给人看，也用来判断新旧。
-- `plugins[].sha256`：插件目录内容的摘要，权限确认记在"这个摘要"上，代码一变就要重新确认。
+- `scripts`：DSH 卡脚本，和酒馆助手脚本跑在同一个沙箱里，多一个 `DSH` 对象。不用确认，但列在导入界面上。
+- `plugins[].sha256`：插件目录内容的摘要，确认记在"这个摘要"上，代码一变就要重新确认。
 - `plugins[].purpose`、`uses`：给玩家看的用途和用到的能力。**这是声明，不是沙箱**：Tavern 能强制的只有插件接口层面（见下文作用范围），Node 层面的文件和网络访问挡不住，确认界面要如实说明。
-- `packs`：共用素材包，多张卡可以共用同一份（例如通用背景、通用 BGM）。按 `sha256` 去重：已经装过的包不重复导入；包里没附带时按 `url` 下载（只接受公开 HTTPS），下载前要玩家确认。
+- `packs`：素材包。`format` 说明由谁解读（例如 `dsh-asset-pack` 由 Galgame 插件解读），Tavern 只认 `format`、文件与摘要、署名许可、包 id。多张卡共用同一个包时按 `contentHash` 去重；包没附带时按 `url` 下载（只接受公开 HTTPS），下载前要玩家确认。插件给这张卡写的素材也存成一个包，归属是这个插件。
 
 ## 三层脚本
 
@@ -68,14 +82,14 @@ ZIP 压缩包，后缀 `.dshcard`：
 | 层 | 是什么 | 跑在哪 | 导入时 |
 |---|---|---|---|
 | 1. 酒馆助手脚本 | SillyTavern 生态的现成写法，在 `card.json` 里 | 浏览器沙箱 iframe（现有机制） | 不用确认 |
-| 2. 沙箱里的 DSH 能力 | 第 1 层脚本里多出的 `DSH` 对象：读台词标注和舞台数据、朗读、读本卡素材 | 同上 | 不用确认 |
+| 2. DSH 卡脚本 | `scripts/` 下的脚本，或第 1 层脚本里用到的 `DSH` 对象：读台词标注和舞台数据、朗读、读本卡素材 | 同上 | 不用确认 |
 | 3. 随卡 DSH 插件 | `plugins/` 下的完整插件 | 宿主 Node + 浏览器 | **必须确认** |
 
 给卡作者的分工建议：界面和每条消息的逻辑写在第 1、2 层；需要宿主能力的（后台推演、生图、联网、存大文件、结算任务）写在第 3 层。很多卡只想"念台词、换立绘"，第 2 层就够，玩家不用面对确认弹窗。
 
 **沙箱与本卡插件之间的通道**：第 1、2 层脚本用 `DSH.callCardPlugin(名字, 参数)` 调用本卡插件以 `tavern.handle` 注册的处理函数；插件用 `tavern.emitToCard({ gameId, name, data })` 往这张卡的沙箱推事件，脚本用 `DSH.onCardPlugin(名字, 处理函数)` 接收。通道只连本卡自己的插件，别的插件调不到，也收不到。这样一张卡可以是"沙箱里画界面、插件在后台干活"。
 
-导出成 CHARX 时只保留第 1 层（它在 `card.json` 里），在 ST、RisuAI 里照样能跑；第 2 层的调用在那里不存在，脚本要自己判断 `typeof DSH`。
+导出成 CHARX 时只保留第 1 层（它在 `card.json` 里），在 ST、RisuAI 里照样能跑。`scripts/` 和 `plugins/` 不进 CHARX。第 1 层脚本里如果顺手用了 `DSH` 对象，要自己判断 `typeof DSH`，否则在别处会报错；更推荐把这部分写进 `scripts/`。
 
 ## 随卡插件
 
@@ -188,7 +202,7 @@ packs/<包 id>/figures/  sprites/  bundles/  credits/
    - 在 Tavern 里不装插件，有头像、立绘、舞台；
    - 装上 Galgame 插件，有服装、Live2D、导演、音乐。
 4. **署名许可是格式的一部分**：`dsh.json` 的每个包列出署名文件，导入确认界面显示，导出时必须带上。
-5. **服装要不要进 Tavern 的角色素材**，先不进；等第二个需要服装的插件出现再说。
+5. **服装暂不进 Tavern 自己的角色素材模型**：Tavern 的角色素材是"每个人物一个头像 + 每种情绪一张立绘"，没有"服装"这一层。不装插件时，内置舞台和对话头像只用一套（默认服装）；换装由插件读素材包自己处理。要让内置舞台也会换装，后台结算还得每轮判断"穿哪套"，多一份提示词和费用，等第二个需要服装的插件出现再说。
 6. 分支的 `dsh-tavern-card-bundle.json` 可以直接转换成 `dsh.json`（`dependencies` 对应 `packs`），导入时两种都认，这样分支已经发出去的卡包不用重做。
 
 ## 实施步骤
