@@ -71,7 +71,7 @@ window.__ModuleLoader__.load({
       log: 'Last operation log',
       logEmpty: '(no log yet)',
       why: 'The Desktop app hardcodes its profile directory to <DSH_HOME>/profiles/desktop, so plugins installed in your other profiles are invisible to it. This page links the two (a junction on Windows, a symlink elsewhere); the previous directory is backed up first and can be restored at any time.',
-      mustClose: 'Note: the app has to be closed to move its profile directory. The helper closes it for you but does NOT restart it (an automatic relaunch proved unreliable across machines), so open the app yourself when the switch is done.',
+      mustClose: 'Note: the app has to be closed to move its profile directory. Quit the app normally within two minutes. The helper waits for it to exit without forcing it to close; reopen it yourself after the switch.',
       how: 'How it works',
     }
 

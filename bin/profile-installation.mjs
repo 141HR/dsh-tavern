@@ -344,7 +344,7 @@ async function installProfileOwned(host, { attemptId, runInstall, runDsh }) {
     console.log('DSH Tavern 已安装。')
     console.log(host === 'cli' ? `已安装独立 DSH ${dshVersion}：${CLI_RUNTIME_ROOT}；不使用全局 DSH。` : `已复用当前 DSH ${dshVersion} 的本地依赖；未升级或降级宿主。`)
     if (host === 'desktop') {
-      console.log('请重启官方 DeepSeek Harness，酒馆已安装到 desktop 配置；原 Tavern 数据目录保持不变。')
+      console.log(`请重启官方 DeepSeek Harness，酒馆已安装到 ${path.basename(PROFILE_DIR)} 配置；原 Tavern 数据目录保持不变。`)
     } else if (host === 'android') {
       console.log('Android Tavern Profile 已配置。')
     } else {

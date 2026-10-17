@@ -33,6 +33,12 @@ $env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString
 
 看到安装成功后，重新打开官方 DeepSeek Harness，即可进入酒馆。侧栏版本处显示“测试版 · DSH 0.2.1”。
 
+## 独立 profile 切换（实验功能）
+
+本分支另附 [Profile 桥接兼容插件](tavern-plugin/packages/dsh-profile-bridge/README.md)，已在 macOS 官方桌面 0.2.1-rc.2 验证酒馆与原版配置往返。它通过目录链接加载独立 `tavern`，保留原版 `desktop`；需正常退出应用后完成切换，再手动启动。
+
+**上面的安装命令尚不会自动启用桥接。** 已手动配置桥接的安装会根据 `tavern` 配置中的标记继续更新酒馆目录，避免覆盖原版配置。Windows 桥接尚未实机验证，使用方法、备份要求见插件说明。
+
 ## 从旧命令行版或自定义目录继承数据
 
 默认社区桌面版与官方桌面都使用同一个 `.dsh` 主目录时，无需跨目录复制。旧命令行版通常使用 `~/.dsh-tavern`；自定义安装请选择**包含 `profiles`、`profile-data` 的旧 DSH 主目录**，不是 `apps/dsh-tavern` 程序目录，也不是单独的 `data` 子目录。

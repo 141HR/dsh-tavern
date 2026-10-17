@@ -3,11 +3,12 @@
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import path from 'node:path'
+import { installedProfile } from './launcher-environment.mjs'
 const anchor = process.env.DSH_TAVERN_HOST_DEPENDENCY_ANCHOR
 if (!anchor || !process.env.DSH_HOME) throw new Error('缺少官方 Desktop 运行环境')
 const require = createRequire(anchor)
 const boot = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-app-boot')).href)
-const profile = boot.loadProfileDirectory('dsh-tavern', path.join(process.env.DSH_HOME, 'profiles', 'desktop'), anchor)
+const profile = boot.loadProfileDirectory('dsh-tavern', path.join(process.env.DSH_HOME, 'profiles', installedProfile('desktop', process.env.DSH_HOME)), anchor)
 if (profile.skippedBundles.length) throw new Error(profile.skippedBundles.map(item => `${item.packageName}: ${item.reason}`).join('\n'))
 const homePatch = boot.loadOptionalPatches('dsh-tavern', path.join(process.env.DSH_HOME, 'cordis.patch.yml')) || []
 const entries = boot.composeEntries([...profile.layers.map(layer => layer.patches), profile.patches, homePatch], message => console.error(message))
