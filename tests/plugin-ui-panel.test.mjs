@@ -225,3 +225,36 @@ test('舞台视图：插件注册后默认用它，拿到舞台数据与当前�
   assert.equal(choice.view, null)
   assert.equal(stage.TavernStageViewSwitch({ choice }), null, '没有插件视图时不显示切换')
 })
+
+test('背景音乐：同一首接着放、换曲淡入；玩家的开关记在浏览器里，关掉时不出声；插件经 playMusic 交给 Tavern', async () => {
+  const start = source.indexOf('const TAVERN_MUSIC_KEY')
+  const code = source.slice(start, source.indexOf('function useTavernMusic(', start))
+  const stored = new Map(), created = []
+  class Audio { constructor(url) { this.url = url; this.volume = 1; this.paused = true; created.push(this) } play() { this.paused = false; return Promise.resolve() } pause() { this.paused = true } }
+  const music = vm.runInNewContext(code + '; tavernMusic', { Audio, setTimeout: fn => fn(), window: { localStorage: { getItem: key => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value) } } })
+  const flush = () => new Promise(resolve => setImmediate(resolve))
+  music.play('a.mp3', { title: '主题' })
+  music.play('a.mp3', { title: '主题' })
+  await flush()
+  assert.equal(created.length, 1, '同一首不重新开始')
+  assert.equal(created[0].volume, 0.45)
+  assert.equal(music.get().track.title, '主题')
+  music.setEnabled(false)
+  assert.equal(created[0].paused, true)
+  assert.equal(stored.get('dsh-tavern-music-enabled'), 'off')
+  music.play('b.mp3')
+  assert.equal(created.length, 1, '关着时换曲也不出声')
+  music.setEnabled(true)
+  await flush()
+  assert.equal(created[1].url, 'b.mp3')
+  music.stop()
+  assert.equal(created[1].paused, true)
+  assert.equal(music.get().track, null)
+
+  const calls = []
+  const ui = loadWith({ tavernMusic: { play: (url, options) => calls.push([url, options]), stop: () => calls.push(['stop']) } })
+  ui.service.playMusic({ url: 'c.mp3', title: '夜' })
+  ui.service.playMusic('')
+  ui.service.stopMusic()
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [['c.mp3', { title: '夜' }], ['', null], ['stop']])
+})

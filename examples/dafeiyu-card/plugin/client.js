@@ -1,5 +1,5 @@
 // 大肥鱼卡内插件（浏览器侧）：用 registerStageView 画 Galgame 式舞台。
-// 背景、服装立绘、背景音乐都来自宿主侧导演定下的场景；翻页、自动、输入框仍由 Tavern 负责。
+// 背景、服装立绘、背景音乐都来自宿主侧导演定下的场景；翻页、自动、输入框和音乐播放仍由 Tavern 负责。
 window.__ModuleLoader__.load({
   id: 'dsh-card-dafeiyu-galgame',
   factory: (require) => {
@@ -10,30 +10,6 @@ window.__ModuleLoader__.load({
       anger: 'anger', annoyance: 'anger', disapproval: 'anger', sadness: 'sad', grief: 'crying', disappointment: 'sad', remorse: 'sad',
       nervousness: 'anxious', fear: 'anxious', confusion: 'anxious', surprise: 'anxious', neutral: 'calm', curiosity: 'calm', realization: 'calm',
       embarrassment: 'shy', disgust: 'disgust', love: 'love', desire: 'love', pride: 'smug' }
-
-    // One music player for the page: the same track keeps playing across beats; a new one fades in.
-    const music = { audio: null, url: '' }
-    function playMusic(url) {
-      if (url === music.url) return
-      const previous = music.audio
-      music.url = url
-      music.audio = null
-      if (previous) fade(previous, 0, () => previous.pause())
-      if (!url) return
-      const audio = new Audio(url)
-      audio.loop = true
-      audio.volume = 0
-      music.audio = audio
-      audio.play().then(() => fade(audio, 0.45), () => {})
-    }
-    function fade(audio, target, done) {
-      const step = () => {
-        const next = audio.volume + Math.sign(target - audio.volume) * 0.05
-        if (Math.abs(target - audio.volume) <= 0.05) { audio.volume = target; done && done(); return }
-        audio.volume = Math.min(1, Math.max(0, next)); setTimeout(step, 60)
-      }
-      step()
-    }
 
     function useScene(ui, gameId, turn) {
       const [scene, setScene] = React.useState(null)
@@ -49,8 +25,9 @@ window.__ModuleLoader__.load({
 
     function Stage({ ui, gameId, stage, beats, index, beat, fullscreen, advance, footer }) {
       const scene = useScene(ui, gameId, beat && beat.turn)
-      React.useEffect(() => { if (scene) playMusic(scene.music ? scene.music.url : '') }, [scene && scene.music && scene.music.url])
-      React.useEffect(() => () => playMusic(''), [])
+      // Tavern plays the music and owns the player's switch; it stops when this game's stage goes away.
+      const track = scene && scene.music
+      React.useEffect(() => { if (scene) ui.playMusic(track ? { url: track.url, title: track.name } : '') }, [gameId, scene && (track ? track.url : '')])
       const figure = scene && scene.figure
       let emotion = figure ? figure.defaultEmotion : 'calm'
       for (const item of beats.slice(0, index + 1)) if (figure && item.kind === 'line' && figure.names.includes(item.speaker)) emotion = EMOTIONS[item.emotion] || figure.defaultEmotion
@@ -72,7 +49,7 @@ window.__ModuleLoader__.load({
       inject: ['tavernUi'],
       apply(ctx) {
         const ui = ctx.tavernUi
-        if (typeof ui.registerStageView !== 'function') return
+        if (typeof ui.registerStageView !== 'function' || typeof ui.playMusic !== 'function') return
         ui.registerStageView({ id: 'galgame', label: '大肥鱼舞台', render: input => h(Stage, { ui, ...input }) })
       },
     }

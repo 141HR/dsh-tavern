@@ -769,6 +769,8 @@ window.__ModuleLoader__.load({
 
 // @include features/speech.js
 
+// @include features/music.js
+
 // @include features/cast-presentation.js
 
 // @include features/cast-stage.js

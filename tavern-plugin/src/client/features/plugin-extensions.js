@@ -196,6 +196,13 @@
 					return tavernSpeech.speak({ sessionId: input.gameId, speaker: typeof input.speaker === "string" ? input.speaker : "", text: input.text, emotion: input.emotion, narration: input.narration === true });
 				},
 				stopSpeech() { tavernSpeech.stop(); },
+				// Background music (apiVersion 2): one looping track; the same url keeps playing, a new one
+				// fades in, an empty one stops. The player's music switch decides whether it is heard.
+				playMusic(input) {
+					const url = typeof input === "string" ? input : input && typeof input.url === "string" ? input.url : "";
+					tavernMusic.play(url, typeof input === "object" && input ? { title: input.title, volume: input.volume } : null);
+				},
+				stopMusic() { tavernMusic.stop(); },
 				// Put text in the game's input box without sending it.
 				setInput(input) {
 					const composer = composerFor(input, "setInput");

@@ -116,7 +116,7 @@
 			const current = props.choice.view ? props.choice.view.key : TAVERN_STAGE_BUILTIN;
 			return h("select", { className: "dsh-tavern-stage-view-switch", value: current, "aria-label": "舞台样式", onChange: function (event) { props.choice.choose(event.target.value); } },
 				[{ key: TAVERN_STAGE_BUILTIN, label: "内置" }].concat(props.choice.views).map(function (entry) {
-					return h("option", { key: entry.key, value: entry.key }, entry.owner ? entry.label + "（" + entry.owner + "）" : entry.label);
+					return h("option", { key: entry.key, value: entry.key, title: entry.owner || undefined }, entry.label);
 				}));
 		}
 
@@ -316,11 +316,13 @@
 			React.useEffect(function () {
 				if (shown && reading.on && beat && !fullscreen) void tavernSpeech.speak(tavernBeatSpeech(props.sessionId, beat));
 			}, [reader.index, reader.turn, reading.on, fullscreen, shown]);
+			// Music belongs to this game's stage: leaving the game (switching, deleting) or losing the stage stops it.
+			React.useEffect(function () { if (shown) return function () { tavernMusic.stop(); }; }, [props.sessionId, shown]);
 			if (!shown) return null;
 			return h("section", { className: "dsh-tavern-status-section dsh-tavern-stage-section", "aria-label": "舞台" },
 				h("div", { className: "dsh-tavern-stage-head" }, h("span", { className: "dsh-tavern-status-label" }, "舞台"),
-					h(TavernStageViewSwitch, { choice: choice }),
-					h("button", { type: "button", className: "dsh-tavern-btn", onClick: function () { setFullscreen(true); } }, "全屏舞台")),
+					h(TavernStageViewSwitch, { choice: choice }), h(TavernMusicToggle, null),
+					h("button", { type: "button", className: "dsh-tavern-stage-head-btn", title: "全屏舞台", "aria-label": "全屏舞台", onClick: function () { setFullscreen(true); } }, "⛶ 全屏")),
 				h(TavernStageSceneView, { view: choice.view, sessionId: props.sessionId, data: data, beats: reader.beats, index: reader.index, onAdvance: function () { reader.setIndex(function (value) { return Math.min(reader.beats.length - 1, value + 1); }); },
 					footer: h("div", { className: "dsh-tavern-stage-controls", onClick: function (event) { event.stopPropagation(); } },
 						h("button", { type: "button", "aria-label": "上一句", disabled: reader.index <= 0, onClick: function () { reader.setIndex(function (value) { return Math.max(0, value - 1); }); } }, "‹"),

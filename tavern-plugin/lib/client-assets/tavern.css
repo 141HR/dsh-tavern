@@ -2825,12 +2825,15 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
 
 /* 舞台（docs/design/cast-presentation.md）：同一局故事的另一种看法，右侧小舞台可展开全屏。 */
 .dsh-tavern-stage-section { display: flex; flex-direction: column; gap: 10px; }
-.dsh-tavern-stage-head { display: flex; align-items: center; gap: 8px; }
-.dsh-tavern-stage-head > .dsh-tavern-btn { margin-left: auto; }
-.dsh-tavern-stage-head .dsh-tavern-stage-view-switch { margin-left: auto; }
-.dsh-tavern-stage-head .dsh-tavern-stage-view-switch + .dsh-tavern-btn { margin-left: 0; }
+.dsh-tavern-stage-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dsh-tavern-stage-head > .dsh-tavern-status-label { margin: 0 auto 0 0; }
+.dsh-tavern-stage-view-switch, .dsh-tavern-stage-head-btn { box-sizing: border-box; height: 26px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 999px; background-color: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; line-height: 1; cursor: pointer; transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease; }
+.dsh-tavern-stage-view-switch { -webkit-appearance: none; appearance: none; min-width: 0; max-width: 11em; padding: 0 24px 0 10px; text-overflow: ellipsis; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; }
+.dsh-tavern-stage-head-btn { flex: none; padding: 0 10px; }
+.dsh-tavern-stage-head-btn.is-off { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); opacity: .7; }
+.dsh-tavern-stage-view-switch:hover, .dsh-tavern-stage-head-btn:hover { border-color: var(--dsh-tavern-accent-border); color: var(--dsh-tavern-accent-active); background-color: var(--dsh-tavern-accent-soft); }
+.dsh-tavern-stage-view-switch:focus-visible, .dsh-tavern-stage-head-btn:focus-visible { outline: 2px solid var(--dsh-tavern-accent-border); outline-offset: 1px; }
 .dsh-tavern-stage-cast > summary { cursor: pointer; font-size: 13px; color: var(--dsw-alias-text-l2); }
-.dsh-tavern-stage-view-switch { margin-left: auto; max-width: 10em; font: inherit; font-size: 12px; }
 .dsh-tavern-stage-body { display: flex; flex-direction: column; gap: 14px; }
 .dsh-tavern-stage-scene { position: relative; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; cursor: pointer; user-select: none; background: linear-gradient(180deg, #2b2f3a 0%, #1b1e26 100%); color: #f4f1ea; }
 .dsh-tavern-stage-scene.is-fullscreen { aspect-ratio: auto; width: 100%; height: 100%; border-radius: 0; }
