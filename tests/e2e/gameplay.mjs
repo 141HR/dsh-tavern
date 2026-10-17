@@ -9,6 +9,7 @@ import { setupRealCardEdit, realCardEditChecks } from './real-card-edit.mjs'
 import { startSceneImageServer, sceneAddChecks } from './scene-add.mjs'
 import { regenAnomalyChecks, regenTemplateChecks } from './regen-anomalies.mjs'
 import { failedTurnCleanupChecks } from './failed-turn-cleanup.mjs'
+import { toolStepsChecks } from './tool-steps.mjs'
 import { storageAuditChecks } from './storage-audit.mjs'
 import { brokenSaveChecks } from './broken-save.mjs'
 import { nativeRepairChecks } from './native-repair.mjs'
@@ -468,6 +469,8 @@ try {
     await brokenSaveChecks({ page, step, savedChat, output, report, root, data, profile, source, restartServer })
   } else if (process.argv.includes('--regen-template')) {
     await regenTemplateChecks({ page, step, savedChat, output, report, root })
+  } else if (process.argv.includes('--tool-steps')) {
+    await toolStepsChecks({ page, step, savedChat, output, report })
   } else if (process.argv.includes('--failed-turn-cleanup')) {
     await failedTurnCleanupChecks({ page, step, savedChat, output, report })
   } else if (process.argv.includes('--regen-anomalies')) {
