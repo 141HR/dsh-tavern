@@ -55,7 +55,7 @@
 					if (!entry.listeners.size) { entry.stop(); if (entry.timer !== null) window.clearTimeout(entry.timer); entries.delete(sessionId); }
 				};
 			}
-			window.addEventListener("dsh-tavern-settings-changed", function () { Array.from(entries.keys()).forEach(invalidate); });
+			if (typeof window.addEventListener === "function") window.addEventListener("dsh-tavern-settings-changed", function () { Array.from(entries.keys()).forEach(invalidate); });
 			return {
 				subscribe: subscribe, load: load,
 				version: function (sessionId) { return entries.get(sessionId) ? entries.get(sessionId).version : 0; },
