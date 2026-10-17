@@ -1,3 +1,4 @@
+import { createCardEditor } from './domain/card-editor.js'
 import { ensureSessionVariableDirectory } from './domain/session-variable-directory.js'
 import { createCompatibilityTurnCompiler } from './domain/compatibility-turn.js'
 import { registerTavernHttpRoutes } from './http/routes.js'
@@ -1206,25 +1207,7 @@ export async function apply(ctx) {
       })
     }
   }
-  async function updateCard(cardPath, patch, revision, rawOperations) {
-    const workspace = await readCardWorkspace(cardPath)
-    if (workspace === undefined) throw new Error('人物卡不存在: ' + cardPath)
-    const change = cardPreparation.update({ kind: 'card', card: workspace, patch: patch, revision: revision, rawOperations: rawOperations })
-    const savedWorkspace = change.card
-    if (!change.changed) {
-      const unchangedCard = change.view
-      unchangedCard.path = cardPath
-      unchangedCard.extensions = cardPreparation.present({ card: savedWorkspace, as: 'card-extensions' })
-      return Object.assign({}, change, { card: unchangedCard })
-    }
-    await fileResources.writeWorking(normalizeResourcePath(cardPath, 'card'), JSON.stringify(savedWorkspace, null, 2))
-    await bumpCardProjectionRevision(cardPath)
-    const savedCard = change.view
-    savedCard.path = cardPath
-    savedCard.extensions = cardPreparation.present({ card: savedWorkspace, as: 'card-extensions' })
-    if (change.nameChanged) await syncCardName(cardPath, savedCard.name)
-    return Object.assign({}, change, { card: savedCard })
-  }
+  const updateCard = createCardEditor({ readCardWorkspace, cardPreparation, fileResources, bumpCardProjectionRevision, syncCardName })
   async function replaceCardVariables(cardPath, variables) {
     const workspace = await readCardWorkspace(cardPath)
     if (workspace === undefined) throw new Error('人物卡不存在: ' + cardPath)
