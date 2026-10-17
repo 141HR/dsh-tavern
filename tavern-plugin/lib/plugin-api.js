@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { publicPluginMedia, pluginMediaSession } from './domain/plugin-media.js'
+import { normalizeGameSettings, coerceSetting, settingValues } from './domain/plugin-game-settings.js'
 
 // The public `tavern` service for third-party DSH plugins (docs/plugin-api.md).
 // Only additive changes are allowed here: published plugins depend on every
@@ -104,6 +105,9 @@ export function createTavernPluginApi(deps) {
   const removedHandlers = new Set()
   const timelineHandlers = new Set()
   const castHandlers = new Set()
+  // Each plugin's own game settings (one declaration per plugin) and who listens for changes.
+  const gameSettingDefs = new Map()
+  const settingHandlers = new Set()
   const speechProviders = new Map()
   const sections = new Map()
   const turnSections = new Map()
@@ -373,6 +377,29 @@ export function createTavernPluginApi(deps) {
       const owner = ownerOf(this)
       const game = await deps.resolveGame(gameIdOf(gameId))
       return game ? deps.data.readGame({ chatId: game.chatId, owner }) : null
+    },
+
+    // Options of this plugin in each game's settings: Tavern draws them in 本局设置 and keeps the values with the game.
+    gameSettings(input) {
+      const owner = ownerOf(this)
+      const entry = { owner, ...normalizeGameSettings(input) }
+      return register.call(this, gameSettingDefs, owner, entry, 'tavern.gameSettings()', '插件 ' + owner + ' 已声明过本局配置项')
+    },
+
+    // The values in effect in one game: what the player chose, the declared default elsewhere.
+    async getGameSettings({ gameId } = {}) {
+      const owner = ownerOf(this)
+      const entry = gameSettingDefs.get(owner)
+      if (!entry) return {}
+      const game = await requireGame(gameId)
+      return settingValues(entry, (await deps.data.readSettings(game.chatId)).values[owner])
+    },
+
+    // Called with { gameId, values } after the player changes this plugin's settings in a game.
+    onGameSettingsChanged(handler) {
+      if (typeof handler !== 'function') throw new TypeError('onGameSettingsChanged 需要一个函数')
+      const entry = { owner: ownerOf(this), handler }
+      return owned(this, () => { settingHandlers.add(entry); return () => settingHandlers.delete(entry) }, 'tavern.onGameSettingsChanged()')
     },
 
     async getTurn({ gameId, turn } = {}) {
@@ -988,7 +1015,6 @@ export function createTavernPluginApi(deps) {
       stages[stage] = { label: REPLACEABLE_STAGES[stage], candidates, chosen: Object.hasOwn(chosen, stage) ? chosen[stage] : null, active: active ? active.owner : '',
         conflict: !Object.hasOwn(chosen, stage) && candidates.filter(owner => !disabled.has(owner)).length > 1 }
     }
-    const plugins = Array.from(uses.keys()).filter(name => !choices.elsewhere.has(name) && !choices.own.has(name)).sort().map(name => ({ name, enabled: !disabled.has(name), uses: uses.get(name) }))
     const tasks = {
       settlement: Object.keys(TASK_PHASES).flatMap(phase => orderedTasks(phase, choices).filter(entry => !choices.own.has(entry.owner)).map(entry => ({ key: taskKey(entry.owner, entry.name), plugin: entry.owner,
         title: entry.title, phase, phaseLabel: TASK_PHASES[phase], enabled: !choices.disabledTasks.has(taskKey(entry.owner, entry.name)) }))),
@@ -996,12 +1022,28 @@ export function createTavernPluginApi(deps) {
         .map(entry => ({ key: taskKey(entry.owner, entry.name), plugin: entry.owner, title: entry.title, description: entry.description, input: entry.input })),
       running: runningTask(game.sessionId)
     }
-    return { plugins, replacements: stages, tasks, errors: [...(errors.get(game.sessionId) || [])].reverse() }
+    // Options plugins add to this game's settings: this card's own plugins and the plugins switched on here.
+    const stored = deps.data?.readSettings ? (await deps.data.readSettings(game.chatId).catch(() => null))?.values || {} : {}
+    const settings = Array.from(gameSettingDefs.values()).filter(entry => !disabled.has(entry.owner)).sort((a, b) => a.owner.localeCompare(b.owner))
+      .map(entry => ({ plugin: entry.owner, title: entry.title || entry.owner, card: choices.own.has(entry.owner), fields: structuredClone(entry.fields), values: settingValues(entry, stored[entry.owner]) }))
+    for (const entry of gameSettingDefs.values()) use(entry.owner, '本局设置', '添加')
+    return { plugins: Array.from(uses.keys()).filter(name => !choices.elsewhere.has(name) && !choices.own.has(name)).sort().map(name => ({ name, enabled: !disabled.has(name), uses: uses.get(name) })),
+      replacements: stages, tasks, settings, errors: [...(errors.get(game.sessionId) || [])].reverse() }
   }
 
-  async function setGamePlugin(gameId, { name, enabled, replace, task, taskOrder } = {}) {
-    const { game, own } = await choicesFor(gameId)
+  async function setGamePlugin(gameId, { name, enabled, replace, task, taskOrder, setting } = {}) {
+    const { game, own, disabled } = await choicesFor(gameId)
     if (!game) throw new Error('这一局不存在或不是游玩对话')
+    let changedValues = null
+    if (setting && typeof setting === 'object') {
+      const entry = gameSettingDefs.get(String(setting.plugin))
+      const field = entry?.fields.find(item => item.key === setting.key)
+      if (!entry || !field || disabled.has(entry.owner)) throw new Error('这一局没有这个插件配置项')
+      const value = coerceSetting(field, setting.value)
+      if (value === undefined) throw new Error('「' + field.label + '」的值不符合要求')
+      await deps.data.updateSettings(game.chatId, settings => { settings.values[entry.owner] = { ...settings.values[entry.owner], [field.key]: value } })
+      changedValues = { owner: entry.owner, values: settingValues(entry, (await deps.data.readSettings(game.chatId)).values[entry.owner]) }
+    }
     if (typeof name === 'string' && own.has(name) || task && typeof task.key === 'string' && own.has(task.key.split(':')[0])) throw new Error('卡内插件是这张卡的一部分，不能在本局单独关闭')
     await deps.data.updateSettings(game.chatId, settings => {
       if (typeof name === 'string' && typeof enabled === 'boolean') {
@@ -1019,7 +1061,20 @@ export function createTavernPluginApi(deps) {
         else settings.replacements[replace.stage] = String(replace.plugin)
       }
     })
+    if (changedValues) {
+      dispatch(Array.from(settingHandlers).filter(entry => entry.owner === changedValues.owner), { gameId: game.sessionId, values: changedValues.values }, '本局配置项', disabled)
+      deps.settingsChanged?.(game.sessionId, changedValues.owner)
+    }
     return gamePlugins(gameId)
+  }
+
+  /** One plugin's settings in a game, for its page side; null when it declared none. */
+  async function pluginGameSettings(gameId, owner) {
+    const entry = gameSettingDefs.get(String(owner))
+    if (!entry) return null
+    const { game, disabled } = await choicesFor(gameId)
+    if (!game || disabled.has(entry.owner)) return null
+    return settingValues(entry, (await deps.data.readSettings(game.chatId)).values[entry.owner])
   }
 
   /** Turns that hold plugin data or media, so a fork computes versions only for them. */
@@ -1154,5 +1209,5 @@ export function createTavernPluginApi(deps) {
 
   return Object.freeze({ service, toolModesFor, callHandler, turnState, exportGame, importGame, turnSettled, castAnnotated, gameRemoved,
     speechProviders: () => Array.from(speechProviders.values()), timelineChanged, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
-    runSettlementTasks, manualTaskFor, runManualTask, stopTasks, runningTask, gamePlugins, setGamePlugin })
+    runSettlementTasks, manualTaskFor, runManualTask, stopTasks, runningTask, gamePlugins, setGamePlugin, pluginGameSettings })
 }

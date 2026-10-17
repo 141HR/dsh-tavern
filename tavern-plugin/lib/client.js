@@ -11135,6 +11135,34 @@ function bindTavernFontZoom(node, win) {
 						return addTo(stageViews, entry);
 					}, "tavernUi.registerStageView()");
 				},
+				// This plugin's own settings in a game (declared on the host side with tavern.gameSettings):
+				// { key: value }, or null when it declared none or is off in that game.
+				getGameSettings(gameId) {
+					if (typeof gameId !== "string" || !gameId) return Promise.reject(new TypeError("getGameSettings 需要 gameId"));
+					return rpc("pluginGameSettings", { plugin: ownerOf(this) }, gameId).then(function (reply) { return reply ? reply.values : null; });
+				},
+				// Calls listener with the values now and after each change the player makes in 本局设置.
+				watchGameSettings(gameId, listener) {
+					if (typeof gameId !== "string" || !gameId) throw new TypeError("watchGameSettings 需要 gameId");
+					if (typeof listener !== "function") throw new TypeError("watchGameSettings 需要 listener 函数");
+					const owner = ownerOf(this);
+					return owned(this, function () {
+						let disposed = false, generation = 0, last = "";
+						function refresh() {
+							const request = ++generation;
+							rpc("pluginGameSettings", { plugin: owner }, gameId).then(function (reply) {
+								const values = reply ? reply.values : null, text = JSON.stringify(values);
+								if (disposed || request !== generation || text === last) return;
+								last = text;
+								try { listener(values); } catch (error) { try { tavernErrorHub.report("插件 " + owner, error); } catch (_) {} }
+							}, function () {});
+						}
+						let stop = function () {};
+						try { if (tavernSessionSignals && typeof tavernSessionSignals.subscribe === "function") stop = tavernSessionSignals.subscribe(gameId, "plugin-settings", refresh); } catch (_) {}
+						refresh();
+						return function () { disposed = true; stop(); };
+					}, "tavernUi.watchGameSettings()");
+				},
 				// The asset packs this game's card carries (apiVersion 2): { id, title, format, contentHash, baseUrl }.
 				getCardPacks(gameId) {
 					if (typeof gameId !== "string" || !gameId) return Promise.reject(new TypeError("getCardPacks 需要 gameId"));
@@ -20104,7 +20132,15 @@ function bindTavernFontZoom(node, win) {
                 catch (err) { setError(String(err.message || err)); }
                 finally { setBusy(false); }
             }
-            if (!data || (!data.plugins.length && !data.errors.length)) return error ? h("p", { role: "alert" }, "插件信息读取失败：" + error) : null;
+            const pluginSettings = data && data.settings || [];
+            const settingsBlock = pluginSettings.map(entry => h("section", { key: entry.plugin, className: "dsh-local-section dsh-tavern-plugin-settings", "aria-label": entry.title },
+                h("h3", null, entry.title),
+                entry.fields.map(field => h(TavernPluginSettingField, { key: field.key, field: field, value: entry.values[field.key], busy: busy,
+                    onChange: value => change({ setting: { plugin: entry.plugin, key: field.key, value: value } }) }))));
+            if (!data || (!data.plugins.length && !data.errors.length && !(data.tasks && data.tasks.settlement.length))) {
+                if (data && pluginSettings.length) return h(React.Fragment, null, settingsBlock, error ? h("p", { role: "alert" }, "保存失败：" + error) : null);
+                return error ? h("p", { role: "alert" }, "插件信息读取失败：" + error) : null;
+            }
             const usesText = uses => uses.map(item => item.stage + "·" + item.mode).join("、");
             const settlementTasks = data.tasks ? data.tasks.settlement : [];
             // Swap with the neighbour in the same phase; the whole order is saved, so it holds for new tasks too.
@@ -20114,7 +20150,7 @@ function bindTavernFontZoom(node, win) {
                 void change({ taskOrder: order });
             }
             const canMove = (index, step) => settlementTasks[index + step]?.phase === settlementTasks[index].phase;
-            return h("section", { className: "dsh-local-section dsh-tavern-game-plugins" }, h("h3", null, "插件"),
+            return h(React.Fragment, null, settingsBlock, h("section", { className: "dsh-local-section dsh-tavern-game-plugins" }, h("h3", null, "插件"),
                 h("p", { className: "dsh-local-help" }, "本局用到的第三方插件。关掉后，它不再参与本局的提示词、结算和通知；已经挂上的内容保留。"),
                 data.plugins.map(plugin => h("label", { key: plugin.name, className: "dsh-tavern-background-task" },
                     h("span", null, plugin.name, h("span", { className: "dsh-tavern-settings-desc" }, usesText(plugin.uses))),
@@ -20141,7 +20177,34 @@ function bindTavernFontZoom(node, win) {
                     data.errors.map((item, index) => h("p", { key: index, className: "dsh-tavern-settings-desc" },
                         new Date(item.at).toLocaleTimeString() + " · " + item.plugin + " · " + item.stage + "：" + item.message)),
                     h("button", { type: "button", className: "dsh-tavern-btn", onClick: load }, "刷新")) : null,
-                error ? h("p", { role: "alert" }, "保存失败：" + error) : null);
+                error ? h("p", { role: "alert" }, "保存失败：" + error) : null));
+        }
+
+        // One option a plugin added to this game's settings (tavern.gameSettings), drawn like Tavern's own.
+        function TavernPluginSettingField(props) {
+            const h = React.createElement;
+            const field = props.field;
+            const [draft, setDraft] = React.useState(String(props.value ?? ""));
+            React.useEffect(() => { setDraft(String(props.value ?? "")); }, [props.value]);
+            const description = field.description ? h("span", { className: "dsh-tavern-settings-desc" }, field.description) : null;
+            if (field.type === "boolean") return h("label", { className: "dsh-tavern-background-task" },
+                h("span", null, field.label, description),
+                h("input", { type: "checkbox", role: "switch", "aria-label": field.label, checked: props.value === true, disabled: props.busy, onChange: event => props.onChange(event.target.checked) }));
+            if (field.type === "select") return h("div", { className: "dsh-local-field" },
+                h("label", null, field.label, h("select", { className: "dsh-tavern-settings-select", "aria-label": field.label, value: props.value, disabled: props.busy, onChange: event => props.onChange(event.target.value) },
+                    field.options.map(option => h("option", { key: option.value, value: option.value }, option.label)))),
+                field.description ? h("p", { className: "dsh-local-help" }, field.description) : null);
+            // Numbers and text are saved when the field loses focus or on Enter.
+            function commit() {
+                const value = field.type === "number" ? Number(draft) : draft;
+                if (field.type === "number" && (draft.trim() === "" || !Number.isFinite(value))) { setDraft(String(props.value ?? "")); return; }
+                if (value !== props.value) props.onChange(value);
+            }
+            return h("div", { className: "dsh-local-field" },
+                h("label", null, field.label, h("input", { className: "dsh-tavern-settings-select", "aria-label": field.label, disabled: props.busy, value: draft,
+                    type: field.type === "number" ? "number" : "text", min: field.min, max: field.max, step: field.step, maxLength: field.maxLength,
+                    onChange: event => setDraft(event.target.value), onBlur: commit, onKeyDown: event => { if (event.key === "Enter") commit(); } })),
+                field.description ? h("p", { className: "dsh-local-help" }, field.description) : null);
         }
 
         // Manual plugin tasks (tavern.manualTask): one button each, run as an exclusive background task.

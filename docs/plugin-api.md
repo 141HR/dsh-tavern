@@ -631,6 +631,27 @@ ctx.tavern.speechProvider({
 | 删局 | 删除 | 删除 |
 | 导出、导入存档 | 当前剧情线上的数据随存档带走，导入后在新游戏里照常读到 | 随存档带走 |
 
+### `gameSettings({ title?, fields })`、`getGameSettings({ gameId })`、`onGameSettingsChanged(handler)`（第 2 版）
+
+给每一局加插件自己的配置项。插件只声明有哪些项，Tavern 把它们画在本局设置里（和本局设置的其他项同样的样式），玩家的取值按局保存，分叉、导出存档时一起带走。
+
+```js
+ctx.tavern.gameSettings({ title: '舞台导演', fields: [
+  { key: 'director', type: 'boolean', label: '舞台导演', description: '每轮按正文换场景。', default: true },
+  { key: 'pace', type: 'select', label: '换装频率', options: [{ value: 'low', label: '少' }, { value: 'high', label: '多' }] },
+  { key: 'lines', type: 'number', label: '每幕句数', min: 1, max: 9, default: 3 },
+  { key: 'note', type: 'text', label: '导演备注', maxLength: 200 }
+] })
+const { director } = await ctx.tavern.getGameSettings({ gameId })
+ctx.tavern.onGameSettingsChanged(({ gameId, values }) => { /* 玩家在本局设置里改了 */ })
+```
+
+- 每个插件声明一次；`title` 最多 20 字，默认用插件名。`fields` 1–20 项，`key` 用字母、数字和下划线；`label` 1–40 字，`description` 最多 200 字。
+- `type`：`boolean` 开关；`select` 单选（`options` 1–20 项，写成字符串或 `{ value, label }`）；`number` 数字（可选 `min`、`max`、`step`）；`text` 一行文本（`maxLength` 最多 500，默认 200）。不写 `default` 时分别默认为关、第一个选项、`min` 或 0、空字符串。
+- `getGameSettings` 返回这一局实际生效的值：玩家改过的用玩家的，没改过或已不合法（例如插件更新后选项变了）的用默认值。
+- 玩家在本局关掉了这个插件时，它的配置项不显示。卡内插件的配置项总是显示在它那张卡的局里。
+- 浏览器侧用 `tavernUi.getGameSettings(gameId)` 读同样的值，`tavernUi.watchGameSettings(gameId, listener)` 在现在和每次改动后收到最新的值。
+
 分叉、导出存档时，插件挂的媒体项也按同样规则带走，媒体用到的图片、音视频文件一并打进存档包。
 
 这两种数据由 Tavern 存在每局一个的插件数据文件里，插件不用自己找地方存，也不要自己写文件：自己写的文件不会随存档、分叉带走，回退时也不会跟着变。插件自己的设置、跨局共享的东西不属于某一局，用 DSH 的设置区或插件自己的存储。
@@ -872,4 +893,4 @@ Tavern 尽量开放接口，并保持每个接口简单、稳定；接口按插�
 | 版本 | 变化 |
 |---|---|
 | 1 | 首个版本。 |
-| 2 | 新增 `turnSection`、`worldbookSource`、`settlementSection`、`settlementTool`：插件可以往每轮正文请求和后台结算里添加内容。新增插件存档数据（`saveTurnData`、`readTurnData`、`saveGameData`、`readGameData`）与 `onTimelineChanged`；编辑正文后重新发 `onTurnSettled`；分叉时带上插件数据和媒体项。新增第一个替换类接口 `replaceSettlement`，以及本局插件面板（按局开关、选择结算由谁负责、错误记录）。新增 `candidateSection`、`compactionSection`、`worldbookEntries`；新增 `getCharacterDesigns`、`saveCharacterDesign`（人物设计档案）、`listCards`、`readCardRaw`、`updateCardRaw`、`toolModes` 与 Skill 读写（`listSkills`、`readSkill`、`saveSkill`、`removeSkill`）；浏览器侧新增 `registerPanel`、`registerStartGroup`、`registerCardListView`（`tavernUi.apiVersion` 为 2）。`onTurnSettled`、`getTurn` 增加只读的 `variables`。新增 `getCard`、`getCardImage`、`getHistory`、`setVariables`、`editTurn`、`runTask`。新增宿主侧 `handle` 与浏览器侧 `callHost`，插件的浏览器侧可以调用自己的宿主侧。新增 `settlementTask`、`manualTask`、`startTask`：插件可以定义每轮结算前后运行的任务和玩家手动运行的任务。新增 `getTurnState`，`onTurnSettled`、`getTurn` 增加 `greeting`；浏览器侧新增 `getTurnState`、`watchTurnState`、`setInput`、`submitInput`、`openOverlay`、`assetUrl`（插件文件夹的 `assets/` 静态资源）。导出存档包含插件存档数据和媒体项，导入后照常可读。插件可放进数据目录的 `plugins/` 文件夹加载。新增演出接口：宿主侧 `getCast`、`onCastAnnotated`、`getCastAssets`，浏览器侧 `getStage`、`watchStage`、`registerStageView`。新增配音接口：宿主侧 `speechProvider`、`synthesizeSpeech`，浏览器侧 `speak`、`stopSpeech`。新增背景音乐 `playMusic`、`stopMusic`。第 1 版接口不变。 |
+| 2 | 新增 `turnSection`、`worldbookSource`、`settlementSection`、`settlementTool`：插件可以往每轮正文请求和后台结算里添加内容。新增插件存档数据（`saveTurnData`、`readTurnData`、`saveGameData`、`readGameData`）与 `onTimelineChanged`；编辑正文后重新发 `onTurnSettled`；分叉时带上插件数据和媒体项。新增第一个替换类接口 `replaceSettlement`，以及本局插件面板（按局开关、选择结算由谁负责、错误记录）。新增 `candidateSection`、`compactionSection`、`worldbookEntries`；新增 `getCharacterDesigns`、`saveCharacterDesign`（人物设计档案）、`listCards`、`readCardRaw`、`updateCardRaw`、`toolModes` 与 Skill 读写（`listSkills`、`readSkill`、`saveSkill`、`removeSkill`）；浏览器侧新增 `registerPanel`、`registerStartGroup`、`registerCardListView`（`tavernUi.apiVersion` 为 2）。`onTurnSettled`、`getTurn` 增加只读的 `variables`。新增 `getCard`、`getCardImage`、`getHistory`、`setVariables`、`editTurn`、`runTask`。新增宿主侧 `handle` 与浏览器侧 `callHost`，插件的浏览器侧可以调用自己的宿主侧。新增 `settlementTask`、`manualTask`、`startTask`：插件可以定义每轮结算前后运行的任务和玩家手动运行的任务。新增 `getTurnState`，`onTurnSettled`、`getTurn` 增加 `greeting`；浏览器侧新增 `getTurnState`、`watchTurnState`、`setInput`、`submitInput`、`openOverlay`、`assetUrl`（插件文件夹的 `assets/` 静态资源）。导出存档包含插件存档数据和媒体项，导入后照常可读。插件可放进数据目录的 `plugins/` 文件夹加载。新增演出接口：宿主侧 `getCast`、`onCastAnnotated`、`getCastAssets`，浏览器侧 `getStage`、`watchStage`、`registerStageView`。新增配音接口：宿主侧 `speechProvider`、`synthesizeSpeech`，浏览器侧 `speak`、`stopSpeech`。新增背景音乐 `playMusic`、`stopMusic`。新增本局配置项 `gameSettings`、`getGameSettings`、`onGameSettingsChanged`，浏览器侧 `getGameSettings`、`watchGameSettings`。第 1 版接口不变。 |

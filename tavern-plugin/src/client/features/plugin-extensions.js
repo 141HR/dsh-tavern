@@ -183,6 +183,34 @@
 						return addTo(stageViews, entry);
 					}, "tavernUi.registerStageView()");
 				},
+				// This plugin's own settings in a game (declared on the host side with tavern.gameSettings):
+				// { key: value }, or null when it declared none or is off in that game.
+				getGameSettings(gameId) {
+					if (typeof gameId !== "string" || !gameId) return Promise.reject(new TypeError("getGameSettings 需要 gameId"));
+					return rpc("pluginGameSettings", { plugin: ownerOf(this) }, gameId).then(function (reply) { return reply ? reply.values : null; });
+				},
+				// Calls listener with the values now and after each change the player makes in 本局设置.
+				watchGameSettings(gameId, listener) {
+					if (typeof gameId !== "string" || !gameId) throw new TypeError("watchGameSettings 需要 gameId");
+					if (typeof listener !== "function") throw new TypeError("watchGameSettings 需要 listener 函数");
+					const owner = ownerOf(this);
+					return owned(this, function () {
+						let disposed = false, generation = 0, last = "";
+						function refresh() {
+							const request = ++generation;
+							rpc("pluginGameSettings", { plugin: owner }, gameId).then(function (reply) {
+								const values = reply ? reply.values : null, text = JSON.stringify(values);
+								if (disposed || request !== generation || text === last) return;
+								last = text;
+								try { listener(values); } catch (error) { try { tavernErrorHub.report("插件 " + owner, error); } catch (_) {} }
+							}, function () {});
+						}
+						let stop = function () {};
+						try { if (tavernSessionSignals && typeof tavernSessionSignals.subscribe === "function") stop = tavernSessionSignals.subscribe(gameId, "plugin-settings", refresh); } catch (_) {}
+						refresh();
+						return function () { disposed = true; stop(); };
+					}, "tavernUi.watchGameSettings()");
+				},
 				// The asset packs this game's card carries (apiVersion 2): { id, title, format, contentHash, baseUrl }.
 				getCardPacks(gameId) {
 					if (typeof gameId !== "string" || !gameId) return Promise.reject(new TypeError("getCardPacks 需要 gameId"));

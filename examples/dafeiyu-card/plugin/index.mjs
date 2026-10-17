@@ -100,16 +100,24 @@ export function apply(ctx) {
     return { ...data.opening, ...(record?.data || {}) }
   }
 
+  // The player's choices for this card's director, in 本局设置.
+  const settings = async gameId => typeof tavern.getGameSettings === 'function' ? await tavern.getGameSettings({ gameId }).catch(() => ({})) : {}
+  if (typeof tavern.gameSettings === 'function') tavern.gameSettings({ title: '大肥鱼舞台', fields: [
+    { key: 'director', type: 'boolean', label: '舞台导演', description: '每轮按正文换场景、时段、服装和背景音乐。关掉后舞台停在当前的样子。', default: true },
+    { key: 'outfits', type: 'boolean', label: '导演换服装', description: '关掉后大肥鱼一直穿现在这套。', default: true }
+  ] })
+
   tavern.settlementSection({ name: 'direct', text: async ({ gameId, turn, text: turnText }) => {
     const data = await catalog(gameId)
-    if (!data.scenes.length) return ''
+    const chosen = await settings(gameId)
+    if (!data.scenes.length || chosen.director === false) return ''
     const current = await sceneAt(gameId, turn - 1)
     const text = words(turnText)
     // A short list: scenes the text names, then the current one; the full list would cost too much every turn.
     const named = data.scenes.filter(scene => scene.keywords.some(keyword => keyword && text.includes(words(keyword)))).slice(0, MAX_SCENES)
     const now = data.scenes.find(scene => scene.id === current.scene)
     const scenes = [...(now ? [now] : []), ...named.filter(scene => scene !== now)].slice(0, MAX_SCENES)
-    const outfits = (data.figure?.outfits || []).filter(outfit => outfit.enabled !== false)
+    const outfits = chosen.outfits === false ? [] : (data.figure?.outfits || []).filter(outfit => outfit.enabled !== false)
     return ['【舞台导演】按本轮正文，调用一次 ' + TOOL + ' 设定舞台；不需要变化的项省略。场景没有变化时不要换。',
       '当前：场景 ' + (now?.name || '无') + '（' + current.time + '），服装 ' + (outfits.find(outfit => outfit.key === current.outfit)?.label || current.outfit) + '，音乐 ' + (data.music.find(track => track.id === current.music)?.name || '无') + '。',
       '可选场景（id：名称〔可选时段〕）：' + scenes.map(scene => scene.id + '：' + scene.name + '〔' + Object.keys(scene.variants).join('/') + '〕').join('；'),
@@ -130,6 +138,9 @@ export function apply(ctx) {
       if (args.scene && !scene) return { ok: false, error: '没有这个场景：' + args.scene }
       if (scene) next.scene = scene.id
       if (args.time) next.time = args.time
+      const chosen = await settings(gameId)
+      if (chosen.director === false) return { ok: false, error: '玩家关掉了舞台导演，本轮不要调用' }
+      if (args.outfit && chosen.outfits === false) return { ok: false, error: '玩家关掉了换服装，不要改服装' }
       if (args.outfit) { if (!(data.figure?.outfits || []).some(outfit => outfit.key === args.outfit)) return { ok: false, error: '没有这套服装：' + args.outfit }; next.outfit = args.outfit }
       if (args.music) { const track = data.music.find(item => item.id === args.music || item.name === args.music); if (!track) return { ok: false, error: '没有这首音乐：' + args.music }; next.music = track.id }
       await tavern.saveTurnData({ gameId, turn, data: next })

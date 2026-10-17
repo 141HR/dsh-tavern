@@ -2857,6 +2857,8 @@ export async function apply(ctx) {
   const pluginApi = createTavernPluginApi({
     ctx,
     logger: console,
+    // A plugin's settings changed in a game: its page side re-reads them (tavernUi.watchGameSettings).
+    settingsChanged: (gameId, plugin) => sessionSignals.publish(gameId, { kind: 'plugin-settings', version: plugin + ':' + Date.now() + ':' + Math.random().toString(36).slice(2) }),
     reservedToolNames: [...BACKGROUND_TOOLS, HISTORY_RECALL_TOOL].map(tool => tool?.name).concat([STORY_SUBMIT_TOOL_NAME, 'character_design_finish', 'worldbook_search', 'web_search', 'skill']).filter(Boolean),
     media: pluginMedia,
     data: pluginData,
@@ -4809,7 +4811,8 @@ export async function apply(ctx) {
       case 'deleteGuide': return { guides: await conversationGuides.remove(args?.sessionId, args) }
       case 'getBodyEdit': return { edit: await bodyEditor.read(args && args.sessionId) }
       case 'listGamePlugins': return { plugins: await pluginApi.gamePlugins(str(args && args.sessionId)) }
-      case 'setGamePlugin': return { plugins: await pluginApi.setGamePlugin(str(args && args.sessionId), { name: args && args.name, enabled: args && args.enabled, replace: args && args.replace, task: args && args.task, taskOrder: args && args.taskOrder }) }
+      case 'setGamePlugin': return { plugins: await pluginApi.setGamePlugin(str(args && args.sessionId), { name: args && args.name, enabled: args && args.enabled, replace: args && args.replace, task: args && args.task, taskOrder: args && args.taskOrder, setting: args && args.setting }) }
+      case 'pluginGameSettings': return { values: await pluginApi.pluginGameSettings(str(args && args.sessionId), str(args && args.plugin)) }
       case 'startPluginTask': return await startPluginTask(args && args.sessionId, args && args.key, args && args.input)
       case 'saveBodyEdit': {
         await reconcileStory(args && args.sessionId)
