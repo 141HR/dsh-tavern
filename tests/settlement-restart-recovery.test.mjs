@@ -19,6 +19,7 @@ import { createMvuSettlementReconciler } from '../tavern-plugin/lib/domain/mvu-s
 import { LEDGER_SUBMIT_TOOL, LEDGER_RULES, ledgerContext, createLedgerSubmission } from '../tavern-plugin/lib/domain/story-ledger.js'
 import { POSTURE_SUBMIT_TOOL, POSTURE_SUBMIT_TOOL_NAME, lastSubmittedPosture, normalizePostureSubmission } from '../tavern-plugin/lib/domain/posture-submission.js'
 import { CHARACTER_DESIGN_READ_TOOL, CHARACTER_DESIGN_SAVE_TOOL } from '../tavern-plugin/lib/domain/character-design-document.js'
+import { createPostureItem, plainSettlementPlan, runPipelineStages } from '../tavern-plugin/lib/domain/background-pipeline.js'
 
 const server = await readFile(new URL('../tavern-plugin/lib/index.js', import.meta.url), 'utf8')
 function section(start, end) {
@@ -78,6 +79,9 @@ async function harness({ beginRunning = true, mvu = true } = {}) {
     mvuSettlement: { settleVariables: async () => ({ receipt: { version: 1, status: 'unchanged', changes: [] } }) },
     pluginApi: { replaceSettlement: async () => null }
   })
+  sandbox.postureItem = createPostureItem({ prompt: () => sandbox.runtimePrompt('posture-settlement'), tool: POSTURE_SUBMIT_TOOL })
+  sandbox.plainSettlementPlan = plainSettlementPlan
+  sandbox.runPipelineStages = runPipelineStages
   sandbox.mvuReceiptsOf = createSessionStateView({activity:chat=>tasks.activity(chat),evidence:()=>({})}).receipts
   vm.runInContext(section('  function pendingMvuTarget(', '  async function mvuUpdateRules('), sandbox)
   vm.runInContext(section('  async function runSettlement(', '  const mvuSettlementReconciler'), sandbox)
@@ -484,7 +488,7 @@ test('管线护栏：普通卡开姿势时，结算请求的提示词、工具�
 test('管线护栏：只开台词标注时照样跑结算（不提交姿势）；全部关闭时不调用模型也提交', async () => {
   const cast = await harness({ beginRunning: false, mvu: false })
   await cast.store.writeChat({ ...cast.get(), backgroundTasks: { posture: false, variables: true } })
-  cast.sandbox.castPresentation = { settlement: { wanted: async () => true } }
+  cast.sandbox.settlementItems = { wanted: async () => true }
   const requests = []
   cast.sandbox.backgroundAgentRunner.run = async input => { requests.push(settlementRequest(input)); assert.equal(input.acceptWithoutText(), false); return { text: '完成' } }
   await cast.sandbox.queueSettlement('chat')
@@ -494,7 +498,7 @@ test('管线护栏：只开台词标注时照样跑结算（不提交姿势）�
 
   const off = await harness({ beginRunning: false, mvu: false })
   await off.store.writeChat({ ...off.get(), backgroundTasks: { posture: false, variables: true } })
-  off.sandbox.castPresentation = { settlement: { wanted: async () => false } }
+  off.sandbox.settlementItems = { wanted: async () => false }
   let runs = 0
   off.sandbox.backgroundAgentRunner.run = async () => { runs++; return { text: '' } }
   await off.sandbox.queueSettlement('chat')
