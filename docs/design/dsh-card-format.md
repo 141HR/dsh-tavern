@@ -19,8 +19,7 @@ ZIP 压缩包，后缀 `.dshcard`。分四块：卡本体（兼容 CHARX）、�
 ```
 大肥鱼.dshcard
 ├─ card.json              Character Card V3，和 CHARX 完全相同；酒馆助手脚本也在这里
-├─ assets/…               CCv3 标准素材：icon / emotion / background，路径同 CHARX
-├─ packs/<包 id>/         素材包，结构沿用 Galgame 分支的 dsh-asset-pack（manifest.json、media/、credits/……）
+├─ packs/<包 id>/         所有素材，结构沿用 Galgame 分支的 dsh-asset-pack（manifest.json、media/、credits/……）
 ├─ scripts/<名字>.js      DSH 卡脚本：沙箱里运行，可以用 DSH 能力（第 2 层）
 ├─ plugins/<插件名>/      随卡 DSH 插件：package.json、index.mjs、client.js、assets/（第 3 层）
 └─ dsh.json               DSH 清单（见下）
@@ -31,10 +30,12 @@ ZIP 压缩包，后缀 `.dshcard`。分四块：卡本体（兼容 CHARX）、�
 | 放什么 | 放哪 | Tavern 怎么对待 |
 |---|---|---|
 | 卡的文字设定、酒馆助手脚本 | `card.json` | 和导入普通卡一样；脚本在沙箱运行 |
-| CCv3 标准素材 | `assets/` | 导入为 Tavern 的角色素材（头像、28 种情绪立绘、背景） |
-| 其他所有素材 | `packs/` | **不解读内容**，只存储、校验、按地址提供 |
+| 所有素材 | `packs/` | **不解读内容**，只存储、校验、按地址提供 |
+| 其中供其他前端用的头像、表情、背景 | `card.json` 的 `data.assets` 指向 `packs/` 里的文件 | 导入为 Tavern 的角色素材（头像、28 种情绪立绘、背景） |
 | DSH 卡脚本 | `scripts/` | 沙箱运行，不用确认 |
 | DSH 插件 | `plugins/` | 确认后才加载，只在本卡生效 |
+
+**素材只放一份**：CCv3 的 `data.assets` 直接指向素材包里的文件（`embeded://packs/<包 id>/media/<摘要>.png`），不另外复制到 `assets/`。CCv3 规范只是建议放在 `assets/{类型}/images/`（SHOULD，不是 MUST）；RisuAI 导入 CHARX 时会把包里每个文件按路径登记，任意路径都能解析（`src/ts/process/processzip.ts` 的 `CharXImporter`）。Tavern 自己的角色素材（玩家上传、ST 立绘包导入的）导出时也存成一个素材包，`format` 为 `dsh-cast`。只导出 CHARX（不带素材包）时，仍按规范的 `assets/` 路径写。
 
 为什么 DSH 卡脚本单独放、不塞进 `card.json`：它用到的 `DSH` 对象在 ST、RisuAI 里不存在，放进 `card.json` 会让导出的 CHARX 在别处报错。单独放，导出 CHARX 时自然丢掉，`card.json` 始终是一张在哪都能跑的卡。
 
@@ -189,7 +190,7 @@ packs/<包 id>/figures/  sprites/  bundles/  credits/
 - `dsh.json` 写卡的标识、版本和 4 个素材包（id、format、contentHash、署名文件）；
 - `packs/` 原样放入。
 
-得到 `dafeiyu.dshcard`（288 MB）和去掉素材包的 `dafeiyu.charx`（16 MB）。用现在的导入代码试：
+得到 `dafeiyu.dshcard`（288 MB）和去掉素材包的 `dafeiyu.charx`（16 MB）。试改时把头像和情绪图复制进了 `assets/`；按"素材只放一份"的结论，应直接指向 `packs/` 里的原文件，能省下这 16 MB 的重复。用现在的导入代码试：
 - **CHARX 版能导入**：14 种情绪认出 9 种当立绘，Tavern 自带的舞台和对话头像直接可用；`crashed`、`drooling`、`eating`、`singing` 没有对应，原样保留。试的过程中发现 `crying` 抢在 `sad` 前面占了"难过"，已修复：按名字贴近程度排序。
 - **`.dshcard` 导入失败**：现在的 zip 读取有 50 MB 上限，并且要整包读进内存。这印证了实施步骤 1、3 必须先做。
 
