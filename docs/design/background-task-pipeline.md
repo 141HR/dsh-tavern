@@ -94,6 +94,8 @@
 
 做完这五步，界面和接口都不变，但内部只剩一套描述：一轮后台做哪些事、按什么顺序、谁提供的。
 
+进度（2026-10-17）：五步都已完成，行为不变。人物设计在结算里本来就不可达（`normalizeBackgroundTasks` 固定关闭），直接删掉了，没有做成结算项；变量仍由 MVU 引擎承载。代码在 `domain/background-pipeline.js`（结算项注册表、姿势项、普通引擎的请求拼装、阶段表）和 `index.js` 的 `runSettlementEngine` / `runSettlementCycle`。
+
 ## 以后（不在第一阶段）
 
 管线稳定后，按导演 AI 的需要补能力，都作为独立任务的选项，不另起机制：
