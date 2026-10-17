@@ -18767,6 +18767,22 @@ function bindTavernFontZoom(node, win) {
 			return res;
 		}
 
+		// Clear the failed or stopped latest round back to before it began (story, variables
+		// and progress stay as they were) and hand its input back to the box.
+		async function withdrawFailedTavernTurn(sessionId, inputActions, currentDraft) {
+			const result = await rpc("rollbackTurn", { expectedTurn: null }, sessionId) || {};
+			historyProjection.rolledBack(sessionId, result.view);
+			setCandidatePanel(null); setRegenPanel(null); setCandidateGuidePanel(null);
+			const text = String(result.view && result.view.clearedInput || "");
+			if (text.trim() !== "") {
+				const current = String(currentDraft || "");
+				// Never glue the old input onto a new one: sent together, the reply acts out both.
+				if (current.trim() === "" || current === text) inputActions.setDraft(text);
+				else if (await askTavernConfirm("输入框里已有新的内容。要用撤回的原输入替换它吗？\n\n原输入：" + text, { confirmText: "替换", cancelText: "保留新内容" })) inputActions.setDraft(text);
+			}
+			return result;
+		}
+
 		function CandidateAction(props) {
 			const [busy, setBusy] = React.useState(false);
 			const candidatePanelState = useCandidatePanel();
@@ -18786,6 +18802,8 @@ function bindTavernFontZoom(node, win) {
 			const taskBusy = !!(taskForMessage && taskForMessage.busy);
 			const regenBusy = regenPanelState !== null && regenPanelState.sessionId === props.sessionId && regenPanelState.phase === "loading";
 			const [replayBusy, setReplayBusy] = React.useState(false);
+			const [withdrawBusy, setWithdrawBusy] = React.useState(false);
+			const draft = props.useInput(snapshot => snapshot.draft);
 			const projectedTaskRef = React.useRef("");
 			React.useEffect(function () {
 				if (!taskForMessage) return;
@@ -18842,6 +18860,20 @@ function bindTavernFontZoom(node, win) {
 				catch (err) { tavernErrorHub.report("重新生成本轮", err); }
 				finally { setReplayBusy(false); liveTavernView.invalidate(props.sessionId); }
 			}
+			// Learned from huajiao1998/dsh-tavern-sqlite-v2: a failed or stopped round can also be
+			// dropped entirely, not only replayed.
+			async function withdrawFailed() {
+				if (!canReplayFailed || frontRunning || replayBusy || withdrawBusy) return;
+				setWithdrawBusy(true);
+				try { await withdrawFailedTavernTurn(props.sessionId, props.inputActions, draft); }
+				catch (err) { tavernErrorHub.report("撤回这条输入", err); }
+				finally {
+					setWithdrawBusy(false);
+					notifyTavernDataChanged(["sessions"], "play-controls");
+					liveTavernView.invalidate(props.sessionId);
+					tavernCoordination.invalidate(props.sessionId);
+				}
+			}
 			const h = React.createElement;
 			const isScript = sessionMode === "script";
 			const hasReadyPanel = candidatePanelState !== null && candidatePanelState.sessionId === props.sessionId && candidatePanelState.messageId === props.messageId && candidatePanelState.phase === "ready";
@@ -18857,7 +18889,8 @@ function bindTavernFontZoom(node, win) {
 						generate(false);
 					}
 				} }, settlementActive ? "后台结算中…" : (activity.busy ? activity.label : ((busy || taskBusy) ? "生成中…" : (hasReadyPanel ? "重新生成候选项" : "生成候选项")))),
-				(canReplayFailed || canRollback) ? h("button", { className: "dsh-tavern-choice-trigger", disabled: frontRunning || (!canReplayFailed && activity.busy && !settlementActive) || regenBusy || replayBusy, title: canReplayFailed ? "移除被中断的回复并原样重放本轮请求（复用模型缓存）" : (settlementActive ? "重新生成将取消当前正文的后台结算" : (activity.busy ? activity.blockReason : "可选择填写意见，再重新生成并替换当前正文")), onClick: canReplayFailed ? replayFailed : openRegeneration }, replayBusy ? "重放中…" : regenBusy ? "重生成中…" : canReplayFailed ? "重新生成本轮" : "重新生成正文") : null
+				(canReplayFailed || canRollback) ? h("button", { className: "dsh-tavern-choice-trigger", disabled: frontRunning || (!canReplayFailed && activity.busy && !settlementActive) || regenBusy || replayBusy, title: canReplayFailed ? "移除被中断的回复并原样重放本轮请求（复用模型缓存）" : (settlementActive ? "重新生成将取消当前正文的后台结算" : (activity.busy ? activity.blockReason : "可选择填写意见，再重新生成并替换当前正文")), onClick: canReplayFailed ? replayFailed : openRegeneration }, replayBusy ? "重放中…" : regenBusy ? "重生成中…" : canReplayFailed ? "重新生成本轮" : "重新生成正文") : null,
+				canReplayFailed ? h("button", { className: "dsh-tavern-choice-trigger dsh-tavern-withdraw-failed", disabled: frontRunning || replayBusy || withdrawBusy, title: "清除这一轮：恢复到这一轮开始前，此前的剧情和变量不变，原输入放回输入框", onClick: withdrawFailed }, withdrawBusy ? "撤回中…" : "撤回这条输入") : null
 			);
 		}
 
@@ -19465,16 +19498,8 @@ function bindTavernFontZoom(node, win) {
                     },
                     staleTurns: staleTurns, filteredStreak: filteredStreak, canRewind: canRewind,
                     onWithdraw: replayTurn === null ? undefined : async function () {
-                        try {
-                            const result = await clearFailedTail();
-                            const text = String(result.view && result.view.clearedInput || "");
-                            if (text.trim() !== "") {
-                                const current = String(draftRef.current || "");
-                                // Never glue the old input onto a new one: sent together, the reply acts out both.
-                                if (current.trim() === "" || current === text) props.inputActions.setDraft(text);
-                                else if (await askTavernConfirm("输入框里已有新的内容。要用撤回的原输入替换它吗？\n\n原输入：" + text, { confirmText: "替换", cancelText: "保留新内容" })) props.inputActions.setDraft(text);
-                            }
-                        } catch (error) { tavernErrorHub.report("撤回这条输入", error); }
+                        try { await withdrawFailedTavernTurn(props.sessionId, props.inputActions, draftRef.current); }
+                        catch (error) { tavernErrorHub.report("撤回这条输入", error); }
                         finally { refreshAfterRecovery(); }
                     },
                     onRewind: replayTurn === null || !canRewind ? undefined : async function () {

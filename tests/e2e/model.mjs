@@ -86,6 +86,12 @@ export function apply(ctx) {
         yield { type: 'finish', reason: { kind: 'stop' } }
         return
       }
+      // Ordinary provider failure (not moderation): the round fails before any text.
+      if (!tools.has('mvu_submit_update') && !tools.has('candidate_submit_choices') && !tools.has('posture_submit')
+        && latestInput.includes('E2E_PROVIDER_ERROR')) {
+        yield { type: 'finish', reason: { kind: 'error', failure: { message: '503 Service Unavailable', code: 'PI_AI_ERROR' } } }
+        return
+      }
       // Mid-stream filter: part of the body already streamed, then the provider cuts it off.
       if (!tools.has('mvu_submit_update') && !tools.has('candidate_submit_choices') && !tools.has('posture_submit')
         && latestInput.includes('E2E_FILTER_MIDSTREAM')) {
