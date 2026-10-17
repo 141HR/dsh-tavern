@@ -158,7 +158,7 @@
 					cardBatch.checkbox(item),
 					h("button", { className: "dsh-tavern-library-card" + (item.hasImage ? " with-image" : "") + (cardBatch.managing && cardBatch.isSelected(item.path) ? " selected" : ""), disabled: busy, onClick: function () { if (cardBatch.managing) cardBatch.toggle(item.path); else loadCard(item.path); } }, h(TavernCardListContent, { card: item, detail: item.path.split("/").pop(), extra: item.script ? "已绑定剧本：" + item.script.title : "" })),
 					!cardBatch.managing ? organization.rowMenu(item) : null,
-					!cardBatch.managing ? mentionButton(item) : null
+					!cardBatch.managing && mentionButton ? mentionButton(item) : null
 				); }); } }) : h("div", { className: "dsh-tavern-empty" }, cards.length ? "没有匹配的人物卡" : "还没有人物卡"), organization.addCardsFooter() )
 			);
 		}
