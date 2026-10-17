@@ -1115,7 +1115,12 @@ export function createTavernPluginApi(deps) {
       const names = Array.from(settlementTools.values()).sort((a, b) => a.name.localeCompare(b.name))
       return { available: names.filter(entry => !disabled.has(entry.owner)).map(entry => entry.name), unavailable: names.filter(entry => disabled.has(entry.owner)).map(entry => entry.name) }
     },
-    async sections({ gameId, turn }) { return collectSections(settlementSections, { gameId, turn }, '结算说明段落', (await choicesFor(gameId)).disabled) },
+    // Sections see the turn being settled: its text is not readable through getTurn until settlement ends.
+    async sections({ gameId, turn }) {
+      const pending = deps.readPendingTurn ? await deps.readPendingTurn(gameId).catch(() => null) : null
+      const current = pending && pending.turn === turn ? { text: pending.text, textVersion: pending.key } : {}
+      return collectSections(settlementSections, { gameId, turn, ...current }, '结算说明段落', (await choicesFor(gameId)).disabled)
+    },
     /** One settlement run's dispatcher: bounded calls, errors returned to the model, never thrown. */
     calls({ gameId, turn }) {
       let count = 0
