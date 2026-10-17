@@ -27,4 +27,21 @@ export async function mobileSidebarChecks({ page, step, output, report }) {
     assert.ok(Math.abs(middle(layout.close) - middle(layout.title)) <= 2, '关闭按钮应与标签标题对齐')
     report.mobileSidebar = true
   })
+  // The right column used to close the left drawer as a side effect; with it staying shut,
+  // starting a game from the drawer must close the drawer itself.
+  await step('手机宽度下从左侧栏开局后，左侧栏自动收起', async () => {
+    const picker = page.getByRole('button', { name: /选择人物卡.*新开游玩/ }).filter({ visible: true })
+    await page.locator('[data-dockkit-tab-close]').filter({ visible: true }).first().click()
+    await page.waitForTimeout(500)
+    await page.locator('[data-mobile-nav="toggle"]').filter({ visible: true }).first().click()
+    await picker.first().waitFor()
+    await page.screenshot({ path: join(output, 'mobile-drawer.png') })
+    await picker.first().click()
+    await page.getByText('E2E 奖励验收', { exact: true }).filter({ visible: true }).first().click()
+    await page.getByRole('button', { name: '开始新游戏', exact: true }).click()
+    await page.getByRole('textbox', { name: /发消息|Message/ }).filter({ visible: true }).first().waitFor()
+    await page.waitForTimeout(1000)
+    await page.screenshot({ path: join(output, 'mobile-started.png') })
+    assert.equal(await picker.count(), 0, '开局后左侧栏应收起')
+  })
 }

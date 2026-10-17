@@ -14269,9 +14269,13 @@ function bindTavernFontZoom(node, win) {
 				{ name: "sidebar.brand.mark", priority: -1 },
 				function (props) { const size = (props && props.size) || 24; return React.createElement("span", { className: "dsh-tavern-logo", "aria-hidden": "true", style: { width: size + 4, height: size + 4 } }); }
 			)), "dsh-tavern: sidebar brand mark");
+			// Whether the left drawer is open on narrow layouts, as of the last render. Opening the right
+			// column used to close it as a side effect; now that it stays shut (#213), close the drawer here.
+			let sidebarWide = false;
+			function closeNarrowSidebar() { if (sidebarWide) { sidebarWide = false; ctx.layout.toggleSidebar(); } }
 			ctx.effect(() => slots.inject("sidebar.workspaces", () => slots.register(
 				{ name: "sidebar.workspaces", priority: -1 },
-				function (props) { return React.createElement(TavernSidebar, Object.assign({}, props, {
+				function (props) { sidebarWide = Boolean(props.wide); return React.createElement(TavernSidebar, Object.assign({}, props, {
 					collapsed: !props.wide,
 					embedded: true,
 					sessions: ctx.sessions,
@@ -14289,12 +14293,12 @@ function bindTavernFontZoom(node, win) {
 					archiveSession: function (sessionId) { return ctx.workspaces.archiveSession(sessionId); },
 					toggleSidebar: function () { if (props.wide) ctx.layout.toggleSidebar(); else props.expandSidebar(); },
 					// Entering a game or the card workspace opens these tabs beside it. On phone-width
-					// layouts the right column covers the story, so leave it closed (#213).
-					openConversationSettingsTab: async function (sessionId) { if (narrowLayout()) return; await openTavernSidebarTab(ctx, { type: "dsh-tavern:conversation-settings" }, { sessionId: sessionId }); await openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId: sessionId }); },
-					openCardLibraryTab: function (sessionId) { if (!narrowLayout()) return openTavernSidebarTab(ctx, { type: "dsh-tavern:cards", meta: null }, { sessionId: sessionId }); },
-					openPresetLibraryTab: function (sessionId) { if (!narrowLayout()) return openTavernSidebarTab(ctx, { type: "dsh-tavern:presets" }, { sessionId: sessionId }); },
-					openWorldBookLibraryTab: function (sessionId) { if (!narrowLayout()) return openTavernSidebarTab(ctx, { type: "dsh-tavern:worldbooks" }, { sessionId: sessionId }); },
-					openResourcesTab: function (sessionId) { if (!narrowLayout()) return openTavernSidebarTab(ctx, { type: "dsh-tavern:resources" }, { sessionId: sessionId }); },
+					// layouts the right column covers the story, so leave it closed and show the story (#213).
+					openConversationSettingsTab: async function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); await openTavernSidebarTab(ctx, { type: "dsh-tavern:conversation-settings" }, { sessionId: sessionId }); await openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId: sessionId }); },
+					openCardLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:cards", meta: null }, { sessionId: sessionId }); },
+					openPresetLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:presets" }, { sessionId: sessionId }); },
+					openWorldBookLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:worldbooks" }, { sessionId: sessionId }); },
+					openResourcesTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:resources" }, { sessionId: sessionId }); },
 					appendMention: input.appendMention,
 					injectTaskPrompt: input.injectTaskPrompt,
 					cleanWorkspaceDraft: input.cleanWorkspaceDraft

@@ -19,6 +19,13 @@ test('只列出上一轮结算后变化的变量及最新值；列表整体给�
   assert.equal(lastRoundVariableChanges({ ...chat([message(before), message(after)]), mvu: { enabled: false } }), null)
 })
 
+test('上一轮删掉的变量也列出，标为已删除', () => {
+  const text = lastRoundVariableChanges(chat([message({ 背包: { 钥匙: 1, 地图: 1 }, 状态: '中毒' }), message({ 背包: { 地图: 1 } })]))
+  assert.match(text, /\/背包\/钥匙 = （已删除）/)
+  assert.match(text, /\/状态 = （已删除）/)
+  assert.doesNotMatch(text, /地图/)
+})
+
 test('每轮第一步追加一次，作为插件上下文进入历史', () => {
   const current = chat([message({ hp: 10 }), message({ hp: 9 })])
   const decision = { kind: 'enter', messages: [{ role: 'user', content: [{ type: 'text', text: '继续' }], source: { kind: 'user' } }] }
