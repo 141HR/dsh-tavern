@@ -2430,6 +2430,9 @@ export async function apply(ctx) {
   const BACKGROUND_TOOLS = [...WORLD_BOOK_FILTER_TOOLS, POSTURE_SUBMIT_TOOL, CHARACTER_DESIGN_READ_TOOL, CHARACTER_DESIGN_SAVE_TOOL, CHARACTER_DESIGN_REUSE_TOOL, MVU_SUBMIT_UPDATE_TOOL, CANDIDATE_SUBMIT_TOOL, SCRIPT_READ_TOOL, SCRIPT_POINT_TOOL, LEDGER_SUBMIT_TOOL]
   const backgroundAgentRunner = createBackgroundAgentRunner({
     retirement: backgroundRetirement,
+    // The browser's session list keeps a disposed subagent as an idle row until the list is
+    // reloaded; tell the game's page so its header count drops the retired worker at once.
+    onRetired: (_id, parentId) => sessionSignals.publish(parentId, { kind: 'subagents', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) }),
     systemAppend: () => runtimePrompt('system-append'),
     imageSystemPrompt: () => runtimePrompt('scene-image-system'),
     resolveModelSelection: async input => backgroundModelSelection(await backgroundConfigForSession(input.sessionId)) || input.selection,
