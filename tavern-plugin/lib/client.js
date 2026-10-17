@@ -14220,6 +14220,14 @@ function bindTavernFontZoom(node, win) {
 		// (after the first turn, when the sidebar remounts), and reopening then would cover the tab the
 		// player brought forward, such as the stage.
 		let tavernSettingsTabsShownFor = "";
+		// A game whose card brings its own stage (a DSH card's plugin) opens on that stage.
+		async function tavernCardStageFor(sessionId) {
+			try {
+				await tavernCardPluginScopes.load();
+				const scopes = tavernCardPluginScopes.get();
+				return tavernUiExtensions.stageViews().some(function (entry) { return scopes[entry.owner] && tavernPluginAllowed(entry.owner, sessionId); });
+			} catch (_) { return false; }
+		}
 		// Hosts that open a tab without expanding a collapsed right column still show the panel.
 		function expandTavernRightColumn(ctx) {
 			try {
@@ -15474,7 +15482,7 @@ function bindTavernFontZoom(node, win) {
 					toggleSidebar: function () { if (props.wide) ctx.layout.toggleSidebar(); else props.expandSidebar(); },
 					// Entering a game or the card workspace opens these tabs beside it. On phone-width
 					// layouts the right column covers the story, so leave it closed and show the story (#213).
-					openConversationSettingsTab: async function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); if (tavernSettingsTabsShownFor === sessionId) return; tavernSettingsTabsShownFor = sessionId; if (!await tavernAutoOpenStatus.read()) return; await openTavernSidebarTab(ctx, { type: "dsh-tavern:conversation-settings" }, { sessionId: sessionId }); await openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId: sessionId }); expandTavernRightColumn(ctx); },
+					openConversationSettingsTab: async function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); if (tavernSettingsTabsShownFor === sessionId) return; tavernSettingsTabsShownFor = sessionId; if (!await tavernAutoOpenStatus.read()) return; await openTavernSidebarTab(ctx, { type: "dsh-tavern:conversation-settings" }, { sessionId: sessionId }); await openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId: sessionId }); if (await tavernCardStageFor(sessionId)) await openTavernSidebarTab(ctx, { type: "dsh-tavern:stage" }, { sessionId: sessionId }); expandTavernRightColumn(ctx); },
 					openCardLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:cards", meta: null }, { sessionId: sessionId }); },
 					openPresetLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:presets" }, { sessionId: sessionId }); },
 					openWorldBookLibraryTab: function (sessionId) { if (narrowLayout()) return closeNarrowSidebar(); return openTavernSidebarTab(ctx, { type: "dsh-tavern:worldbooks" }, { sessionId: sessionId }); },
