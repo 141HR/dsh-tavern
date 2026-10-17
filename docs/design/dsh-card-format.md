@@ -143,14 +143,53 @@ await ctx.tavern.setCastVoice({ gameId, name, provider, voice })
 
 ## 验证用例：大肥鱼
 
-Galgame 分支的示例卡「大肥鱼」（卡包约 262 MB：三套服装、情绪差分、分层立绘、三个 Live2D 模型、两套舞台皮肤，绑定中国通用背景、通用 BGM、通用音效三个素材包）。改造成 `.dshcard` 用来检验格式是否够用：
+Galgame 分支的示例卡「大肥鱼」（`dafeiyu.card-bundle.zip`，274.7 MB，SHA-256 与发行清单一致）已下载拆解，并用脚本试改成 `.dshcard`。
 
-- 卡文本 → `card.json`；封面 → `assets/icon`；主服装的情绪差分 → `assets/emotion`。
-- 多套服装、分层立绘、Live2D、皮肤 → `dsh/assets/plugin.<galgame 插件>/`。
-- 三个通用素材包 → `packs`（附带或给下载地址）。
-- 导演、舞台、音频 → 一个随卡插件（或一个全局的 Galgame 插件 + 卡里只放素材和配置，这两种组织方式都应该能表达）。
+### 它原来的结构
 
-改造时发现格式放不下的东西，回来补这份文档。
+分支已经有一套自己的卡包格式 `dsh-tavern-card-bundle`，和本文的设计很接近：
+
+```
+card/card.json                CCv3，extensions.dsh_tavern 里有素材包绑定、开场画面、舞台皮肤
+card/cover.png
+dsh-tavern-card-bundle.json   format、schemaVersion、cover、dependencies（每个素材包的 id + contentHash）、files
+packs/<包 id>/manifest.json   format: "dsh-asset-pack"
+packs/<包 id>/media/<sha256>.<ext>   按内容寻址的文件
+packs/<包 id>/figures/  sprites/  bundles/  credits/
+```
+
+四个素材包：大肥鱼本体（171 MB）、中国通用背景（43 MB，197 个背景）、通用 BGM（55 MB）、通用音效（4.7 MB）。
+
+素材包里的数据模型比 Tavern 的角色素材丰富得多：
+- **人物 × 服装 × 情绪**：3 套服装，每套 14 种情绪；情绪是开放集合（`eating`、`singing`、`crashed`、`drooling` 不在 ST 的 28 种里）。
+- **分层立绘**：带嘴型帧（a/e/i/o/u/闭）和眨眼图层，供口型同步。
+- **Live2D 模型**：每套服装一个，情绪对应表情和动作。
+- **背景**：有日夜变体。
+- **给模型看的说明**：背景、人物都带检索关键词、`directorNote`（给导演的用法说明）、`generationGuidance`（生图用的情绪描述）。
+- **署名与许可**：每个包有 `credits/`（CREDITS、LICENSE、图片来源）。
+
+### 试改结果
+
+脚本（不进仓库）把它改成了：
+- `card.json` 放到根目录，补上 CCv3 `assets`：封面作为 `icon`，默认服装（女仆装）的 14 张情绪头像作为 `emotion`；
+- `dsh.json` 写卡的标识、版本和 4 个素材包（id、format、contentHash、署名文件）；
+- `packs/` 原样放入。
+
+得到 `dafeiyu.dshcard`（288 MB）和去掉素材包的 `dafeiyu.charx`（16 MB）。用现在的导入代码试：
+- **CHARX 版能导入**：14 种情绪认出 9 种当立绘，Tavern 自带的舞台和对话头像直接可用；`crashed`、`drooling`、`eating`、`singing` 没有对应，原样保留。试的过程中发现 `crying` 抢在 `sad` 前面占了"难过"，已修复：按名字贴近程度排序。
+- **`.dshcard` 导入失败**：现在的 zip 读取有 50 MB 上限，并且要整包读进内存。这印证了实施步骤 1、3 必须先做。
+
+### 对格式的结论
+
+1. **素材包直接采用分支的 `dsh-asset-pack` 结构**，不另造：按内容寻址、清单带每个文件的摘要，正是存储层要的。`.dshcard` 的 `packs/<id>/` 原样放它。
+2. **Tavern 不解读素材包的内容**，只认四样：`format`、文件与摘要、署名许可、包 id。服装、分层立绘、Live2D、日夜变体、导演说明属于声明这个 `format` 的插件（这里是 Galgame 插件）。Tavern 自己的角色素材保持简单（头像、28 种情绪立绘、背景、声音），保证不装插件时也能用。
+3. **同一张卡分三级可用**：
+   - 在 ST、RisuAI 里是一张普通卡（CHARX 部分）；
+   - 在 Tavern 里不装插件，有头像、立绘、舞台；
+   - 装上 Galgame 插件，有服装、Live2D、导演、音乐。
+4. **署名许可是格式的一部分**：`dsh.json` 的每个包列出署名文件，导入确认界面显示，导出时必须带上。
+5. **服装要不要进 Tavern 的角色素材**，先不进；等第二个需要服装的插件出现再说。
+6. 分支的 `dsh-tavern-card-bundle.json` 可以直接转换成 `dsh.json`（`dependencies` 对应 `packs`），导入时两种都认，这样分支已经发出去的卡包不用重做。
 
 ## 实施步骤
 
@@ -158,7 +197,7 @@ Galgame 分支的示例卡「大肥鱼」（卡包约 262 MB：三套服装、�
 
 1. **存储层**：全局内容寻址仓库、按卡清单、Range 读取、流式上传、容量与清理；`cast-assets` 迁移进来。行为不变。
 2. **插件写素材的接口**：`putCardAsset` 等；文档与示例。
-3. **`.dshcard` 读写**：ZIP64、流式解压；`dsh.json` 校验；导入（不含插件）与三种导出；共用素材包去重与下载确认。
+3. **`.dshcard` 读写**：ZIP64、流式解压；`dsh.json` 校验；导入（不含插件）与三种导出；共用素材包去重与下载确认；兼容读取分支的 `dsh-tavern-card-bundle.json`。
 4. **随卡插件**：加载、按卡限制、确认流程、更新与卸载。
 5. **三层脚本的通道与沙箱 DSH 能力**。
 6. **大肥鱼改造**：作为验收用例和给卡作者的示范。
