@@ -29,7 +29,9 @@ export async function presetSwitch({ page, step, savedChat, inspectRound, output
       const switched = await savedChat()
       assert.equal(switched.id, identity.id)
       assert.equal(switched.sessionId, identity.sessionId)
-      assert.deepEqual(switched.messages, before.messages, '切换预设不能改动历史正文、变量或结算回执')
+      // The status frame records its display receipt whenever it renders; that is not story state.
+      const story = messages => messages.map(({ displayRuntime: _shown, ...message }) => message)
+      assert.deepEqual(story(switched.messages), story(before.messages), '切换预设不能改动历史正文、变量或结算回执')
       assert.equal(switched.runtimePresetSnapshot?.presetPath || '', path)
       const composer = page.getByRole('textbox', { name: /发消息|Message/ })
       await composer.fill(`E2E 预设验收 ${gold}`)
