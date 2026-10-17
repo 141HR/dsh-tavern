@@ -63,7 +63,8 @@ window.__ModuleLoader__.load({
       const portrait = !standing && figure && (figure.avatars[emotion] || figure.avatars[figure.defaultEmotion])
       const figureStyle = { position: 'absolute', left: '50%', transition: 'transform .3s', filter: beat && beat.kind === 'line' && !speaking ? 'brightness(.75)' : 'none' }
       // The scene on top, the text box under it: the box never covers the figure, and the figure keeps its feet on the floor.
-      return h('div', { onClick: advance, style: { display: 'flex', flexDirection: 'column', height: fullscreen ? '100%' : 440, minHeight: 300, overflow: 'hidden', borderRadius: fullscreen ? 0 : 8, cursor: 'pointer', color: '#fff', background: '#141a26' } },
+      // In full screen Tavern's input bar takes the bottom 88px after the last line.
+      return h('div', { onClick: advance, style: { display: 'flex', flexDirection: 'column', boxSizing: 'border-box', paddingBottom: fullscreen ? 88 : 0, height: fullscreen ? '100%' : 440, minHeight: 300, overflow: 'hidden', borderRadius: fullscreen ? 0 : 8, cursor: 'pointer', color: '#fff', background: '#141a26' } },
         h('div', { style: { position: 'relative', flex: '1 1 auto', minHeight: 0, overflow: 'hidden', background: '#1d2433' } },
           scene && scene.background ? h('img', { src: scene.background.url, alt: '', style: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' } }) : null,
           scene && scene.background ? h('div', { style: { position: 'absolute', top: 10, left: 12, fontSize: 12, padding: '2px 10px', borderRadius: 12, background: 'rgba(0,0,0,.4)' } },
