@@ -1008,7 +1008,11 @@
         function TavernStageAction(props) {
             const owner = props.sessions.subagentAddress(props.sessionId)?.parentSessionId || props.sessionId;
             const mode = useTavernSessionMode(owner);
-            const enabled = useTavernCastEnabled();
+            useTavernUiExtensions();
+            const scopes = useTavernCardPluginScopes();
+            // A card that brings its own stage shows the entry even with 「对话头像」 off.
+            const cardStage = tavernUiExtensions.stageViews().some(function (entry) { return scopes[entry.owner] && tavernPluginAllowed(entry.owner, owner); });
+            const enabled = useTavernCastEnabled() || cardStage;
             if (!enabled || !isPlayMode(mode)) return null;
             return React.createElement("button", { type: "button", className: "dsh-tavern-btn dsh-tavern-header-settings", "aria-label": "舞台", title: "打开舞台", onClick: () => props.open(owner) },
                 React.createElement("svg", { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },

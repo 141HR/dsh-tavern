@@ -2703,7 +2703,8 @@ export async function apply(ctx) {
   const pluginSettlementProgress = createPluginSettlementProgress()
   // Dialogue speakers and emotions, annotated by settlement (docs/design/cast-presentation.md).
   const castPresentation = createCastPresentation({
-    enabled: async () => (await readTavernSettings()).castPresentation === true,
+    // On for every game with the global switch, and for games of a card that brings its own plugins (a DSH card's stage).
+    enabled: async gameId => (await readTavernSettings()).castPresentation === true || (gameId ? await cardHasPlugins(str(gameId)) : false),
     turns: pluginTurns,
     data: pluginData,
     publish: (sessionId, annotation) => {
@@ -2719,6 +2720,10 @@ export async function apply(ctx) {
     const url = file => file ? '/api/dsh-tavern/cast-asset?' + new URLSearchParams({ card: key, file }).toString() : ''
     return manifest.characters.map(character => ({ name: character.name, aliases: character.aliases || [], avatarUrl: url(character.avatar), voices: character.voices || {},
       sprites: Object.fromEntries(Object.entries(character.sprites || {}).map(([emotion, file]) => [emotion, url(file)])) }))
+  }
+  async function cardHasPlugins(sessionId) {
+    const card = await castCardOf(sessionId).catch(() => null)
+    return Boolean(card && ((await castAssets.read(card.path)).plugins || []).some(plugin => plugin.enabled))
   }
   async function castCardOf(sessionId) {
     const header = await chatHeaderForSession(str(sessionId), ['cardPath', 'cardName', 'mode', 'macroState'])
@@ -3615,7 +3620,7 @@ export async function apply(ctx) {
         throw error
       }
       result = { posture: mvuResult.posture }
-    } else if (!backgroundTasksSettings.posture && !await settlementItems.wanted()) {
+    } else if (!backgroundTasksSettings.posture && !await settlementItems.wanted({ gameId: snapshot.sessionId })) {
       result = {}
     } else if (await settleByPlugin()) {
       // A plugin replaced this settlement; its validated result is committed like Tavern's own.

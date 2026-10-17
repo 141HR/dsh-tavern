@@ -11991,17 +11991,22 @@ function bindTavernFontZoom(node, win) {
 		// With no choice made, a plugin view is used: installing one is asking for it.
 		const TAVERN_STAGE_VIEW_KEY = "dsh-tavern-stage-view";
 		const TAVERN_STAGE_BUILTIN = "dsh-tavern:builtin";
+		// A card that brings its own stage (a DSH card's plugin) opens on it; the choice is then kept per card.
 		function useTavernStageView(sessionId) {
 			useTavernUiExtensions();
-			useTavernCardPluginScopes();
-			const [chosen, setChosen] = React.useState(function () { try { return window.localStorage.getItem(TAVERN_STAGE_VIEW_KEY) || ""; } catch (_) { return ""; } });
+			const scopes = useTavernCardPluginScopes();
+			const [, setVersion] = React.useState(0);
 			const views = tavernUiExtensions.stageViews().filter(function (entry) { return tavernPluginAllowed(entry.owner, sessionId); });
-			const view = chosen === TAVERN_STAGE_BUILTIN ? null : views.find(function (entry) { return entry.key === chosen; }) || views[0] || null;
+			const cardView = views.find(function (entry) { return scopes[entry.owner]; }) || null;
+			const storageKey = cardView ? TAVERN_STAGE_VIEW_KEY + ":" + scopes[cardView.owner] : TAVERN_STAGE_VIEW_KEY;
+			let chosen = "";
+			try { chosen = window.localStorage.getItem(storageKey) || ""; } catch (_) {}
+			const view = chosen === TAVERN_STAGE_BUILTIN ? null : views.find(function (entry) { return entry.key === chosen; }) || cardView || views[0] || null;
 			function choose(key) {
-				setChosen(key);
-				try { window.localStorage.setItem(TAVERN_STAGE_VIEW_KEY, key); } catch (_) {}
+				try { window.localStorage.setItem(storageKey, key); } catch (_) {}
+				setVersion(function (value) { return value + 1; });
 			}
-			return { views: views, view: view, choose: choose };
+			return { views: views, view: view, card: Boolean(cardView), choose: choose };
 		}
 
 		function TavernStageViewSwitch(props) {
@@ -12195,8 +12200,8 @@ function bindTavernFontZoom(node, win) {
 
 		function TavernStageTab(props) {
 			const h = React.createElement;
-			const enabled = useTavernCastEnabled();
 			const stage = useTavernCastStage(props.sessionId);
+			const enabled = Boolean(stage.data && stage.data.enabled !== false);
 			const reader = useTavernStageReader(stage.data, true);
 			const [fullscreen, setFullscreen] = React.useState(false);
 			const choice = useTavernStageView(props.sessionId);
@@ -20076,7 +20081,11 @@ function bindTavernFontZoom(node, win) {
         function TavernStageAction(props) {
             const owner = props.sessions.subagentAddress(props.sessionId)?.parentSessionId || props.sessionId;
             const mode = useTavernSessionMode(owner);
-            const enabled = useTavernCastEnabled();
+            useTavernUiExtensions();
+            const scopes = useTavernCardPluginScopes();
+            // A card that brings its own stage shows the entry even with 「对话头像」 off.
+            const cardStage = tavernUiExtensions.stageViews().some(function (entry) { return scopes[entry.owner] && tavernPluginAllowed(entry.owner, owner); });
+            const enabled = useTavernCastEnabled() || cardStage;
             if (!enabled || !isPlayMode(mode)) return null;
             return React.createElement("button", { type: "button", className: "dsh-tavern-btn dsh-tavern-header-settings", "aria-label": "舞台", title: "打开舞台", onClick: () => props.open(owner) },
                 React.createElement("svg", { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },

@@ -194,7 +194,7 @@ test('舞台视图：插件注册后默认用它，拿到舞台数据与当前�
   const stored = new Map()
   const stage = vm.runInNewContext(code + '; ({ useTavernStageView, TavernStageSceneView, TavernStageViewSwitch })', {
     React: { createElement: h, useState: init => [typeof init === 'function' ? init() : init, () => {}] },
-    useTavernUiExtensions() {}, useTavernCardPluginScopes() {}, tavernPluginAllowed: () => true, tavernUiExtensions: ui, tavernPluginBoundary: () => 'Boundary', TavernStageScene: 'Builtin',
+    useTavernUiExtensions() {}, useTavernCardPluginScopes() { return {} }, tavernPluginAllowed: () => true, tavernUiExtensions: ui, tavernPluginBoundary: () => 'Boundary', TavernStageScene: 'Builtin',
     window: { localStorage: { getItem: key => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value) } }
   })
   let choice = stage.useTavernStageView()
