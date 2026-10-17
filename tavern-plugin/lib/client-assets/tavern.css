@@ -2858,12 +2858,14 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
 .dsh-tavern-cast-manager-row button { font-size: 12px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: transparent; color: inherit; cursor: pointer; }
 .dsh-tavern-cast-manager-emotion { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 
-/* Windows 的自绘标题栏在窗口最顶端盖着一条 --dsh-windows-titlebar-height（40px）的拖拽带
-   （[data-windows-titlebar] .frame:before { -webkit-app-region: drag }）。fixed 弹层虽然画在它
-   上面，但按下鼠标仍会被当成“拖动窗口”，click 永远到不了 React——首行按钮（放弃开局 / 折叠设置 /
-   暂时收起）就是这样点了没反应。宿主的全屏弹层都靠 padding-top 让出这条带；这里把面板本身标成
-   no-drag，位置不动，弹层四周的遮罩仍可拖动窗口。 */
-[data-windows-titlebar] :is(.dsh-tavern-card-picker, .dsh-tavern-prompt, .dsh-tavern-group-manager, .dsh-tavern-mobile-import-panel, .dsh-ejs-editor) {
+/* Windows 的自绘标题栏在窗口顶端盖着一条 --dsh-windows-titlebar-height（40px）的拖拽带
+   （[data-windows-titlebar] .frame:before { -webkit-app-region: drag }）。拖拽区域按坐标算，不看层叠：
+   画在这条带上的弹层，按下鼠标仍会被当成“拖动窗口”，click 到不了页面（游戏准备首行的放弃开局 /
+   折叠设置 / 暂时收起点了没反应）。宿主在 macOS 上用 :is(button, [role=dialog], …) { no-drag } 兜底，
+   Windows 没有；这里按同样的思路补上：可交互控件、对话框、浮层一律 no-drag，再加上不带对话框语义的
+   tavern 浮层（游戏准备面板、错误记录、卡内插件的全屏界面）。只标面板，遮罩空白处仍可拖动窗口。 */
+[data-windows-titlebar] :is(button, input, textarea, select, a[href], [role=button], dialog, [popover], [role=dialog],
+  .dsh-tavern-card-picker, .dsh-tavern-error-center, .dsh-tavern-plugin-overlay) {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
