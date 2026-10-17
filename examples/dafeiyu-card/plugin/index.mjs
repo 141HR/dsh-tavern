@@ -12,6 +12,47 @@ const MAX_SCENES = 12
 
 function words(text) { return String(text || '').toLowerCase() }
 
+// The full-body standing picture of one outfit and emotion, as layers on a canvas (pixels of the canvas).
+// The pack's sprite manifest has three shapes: a whole picture (with a stage size), a whole picture
+// drawn without a mouth (the closed mouth goes on top), or parts of a rig picked by a recipe.
+// The first layer covers the whole canvas. Returns null when the outfit has no standing picture for it.
+export function standingPicture(outfit, manifest, emotion, url) {
+  const assets = outfit?.sprite?.assets || {}
+  const media = path => url(assets[path])
+  // Some pictures were never measured; they share the canvas of the outfit's default one.
+  const anatomy = outfit?.sprite?.anatomy?.[emotion] || outfit?.sprite?.anatomy?.[outfit?.defaultEmotion] || {}
+  const frame = { top: anatomy.figureTop ?? 0, feet: anatomy.feet ?? 1, x: anatomy.supportX ?? 0.5 }
+  const render = manifest?.emotions?.[emotion]?.render
+  const legacy = render?.kind === 'whole' ? render.legacy : manifest?.kind === 'layered-static-sprites' ? manifest : null
+  let canvas = null, layers = []
+  if (render?.kind === 'parts') {
+    const rig = manifest.rigs?.[render.rig], recipe = rig?.recipes?.[render.recipe]
+    if (!rig || !recipe) return null
+    canvas = rig.canvas
+    for (const group of rig.drawOrder || []) {
+      const part = rig.parts?.[recipe.selection?.[group]]
+      if (part) layers.push({ url: media(part.src), rect: part.rect })
+    }
+  } else if (legacy) {
+    const entry = legacy.emotions?.[emotion]
+    if (!entry) return null
+    if (entry.stage) {
+      canvas = [entry.stage.width, entry.stage.height]
+      layers.push({ url: media(entry.stage.src), rect: [0, 0, ...canvas] })
+    } else if (entry.src) {
+      canvas = entry.binding?.canvas || null
+      layers.push({ url: media(entry.src), rect: canvas ? [0, 0, ...canvas] : null })
+      const mouth = entry.binding?.mouth, set = mouth && legacy.rig?.mouthSets?.[mouth.set]
+      if (canvas && mouth?.surface === 'mouthless' && set?.frames?.closed) {
+        const scale = mouth.anchor?.scale ?? 1, [w, h] = set.canvas, [px, py] = set.pivot || [0, 0]
+        layers.push({ url: media(set.frames.closed), rect: [mouth.anchor.x - px * w * scale, mouth.anchor.y - py * h * scale, w * scale, h * scale] })
+      }
+    }
+  }
+  if (!layers.length || layers.some(layer => !layer.url)) return null
+  return { canvas, layers, ...frame }
+}
+
 export function apply(ctx) {
   const tavern = ctx.tavern
   const catalogs = new Map()
@@ -22,7 +63,7 @@ export function apply(ctx) {
     const job = (async () => {
       const packs = await tavern.listCardPacks({ gameId })
       const json = async (pack, path) => JSON.parse(Buffer.from((await tavern.readCardPackFile({ gameId, pack: pack.id, path })).data).toString('utf8'))
-      const result = { figure: null, figureBase: '', figureBlobs: {}, scenes: [], music: [], opening: null }
+      const result = { figure: null, figureBase: '', figureBlobs: {}, sprites: {}, scenes: [], music: [], opening: null }
       for (const pack of packs.filter(item => item.format === 'dsh-asset-pack')) {
         const manifest = await json(pack, 'manifest.json')
         const media = hash => hash && manifest.blobs?.[hash] ? pack.baseUrl + encodeURIComponent('media/' + hash + '.' + manifest.blobs[hash].ext) : ''
@@ -30,6 +71,7 @@ export function apply(ctx) {
           if (result.figure) continue
           result.figure = await json(pack, 'figures/' + figureId + '.json')
           result.figureMedia = media
+          for (const [key, path] of Object.entries(manifest.sprites || {})) result.sprites[key] = await json(pack, path).catch(() => null)
         }
         for (const asset of manifest.assets || []) {
           if (asset.enabled === false) continue
@@ -106,7 +148,8 @@ export function apply(ctx) {
       background: scene ? { name: scene.name, url: scene.variants[current.time] || scene.variants[scene.fallback] } : null,
       time: current.time,
       figure: data.figure ? { names: [data.figure.name, ...(data.figure.aliases || [])], outfit: outfit?.label || '', defaultEmotion: outfit?.defaultEmotion || 'calm',
-        avatars: Object.fromEntries(Object.entries(outfit?.avatars || {}).map(([emotion, hash]) => [emotion, data.figureMedia(hash)])) } : null,
+        avatars: Object.fromEntries(Object.entries(outfit?.avatars || {}).map(([emotion, hash]) => [emotion, data.figureMedia(hash)])),
+        standing: Object.fromEntries(Object.keys(outfit?.avatars || {}).map(emotion => [emotion, standingPicture(outfit, data.sprites[outfit.sprite?.manifestKey], emotion, data.figureMedia)]).filter(([, picture]) => picture)) } : null,
       music: track ? { name: track.name, url: track.url } : null
     }
   })
