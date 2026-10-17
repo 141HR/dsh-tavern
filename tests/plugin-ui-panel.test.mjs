@@ -10,7 +10,7 @@ const factory = source.slice(start, source.indexOf('const tavernUiExtensions = c
 function load() {
   const context = {
     React: { createElement: (type, props, ...children) => ({ type, props, children }) },
-    tavernPluginBoundary: () => 'Boundary'
+    tavernPluginBoundary: () => 'Boundary', tavernPluginAllowed: () => true
   }
   return vm.runInNewContext(factory + '; createTavernUiExtensions()', context)
 }
@@ -41,7 +41,7 @@ test('插件面板：注册为当前游戏的侧栏页，卸载时移除；没�
 function loadWith(extra) {
   const context = {
     React: { createElement: (type, props, ...children) => ({ type, props, children }) },
-    tavernPluginBoundary: () => 'Boundary', tavernErrorHub: { report() {} }, ...extra
+    tavernPluginBoundary: () => 'Boundary', tavernPluginAllowed: () => true, tavernErrorHub: { report() {} }, ...extra
   }
   return vm.runInNewContext(factory + '; createTavernUiExtensions()', context)
 }
@@ -177,7 +177,7 @@ test('舞台视图：插件注册后默认用它，拿到舞台数据与当前�
   const stored = new Map()
   const stage = vm.runInNewContext(code + '; ({ useTavernStageView, TavernStageSceneView, TavernStageViewSwitch })', {
     React: { createElement: h, useState: init => [typeof init === 'function' ? init() : init, () => {}] },
-    useTavernUiExtensions() {}, tavernUiExtensions: ui, tavernPluginBoundary: () => 'Boundary', TavernStageScene: 'Builtin',
+    useTavernUiExtensions() {}, useTavernCardPluginScopes() {}, tavernPluginAllowed: () => true, tavernUiExtensions: ui, tavernPluginBoundary: () => 'Boundary', TavernStageScene: 'Builtin',
     window: { localStorage: { getItem: key => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value) } }
   })
   let choice = stage.useTavernStageView()

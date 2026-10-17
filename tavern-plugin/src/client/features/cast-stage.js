@@ -111,10 +111,11 @@
 		// With no choice made, a plugin view is used: installing one is asking for it.
 		const TAVERN_STAGE_VIEW_KEY = "dsh-tavern-stage-view";
 		const TAVERN_STAGE_BUILTIN = "dsh-tavern:builtin";
-		function useTavernStageView() {
+		function useTavernStageView(sessionId) {
 			useTavernUiExtensions();
+			useTavernCardPluginScopes();
 			const [chosen, setChosen] = React.useState(function () { try { return window.localStorage.getItem(TAVERN_STAGE_VIEW_KEY) || ""; } catch (_) { return ""; } });
-			const views = tavernUiExtensions.stageViews();
+			const views = tavernUiExtensions.stageViews().filter(function (entry) { return tavernPluginAllowed(entry.owner, sessionId); });
 			const view = chosen === TAVERN_STAGE_BUILTIN ? null : views.find(function (entry) { return entry.key === chosen; }) || views[0] || null;
 			function choose(key) {
 				setChosen(key);
@@ -318,7 +319,7 @@
 			const stage = useTavernCastStage(props.sessionId);
 			const reader = useTavernStageReader(stage.data, true);
 			const [fullscreen, setFullscreen] = React.useState(false);
-			const choice = useTavernStageView();
+			const choice = useTavernStageView(props.sessionId);
 			const reading = useTavernStageReading();
 			const beat = reader.beats[reader.index];
 			React.useEffect(function () {

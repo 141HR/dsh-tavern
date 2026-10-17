@@ -544,7 +544,7 @@ try {
   })
   if (castScenario) await castStageChecks({ page, step, output, report })
   if (castScenario) await castSpeechChecks({ page, step, output, report })
-  if (castScenario) await castCardFileChecks({ page, step, report })
+  if (castScenario) await castCardFileChecks({ page, step, report, savedChat })
   await step('刷新后确认同一局、正文和状态均保留', async () => {
     await page.reload({ waitUntil: 'domcontentloaded' })
     await inspectScreen()

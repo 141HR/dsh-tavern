@@ -174,6 +174,7 @@ import { createAssetPacks } from './domain/asset-packs.js'
 import { readCardArchive } from './domain/card-archive.js'
 import { openZipFile } from './domain/zip-file.js'
 import { createUploads } from './domain/uploads.js'
+import { createCardPlugins } from './domain/card-plugins.js'
 import { createPostureItem, createSettlementItems, plainSettlementPlan, runPipelineStages } from './domain/background-pipeline.js'
 import { TAVERN_COMPATIBILITY_CAPABILITIES, createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
 import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics, sanitizeModuleFailure, sanitizeMvuLoadDiagnostic, redactMvuLoadError } from './domain/mvu-diagnostics.js'
@@ -1025,6 +1026,7 @@ export async function apply(ctx) {
   // DSH cards (docs/design/dsh-card-format.md): asset packs stored once by content; big files uploaded to disk.
   const assetPacks = createAssetPacks({ root: dataRoot, store: profileData })
   const uploads = createUploads({ root: dataRoot })
+  const cardPlugins = createCardPlugins({ dataRoot, pluginsDir: userPluginPaths(dataRoot).plugins })
   void uploads.sweep().catch(() => {})
   // Voiced dialogue: channels are Tavern's and the plugins' (pluginApi is created later; read lazily).
   const speech = createSpeech({ store: profileData, credentials: () => ctx.get('credentials'), plugins: () => pluginApi.speechProviders() })
@@ -1063,9 +1065,12 @@ export async function apply(ctx) {
       }
       const imported = await storeImportedCard(cardImportFromCard({ card: archive.card, resolve: archive.resolve, name }), { unique: true })
       if (packs.length) await castAssets.bindPacks(imported.path, packs)
+      // The card's plugins are kept aside, unused, until the player turns them on.
+      const plugins = archive.plugins.length ? await cardPlugins.stage(zip, { cardKey: castAssets.keyOf(imported.path), plugins: archive.plugins }) : []
+      if (plugins.length) await castAssets.setPlugins(imported.path, plugins)
       return { ...imported, format: archive.kind, ...(archive.info ? { info: archive.info } : {}),
         ...(packs.length ? { packs: packs.map(({ id, contentHash, title, format, files, reused }) => ({ id, contentHash, title, format, files, reused })) } : {}),
-        ...(archive.plugins.length ? { pluginsSkipped: archive.plugins.map(plugin => plugin.name) } : {}) }
+        ...(plugins.length ? { plugins: plugins.map(({ name, purpose, files, bytes }) => ({ name, purpose, files, bytes, enabled: false })) } : {}) }
     } finally { await zip.close() }
   }
   async function storeImportedCard({ payload, collected }, options = {}) {
@@ -1307,8 +1312,21 @@ export async function apply(ctx) {
       backupPath: restored.backupPath
     }
   }
+  // Turn a card's own plugins on or off (docs/design/dsh-card-format.md): they then load like user plugins, confined to this card.
+  async function setCardPlugins(input, enabled) {
+    const cardPath = normalizeResourcePath(input, 'card')
+    const plugins = (await castAssets.read(cardPath)).plugins || []
+    if (!plugins.length) throw new Error('这张人物卡没有卡内插件')
+    const cardKey = castAssets.keyOf(cardPath)
+    if (enabled) await cardPlugins.enable({ cardKey, cardPath, plugins })
+    else await cardPlugins.disable({ cardKey, plugins })
+    const next = await castAssets.setPlugins(cardPath, plugins.map(plugin => ({ ...plugin, enabled: enabled === true })))
+    return next.plugins
+  }
   async function deleteCard(cardPath) {
+    const plugins = (await castAssets.read(normalizeResourcePath(cardPath, 'card')).catch(() => null))?.plugins || []
     const result = await cardDeletion.remove(cardPath)
+    if (result.deleted && plugins.length) await cardPlugins.remove({ cardKey: castAssets.keyOf(normalizeResourcePath(cardPath, 'card')), plugins }).catch(error => console.warn('dsh-tavern: 删除卡内插件失败', error?.message || error))
     if (result.deleted) await cardOrganization.movePath(normalizeResourcePath(cardPath, 'card'), null)
     return result
   }
@@ -2820,6 +2838,8 @@ export async function apply(ctx) {
     readHistory: readPluginHistory,
     readCast: (sessionId, turn) => castPresentation.annotation(sessionId, turn),
     listCardPacks: sessionId => cardPacksOf(sessionId),
+    cardScope: () => cardPlugins.scope(),
+    cardPathOf: async sessionId => str((await chatHeaderForSession(str(sessionId), ['cardPath']))?.cardPath) || null,
     readCardPackFile: async (sessionId, packId, file) => {
       const pack = (await cardPacksOf(sessionId)).find(item => item.id === packId)
       const found = pack ? await assetPacks.file(pack.id, pack.contentHash, file) : undefined
@@ -4442,6 +4462,9 @@ export async function apply(ctx) {
         finally { await upload.remove() }
       }
       case 'cardPacks': return { packs: await cardPacksOf(args && args.sessionId) }
+      case 'cardPlugins': return { plugins: (await castAssets.read(normalizeResourcePath(args && args.path, 'card'))).plugins || [] }
+      case 'setCardPlugins': return { plugins: await setCardPlugins(args && args.path, args && args.enabled === true) }
+      case 'cardPluginScopes': return { scopes: Object.fromEntries([...await cardPlugins.scope()].map(([name, scope]) => [name, scope.cardPath])) }
       case 'deleteCard': return await deleteCard(args && args.path)
       case 'prepareDeleteChats': return await deleteChats(args && args.chatIds, true)
       case 'deleteChats': return await deleteChats(args && args.chatIds)
