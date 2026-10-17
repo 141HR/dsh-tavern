@@ -77,3 +77,14 @@ export function plainSettlementPlan({ posture }) {
     tools: posture ? [posture.tool] : []
   }
 }
+
+/**
+ * One turn's pipeline: stages run in order, each only when its condition holds.
+ * The settlement job runs the closing stage (onSettled) once these are done and not stopped.
+ */
+export async function runPipelineStages(stages) {
+  for (const stage of stages) {
+    if (typeof stage.when === 'function' && !await stage.when()) continue
+    await stage.run()
+  }
+}

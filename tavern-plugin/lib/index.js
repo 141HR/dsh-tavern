@@ -163,7 +163,7 @@ import { createManualLedger } from './domain/manual-ledger.js'
 import { POSTURE_SUBMIT_TOOL, POSTURE_SUBMIT_TOOL_NAME, lastSubmittedPosture, normalizePostureSubmission } from './domain/posture-submission.js'
 import { createCastPresentation } from './domain/cast-presentation.js'
 import { createCastAssets } from './domain/cast-assets.js'
-import { createPostureItem, createSettlementItems, plainSettlementPlan } from './domain/background-pipeline.js'
+import { createPostureItem, createSettlementItems, plainSettlementPlan, runPipelineStages } from './domain/background-pipeline.js'
 import { TAVERN_COMPATIBILITY_CAPABILITIES, createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
 import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics, sanitizeModuleFailure, sanitizeMvuLoadDiagnostic, redactMvuLoadError } from './domain/mvu-diagnostics.js'
 import { createPlayChatDebugReference, readPlayChatDebugTurn } from './domain/play-chat-debug.js'
@@ -3550,13 +3550,15 @@ export async function apply(ctx) {
     const gameId = str(state?.sessionId)
     const onStart = label => pluginSettlementProgress.begin(gameId, label)
     const activity = state ? backgroundTasks.activity(state) : null
-    if (gameId && activity?.role === 'settlement' && ['pending', 'running'].includes(activity.phase)) {
-      await pluginApi.runSettlementTasks({ gameId, phase: 'before', signal, onStart })
-    }
-    await runSettlement(chatId, signal)
-    if (!gameId || signal?.aborted) return
-    // Tavern's settlement is committed by now: a plugin-task operation keeps the game busy (and stoppable).
-    await pluginApi.runSettlementTasks({ gameId, phase: 'after', signal, onStart, around: work => inPluginTaskOperation(chatId, work) })
+    // The turn's pipeline (docs/design/background-task-pipeline.md): before-tasks, the main settlement, after-tasks.
+    await runPipelineStages([
+      { id: 'before', when: () => Boolean(gameId) && activity?.role === 'settlement' && ['pending', 'running'].includes(activity.phase),
+        run: () => pluginApi.runSettlementTasks({ gameId, phase: 'before', signal, onStart }) },
+      { id: 'settle', run: () => runSettlement(chatId, signal) },
+      // Tavern's settlement is committed by now: a plugin-task operation keeps the game busy (and stoppable).
+      { id: 'after', when: () => Boolean(gameId) && !signal?.aborted,
+        run: () => pluginApi.runSettlementTasks({ gameId, phase: 'after', signal, onStart, around: work => inPluginTaskOperation(chatId, work) }) }
+    ])
   }
   async function inPluginTaskOperation(chatId, work) {
     let taskRun = null

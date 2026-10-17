@@ -19,7 +19,7 @@ import { createMvuSettlementReconciler } from '../tavern-plugin/lib/domain/mvu-s
 import { LEDGER_SUBMIT_TOOL, LEDGER_RULES, ledgerContext, createLedgerSubmission } from '../tavern-plugin/lib/domain/story-ledger.js'
 import { POSTURE_SUBMIT_TOOL, POSTURE_SUBMIT_TOOL_NAME, lastSubmittedPosture, normalizePostureSubmission } from '../tavern-plugin/lib/domain/posture-submission.js'
 import { CHARACTER_DESIGN_READ_TOOL, CHARACTER_DESIGN_SAVE_TOOL } from '../tavern-plugin/lib/domain/character-design-document.js'
-import { createPostureItem, plainSettlementPlan } from '../tavern-plugin/lib/domain/background-pipeline.js'
+import { createPostureItem, plainSettlementPlan, runPipelineStages } from '../tavern-plugin/lib/domain/background-pipeline.js'
 
 const server = await readFile(new URL('../tavern-plugin/lib/index.js', import.meta.url), 'utf8')
 function section(start, end) {
@@ -81,6 +81,7 @@ async function harness({ beginRunning = true, mvu = true } = {}) {
   })
   sandbox.postureItem = createPostureItem({ prompt: () => sandbox.runtimePrompt('posture-settlement'), tool: POSTURE_SUBMIT_TOOL })
   sandbox.plainSettlementPlan = plainSettlementPlan
+  sandbox.runPipelineStages = runPipelineStages
   sandbox.mvuReceiptsOf = createSessionStateView({activity:chat=>tasks.activity(chat),evidence:()=>({})}).receipts
   vm.runInContext(section('  function pendingMvuTarget(', '  async function mvuUpdateRules('), sandbox)
   vm.runInContext(section('  async function runSettlement(', '  const mvuSettlementReconciler'), sandbox)
