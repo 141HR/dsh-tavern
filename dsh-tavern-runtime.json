@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "33bd832122c3d0f5217e2f683e5624a8f20f95ba",
-  "releaseSequence": 657,
+  "revision": "f8618abf9a4df2521e28b09ddcb25ecd0dcfeb9e",
+  "releaseSequence": 660,
   "version": "2.7.0",
   "files": [
     {
@@ -451,8 +451,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "8e4472f12ecf006eec06369d1df3a94f5038df9a6783e43bd1dc65cbd1f9db97",
-      "size": 1832545
+      "sha256": "b6957d3117f1a781d9b9a105596d5418a96b9561c77f1b9602ef8f09e412eadc",
+      "size": 1832489
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -791,8 +791,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-fork-targets.js",
-      "sha256": "c38c0456daccd20ca0660aeeec48595fbdb9a84b90e6f9ccf73e5998f9b43f71",
-      "size": 2344
+      "sha256": "2dbc661a63d55ca4ef38c08fc2427171adf9122eeba7c3374ed84bab49640e84",
+      "size": 2536
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-fork.js",
@@ -963,6 +963,11 @@
       "path": "tavern-plugin/lib/domain/game-save.js",
       "sha256": "777ddc6e77721dd5f2628be1233e4ac21df71c7c43ca3186ac256756ea2be8af",
       "size": 9426
+    },
+    {
+      "path": "tavern-plugin/lib/domain/game-titles.js",
+      "sha256": "e4763625cae05ff8f83d4bce0dfa74c6f4b0fa131c522a1024af8bd4bc844331",
+      "size": 2131
     },
     {
       "path": "tavern-plugin/lib/domain/gameplay-settled-turn.js",
@@ -2186,8 +2191,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "5641d05ed4b2e077aff10192243070989910791e28f229f916e274b1f77bf475",
-      "size": 350728
+      "sha256": "ce7d051704402fb6fbcb16ff6d60ecf73eb979e8940001d42e1e844c39e2eebb",
+      "size": 351258
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -4906,8 +4911,8 @@
     },
     {
       "path": "tavern-plugin/src/client/main.js",
-      "sha256": "f5044f7f89ead599e6ebb187aee8484e1ff1b08ef96497215ceb060f415cf1cd",
-      "size": 64832
+      "sha256": "a1fc37ea0808916d31f721bd3554d8e64d7ade3d51f61f352ef9aaf5f5db368f",
+      "size": 64776
     },
     {
       "path": "tavern-plugin/src/client/modules/assistant-visibility.js",
