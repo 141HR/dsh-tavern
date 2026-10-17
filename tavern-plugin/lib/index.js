@@ -1,3 +1,4 @@
+import { createGameSaveResources } from './domain/game-save-resources.js'
 import { createCardEditor } from './domain/card-editor.js'
 import { ensureSessionVariableDirectory } from './domain/session-variable-directory.js'
 import { createCompatibilityTurnCompiler } from './domain/compatibility-turn.js'
@@ -1431,6 +1432,7 @@ export async function apply(ctx) {
     if (!Array.isArray(events) || !events.some(event => event?.type === 'turn/end')) throw new Error('存档包已损坏：缺少模型会话记录')
     if (events.some((event, index) => event?.seq !== index)) throw new Error('存档包已损坏：模型会话记录不连续')
   }
+  const prepareGameSaveResources = createGameSaveResources({ resources: fileResources, cardPreparation })
   async function importGameSave(args) {
     if (typeof args?.fileB64 !== 'string' || !args.fileB64) throw new Error('请选择 .dshsave 存档文件')
     const save = readGameSave(Buffer.from(args.fileB64, 'base64'), { tavernVersion: TAVERN_PACKAGE_VERSION })
@@ -1443,12 +1445,7 @@ export async function apply(ctx) {
     try {
       const chatId = uid('chat'), sessionId = 'session-' + randomUUID()
       // 1. Card: reuse an identical local card; otherwise import the packaged one as a new card.
-      let cardPath = str(save.chat.cardPath), importedCard = ''
-      if (save.card?.payload) {
-        let local = null
-        try { local = await fileResources.originalCardPayload(cardPath) } catch {}
-        if (!local || JSON.stringify(local) !== JSON.stringify(save.card.payload)) cardPath = importedCard = (await importCard(save.card.payload)).path
-      }
+      const { cardPath, importedCard } = await prepareGameSaveResources(save)
       if (save.script && (save.chat.mode || 'story') === 'script' && !await fileResources.scriptForCard(cardPath)) {
         await importScript(cardPath, { name: str(save.script.path).split('/').pop() || '剧本.txt', text: str(save.script.text) })
       }
