@@ -15004,7 +15004,7 @@ function bindTavernFontZoom(node, win) {
                     finally { setBusy(false); }
                 }
                 return h("section", { className: "dsh-tavern-settings-group" },
-                    h("label", { className: "dsh-tavern-settings-row" },
+                    h("label", { className: "dsh-tavern-settings-row dsh-tavern-background-task" },
                         h("span", { className: "dsh-tavern-settings-copy" },
                             h("strong", null, "正文走工具调用"),
                             h("p", { className: "dsh-tavern-settings-desc" }, "让模型通过工具调用提交正文，可缓解 Gemini 等模型在正文中途截断或拒答。需要模型支持工具调用；正文生成完成后一次性显示。")),
