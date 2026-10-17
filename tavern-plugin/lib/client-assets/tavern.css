@@ -2891,3 +2891,5 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
 .dsh-tavern-card-plugins ul { margin: 6px 0; padding-left: 18px; }
 .dsh-tavern-card-plugins li { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
 .dsh-tavern-card-plugins small { opacity: .7; }
+.dsh-tavern-card-stage { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+.dsh-tavern-card-stage .dsh-tavern-settings-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

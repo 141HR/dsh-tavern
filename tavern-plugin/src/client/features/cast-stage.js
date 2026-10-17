@@ -11,7 +11,8 @@
 				try { if (tavernSessionSignals && typeof tavernSessionSignals.subscribe === "function") stop = tavernSessionSignals.subscribe(sessionId, "cast", function () { setVersion(function (value) { return value + 1; }); }); } catch (_) {}
 				const onSettings = function () { setVersion(function (value) { return value + 1; }); };
 				window.addEventListener("dsh-tavern-settings-changed", onSettings);
-				return function () { stop(); window.removeEventListener("dsh-tavern-settings-changed", onSettings); };
+				window.addEventListener("dsh-tavern-card-stage-changed", onSettings);
+				return function () { stop(); window.removeEventListener("dsh-tavern-settings-changed", onSettings); window.removeEventListener("dsh-tavern-card-stage-changed", onSettings); };
 			}, [sessionId]);
 			const refresh = React.useCallback(function () { setVersion(function (value) { return value + 1; }); }, []);
 			React.useEffect(function () {

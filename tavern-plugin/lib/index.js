@@ -1109,6 +1109,7 @@ export async function apply(ctx) {
     }
     const stored = { ...(presetPath ? { presetPath } : {}), ...(defaults.settings ? { settings: defaults.settings } : {}) }
     await castAssets.setStartDefaults(cardPath, Object.keys(stored).length ? stored : null)
+    if (defaults.stage) await castAssets.setStage(cardPath, true)
     return stored
   }
   async function storeImportedCard({ payload, collected }, options = {}) {
@@ -2726,8 +2727,8 @@ export async function apply(ctx) {
   const pluginSettlementProgress = createPluginSettlementProgress()
   // Dialogue speakers and emotions, annotated by settlement (docs/design/cast-presentation.md).
   const castPresentation = createCastPresentation({
-    // On for every game with the global switch, and for games of a card that brings its own plugins (a DSH card's stage).
-    enabled: async gameId => (await readTavernSettings()).castPresentation === true || (gameId ? await cardHasPlugins(str(gameId)) : false),
+    // On for every game with the global switch, and for games of a card whose stage is on (the stage reads the annotations).
+    enabled: async gameId => (await readTavernSettings()).castPresentation === true || (gameId ? await cardStageOn(str(gameId)) : false),
     turns: pluginTurns,
     data: pluginData,
     publish: (sessionId, annotation) => {
@@ -2744,9 +2745,9 @@ export async function apply(ctx) {
     return manifest.characters.map(character => ({ name: character.name, aliases: character.aliases || [], avatarUrl: url(character.avatar), voices: character.voices || {},
       sprites: Object.fromEntries(Object.entries(character.sprites || {}).map(([emotion, file]) => [emotion, url(file)])) }))
   }
-  async function cardHasPlugins(sessionId) {
+  async function cardStageOn(sessionId) {
     const card = await castCardOf(sessionId).catch(() => null)
-    return Boolean(card && ((await castAssets.read(card.path)).plugins || []).some(plugin => plugin.enabled))
+    return Boolean(card && (await castAssets.read(card.path)).stage === true)
   }
   async function castCardOf(sessionId) {
     const header = await chatHeaderForSession(str(sessionId), ['cardPath', 'cardName', 'mode', 'macroState'])
@@ -2767,7 +2768,8 @@ export async function apply(ctx) {
     }
     const manifest = await castAssets.read(card.path)
     const background = (manifest.backgrounds || [])[0]
-    return { enabled: annotated.enabled, player: card.player, card: { name: card.name, imageUrl: '/api/dsh-tavern/card-image?path=' + encodeURIComponent(card.path) },
+    // The stage is the card's choice: off for ordinary cards, on when the player or the card turned it on.
+    return { enabled: manifest.stage === true, player: card.player, card: { name: card.name, imageUrl: '/api/dsh-tavern/card-image?path=' + encodeURIComponent(card.path) },
       background: background ? '/api/dsh-tavern/cast-asset?' + new URLSearchParams({ card: castAssets.keyOf(card.path), file: background.file }).toString() : '',
       cast: castAssetView(card.path, manifest), turns }
   }
@@ -4527,6 +4529,8 @@ export async function apply(ctx) {
       case 'cardPacks': return { packs: await cardPacksOf(args && args.sessionId) }
       case 'cardPlugins': return { plugins: (await castAssets.read(normalizeResourcePath(args && args.path, 'card'))).plugins || [] }
       case 'setCardPlugins': return { plugins: await setCardPlugins(args && args.path, args && args.enabled === true) }
+      case 'cardStage': return { enabled: (await castAssets.read(normalizeResourcePath(args && args.path, 'card'))).stage === true }
+      case 'setCardStage': return { enabled: (await castAssets.setStage(normalizeResourcePath(args && args.path, 'card'), args && args.enabled === true)).stage === true }
       case 'cardPluginScopes': return { scopes: Object.fromEntries([...await cardPlugins.scope()].map(([name, scope]) => [name, scope.cardPath])) }
       case 'deleteCard': return await deleteCard(args && args.path)
       case 'prepareDeleteChats': return await deleteChats(args && args.chatIds, true)

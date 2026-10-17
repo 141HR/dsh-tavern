@@ -193,4 +193,7 @@ test('开局默认：dsh.json 指向包内预设，只认少数几项设置，�
   const bad = await openZipFile(await zipFile(dir, 'b.dshcard', { 'card.json': '{}', 'dsh.json': JSON.stringify({ ...dsh, defaults: { preset: '../x.json' } }) }))
   await assert.rejects(readCardArchive(bad), /defaults\.preset/)
   await bad.close()
+  const staged = await openZipFile(await zipFile(dir, 'c.dshcard', { 'card.json': '{}', 'dsh.json': JSON.stringify({ ...dsh, defaults: { stage: true } }) }))
+  assert.deepEqual((await readCardArchive(staged)).defaults, { stage: true }, '卡可以要求打开自己的舞台')
+  await staged.close()
 })

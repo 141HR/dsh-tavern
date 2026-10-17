@@ -510,6 +510,9 @@ try {
     await toggle.click()
     await page.getByText('已保存，所有游戏下一轮生效').waitFor()
     assert.equal(await toggle.isChecked(), true)
+    // The stage is per card and off for ordinary cards; this card turns it on.
+    const stage = await page.evaluate(async () => (await fetch('/api/dsh-tavern/setCardStage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: 'cards/e2e.json', enabled: true }) })).json())
+    assert.equal(stage.enabled, true)
     await page.goto(chatUrl)
     await page.getByRole('textbox', { name: /发消息|Message/ }).waitFor()
   })
