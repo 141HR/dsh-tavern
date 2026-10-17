@@ -1,3 +1,4 @@
+import { sceneSaveKeyMap } from './domain/scene-save.js'
 import { createGameSaveSnapshot } from './domain/game-save-snapshot.js'
 import { createGameSaveResources } from './domain/game-save-resources.js'
 import { createCardEditor } from './domain/card-editor.js'
@@ -1465,12 +1466,7 @@ export async function apply(ctx) {
         return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, withRefs(child)]))
       }
       // 3. Scene image keys hash the chat id; map the current branch's keys to the new id.
-      const keyMap = new Map()
-      for (const message of save.chat.messages || []) {
-        if (message?.role !== 'assistant') continue
-        const turn = Number(message.turn || (message.greeting ? 1 : 0))
-        try { keyMap.set(computeSceneTarget(save.chat, turn).key, computeSceneTarget({ ...save.chat, id: chatId }, turn).key) } catch {}
-      }
+      const keyMap = sceneSaveKeyMap([save.chat, ...save.revisions.map(item => item.state)], chatId)
       const rename = text => {
         let out = text.split(sourceChatId).join(chatId).split(sourceSessionId).join(sessionId)
         for (const [from, to] of keyMap) out = out.split(from).join(to)
