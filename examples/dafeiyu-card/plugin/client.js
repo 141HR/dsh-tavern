@@ -23,16 +23,31 @@ window.__ModuleLoader__.load({
       return scene
     }
 
-    // The full-body picture stands on the stage floor, its figure 88% of the stage tall; the text box covers the legs, as in a galgame.
-    const FIGURE = 88
-    function Standing({ picture, alt, speaking, style }) {
-      const { canvas, layers, top, feet, x } = picture
-      const height = FIGURE / Math.max(0.2, feet - top)
-      const box = { ...style, height: height + '%', bottom: -(1 - feet) * height + '%', transform: 'translateX(' + (-x * 100) + '%)' + (speaking ? ' translateY(-4px)' : ''), pointerEvents: 'none' }
-      if (!canvas) return h('div', { style: box }, h('img', { src: layers[0].url, alt, style: { display: 'block', height: '100%' } }))
-      const [width, tall] = canvas
-      return h('div', { style: { ...box, aspectRatio: width + ' / ' + tall } }, layers.map((layer, at) => h('img', { key: at, src: layer.url, alt: at ? '' : alt,
-        style: { position: 'absolute', left: layer.rect[0] / width * 100 + '%', top: layer.rect[1] / tall * 100 + '%', width: layer.rect[2] / width * 100 + '%', height: layer.rect[3] / tall * 100 + '%' } })))
+    // The full-body picture stands on the text box, as tall as the room above it allows.
+    // Its layers are drawn into one canvas at their own pixels: scaled separately, their edges showed as thin lines.
+    const TEXTBOX = { stage: 128, fullscreen: 168 }, IMAGES = new Map()
+    function image(url) {
+      if (!IMAGES.has(url)) IMAGES.set(url, new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = url }))
+      return IMAGES.get(url)
+    }
+    function Standing({ picture, alt, speaking, floor, style }) {
+      const ref = React.useRef(null)
+      const { layers, top, feet, x } = picture
+      React.useEffect(() => {
+        let active = true
+        Promise.all(layers.map(layer => image(layer.url))).then(images => {
+          const canvas = ref.current
+          if (!active || !canvas) return
+          const [width, height] = picture.canvas || [images[0].naturalWidth, images[0].naturalHeight]
+          canvas.width = width; canvas.height = height
+          const context = canvas.getContext('2d')
+          images.forEach((img, at) => { const rect = layers[at].rect || [0, 0, width, height]; context.drawImage(img, Math.round(rect[0]), Math.round(rect[1]), Math.round(rect[2]), Math.round(rect[3])) })
+        }, () => {})
+        return () => { active = false }
+      }, [picture])
+      const span = Math.max(0.2, feet - top), room = '(100% - ' + (floor + 20) + 'px)'
+      return h('canvas', { ref, width: 0, height: 0, role: 'img', 'aria-label': alt, style: { ...style, height: 'calc(' + room + ' / ' + span + ')', bottom: 'calc(' + (floor + 6) + 'px - ' + room + ' * ' + ((1 - feet) / span) + ')',
+        transform: 'translateX(' + (-x * 100) + '%)' + (speaking ? ' translateY(-4px)' : ''), pointerEvents: 'none' } })
     }
 
     function Stage({ ui, gameId, stage, beats, index, beat, fullscreen, advance, footer }) {
@@ -47,14 +62,14 @@ window.__ModuleLoader__.load({
       const standing = figure && figure.standing && (figure.standing[emotion] || figure.standing[figure.defaultEmotion])
       const portrait = !standing && figure && (figure.avatars[emotion] || figure.avatars[figure.defaultEmotion])
       const figureStyle = { position: 'absolute', left: '50%', transition: 'transform .3s', filter: beat && beat.kind === 'line' && !speaking ? 'brightness(.75)' : 'none' }
-      return h('div', { onClick: advance, style: { position: 'relative', height: fullscreen ? '100%' : 360, minHeight: 260, overflow: 'hidden', borderRadius: fullscreen ? 0 : 8, cursor: 'pointer', color: '#fff', background: '#1d2433' } },
+      return h('div', { onClick: advance, style: { position: 'relative', height: fullscreen ? '100%' : 440, minHeight: 300, overflow: 'hidden', borderRadius: fullscreen ? 0 : 8, cursor: 'pointer', color: '#fff', background: '#1d2433' } },
         scene && scene.background ? h('img', { src: scene.background.url, alt: '', style: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' } }) : null,
         scene && scene.background ? h('div', { style: { position: 'absolute', top: 10, left: 12, fontSize: 12, padding: '2px 10px', borderRadius: 12, background: 'rgba(0,0,0,.4)' } },
           scene.background.name + (scene.music ? ' · ♪ ' + scene.music.name : '')) : null,
-        standing ? h(Standing, { picture: standing, alt: figure.names[0], speaking, style: figureStyle }) : null,
+        standing ? h(Standing, { picture: standing, alt: figure.names[0], speaking, floor: 12 + (fullscreen ? TEXTBOX.fullscreen : TEXTBOX.stage), style: figureStyle }) : null,
         portrait ? h('img', { src: portrait, alt: figure.names[0], style: { ...figureStyle, bottom: 96, transform: 'translateX(-50%)' + (speaking ? ' translateY(-4px)' : ''), maxHeight: '62%', maxWidth: '80%', objectFit: 'contain' } }) : null,
         // A fixed-height box: the pager stays put however long the line is; a long line scrolls inside.
-        h('div', { style: { position: 'absolute', left: 12, right: 12, bottom: 12, height: fullscreen ? 168 : 128, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', padding: '10px 14px', borderRadius: 8, background: 'rgba(10,20,40,.72)' } },
+        h('div', { style: { position: 'absolute', left: 12, right: 12, bottom: 12, height: fullscreen ? TEXTBOX.fullscreen : TEXTBOX.stage, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', padding: '10px 14px', borderRadius: 8, background: 'rgba(10,20,40,.72)' } },
           beat && beat.kind === 'line' ? h('div', { style: { flex: 'none', fontWeight: 600, marginBottom: 4, color: speaking ? '#8fb7ff' : '#fff' } }, beat.speaker) : null,
           h('div', { style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', lineHeight: 1.6, fontStyle: beat && beat.kind === 'narration' ? 'italic' : 'normal' } }, beat ? beat.text : '还没有可以演出的正文'),
           footer))
