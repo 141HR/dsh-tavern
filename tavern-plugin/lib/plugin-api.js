@@ -143,8 +143,30 @@ export function createTavernPluginApi(deps) {
   async function choicesFor(gameId) {
     const game = gameId ? await deps.resolveGame(String(gameId)).catch(() => null) : null
     const settings = game && deps.data?.readSettings ? await deps.data.readSettings(game.chatId).catch(() => null) : null
-    return { game, disabled: new Set(settings?.disabled || []), replacements: settings?.replacements || {},
+    const disabled = new Set(settings?.disabled || [])
+    // A card's own plugins exist only in that card's games.
+    const elsewhere = await scopedElsewhere(game)
+    for (const name of elsewhere) disabled.add(name)
+    return { game, disabled, elsewhere, replacements: settings?.replacements || {},
       disabledTasks: new Set(settings?.disabledTasks || []), taskOrder: settings?.taskOrder || [] }
+  }
+
+  /** Card plugins (card-plugins.js) that belong to another card than this game's. */
+  async function scopedElsewhere(game) {
+    const scopes = deps.cardScope ? await deps.cardScope().catch(() => null) : null
+    if (!scopes?.size) return new Set()
+    const cardPath = game && deps.cardPathOf ? await deps.cardPathOf(game.sessionId).catch(() => null) : null
+    return new Set([...scopes].filter(([, scope]) => scope.cardPath !== cardPath).map(([name]) => name))
+  }
+
+  /** A card plugin's calls reach only its own card and that card's games. */
+  async function guardScope(owner, input) {
+    const scopes = deps.cardScope ? await deps.cardScope().catch(() => null) : null
+    const scope = scopes?.get(owner)
+    if (!scope) return
+    const refuse = () => { throw Object.assign(new Error('卡内插件 ' + owner + ' 只能用于它所在的人物卡'), { code: 'TAVERN_PLUGIN_SCOPE' }) }
+    if (input.card !== undefined && String(input.card) !== scope.cardPath) refuse()
+    if (input.gameId !== undefined && (typeof input.gameId !== 'string' || await deps.cardPathOf?.(input.gameId).catch(() => null) !== scope.cardPath)) refuse()
   }
 
   function dispatch(handlers, payload, label, disabled) {
@@ -400,7 +422,8 @@ export function createTavernPluginApi(deps) {
 
     // Every character card in the library, read-only. `id` is what card-taking methods accept.
     async listCards() {
-      return (await deps.listCards()).map(card => ({
+      const scope = deps.cardScope ? (await deps.cardScope().catch(() => null))?.get(ownerOf(this)) : null
+      return (await deps.listCards()).filter(card => !scope || card.path === scope.cardPath).map(card => ({
         id: card.path, name: card.name, fileName: String(card.path).split('/').pop(),
         imageUrl: card.hasImage ? '/api/dsh-tavern/card-image?path=' + encodeURIComponent(card.path) : '',
         script: card.script ? { title: card.script.title } : null,
@@ -661,6 +684,16 @@ export function createTavernPluginApi(deps) {
       sectionName(name)
       if (typeof entries !== 'function') throw new TypeError('entries 必须是函数')
       return register.call(this, worldbookPools, owner + '\u0000' + name, { owner, name, entries }, 'tavern.worldbookEntries()', '世界书条目来源 ' + name + ' 已注册')
+    }
+  }
+  // Every call naming a game or a card passes the card-plugin scope check first.
+  for (const key of Object.keys(service)) {
+    const method = service[key]
+    if (typeof method !== 'function' || method.constructor.name !== 'AsyncFunction') continue
+    service[key] = async function (...args) {
+      const input = args[0]
+      if (input && typeof input === 'object' && (input.gameId !== undefined || input.card !== undefined)) await guardScope(ownerOf(this), input)
+      return await method.apply(this, args)
     }
   }
   Object.defineProperty(service, TRACKER, { value: { associate: 'tavern', property: 'ctx' } })
@@ -952,7 +985,7 @@ export function createTavernPluginApi(deps) {
       stages[stage] = { label: REPLACEABLE_STAGES[stage], candidates, chosen: Object.hasOwn(chosen, stage) ? chosen[stage] : null, active: active ? active.owner : '',
         conflict: !Object.hasOwn(chosen, stage) && candidates.filter(owner => !disabled.has(owner)).length > 1 }
     }
-    const plugins = Array.from(uses.keys()).sort().map(name => ({ name, enabled: !disabled.has(name), uses: uses.get(name) }))
+    const plugins = Array.from(uses.keys()).filter(name => !choices.elsewhere.has(name)).sort().map(name => ({ name, enabled: !disabled.has(name), uses: uses.get(name) }))
     const tasks = {
       settlement: Object.keys(TASK_PHASES).flatMap(phase => orderedTasks(phase, choices).map(entry => ({ key: taskKey(entry.owner, entry.name), plugin: entry.owner,
         title: entry.title, phase, phaseLabel: TASK_PHASES[phase], enabled: !choices.disabledTasks.has(taskKey(entry.owner, entry.name)) }))),

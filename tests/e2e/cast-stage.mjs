@@ -132,7 +132,7 @@ async function expectRequest(requests, match) {
 }
 
 // A CHARX card brings its expressions and background; exporting writes them back.
-export async function castCardFileChecks({ page, step, report }) {
+export async function castCardFileChecks({ page, step, report, savedChat }) {
   await step('CHARX：导入带立绘和背景的卡，素材进角色素材；导出 CHARX 写回', async () => {
     const card = { spec: 'chara_card_v3', spec_version: '3.0', data: { name: 'CHARX 验收', description: '带素材的卡', first_mes: '你好。', group_only_greetings: [], assets: [
       { type: 'icon', uri: 'embeded://assets/icon/images/main.png', name: 'main', ext: 'png' },
@@ -182,6 +182,30 @@ export async function castCardFileChecks({ page, step, report }) {
     assert.deepEqual([html.headers()['content-type'], html.headers()['content-disposition']], ['application/octet-stream', 'attachment'], '包里的网页只能下载，不在酒馆页面里运行')
     assert.equal((await page.request.get(fileUrl('../card.json'))).status(), 404)
     report.dshCard = { imported: true }
+
+    // A card that carries a plugin: kept aside on import, loaded once the player turns it on, confined to its card.
+    const pluginCard = writeZipEntries([{ path: 'card.json', content: JSON.stringify({ ...card, data: { ...card.data, name: '插件卡验收' } }) },
+      { path: 'dsh.json', content: JSON.stringify({ ...dsh, card: { ...dsh.card, title: '插件卡验收' }, packs: [], plugins: [{ name: 'e2e-card-plugin', path: 'plugins/ping/', purpose: '验收' }] }) },
+      { path: 'plugins/ping/package.json', content: JSON.stringify({ name: 'dsh-e2e-card-ping', private: true, type: 'module', exports: { '.': './index.mjs' } }) },
+      { path: 'plugins/ping/index.mjs', content: "export const name = 'dsh-e2e-card-ping'\nexport const inject = ['tavern']\nexport function apply(ctx) { ctx.tavern.handle('e2e-card/ping', async ({ gameId }) => ({ pong: true, gameId: gameId || '' })) }\n" }])
+    const withPlugin = await importArchive(page, '插件卡验收.dshcard', pluginCard)
+    assert.deepEqual(withPlugin.plugins.map(item => [item.name, item.enabled]), [['dsh-e2e-card-ping', false]])
+    const call = (method, args) => page.evaluate(async ([method, args]) => (await fetch('/api/dsh-tavern/' + method, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(args) })).json(), [method, args])
+    assert.equal((await call('callPluginHandler', { name: 'e2e-card/ping', args: {} })).ok, false, '没启用时不加载')
+    const enabled = await call('setCardPlugins', { path: withPlugin.path, enabled: true })
+    assert.equal(enabled.ok, true, JSON.stringify(enabled))
+    let pong = null
+    for (let attempt = 0; attempt < 60 && !pong?.ok; attempt++) { await page.waitForTimeout(500); pong = await call('callPluginHandler', { name: 'e2e-card/ping', args: {} }) }
+    assert.deepEqual(pong.result, { pong: true, gameId: '' }, '启用后宿主侧几秒内加载')
+    const scopes = await call('cardPluginScopes', {})
+    assert.equal(scopes.scopes['dsh-e2e-card-ping'], withPlugin.path)
+    const sessionId = (await savedChat()).sessionId
+    const other = await call('callPluginHandler', { name: 'e2e-card/ping', args: { gameId: sessionId } })
+    assert.equal(other.ok, false, '别的卡的局调用被拒：' + JSON.stringify(other))
+    await call('setCardPlugins', { path: withPlugin.path, enabled: false })
+    for (let attempt = 0; attempt < 60 && pong?.ok; attempt++) { await page.waitForTimeout(500); pong = await call('callPluginHandler', { name: 'e2e-card/ping', args: {} }) }
+    assert.equal(pong.ok, false, '停用后卸载')
+    report.dshCard.plugin = true
     if (process.env.TAVERN_E2E_DSHCARD) {
       const big = await readFile(process.env.TAVERN_E2E_DSHCARD)
       const started = Date.now()

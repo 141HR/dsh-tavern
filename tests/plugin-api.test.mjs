@@ -796,3 +796,34 @@ test('配音渠道：插件注册的渠道带上归属，合成超时或出错�
   assert.equal(await tavern.synthesizeSpeech({ gameId: 'game-1', text: '夜深了。', narration: true }), null)
   await assert.rejects(tavern.synthesizeSpeech({ gameId: 'game-1', text: ' ' }), /text/)
 })
+
+test('卡内插件只在所属人物卡的局里出现：回调不触发、调用被拒、人物卡列表只剩本卡、本局插件面板不列出', { skip: !cordis }, async t => {
+  let cardOfGame = 'cards/other.json'
+  const settled = []
+  const h = await harness(t, {
+    data: createPluginData({ store: memoryStore() }),
+    cardScope: async () => new Map([['fish-plugin', { cardPath: 'cards/fish.json', folder: 'card-x-fish' }]]),
+    cardPathOf: async () => cardOfGame,
+    listCards: async () => [{ path: 'cards/fish.json', name: '鱼' }, { path: 'cards/other.json', name: '别的' }],
+    readCardRaw: async () => ({ data: {} })
+  })
+  let tavern
+  await h.root.plugin({ name: 'fish-plugin', inject: ['tavern'], apply(ctx) { tavern = ctx.tavern; ctx.tavern.onTurnSettled(turn => settled.push(turn.turn)); ctx.tavern.promptSection({ name: 'fish', text: '鱼的规则' }) } })
+  await tick()
+  await h.api.turnSettled('game-1')
+  await tick()
+  assert.deepEqual(settled, [], '别的卡的局不通知')
+  assert.deepEqual(await h.api.promptSections({ gameId: 'game-1' }), [])
+  await assert.rejects(tavern.getTurn({ gameId: 'game-1', turn: 3 }), /只能用于它所在的人物卡/)
+  await assert.rejects(tavern.readCardRaw({ card: 'cards/other.json' }), /只能用于它所在的人物卡/)
+  assert.deepEqual((await tavern.listCards()).map(card => card.id), ['cards/fish.json'])
+  assert.deepEqual((await h.api.gamePlugins('game-1')).plugins, [])
+
+  cardOfGame = 'cards/fish.json'
+  h.setLatest(turnMaterial({ key: 'key-3c' }))
+  await h.api.turnSettled('game-1')
+  await tick()
+  assert.deepEqual(settled, [3], '本卡的局照常通知')
+  assert.equal((await tavern.getTurn({ gameId: 'game-1', turn: 3 })).text, '她推开门。')
+  assert.deepEqual((await h.api.promptSections({ gameId: 'game-1' })).map(item => item.text), ['鱼的规则'])
+})

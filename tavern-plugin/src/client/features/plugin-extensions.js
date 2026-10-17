@@ -92,6 +92,7 @@
 						const dispose = host.betterSidebar.registerTab({ id: tabId, title: title, order: 60, single: true,
 							component: function (props) {
 								const gameId = props.scope && props.scope.sessionId || "";
+								if (gameId && !tavernPluginAllowed(owner, gameId)) return React.createElement("p", { className: "dsh-tavern-plugin-panel-empty" }, "这是另一张人物卡的插件面板。");
 								return React.createElement(tavernPluginBoundary(), { owner: owner, fallback: React.createElement("p", { className: "dsh-tavern-plugin-panel-error" }, "插件 " + owner + " 的面板出错了") },
 									gameId ? React.createElement(render, { gameId: gameId, visible: props.visible !== false }) : React.createElement("p", { className: "dsh-tavern-plugin-panel-empty" }, "请先打开一局游戏。"));
 							} });
@@ -409,7 +410,7 @@
 		 * media still needs a place. `placed` collects anchored ids during render.
 		 */
 		function createTavernPluginTextContext(input) {
-			const markers = tavernUiExtensions.markers();
+			const markers = tavernUiExtensions.markers().filter(function (marker) { return tavernPluginAllowed(marker.owner, input.sessionId); });
 			// `extras` are Tavern's own anchored elements (the built-in scene picture).
 			const extras = new Map((input.extras || []).filter(function (extra) { return extra.anchor; }).map(function (extra) { return [extra.id, extra]; }));
 			const anchored = input.items.filter(function (item) { return item.anchor; }).concat(Array.from(extras.values()));
@@ -467,7 +468,7 @@
 
 		function TavernPluginMessageActions(props) {
 			useTavernUiExtensions();
-			const actions = tavernUiExtensions.messageActions();
+			const actions = tavernUiExtensions.messageActions().filter(function (entry) { return tavernPluginAllowed(entry.owner, props.sessionId); });
 			if (!actions.length) return null;
 			return React.createElement(TavernPluginActionButtons, { actions: actions, className: "dsh-tavern-plugin-message-actions", buttonClassName: "dsh-tavern-btn",
 				context: { gameId: props.sessionId, turn: props.turn, settled: props.settled } });
@@ -475,7 +476,7 @@
 
 		function TavernPluginComposerActions(props) {
 			useTavernUiExtensions();
-			const actions = tavernUiExtensions.composerActions();
+			const actions = tavernUiExtensions.composerActions().filter(function (entry) { return tavernPluginAllowed(entry.owner, props.sessionId); });
 			if (!actions.length) return null;
 			return React.createElement(TavernPluginActionButtons, { actions: actions, className: "dsh-tavern-plugin-composer-actions", buttonClassName: "dsh-tavern-choice-trigger",
 				disabled: props.running, context: { gameId: props.sessionId, turn: props.turn, busy: Boolean(props.running) } });

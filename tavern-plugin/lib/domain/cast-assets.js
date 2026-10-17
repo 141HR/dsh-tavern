@@ -257,6 +257,14 @@ export function createCastAssets({ store }) {
     return read(cardPath)
   }
 
+  /** The plugins a card carries (card-plugins.js) and whether the player turned them on. */
+  async function setPlugins(cardPath, plugins) {
+    await update(cardPath, manifest => {
+      manifest.plugins = plugins.map(plugin => ({ folder: plugin.folder, name: plugin.name, sha256: plugin.sha256, purpose: plugin.purpose || '', files: plugin.files || 0, bytes: plugin.bytes || 0, enabled: plugin.enabled === true }))
+    })
+    return read(cardPath)
+  }
+
   /** Bytes of one of the card's material files, for export. */
   async function readFile(cardPath, file) {
     if (!/^[0-9a-f]{32}\.[a-z0-9]{1,10}$/.test(String(file))) return undefined
@@ -270,5 +278,5 @@ export function createCastAssets({ store }) {
     return bytes ? { bytes, mediaType: IMAGE_TYPES[file.split('.').pop()] } : undefined
   }
 
-  return Object.freeze({ read, movePath, setImage, removeImage, setCharacter, setVoice, removeCharacter, importSpritePack, importCardAssets, bindPacks, readFile, readImage, keyOf: cardPath => hash(String(cardPath)) })
+  return Object.freeze({ read, movePath, setImage, removeImage, setCharacter, setVoice, removeCharacter, importSpritePack, importCardAssets, bindPacks, setPlugins, readFile, readImage, keyOf: cardPath => hash(String(cardPath)) })
 }
