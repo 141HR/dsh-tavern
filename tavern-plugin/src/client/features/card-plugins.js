@@ -36,7 +36,6 @@
 			const [plugins, setPlugins] = React.useState(null);
 			const [busy, setBusy] = React.useState(false);
 			const [message, setMessage] = React.useState("");
-			const askConfirm = useTavernConfirm(props.path);
 			React.useEffect(function () {
 				let active = true;
 				setPlugins(null); setMessage("");
@@ -46,7 +45,6 @@
 			if (!plugins || !plugins.length) return null;
 			const enabled = plugins.every(function (plugin) { return plugin.enabled; });
 			async function toggle() {
-				if (!enabled && !await askConfirm("启用这张卡的插件吗？\n启用后插件会在这台电脑上运行代码（可以读写文件、联网），只在这张卡的游戏里生效。只启用你信任的人物卡。")) return;
 				setBusy(true); setMessage("");
 				try {
 					const reply = await rpc("setCardPlugins", { path: props.path, enabled: !enabled });
@@ -62,6 +60,6 @@
 				h("ul", null, plugins.map(function (plugin) {
 					return h("li", { key: plugin.folder }, h("span", null, plugin.name), plugin.purpose ? h("small", null, plugin.purpose) : null, h("small", null, plugin.enabled ? "已启用" : "未启用"));
 				})),
-				h("p", { className: "dsh-tavern-settings-desc" }, "插件在这台电脑上运行代码，只在这张卡的游戏里生效。"),
+				h("p", { className: "dsh-tavern-settings-desc" }, "只在这张卡的游戏里生效。"),
 				message ? h("p", { role: "status", className: "dsh-tavern-settings-desc" }, message) : null);
 		}

@@ -628,7 +628,7 @@
 			}
 			async function importCard(file) {
 				setBusy(true); setError("");
-				try { const result = await importTavernCardFile(file, call); await refresh(); notifyDataChanged(["cards"]); await tavernCardPluginPrompt(result.card, askConfirm, call); }
+				try { await importTavernCardFile(file, call); await refresh(); notifyDataChanged(["cards"]); }
 				catch (err) { setError(String(err && err.message || err)); }
 				finally { setBusy(false); }
 			}

@@ -57,20 +57,10 @@ window.__ModuleLoader__.load({
 			return call("importCard", { payload: await parseCardFile(file) });
 		}
 
-		/** After importing a card with its own plugins, ask once whether to turn them on. Returns a notice. */
-		async function tavernCardPluginPrompt(card, askConfirm, call) {
-			const plugins = card && card.plugins || [];
-			if (!plugins.length) return "";
-			const lines = plugins.map(function (plugin) { return "· " + plugin.name + (plugin.purpose ? "：" + plugin.purpose : ""); });
-			const accepted = await askConfirm("「" + (card.name || "这张卡") + "」带有卡内插件：\n" + lines.join("\n") + "\n\n启用后插件会在这台电脑上运行代码（可以读写文件、联网），只在这张卡的游戏里生效。只启用你信任的人物卡。\n\n现在启用吗？以后也可以在人物卡库的卡片详情里启用或停用。");
-			if (!accepted) return "卡内插件未启用";
-			await call("setCardPlugins", { path: card.path, enabled: true });
-			return "卡内插件已启用，刷新页面后界面部分生效";
-		}
-
 		/** What a card file brought into its character material, for the import notice. */
 		function tavernCardAssetNotice(assets, card) {
 			const extra = [];
+			if (card && card.plugins && card.plugins.length) extra.push(card.pluginError ? "卡内插件没有启用：" + card.pluginError : "卡内插件 " + card.plugins.map(function (plugin) { return plugin.name; }).join("、") + " 已启用，刷新页面后完整生效");
 			if (card && card.packs && card.packs.length) extra.push("素材包 " + card.packs.map(function (pack) { return pack.title || pack.id; }).join("、") + (card.packs.some(function (pack) { return pack.reused; }) ? "（已有的包直接复用）" : ""));
 			const base = tavernCardAssetText(assets);
 			return [base].concat(extra).filter(Boolean).join("；");
