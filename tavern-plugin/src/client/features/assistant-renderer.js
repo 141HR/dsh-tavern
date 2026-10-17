@@ -230,17 +230,17 @@
 		}
 
 		// gallery: { urls, index } pages through several pictures with ‹ › and the arrow keys.
-		function openSceneImagePreview(url, opener, version, onEditPrompt, gallery) {
+		function openSceneImagePreview(url, opener, version, onEditPrompt, gallery, label) {
 			const dialog = document.createElement("dialog");
 			dialog.className = "dsh-tavern-image-preview";
-			dialog.setAttribute("aria-label", "场景插画预览");
+			dialog.setAttribute("aria-label", (label || "场景插画") + "预览");
 			const close = document.createElement("button");
 			close.type = "button";
 			close.textContent = "缩小并返回 ×";
 			close.setAttribute("aria-label", "缩小并返回");
 			const image = document.createElement("img");
 			image.src = url;
-			image.alt = "放大的场景插画";
+			image.alt = "放大的" + (label || "场景插画");
 			close.addEventListener("click", function () { dialog.close(); });
 			dialog.addEventListener("click", function (event) { if (event.target === dialog) dialog.close(); });
 			dialog.addEventListener("close", function () { dialog.remove(); if (opener && opener.isConnected) opener.focus(); }, { once: true });

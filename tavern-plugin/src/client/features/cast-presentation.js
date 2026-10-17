@@ -116,7 +116,12 @@
 		function TavernCastAvatar(props) {
 			const [failed, setFailed] = React.useState(false);
 			const name = String(props.speaker || "");
-			if (props.imageUrl && !failed) return React.createElement("img", { className: "dsh-tavern-cast-avatar", src: props.imageUrl, alt: "", loading: "lazy", onError: function () { setFailed(true); } });
+			// A click shows the picture full size.
+			if (props.imageUrl && !failed) {
+				const open = function (event) { event.stopPropagation(); openSceneImagePreview(props.imageUrl, event.currentTarget, null, null, null, name ? name + "的头像" : "头像"); };
+				return React.createElement("img", { className: "dsh-tavern-cast-avatar is-zoomable", src: props.imageUrl, alt: "", loading: "lazy", role: "button", tabIndex: 0, "aria-label": "放大" + (name ? name + "的" : "") + "头像", title: "点击放大",
+					onClick: open, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(event); } }, onError: function () { setFailed(true); } });
+			}
 			return React.createElement("span", { className: "dsh-tavern-cast-avatar dsh-tavern-cast-avatar-letter", "aria-hidden": true, style: { "--dsh-cast-hue": tavernCastHue(name) } }, Array.from(name)[0] || "?");
 		}
 
