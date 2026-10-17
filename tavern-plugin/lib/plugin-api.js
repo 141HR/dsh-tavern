@@ -143,20 +143,23 @@ export function createTavernPluginApi(deps) {
   async function choicesFor(gameId) {
     const game = gameId ? await deps.resolveGame(String(gameId)).catch(() => null) : null
     const settings = game && deps.data?.readSettings ? await deps.data.readSettings(game.chatId).catch(() => null) : null
-    const disabled = new Set(settings?.disabled || [])
-    // A card's own plugins exist only in that card's games.
-    const elsewhere = await scopedElsewhere(game)
+    // A card's own plugins exist only in that card's games, and there they are part of the
+    // game: always on, not listed among the plugins the player switches per game.
+    const { elsewhere, own } = await cardPluginsFor(game)
+    const disabled = new Set((settings?.disabled || []).filter(name => !own.has(name)))
     for (const name of elsewhere) disabled.add(name)
-    return { game, disabled, elsewhere, replacements: settings?.replacements || {},
-      disabledTasks: new Set(settings?.disabledTasks || []), taskOrder: settings?.taskOrder || [] }
+    return { game, disabled, elsewhere, own, replacements: settings?.replacements || {},
+      disabledTasks: new Set((settings?.disabledTasks || []).filter(key => !own.has(String(key).split(':')[0]))), taskOrder: settings?.taskOrder || [] }
   }
 
-  /** Card plugins (card-plugins.js) that belong to another card than this game's. */
-  async function scopedElsewhere(game) {
+  /** Card plugins (card-plugins.js): those of another card than this game's, and this card's own. */
+  async function cardPluginsFor(game) {
     const scopes = deps.cardScope ? await deps.cardScope().catch(() => null) : null
-    if (!scopes?.size) return new Set()
+    if (!scopes?.size) return { elsewhere: new Set(), own: new Set() }
     const cardPath = game && deps.cardPathOf ? await deps.cardPathOf(game.sessionId).catch(() => null) : null
-    return new Set([...scopes].filter(([, scope]) => scope.cardPath !== cardPath).map(([name]) => name))
+    const elsewhere = new Set(), own = new Set()
+    for (const [name, scope] of scopes) (scope.cardPath === cardPath ? own : elsewhere).add(name)
+    return { elsewhere, own }
   }
 
   /** A card plugin's calls reach only its own card and that card's games. */
@@ -985,9 +988,9 @@ export function createTavernPluginApi(deps) {
       stages[stage] = { label: REPLACEABLE_STAGES[stage], candidates, chosen: Object.hasOwn(chosen, stage) ? chosen[stage] : null, active: active ? active.owner : '',
         conflict: !Object.hasOwn(chosen, stage) && candidates.filter(owner => !disabled.has(owner)).length > 1 }
     }
-    const plugins = Array.from(uses.keys()).filter(name => !choices.elsewhere.has(name)).sort().map(name => ({ name, enabled: !disabled.has(name), uses: uses.get(name) }))
+    const plugins = Array.from(uses.keys()).filter(name => !choices.elsewhere.has(name) && !choices.own.has(name)).sort().map(name => ({ name, enabled: !disabled.has(name), uses: uses.get(name) }))
     const tasks = {
-      settlement: Object.keys(TASK_PHASES).flatMap(phase => orderedTasks(phase, choices).map(entry => ({ key: taskKey(entry.owner, entry.name), plugin: entry.owner,
+      settlement: Object.keys(TASK_PHASES).flatMap(phase => orderedTasks(phase, choices).filter(entry => !choices.own.has(entry.owner)).map(entry => ({ key: taskKey(entry.owner, entry.name), plugin: entry.owner,
         title: entry.title, phase, phaseLabel: TASK_PHASES[phase], enabled: !choices.disabledTasks.has(taskKey(entry.owner, entry.name)) }))),
       manual: Array.from(manualTasks.values()).filter(entry => !disabled.has(entry.owner)).sort((a, b) => a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name))
         .map(entry => ({ key: taskKey(entry.owner, entry.name), plugin: entry.owner, title: entry.title, description: entry.description, input: entry.input })),
@@ -997,8 +1000,9 @@ export function createTavernPluginApi(deps) {
   }
 
   async function setGamePlugin(gameId, { name, enabled, replace, task, taskOrder } = {}) {
-    const { game } = await choicesFor(gameId)
+    const { game, own } = await choicesFor(gameId)
     if (!game) throw new Error('这一局不存在或不是游玩对话')
+    if (typeof name === 'string' && own.has(name) || task && typeof task.key === 'string' && own.has(task.key.split(':')[0])) throw new Error('卡内插件是这张卡的一部分，不能在本局单独关闭')
     await deps.data.updateSettings(game.chatId, settings => {
       if (typeof name === 'string' && typeof enabled === 'boolean') {
         settings.disabled = settings.disabled.filter(item => item !== name)

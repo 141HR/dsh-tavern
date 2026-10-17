@@ -826,4 +826,7 @@ test('卡内插件只在所属人物卡的局里出现：回调不触发、调�
   assert.deepEqual(settled, [3], '本卡的局照常通知')
   assert.equal((await tavern.getTurn({ gameId: 'game-1', turn: 3 })).text, '她推开门。')
   assert.deepEqual((await h.api.promptSections({ gameId: 'game-1' })).map(item => item.text), ['鱼的规则'])
+  assert.deepEqual((await h.api.gamePlugins('game-1')).plugins, [], '本卡的插件是这一局的一部分，不在插件面板里开关')
+  await assert.rejects(h.api.setGamePlugin('game-1', { name: 'fish-plugin', enabled: false }), /不能在本局单独关闭/)
+  assert.deepEqual((await h.api.promptSections({ gameId: 'game-1' })).map(item => item.text), ['鱼的规则'])
 })
