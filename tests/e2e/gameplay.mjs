@@ -20,7 +20,7 @@ import { backgroundLifecycleChecks } from './background-lifecycle.mjs'
 import { cardMemoryChecks } from './card-memory.mjs'
 import {displayRegressionRules, displayRegressionChecks} from './display-regression.mjs'
 import { surfaceRecoveryChecks } from './surface-recovery.mjs'
-import { castCardFileChecks, castSpeechChecks, castStageChecks, castStageInputChecks } from './cast-stage.mjs'
+import { castCardFileChecks, castSpeechChecks, castStageChecks, castStageInputChecks, dshCardPlayChecks } from './cast-stage.mjs'
 import { cardVariableUpdateChecks } from './card-variable-update.mjs'
 import { cardUpdateChecks } from './card-update.mjs'
 import { sidebarUpgrade } from './sidebar-upgrade.mjs'
@@ -871,6 +871,7 @@ try {
     report.nativeFormat.restart=true
   })
   if (castScenario) await castStageInputChecks({ page, step, report })
+  if (castScenario) await dshCardPlayChecks({ page, step, output, report })
   // Every scenario ends with the story save agreeing with what the model sees (#196).
   if (storyToolScenario) await step('正文均经 submit_story 提交', async () => {
     const submitted = (await readFile(join(output, 'story-tool.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line).content)

@@ -339,7 +339,7 @@ ctx.tavern.worldbookEntries({ name: 'session', entries: async ({ gameId, turn })
 
 ### `settlementSection({ name, text })`（第 2 版）
 
-往每轮的**后台结算**任务里加一段说明，例如「本轮结束时用 `anchor_submit` 记录叙事锚点」。`text` 是字符串或函数，函数收到 `{ gameId, turn }`。出错时跳过。
+往每轮的**后台结算**任务里加一段说明，例如「本轮结束时用 `anchor_submit` 记录叙事锚点」。`text` 是字符串或函数，函数收到 `{ gameId, turn, text, textVersion }`：`text` 是正在结算的这一轮正文（结算结束前 `getTurn` 还读不到它），按它决定这一轮要写什么。出错时跳过。
 
 ### `settlementTool({ name, description, parameters, execute })`（第 2 版）
 
