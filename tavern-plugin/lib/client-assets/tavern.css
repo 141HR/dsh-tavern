@@ -109,7 +109,9 @@ body.dsh-tavern-shell-active,
 .dsh-tavern-image-pending-cancel:hover:not(:disabled) { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover); }
 .dsh-tavern-image-pending-cancel:disabled { opacity: .5; cursor: default; }
 @media (prefers-reduced-motion: reduce) { .dsh-tavern-image-pending-frame, .dsh-tavern-image-pending-spinner { animation: none; } }
-.dsh-tavern-illustration img { display: block; width: auto; height: auto; max-width: min(100%, 320px); max-height: min(240px, 35svh); object-fit: contain; border-radius: 12px; }
+/* 插图按正文栏宽显示，最大约 640px、七成屏高（参考 weixinlll/dsh-tavern-image：原来 320×240 的预览太小，插件作者只能用 !important 放大）。
+   不用 min() 里套 svh：部分手机 WebView 不认，整条声明会失效。 */
+.dsh-tavern-illustration img { display: block; width: auto; height: auto; max-width: min(100%, 640px); max-height: 70vh; object-fit: contain; border-radius: 12px; }
 .dsh-tavern-image-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .dsh-tavern-plugin-media { margin: 10px 0; }
 .dsh-tavern-plugin-media video, .dsh-tavern-plugin-media audio { display: block; max-width: min(100%, 480px); border-radius: 12px; }
