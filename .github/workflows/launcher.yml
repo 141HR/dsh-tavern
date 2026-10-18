@@ -14,15 +14,13 @@ jobs:
   cross-platform:
     strategy:
       fail-fast: false
+      # One run per platform; together they still cover the oldest supported Node (22.19)
+      # and the newer one desktop hosts bundle (24).
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
-        node: [22.19.0, 24.18.1]
-        # Hosted macOS runners are scarce and jobs can queue until cancelled.
-        # Node-version differences are covered on Linux and Windows; macOS
-        # only needs one run for its platform paths, on the oldest supported Node.
-        exclude:
-          - os: macos-latest
-            node: 24.18.1
+        include:
+          - { os: ubuntu-latest, node: 22.19.0 }
+          - { os: macos-latest, node: 22.19.0 }
+          - { os: windows-latest, node: 24.18.1 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
