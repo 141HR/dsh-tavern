@@ -62,6 +62,8 @@ jobs:
     env:
       DSH_TAVERN_ARCHIVE_URL: https://github.com/${{ github.repository }}/archive/${{ github.sha }}.zip
       DSH_TAVERN_NO_OPEN: 1
+      # The installers default to the desktop host (DeepSeek Harness / DSH NEXT), absent on runners.
+      DSH_TAVERN_HOST: cli
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -112,6 +114,7 @@ jobs:
     env:
       DSH_TAVERN_ARCHIVE_URL: https://github.com/${{ github.repository }}/archive/${{ github.sha }}.tar.gz
       DSH_TAVERN_NO_OPEN: 1
+      DSH_TAVERN_HOST: cli
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
