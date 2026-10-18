@@ -2579,6 +2579,10 @@ button.dsh-tavern-play-fullscreen {
     padding-right: env(safe-area-inset-right, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+  /* DSH 0.2.x 的全屏右栏不再带层级（0.1.7 曾是 dock 层 40），与会话顶栏（30）、输入区（7）
+     同处 frame 的层叠上下文，顶栏和输入区反而盖在右栏上。恢复 40：高于中间栏，
+     低于手机布局的抽屉、悬浮按钮（55）和弹层。 */
+  [data-mobile-nav="frame"] [data-sidebar-right-open][data-sidebar-right-panel="fullscreen"] { z-index: 40; }
   html.dsh-tavern-viewport-pinned [data-composer-seat] {
     /* 宿主用外侧 box-shadow 描边；候选收起后卡片紧贴滚动容器，需为上描边保留绘制空间。
        border-box 让这 4px 计入可用高度，极短窗口也不能把发送栏挤到键盘下面。 */
