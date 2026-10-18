@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "dc191a773d49d7eef243f457537b8db0a1006bae",
-  "releaseSequence": 713,
+  "revision": "12c0f6434161fed0c382af0b933af7e3f16825fa",
+  "releaseSequence": 714,
   "version": "3.0.0",
   "files": [
     {
@@ -38,6 +38,11 @@
       "path": "bin/bundled-image-plugin.mjs",
       "sha256": "bd0a4d246d2aa08b5cf86a45a1f4495615c3ecaf4ada90b782e88028d0199270",
       "size": 2095
+    },
+    {
+      "path": "bin/chat-answer-step-patch.mjs",
+      "sha256": "9c68dc6d67ea79e06670cd44d2d7cd6265b1fd6a0d2ad57ddd7e84f6e1475f16",
+      "size": 3088
     },
     {
       "path": "bin/cli-runtime.mjs",
@@ -151,8 +156,8 @@
     },
     {
       "path": "bin/profile-installation.mjs",
-      "sha256": "32735054f7c2a26d43272f55064355b1db2cd91c7995675fa9023d4963e80f6f",
-      "size": 20001
+      "sha256": "c4822b05aa322c366e1d6231789533c890647278e53ddcd55d626bed930a5cc4",
+      "size": 20847
     },
     {
       "path": "bin/prune-installed-files.mjs",
