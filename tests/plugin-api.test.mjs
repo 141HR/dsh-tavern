@@ -1078,3 +1078,21 @@ test('插件导入器：按扩展名接管 Tavern 不认识的人物卡文件，
   await h.api.cardImported(converted, 'cards/林岚.png')
   assert.deepEqual(done, ['cards/林岚.png'])
 })
+
+test('skillSource：插件登记自己的 Skill 目录，卸载时撤销；卡内插件不能添加', { skip: !cordis }, async t => {
+  const roots = []
+  const h = await harness(t, {
+    addSkillRoot: entry => { roots.push(entry); return () => roots.splice(roots.indexOf(entry), 1) },
+    cardScope: async () => new Map([['card-own', { cards: ['cards/b.json'] }]])
+  })
+  const fiber = await h.root.plugin({ name: 'director', inject: ['tavern'], apply(ctx) {
+    assert.throws(() => ctx.tavern.skillSource({ dir: 'skills' }), /绝对路径/)
+    assert.throws(() => ctx.tavern.skillSource({ dir: '/x', role: 'image' }), /role/)
+    ctx.tavern.skillSource({ dir: '/plugins/director/skills', role: 'background' })
+  } })
+  await h.root.plugin({ name: 'card-own', inject: ['tavern'], apply(ctx) { ctx.tavern.skillSource({ dir: '/plugins/own/skills' }) } })
+  await tick()
+  assert.deepEqual(roots, [{ owner: 'director', dir: '/plugins/director/skills', role: 'background' }])
+  await fiber.dispose()
+  assert.deepEqual(roots, [])
+})

@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import path from 'node:path'
 import { publicPluginMedia, pluginMediaSession } from './domain/plugin-media.js'
 import { normalizeGameSettings, coerceSetting, settingValues } from './domain/plugin-game-settings.js'
 
@@ -652,6 +653,22 @@ export function createTavernPluginApi(deps) {
       return register.call(this, toolScopes, name, { owner: ownerOf(this), modes: [...new Set(modes)] }, 'tavern.toolModes()', '工具 ' + name + ' 的可见范围已被设置')
     },
 
+    // A directory of the plugin's own skills (<dir>/<name>/SKILL.md), read-only, after Tavern's built-in ones.
+    skillSource({ dir, role = 'card' } = {}) {
+      const owner = ownerOf(this)
+      if (typeof dir !== 'string' || !path.isAbsolute(dir)) throw new TypeError('dir 必须是绝对路径（例如 fileURLToPath(new URL(\'./skills\', import.meta.url))）')
+      if (!['card', 'background'].includes(role)) throw new Error("role 只能是 'card' 或 'background'")
+      if (typeof deps.addSkillRoot !== 'function') throw new Error('当前版本不支持插件 Skill')
+      return owned(this, () => {
+        let dispose = deps.addSkillRoot({ owner, dir: path.resolve(dir), role })
+        // A card's own plugin lives in that card's games: its skills would reach every game, so they are not added.
+        void (deps.cardScope ? deps.cardScope() : Promise.resolve(null)).then(scopes => {
+          if (scopes?.has(owner)) { dispose(); dispose = () => {}; recordError(null, owner, 'Skill 来源', new Error('卡内插件不能添加 Skill')) }
+        }, () => {})
+        return () => dispose()
+      }, 'tavern.skillSource()')
+    },
+
     // Skills: Tavern's built-in ones read-only, the player's own ones writable.
     async listSkills() {
       return (await deps.skills.list()).map(skill => ({ name: skill.name, source: skill.source, description: skill.description || '' }))
@@ -674,7 +691,7 @@ export function createTavernPluginApi(deps) {
     async removeSkill({ name } = {}) {
       const skill = await deps.skills.read(name)
       if (!skill) throw Object.assign(new Error('Skill 不存在：' + name), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
-      if (skill.source !== 'user') throw new Error('只能删除玩家自己的 Skill，内置 Skill 不能删除')
+      if (skill.source !== 'user') throw new Error(skill.source === 'plugin' ? '只能删除玩家自己的 Skill，插件自带的 Skill 不能删除' : '只能删除玩家自己的 Skill，内置 Skill 不能删除')
       await deps.skills.remove(skill.name)
     },
 

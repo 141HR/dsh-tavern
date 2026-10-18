@@ -510,6 +510,29 @@ export async function apply(ctx) {
   ctx.inject(['sessionSkillCatalog'], scope => {
     scope.effect(() => installSkillCatalogSessionScope(scope.get('sessionSkillCatalog')))
   })
+  // Plugins' own skills directories (tavern.skillSource): one read-only file provider each.
+  const pluginSkillRoots = new Set()
+  const EMPTY_SKILL_PROVIDER = Object.freeze({ list: async () => [], get: async () => undefined, dispose: async () => {} })
+  let skillHost = null
+  function attachPluginSkillRoot(entry) {
+    if (!skillHost || entry.slot !== undefined) return
+    entry.slot = skillHost.providers.length
+    skillHost.providers.push(new FileSystemSkillProvider(ctx, skillHost.control, { providerName: 'tavern-plugin-files-' + entry.slot, includeDefaultRoots: false, bundledSkillDir: entry.dir }))
+  }
+  function addPluginSkillRoot({ owner, dir, role }) {
+    const entry = { owner, dir, role }
+    pluginSkillRoots.add(entry)
+    const dropRoot = tavernSkills.addRoot({ path: dir, role, owner })
+    attachPluginSkillRoot(entry)
+    skillHost?.control.invalidate()
+    return () => {
+      pluginSkillRoots.delete(entry)
+      dropRoot()
+      // Slots keep their index: candidates already listed locate their provider by it.
+      if (skillHost && entry.slot !== undefined) { const provider = skillHost.providers[entry.slot]; skillHost.providers[entry.slot] = EMPTY_SKILL_PROVIDER; void provider.dispose?.() }
+      skillHost?.control.invalidate()
+    }
+  }
   const skillRegistry = ctx.get('skills')
   if (!skillRegistry) throw new Error('dsh-tavern: 缺少原生 Skills 服务')
   skillRegistry.registerProvider(control => {
@@ -518,8 +541,10 @@ export async function apply(ctx) {
       new FileSystemSkillProvider(ctx, control, { providerName: 'tavern-interactive-files', includeDefaultRoots: false, customSkillDirs: [dataRoot + '/skills'], bundledSkillDir: sourceRoot + '/presets/tavern/skills' }),
       new FileSystemSkillProvider(ctx, control, { providerName: 'tavern-background-files', includeDefaultRoots: false, bundledSkillDir: sourceRoot + '/presets/tavern-background/skills' })
     ]
+    skillHost = { control, providers }
+    for (const entry of pluginSkillRoots) { entry.slot = undefined; attachPluginSkillRoot(entry) }
     ctx.effect(() => tavernSkills.subscribe(control.invalidate))
-    ctx.effect(() => () => Promise.all(providers.map(provider => provider.dispose())))
+    ctx.effect(() => () => Promise.all(providers.map(provider => provider.dispose?.())))
     ctx.on('fs/observed', (target, _observation, actor) => {
       if (actor?.name === 'write' || actor?.name === 'edit') providers.forEach(provider => provider.observeHostMutation(target.displayPath))
     })
@@ -2990,6 +3015,7 @@ export async function apply(ctx) {
     // Tavern decides where its own tools show; a plugin may only scope the tools it registered.
     isControlledTool: name => controlledToolNames.has(name),
     skills: tavernSkills,
+    addSkillRoot: addPluginSkillRoot,
     readCardImage: async sessionId => {
       const header = await chatHeaderForSession(sessionId, ['cardPath'])
       const cardPath = str(header?.cardPath)
