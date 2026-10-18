@@ -44,7 +44,9 @@ export function minimaxEmotion(emotion) {
 
 function trimSlash(value) { return String(value || '').trim().replace(/\/+$/, '') }
 
-async function request(fetchImpl, url, init, signal) {
+const rawReason = text => text.replace(/\s+/g, ' ').slice(0, 200)
+
+async function request(fetchImpl, url, init, signal, reason = rawReason) {
   const signals = [AbortSignal.timeout(TIMEOUT_MS), ...(signal ? [signal] : [])]
   let response
   try { response = await fetchImpl(url, { ...init, redirect: 'error', signal: AbortSignal.any(signals) }) }
@@ -53,13 +55,77 @@ async function request(fetchImpl, url, init, signal) {
   if (length > MAX_AUDIO_BYTES) throw new Error('配音结果超过 20 MB')
   const bytes = Buffer.from(await response.arrayBuffer())
   if (bytes.length > MAX_AUDIO_BYTES) throw new Error('配音结果超过 20 MB')
-  if (!response.ok) throw new Error('配音服务返回 HTTP ' + response.status + '：' + bytes.toString('utf8').replace(/\s+/g, ' ').slice(0, 200))
+  if (!response.ok) throw Object.assign(new Error('配音服务返回 HTTP ' + response.status + '：' + (reason(bytes.toString('utf8')) || '没有说明')), { status: response.status })
   return { bytes, mediaType: response.headers.get('content-type') || '' }
 }
 
 const OPENAI_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse']
 const MINIMAX_VOICES = ['female-shaonv', 'female-yujie', 'female-chengshu', 'female-tianmei', 'male-qn-qingse', 'male-qn-jingying', 'male-qn-badao', 'male-qn-daxuesheng',
   'presenter_male', 'presenter_female', 'audiobook_male_1', 'audiobook_female_1']
+// Speaker ids from the console's voice list; replicas (声音复刻) are prefixed with icl_.
+const VOLCENGINE_VOICES = ['zh_female_vv_uranus_bigtts', 'zh_female_xiaohe_uranus_bigtts', 'zh_male_m191_uranus_bigtts', 'zh_male_taocheng_uranus_bigtts',
+  'zh_female_cancan_uranus_bigtts', 'zh_female_gaolengyujie_uranus_bigtts', 'zh_female_sajiaoxuemei_uranus_bigtts', 'zh_female_wuzetian_uranus_bigtts',
+  'zh_female_sophie_uranus_bigtts', 'zh_female_wenroushunv_uranus_bigtts', 'zh_male_dayi_saturn_bigtts', 'zh_female_mizai_saturn_bigtts',
+  'zh_female_meilinvyou_saturn_bigtts', 'zh_male_ruyayichen_saturn_bigtts', 'zh_female_xueayi_saturn_bigtts',
+  'zh_female_cancan_mars_bigtts', 'zh_female_vv_mars_bigtts', 'zh_male_qingshuangnanda_mars_bigtts', 'zh_male_wenrouxiaoge_mars_bigtts',
+  'zh_female_tianmeixiaoyuan_moon_bigtts', 'zh_male_shaonianzixin_moon_bigtts', 'zh_female_meilinvyou_moon_bigtts', 'zh_male_aojiaobazong_moon_bigtts',
+  'zh_female_yuanqinvyou_moon_bigtts', 'zh_male_shenyeboke_moon_bigtts', 'zh_male_beijingxiaoye_moon_bigtts', 'zh_male_tangseng_mars_bigtts',
+  'zh_male_sunwukong_mars_bigtts', 'zh_male_xionger_mars_bigtts', 'multi_female_shuangkuaisisi_moon_bigtts', 'en_female_anna_mars_bigtts']
+
+// 火山的情感是固定枚举，而且只有部分音色认；映射不到就不传，让音色用默认语气。
+const VOLCENGINE_EMOTIONS = Object.freeze({
+  joy: 'happy', amusement: 'happy', excitement: 'excited', pride: 'happy', optimism: 'happy', approval: 'warm', gratitude: 'warm', admiration: 'warm',
+  love: 'lovey-dovey', desire: 'lovey-dovey', caring: 'comfort', relief: 'comfort',
+  sadness: 'sad', grief: 'sad', remorse: 'sad', disappointment: 'depressed',
+  anger: 'angry', annoyance: 'angry', disapproval: 'hate', disgust: 'hate',
+  fear: 'fear', nervousness: 'tension', surprise: 'surprised', realization: 'surprised',
+  embarrassment: 'shy'
+})
+
+/** Which resource a speaker belongs to: 2.0 voices, replicas, or the 1.0 catalog. */
+export function volcengineResource(voice, override) {
+  if (String(override || '').trim()) return String(override).trim()
+  const speaker = String(voice || '').trim().toLowerCase()
+  if (speaker.startsWith('icl_') || speaker.startsWith('s_')) return 'seed-icl-2.0'
+  if (speaker.includes('_uranus_') || speaker.includes('_saturn_')) return 'seed-tts-2.0'
+  return 'seed-tts-1.0'
+}
+
+/** The emotion code this voice understands, or '' to leave its default delivery alone. */
+export function volcengineEmotion(emotion, resourceId, voice) {
+  const key = String(emotion || '')
+  const code = Object.hasOwn(VOLCENGINE_EMOTIONS, key) ? VOLCENGINE_EMOTIONS[key] : ''
+  if (!code) return ''
+  if (resourceId === 'seed-tts-2.0') return code
+  if (resourceId === 'seed-tts-1.0' && /_emo(_v2)?_/i.test(String(voice || ''))) return code
+  return ''
+}
+
+function volcengineReason(text) {
+  const raw = String(text || '').replace(/\s+/g, ' ').trim()
+  try {
+    const body = JSON.parse(raw)
+    const reason = body?.message || body?.header?.message || body?.error?.message || body?.error
+    if (typeof reason === 'string' && reason) return reason
+  } catch {}
+  return raw.slice(0, 200)
+}
+
+// The V3 endpoint answers with one JSON object per line; each carries a base64 audio slice.
+async function volcengineAudio(fetchImpl, url, init, signal) {
+  const { bytes } = await request(fetchImpl, url, init, signal, volcengineReason)
+  const slices = []
+  let failure = ''
+  for (const line of bytes.toString('utf8').split('\n')) {
+    let payload
+    try { payload = JSON.parse(line) } catch { continue }
+    if (typeof payload?.data === 'string' && payload.data) { slices.push(Buffer.from(payload.data, 'base64')); continue }
+    const code = Number(payload?.code ?? payload?.header?.code)
+    if (Number.isFinite(code) && code !== 0 && code !== 20000000) failure = String(payload?.message || payload?.header?.message || code)
+  }
+  if (!slices.length) throw new Error('火山引擎没有返回音频' + (failure ? '：' + failure : ''))
+  return Buffer.concat(slices)
+}
 
 export const BUILTIN_SPEECH_PROVIDERS = Object.freeze([
   {
@@ -95,7 +161,7 @@ export const BUILTIN_SPEECH_PROVIDERS = Object.freeze([
     }
   },
   {
-    id: 'minimax', label: 'MiniMax 语音', key: true, voices: MINIMAX_VOICES, defaultVoice: 'female-shaonv',
+    id: 'minimax', label: 'MiniMax 语音', key: true, emotional: true, voices: MINIMAX_VOICES, defaultVoice: 'female-shaonv',
     description: 'MiniMax T2A v2 接口，按台词情绪选择语气。声音填系统音色或自己复刻的音色 ID。',
     fields: [{ name: 'baseUrl', label: 'API 根地址', default: 'https://api.minimaxi.com', required: true }, { name: 'model', label: '模型', default: 'speech-02-hd', required: true },
       { name: 'groupId', label: 'Group ID（选填）', default: '' }],
@@ -112,6 +178,31 @@ export const BUILTIN_SPEECH_PROVIDERS = Object.freeze([
       const audio = body?.data?.audio
       if (typeof audio !== 'string' || !/^[0-9a-f]+$/i.test(audio)) throw new Error('MiniMax 没有返回音频')
       return { data: Buffer.from(audio, 'hex'), mediaType: 'audio/mpeg' }
+    }
+  },
+  {
+    id: 'volcengine', label: '火山引擎语音', key: true, keyLabel: 'Access Token', emotional: true, voices: VOLCENGINE_VOICES, defaultVoice: 'zh_female_vv_uranus_bigtts',
+    description: '火山引擎（豆包）语音合成 V3：填控制台的 APP ID，Access Token 填在下面的 Key 里。声音写音色 ID，复刻音色以 icl_ 开头。2.0 音色按台词情绪选语气，其他音色用自己的默认语气。',
+    fields: [{ name: 'appId', label: 'APP ID', required: true },
+      { name: 'baseUrl', label: '服务地址', default: 'https://openspeech.bytedance.com', required: true },
+      { name: 'resourceId', label: '资源 ID（选填）', default: '' }],
+    async synthesize({ config, apiKey, text, voice, emotion, signal, fetchImpl }) {
+      const resourceId = volcengineResource(voice, config.resourceId)
+      const audio = { format: 'mp3', sample_rate: 24000, speech_rate: 0, loudness_rate: 0 }
+      const say = audioParams => volcengineAudio(fetchImpl, trimSlash(config.baseUrl) + '/api/v3/tts/unidirectional', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-app-id': config.appId, 'x-api-access-key': apiKey, 'x-api-resource-id': resourceId },
+        body: JSON.stringify({ user: { uid: 'dsh-tavern' }, req_params: { text, speaker: voice, audio_params: audioParams } })
+      }, signal)
+      const style = volcengineEmotion(emotion, resourceId, voice)
+      if (!style) return { data: await say(audio), mediaType: 'audio/mpeg' }
+      try { return { data: await say({ ...audio, emotion: style, emotion_scale: 4 }), mediaType: 'audio/mpeg' } }
+      catch (error) {
+        // Which voice takes which emotion isn't listed anywhere we can read; a refused emotion
+        // shouldn't cost the line, so say it once more in the voice's own manner.
+        if (signal?.aborted || [401, 403, 429].includes(error?.status) || /^(无法连接|配音服务超过)/.test(error?.message)) throw error
+        return { data: await say(audio), mediaType: 'audio/mpeg' }
+      }
     }
   }
 ])
@@ -161,7 +252,7 @@ export function createSpeech({ store, credentials, plugins = () => [], fetchImpl
   function missing(provider, config, apiKey) {
     const field = provider.fields.find(item => item.required && !config[item.name])
     if (field) return '请填写' + field.label
-    if (provider.key && !apiKey) return '请填写 API Key'
+    if (provider.key && !apiKey) return '请填写 ' + (provider.keyLabel || 'API Key')
     return ''
   }
 
@@ -171,7 +262,7 @@ export function createSpeech({ store, credentials, plugins = () => [], fetchImpl
     for (const provider of providers()) {
       const config = settingsOf(provider, stored)
       list.push({ id: provider.id, label: provider.label, description: provider.description, owner: provider.owner || '', browser: provider.browser === true,
-        key: provider.key, hasKey: Boolean(await keyOf(provider)), voices: provider.voices.slice(0, 200),
+        key: provider.key, keyLabel: provider.keyLabel || 'API Key', hasKey: Boolean(await keyOf(provider)), voices: provider.voices.slice(0, 200),
         fields: provider.fields.map(field => ({ name: field.name, label: field.label, value: config[field.name], placeholder: field.default || '' })),
         voice: config.voice, narratorVoice: config.narratorVoice })
     }
@@ -200,7 +291,7 @@ export function createSpeech({ store, credentials, plugins = () => [], fetchImpl
     const supplied = provider.key && typeof apiKey === 'string' ? apiKey.trim() : ''
     const savedKey = await keyOf(provider)
     // A key belongs to the address it was saved with; never send it to a new one.
-    if (provider.key && savedKey && !supplied && trimSlash(next.baseUrl) !== trimSlash(previous.baseUrl)) throw invalid('地址已修改，请重新填写 API Key；旧密钥不会发送到新地址')
+    if (provider.key && savedKey && !supplied && trimSlash(next.baseUrl) !== trimSlash(previous.baseUrl)) throw invalid('地址已修改，请重新填写 ' + (provider.keyLabel || 'API Key') + '；旧密钥不会发送到新地址')
     const turnOn = enabled === undefined ? stored.enabled : enabled === true
     if (turnOn) {
       const reason = missing(provider, next, supplied || savedKey)
@@ -251,7 +342,7 @@ export function createSpeech({ store, credentials, plugins = () => [], fetchImpl
     if (provider.browser) return { browser: true, voice: speaker, text }
     if (!speaker) throw invalid('请先为「' + provider.label + '」填写默认声音')
     const { voice: _voice, narratorVoice: _narrator, ...fields } = config
-    const usesEmotion = provider.plugin || provider.id === 'minimax' || (provider.id === 'openai' && /gpt-4o/.test(config.model))
+    const usesEmotion = provider.plugin || provider.emotional === true || (provider.id === 'openai' && /gpt-4o/.test(config.model))
     // A plugin channel also hears who speaks and may voice them differently; its version marks changed synthesis.
     const line = { gameId: typeof gameId === 'string' ? gameId : '', speaker: typeof character === 'string' ? character.trim() : '', narration: narration === true }
     const digest = hash(JSON.stringify(provider.plugin ? [provider.id, fields, speaker, emotion, text, provider.plugin.version || '', line.speaker, line.narration]
