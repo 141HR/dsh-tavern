@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "be1917eefb13c0e811258041410f4df30b6917b9",
-  "releaseSequence": 678,
+  "revision": "c38568d4aeeba27fef0d747188fb10736ce2109b",
+  "releaseSequence": 679,
   "version": "2.7.0",
   "files": [
     {
@@ -246,8 +246,8 @@
     },
     {
       "path": "config/dsh-compatibility.json",
-      "sha256": "1039a9ae84eb9af3dc6195f6fe652581155da7884858c46632799b356775b929",
-      "size": 297
+      "sha256": "4137e7524fb8c53889e5dd451cf9ab067c0cba8711136e0c1d1ae6bd1c053050",
+      "size": 307
     },
     {
       "path": "config/legacy-profile-patch-v0.6.yml",
