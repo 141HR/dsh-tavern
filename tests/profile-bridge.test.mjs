@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, realpathSync, symlinkSync, existsSync, renameSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, realpathSync, symlinkSync, existsSync, renameSync, rmSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { switchProfile, waitForExit } from '../tavern-plugin/packages/dsh-profile-bridge/lib/helper.mjs'
@@ -54,4 +54,53 @@ test('已有切换在排队时给出可读的 busy 错误', async t => {
  const stateDir=mkdtempSync(join(tmpdir(),'pb-lock-'));t.after(()=>rmSync(stateDir,{recursive:true,force:true}))
  mkdirSync(join(stateDir,'pending'))
  assert.throws(()=>scheduleSwitch({stateDir}),e=>e.code==='busy'&&/等待桌面退出/.test(e.message))
+})
+
+test('陈旧 pending 自动归档并重试，仍在等待应用的锁保持 busy', async t => {
+ const { acquirePendingLock } = await import('../tavern-plugin/packages/dsh-profile-bridge/lib/helper.mjs')
+ const stateDir=mkdtempSync(join(tmpdir(),'pb-stale-'));t.after(()=>rmSync(stateDir,{recursive:true,force:true}))
+ const lock=join(stateDir,'pending');mkdirSync(lock)
+ writeFileSync(join(lock,'request.json'),JSON.stringify({pids:[4242]}))
+ assert.throws(()=>acquirePendingLock(stateDir,{alive:pid=>pid===4242,now:()=>Date.now()+3600000}),e=>e.code==='busy')
+ const acquired=acquirePendingLock(stateDir,{alive:()=>false,now:()=>Date.now()+3600000})
+ assert.equal(acquired.reclaimed,true)
+ const archives=readdirSync(join(stateDir,'stale')).filter(name=>name.startsWith('pending-'))
+ assert.equal(archives.length,1)
+ assert.ok(existsSync(join(stateDir,'stale',archives[0],'request.json')))
+ assert.ok(existsSync(join(stateDir,'pending')))
+})
+
+test('worker 仍在运行时保留 pending，worker 退出后立即回收', async t => {
+ const { acquirePendingLock } = await import('../tavern-plugin/packages/dsh-profile-bridge/lib/helper.mjs')
+ const stateDir=mkdtempSync(join(tmpdir(),'pb-worker-'));t.after(()=>rmSync(stateDir,{recursive:true,force:true}))
+ const lock=join(stateDir,'pending');mkdirSync(lock)
+ writeFileSync(join(lock,'request.json'),'{}')
+ writeFileSync(join(lock,'worker.json'),JSON.stringify({pid:5252,startedAt:0}))
+ assert.throws(()=>acquirePendingLock(stateDir,{alive:pid=>pid===5252,now:()=>Date.now()+3600000}),e=>e.code==='busy')
+ const acquired=acquirePendingLock(stateDir,{alive:()=>false,now:()=>Date.now()})
+ assert.equal(acquired.reclaimed,true)
+ assert.ok(readdirSync(join(stateDir,'stale')).some(name=>name.startsWith('pending-')))
+})
+
+test('陈旧锁归档只保留最近几份', async t => {
+ const { acquirePendingLock } = await import('../tavern-plugin/packages/dsh-profile-bridge/lib/helper.mjs')
+ const stateDir=mkdtempSync(join(tmpdir(),'pb-prune-'));t.after(()=>rmSync(stateDir,{recursive:true,force:true}))
+ const staleRoot=join(stateDir,'stale');mkdirSync(staleRoot,{recursive:true})
+ for(let index=0;index<3;index+=1) mkdirSync(join(staleRoot,'pending-old-'+index))
+ const lock=join(stateDir,'pending');mkdirSync(lock);writeFileSync(join(lock,'request.json'),'{}')
+ const acquired=acquirePendingLock(stateDir,{alive:()=>false,now:()=>Date.now()+3600000,keep:2})
+ assert.equal(acquired.reclaimed,true)
+ assert.equal(readdirSync(staleRoot).filter(name=>name.startsWith('pending-')).length,2)
+})
+
+test('worker 结束后释放 pending：登记的 worker.json 不会让锁目录残留', async t => {
+ const { execFileSync } = await import('node:child_process')
+ const { fileURLToPath } = await import('node:url')
+ const stateDir=mkdtempSync(join(tmpdir(),'pb-release-'));t.after(()=>rmSync(stateDir,{recursive:true,force:true}))
+ const lock=join(stateDir,'pending');mkdirSync(lock)
+ writeFileSync(join(lock,'request.json'),JSON.stringify({stateDir,pids:[]}))
+ writeFileSync(join(lock,'worker.json'),JSON.stringify({pid:1234,startedAt:0}))
+ const worker=fileURLToPath(new URL('../tavern-plugin/packages/dsh-profile-bridge/lib/worker.mjs',import.meta.url))
+ try { execFileSync(process.execPath,[worker,join(lock,'request.json')],{stdio:'ignore'}) } catch {}
+ assert.equal(existsSync(lock),false)
 })
