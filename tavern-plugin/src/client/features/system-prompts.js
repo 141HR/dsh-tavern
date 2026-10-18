@@ -2,7 +2,6 @@
             const askConfirm = useTavernConfirm();
 			const h = React.createElement;
 			const [state, setState] = React.useState({ loading: true, busy: false, prompts: [], promptSets: { activeId: "", sets: [] }, systemAppendEnabled: false, drafts: {}, error: "", notice: "" });
-			const importInput = React.useRef(null);
 			function accept(result, notice, name) {
 				const value = result && result.systemPrompts || {};
 				setState(function (current) {
@@ -57,21 +56,6 @@
 				try { accept(await rpc("manageSystemPromptSet", { action: action, id: id, name: name }), action === "select" ? "已切换方案，将从下一次请求开始生效。" : action === "delete" ? "方案已删除。" : action === "rename" ? "已重命名。" : "已新建方案并切换使用。"); }
 				catch (error) { setState(function (current) { return Object.assign({}, current, { busy: false, error: String(error && error.message || error) }); }); }
 			}
-			async function importFile(file) {
-				if (!file) return;
-				setState(function (current) { return Object.assign({}, current, { busy: true, error: "", notice: "" }); });
-				try { accept(await rpc("importSystemPrompts", { payload: await parseTextResourceFile(file) }), "已导入为新方案并切换使用。"); }
-				catch (error) { setState(function (current) { return Object.assign({}, current, { busy: false, error: String(error && error.message || error) }); }); }
-			}
-			async function exportFile() {
-				setState(function (current) { return Object.assign({}, current, { busy: true, error: "", notice: "" }); });
-				try {
-					const result = await rpc("exportSystemPrompts");
-					const blob = new Blob([result.text], { type: "application/json" }); const url = URL.createObjectURL(blob); const link = document.createElement("a");
-					link.href = url; link.download = result.name || "dsh-tavern-system-prompts.json"; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
-					setState(function (current) { return Object.assign({}, current, { busy: false, notice: "已导出当前方案。" }); });
-				} catch (error) { setState(function (current) { return Object.assign({}, current, { busy: false, error: String(error && error.message || error) }); }); }
-			}
 			function row(item) {
 				const value = draft(item); const dirty = value !== String(item.text || "");
 				return h("details", { key: item.name, className: "dsh-tavern-prompt-row dsh-tavern-system-prompt-row role-system" },
@@ -83,8 +67,7 @@
 			return h("div", { className: "dsh-tavern-presets" },
 				h("div", { className: "dsh-tavern-status-head dsh-tavern-system-prompt-head" },
 					h("div", { className: "dsh-tavern-status-title" }, "系统提示词"),
-					h("div", { className: "dsh-tavern-question-sub" }, "选中的方案对所有游戏生效"),
-					h("div", { className: "dsh-tavern-system-prompt-top-actions" }, h("button", { className: "dsh-tavern-btn", disabled: state.busy, onClick: function () { importInput.current && importInput.current.click(); } }, "导入 JSON"), h("button", { className: "dsh-tavern-btn", disabled: state.busy, onClick: function () { void exportFile(); } }, "导出 JSON"), h("input", { ref: importInput, type: "file", accept: ".json,application/json", style: { display: "none" }, onChange: function (event) { const file = event.target.files && event.target.files[0]; void importFile(file); event.target.value = ""; } }))),
+					h("div", { className: "dsh-tavern-question-sub" }, "选中的方案对所有游戏生效")),
 				h("div", { className: "dsh-tavern-profile-library-bar dsh-tavern-prompt-set-bar" },
 					h("select", { "aria-label": "系统提示词方案", value: state.promptSets.activeId, disabled: state.busy, onChange: function (event) { void manageSet("select", event.target.value); } }, state.promptSets.sets.map(function (item) { return h("option", { key: item.id, value: item.id }, item.name); })),
 					h("button", { className: "dsh-tavern-btn", disabled: state.busy, title: "新建一套默认内容的方案", onClick: function () { void manageSet("create"); } }, "新建"),

@@ -234,10 +234,10 @@
 				const ctx = input.ctx;
 				const appendMention = input.appendMention;
 				return ctx.effect(function () {
-					const dispose = ctx.betterSidebar.registerTab({ id: "dsh-tavern:presets", title: "预设库", order: 4, single: true, component: function (props) { return React.createElement(ExternalPresetLibraryTab, { scope: props.scope, visible: props.visible, appendMention: function (kind, path, label) { appendMention(props.scope.sessionId, kind, path, label); } }); } });
+					const dispose = ctx.betterSidebar.registerTab({ id: "dsh-tavern:presets", title: "预设", order: 4, single: true, component: function (props) { return React.createElement(TavernPresetHubTab, { scope: props.scope, tab: props.tab, visible: props.visible, appendMention: function (kind, path, label) { appendMention(props.scope.sessionId, kind, path, label); } }); } });
 					return function () { if (typeof dispose === "function") dispose(); };
 				}, "dsh-tavern: preset library");
 			}
-			return Object.freeze({ register: register });
+			return Object.freeze({ register: register, Tab: ExternalPresetLibraryTab });
 			}
 			const presetLibraryFeature = createExternalPresetAndBypassPlanFeatureModule();

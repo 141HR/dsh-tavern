@@ -133,18 +133,3 @@
 					)
 			));
 		}
-
-		function createUserPreferenceProfileFeatureModule() {
-			function register(input) {
-				const ctx = input.ctx;
-				return ctx.effect(() => ctx.betterSidebar.registerTab({
-					id: "dsh-tavern:user-profile",
-					title: "长期偏好",
-					order: 3,
-					single: true,
-					component: UserPreferenceProfileTab
-				}), "dsh-tavern: Better Sidebar user profile tab");
-			}
-			return Object.freeze({ register: register });
-		}
-		const userPreferenceProfileFeature = createUserPreferenceProfileFeatureModule();

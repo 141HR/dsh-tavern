@@ -355,7 +355,7 @@
                         h("p", { className: "dsh-tavern-settings-desc" }, "Guide 是本局持续生效的要求，会同时注入前台（正文）和后台（候选、变量结算），可用来引导剧情走向、文风和数值尺度。"),
                         h("details", { className: "dsh-tavern-guide-destinations" },
                             h("summary", null, "长期偏好与人物设定"),
-                            h("div", null, "跨游戏通用的个人喜好，可在长期偏好中设置。", h("button", { type: "button", onClick: () => props.openStyleTab("dsh-tavern:user-profile") }, "打开长期偏好 ↗")),
+                            h("div", null, "跨游戏通用的个人喜好，可在长期偏好中设置。", h("button", { type: "button", onClick: () => props.openStyleTab("dsh-tavern:presets", { section: "userProfile" }) }, "打开长期偏好 ↗")),
                             h("div", null, "故事专属设定写入人物卡。", h("button", { type: "button", disabled: !view.card.path, onClick: () => props.openStyleTab("dsh-tavern:cards", { cardPath: view.card.path }) }, "打开人物卡 ↗"))),
 						h("div", { className: "dsh-tavern-guide-list" },
 							(view.guides || []).length ? (view.guides || []).map(function (guide, index) {
