@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "12c0f6434161fed0c382af0b933af7e3f16825fa",
-  "releaseSequence": 714,
+  "revision": "440719f3f7ec81d46331d6415a35a32514a53d31",
+  "releaseSequence": 715,
   "version": "3.0.0",
   "files": [
     {
@@ -1246,8 +1246,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/native-surface-repair.js",
-      "sha256": "cd378e3ba4c4475658cdd0b349bfb46f70233e792e35f64101e5ab5250ff186c",
-      "size": 10338
+      "sha256": "b92bf0153b3c27f0cf4bbcef9869e67cb8487a95860e9b269cf21c673f846858",
+      "size": 10700
     },
     {
       "path": "tavern-plugin/lib/domain/native-turn-result.js",
@@ -1711,8 +1711,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/session-log-repair.js",
-      "sha256": "071397ef1d5555a0170725f49951374799a8ef52af0669cb1e58d35178aa35cb",
-      "size": 7550
+      "sha256": "754a156b34e96d255ab26f2e3d41d9303bdd0112d1013c23f4465547d5da92c0",
+      "size": 10635
     },
     {
       "path": "tavern-plugin/lib/domain/session-message-index.js",
@@ -1746,8 +1746,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/session-surface-mutations.js",
-      "sha256": "7bbabb7dc9cff7e69cd4733ad2e18ff5b8ab43d16262c689c9d611574be95890",
-      "size": 9007
+      "sha256": "4d78885fbfff149613b36a9023b36db3d5ab3b13873462c320afdce2a66e6904",
+      "size": 10174
     },
     {
       "path": "tavern-plugin/lib/domain/session-turn-input.js",
@@ -1876,8 +1876,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/story-tool-submission.js",
-      "sha256": "0b94d29132b31dc75f966c176d3a7688c5242534447a6e957f8f832224ea036e",
-      "size": 7553
+      "sha256": "6ae3975de3f6c64b673c09ac9fd18829a37ece0cc50d2dc20969f4108e3f426a",
+      "size": 7772
     },
     {
       "path": "tavern-plugin/lib/domain/surface-recovery.js",
