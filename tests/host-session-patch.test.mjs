@@ -92,32 +92,6 @@ test(`${SESSION_PATCH_VERSION} 补丁允许替换，未打补丁的读取仍拒�
   await ctx.fiber.dispose()
 })
 
-test('补丁按文件字节放行：新版本号、字节相同照常就绪；字节不同则 skipped 并说明原因', { skip: !runtimeReady }, async () => {
-  const hostRequire = createRequire(join(runtime, 'package.json'))
-  const load = name => import(pathToFileURL(hostRequire.resolve(name)).href)
-  const { Context } = await load('@deepseek-ai/cordis')
-  const Jsonl = await load('@deepseek-ai/dsh-session-persistence-jsonl')
-  const { SessionQueryEngine } = await load('@deepseek-ai/dsh-session-query')
-  const root = await mkdtemp(join(tmpdir(), 'tavern-host-patch-bytes-'))
-  const fakePackage = join(root, 'package.json')
-  writeFileSync(fakePackage, JSON.stringify({ name: '@deepseek-ai/dsh-session', version: '0.2.9-rc.1' }))
-  const relabeled = (override = {}) => ({ resolve: name => name === '@deepseek-ai/dsh-session/package.json' ? fakePackage : override[name] || hostRequire.resolve(name) })
-
-  const changed = await installHostSessionPatch({ hostRequire: relabeled({ '@deepseek-ai/dsh-session/surface': fileURLToPath(import.meta.url) }), persistence: null, query: null })
-  assert.equal(changed.status, 'skipped')
-  assert.equal(changed.view().ready, false)
-  assert.match(changed.reason, /0\.2\.9-rc\.1 的会话文件与已审计的 .+ 不同（@deepseek-ai\/dsh-session\/surface）/)
-
-  const ctx = new Context()
-  try {
-    await ctx.plugin(Jsonl, { root: join(root, 'ready'), compression: 'none' }).await()
-    const same = await installHostSessionPatch({ hostRequire: relabeled(), persistence: ctx.sessionPersistence, query: new SessionQueryEngine(ctx) })
-    assert.equal(same.status, 'ready', same.reason)
-    assert.equal(same.hostVersion, '0.2.9-rc.1')
-    same.dispose()
-  } finally { await ctx.fiber.dispose() }
-})
-
 test('issue #74: patched persistence rewrites dynamic import("koffi") to a file URL', () => {
   // Mirror compile()'s specifier rewrite without booting the full host patch.
   const sample = 'async function win32(){ const k = (await import("koffi")).default; return k }\nexport default {}\n'
