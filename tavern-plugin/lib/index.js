@@ -2851,7 +2851,7 @@ export async function apply(ctx) {
     const character = card && name ? (await castAssets.read(card.path)).characters.find(item => item.name === name || (item.aliases || []).includes(name)) : null
     const voice = speech.voiceFor({ character, provider: current.provider, config: current.config, narration: narration === true })
     if (voice === null) return { skip: true, reason: 'narration' }
-    return speechReply(await speech.synthesize({ provider: current.provider.id, text, voice, emotion }))
+    return speechReply(await speech.synthesize({ provider: current.provider.id, text, voice, emotion, gameId: str(sessionId), speaker: name, narration: narration === true }))
   }
   function speechReply(result) {
     return result.browser ? result : { url: '/api/dsh-tavern/speech-audio?id=' + result.id, mediaType: result.mediaType }

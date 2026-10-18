@@ -370,14 +370,15 @@ export function createTavernPluginApi(deps) {
     },
 
     // A speech channel of the plugin's own; players pick it in Tavern's voicing settings.
-    speechProvider({ id, label, description = '', voices = [], defaultVoice = '', synthesize } = {}) {
+    speechProvider({ id, label, description = '', voices = [], defaultVoice = '', version = '', synthesize } = {}) {
       const owner = ownerOf(this)
       sectionName(id)
       if (typeof label !== 'string' || !label.trim() || label.trim().length > 30) throw new Error('label 必须是 1–30 字')
       if (typeof synthesize !== 'function') throw new TypeError('speechProvider 需要 synthesize 函数')
       if (!Array.isArray(voices) || voices.some(voice => typeof voice !== 'string')) throw new TypeError('voices 必须是文本数组')
+      if (typeof version !== 'string' || version.length > 40) throw new TypeError('version 必须是不超过 40 字的字符串')
       const key = owner + '/' + id
-      const entry = { id: key, owner, label: label.trim(), description: String(description).slice(0, 300), voices: voices.slice(0, 200), defaultVoice: String(defaultVoice || ''),
+      const entry = { id: key, owner, label: label.trim(), description: String(description).slice(0, 300), voices: voices.slice(0, 200), defaultVoice: String(defaultVoice || ''), version,
         synthesize: input => bounded(synthesize(input), '配音渠道 ' + key, REPLACEMENT_TIMEOUT_MS).catch(error => { recordError(null, owner, '配音', error); throw error }) }
       return register.call(this, speechProviders, key, entry, 'tavern.speechProvider()', '配音渠道 ' + id + ' 已注册')
     },
