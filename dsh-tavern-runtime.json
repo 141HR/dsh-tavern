@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "8bf81b1260e7aaa84694f2cdb774c258720f4c3f",
-  "releaseSequence": 704,
+  "revision": "6c4f7fbe69d13e27e283e06dc444308f81144096",
+  "releaseSequence": 705,
   "version": "3.0.0",
   "files": [
     {
@@ -66,8 +66,8 @@
     },
     {
       "path": "bin/dsh-compatibility.mjs",
-      "sha256": "cfb39bc5274455547e673f725637ee3dbd05f0c2b8fb54272460f6e70482aeb5",
-      "size": 3659
+      "sha256": "e7ec9301807350485e699129f2a00a743d9c57e0f9b67ac4c6c37091f6e0aa97",
+      "size": 4082
     },
     {
       "path": "bin/dsh-tavern",
@@ -141,8 +141,8 @@
     },
     {
       "path": "bin/profile-configuration.mjs",
-      "sha256": "282cb5ec57503ada1e895520b21decc8726ad3bdad24f8288e2bb99b33bc02d8",
-      "size": 14056
+      "sha256": "149f9d6b8f8cb7351d8ab3a455b8610b205353cbe01c12a03adb4d523fd77f24",
+      "size": 14770
     },
     {
       "path": "bin/profile-installation.mjs",
@@ -246,8 +246,8 @@
     },
     {
       "path": "config/dsh-compatibility.json",
-      "sha256": "4137e7524fb8c53889e5dd451cf9ab067c0cba8711136e0c1d1ae6bd1c053050",
-      "size": 307
+      "sha256": "071ad562b5bf1b837d1c05e19c19bd3bd8ad0c65f1a36c428fce25939b356c24",
+      "size": 461
     },
     {
       "path": "config/legacy-profile-patch-v0.6.yml",
@@ -283,6 +283,11 @@
       "path": "package.json",
       "sha256": "b8ce7ded104ca6644d58dcb188ee5b2baab47fd41683324acf2748b110ceacc1",
       "size": 3822
+    },
+    {
+      "path": "patches/dsh-better-sidebar@0.26.0.patch",
+      "sha256": "dbfa67fb8adc1248d6243ad219b8ae37021b087f007a20ce98cce4fbb734e31a",
+      "size": 1901
     },
     {
       "path": "patches/dsh-better-sidebar@0.28.0.patch",
