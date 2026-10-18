@@ -154,7 +154,7 @@
 
 ### 命令行版（Windows / macOS / Linux，用浏览器玩）
 
-不需要桌面版，自带 DSH。需要 [Node.js 22.19+](https://nodejs.org/) 和 pnpm。
+不需要桌面版。命令行版自带一套独立的 DSH，和程序、游戏数据一起装在自己的目录里（默认 `~/.dsh-tavern`），**不会改动、也不会和你已经装好的 DSH 冲突**：桌面版、全局的 `dsh` 命令照常使用，两边互不影响，可以同时运行。需要 [Node.js 22.19+](https://nodejs.org/) 和 pnpm。
 
 Windows（PowerShell）：
 
