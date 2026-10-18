@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "1de6f3f7163b117117ee2d6689e64c12646137c2",
-  "releaseSequence": 664,
+  "revision": "eec62c1b04b97b57517ad90dd1c3575937fba793",
+  "releaseSequence": 666,
   "version": "2.7.0",
   "files": [
     {
@@ -2086,8 +2086,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/worldbook-recall.js",
-      "sha256": "ae76d9676c73a941d8a79d54537e246a1762bfc07711bb4d2e794c38718fb181",
-      "size": 14683
+      "sha256": "517b23bf0d79ca136df21943b7534992a3e3473a94a6e989b40c41f943e63714",
+      "size": 14916
     },
     {
       "path": "tavern-plugin/lib/domain/worldbook-resource.js",
