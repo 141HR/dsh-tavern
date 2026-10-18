@@ -457,9 +457,6 @@ export function createNativePlayOrchestrationStrategy(options) {
       const modes = options.pluginToolModes ? options.pluginToolModes(schema.name) : null
       return !modes || modes.includes(group)
     })
-    // DSH may expose both editor generations; the legacy schema alone costs
-    // ~800 tokens on every card-Agent step and duplicates read/edit/write.
-    if (assembly.tools.some(schema => schema.name === 'edit')) assembly.tools = assembly.tools.filter(schema => schema.name !== 'str_replace_editor')
     return assembly
   }
 
