@@ -5384,6 +5384,7 @@ export async function apply(ctx) {
       projectMessages: compatibilityMessages
     },
     nativePlay: {
+      historyToolCall: async () => (await readTavernSettings()).storyHistoryToolCall,
       systemAppend: () => runtimePrompt('system-append'),
       stagedRequests: runtimePresetSnapshots,
       modeFor: async function (sessionId) { return await turnOrchestrator.modeFor(sessionId) },
