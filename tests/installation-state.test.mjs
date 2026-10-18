@@ -214,7 +214,7 @@ test('standalone installer embeddings are current and ownership precedes persist
   assert.ok(unix.indexOf(' acquire --home ') < unix.indexOf("printf 'cli-v1\\n'"))
   assert.ok(unix.indexOf(' acquire --home ') < unix.indexOf('mkdir -p "$(dirname -- "${SOURCE_CACHE}")"'))
   assert.ok(windows.indexOf('$OwnerJson = & node') < windows.indexOf("Set-Content -LiteralPath (Join-Path $DshRoot '.dsh-tavern-install-root')"))
-  assert.ok(windows.indexOf('$OwnerJson = & node') < windows.indexOf('[Environment]::SetEnvironmentVariable'))
+  assert.ok(windows.indexOf('$OwnerJson = & node') < windows.indexOf("[Environment]::SetEnvironmentVariable('Path', $NewUserPath, 'User')"))
 })
 
 test('standalone post-download stages use the real process supervisor to bound hung descendants', { skip: process.platform === 'win32' }, t => {
