@@ -71,7 +71,7 @@ Invoke-Expression $tavernInstaller
 
 已有测试版若占用了 `desktop`，安装器会将当前酒馆配置复制到 `tavern`，并查找原版目录备份或成对的配置文件备份。找不到原版备份时停止，不覆盖现有 profile；需先恢复原版 desktop 备份，再重试。安装失败会恢复之前的 profile 入口和目录，失败现场及备份仍保留；中断后的未完成目录事务在下次安装时恢复。
 
-重新运行安装命令会继续更新独立 `tavern`，安装成功后默认进入酒馆。macOS 桥接已实机验证；Windows junction 切换仍待实机验证。实现与来源见 [桥接插件说明](tavern-plugin/packages/dsh-profile-bridge/README.md)。
+重新运行安装命令会继续更新独立 `tavern`，安装成功后默认进入酒馆。macOS 与 Windows 11 均已实机验证往返切换。实现与来源见 [桥接插件说明](tavern-plugin/packages/dsh-profile-bridge/README.md)。
 
 ## 从旧命令行版或自定义目录继承数据
 

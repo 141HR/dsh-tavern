@@ -10,7 +10,7 @@
 
 ## 使用与验证范围
 
-2026-10-17 已在 macOS 官方桌面 0.2.1-rc.2 验证 `tavern → 原版 desktop → tavern` 往返：两边设置页都能打开“配置档案”（现名“Profile 切换”），正常退出后切换，重新启动后正确加载。Windows 目录 junction 逻辑暂未实机验证。
+2026-10-17 已在 macOS 官方桌面 0.2.1-rc.2 验证 `tavern → 原版 desktop → tavern` 往返：两边设置页都能打开“配置档案”（现名“Profile 切换”），正常退出后切换，重新启动后正确加载。2026-10-18 社区贡献者 141HR 在 Windows 11（build 26200）官方桌面 0.2.1-rc.2 验证同样的往返：`profiles/desktop` 在独立目录与指向 `profiles/tavern` 的 junction 之间切换，存档与配置不受影响。
 
 - 返回原版：设置 → Profile 切换 → 选「原版 DSH」→ 立即重启。
 - 返回酒馆：原版设置 → Profile 切换 → 选「DSH Tavern」→ 立即重启。
