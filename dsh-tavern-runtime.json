@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "40b2accdcd8cab6ef9fa8ccb3be6cf5348228412",
-  "releaseSequence": 697,
+  "revision": "daf7ed78589757ff3bc0808b5f69f9d8a7284ef4",
+  "releaseSequence": 698,
   "version": "3.0.0",
   "files": [
     {
@@ -16,8 +16,8 @@
     },
     {
       "path": "bin/build-installer-scripts.mjs",
-      "sha256": "c77830b0d5714398934d805fbd20bdb8e8751dbf0fdcb8dc190d1b11dcf0ec20",
-      "size": 2555
+      "sha256": "cbdc9911faf59a0ff7115d81420152fe70ab3b1fafb481f1722a55f7d3cbe11a",
+      "size": 3417
     },
     {
       "path": "bin/build-mvu-schema.mjs",
@@ -61,8 +61,8 @@
     },
     {
       "path": "bin/download.cjs",
-      "sha256": "c44dd6da3e3089d9113d31703ea61d9599bf43d0e8d4f2550da25c3af90297a2",
-      "size": 17033
+      "sha256": "956033ee2bf2e81417e589fe58a9eb54277cd806591b00d04fa79be8da973972",
+      "size": 19715
     },
     {
       "path": "bin/dsh-compatibility.mjs",
@@ -271,13 +271,13 @@
     },
     {
       "path": "install.ps1",
-      "sha256": "a26f32cfc1edece544b6f86f334839674503bb819b9d956bbf56e8248f152df6",
-      "size": 82158
+      "sha256": "3da72f67d1d92deffffb58c88a1fa539f1b97212b9f88d42816aa181c922ed49",
+      "size": 85017
     },
     {
       "path": "install.sh",
-      "sha256": "c50c346e038c5e79714017adaa855aa534c1ef7cb37beffdaacd8e590679aa4d",
-      "size": 62463
+      "sha256": "aa4160c030234af7eda18aae0900e6449200a8f78f3248f9da8ee02cb638a871",
+      "size": 65321
     },
     {
       "path": "package.json",
