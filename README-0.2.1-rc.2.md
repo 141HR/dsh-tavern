@@ -4,15 +4,15 @@
 
 | 系统 | 安装方式 |
 | --- | --- |
-| [Windows](#windows) | 官方桌面版，或命令行版（浏览器使用） |
+| [Windows](#windows) | 桌面版（官方 / 社区 DSH NEXT），或命令行版（浏览器使用） |
 | [安卓](#安卓dsha) | DSHA |
-| [macOS](#macos) | 官方桌面版，或命令行版（浏览器使用） |
+| [macOS](#macos) | 桌面版（官方 / 社区 DSH NEXT），或命令行版（浏览器使用） |
 | [Linux](#linux) | 命令行版（浏览器使用） |
 
 ## 开始之前
 
 - 先备份 `.dsh` 目录，并完整退出桌面版和旧酒馆。
-- 允许的宿主版本：官方 DeepSeek Harness **0.2.1-rc.2**（[官网下载](https://deepseek.com/harness/)）、DSHA **v0.2.0-rc2**（内置 DSH 0.2.0-rc.2）。其他版本安装器会停止。命令行版自带 DSH，不受此限。
+- 允许的宿主版本：官方 DeepSeek Harness **0.2.1-rc.2**（[官网下载](https://deepseek.com/harness/)）或社区版 [DSH NEXT](https://github.com/anywhere-labs/dsh-desktop/releases)（内置同一版本 DSH）、DSHA **v0.2.0-rc2**（内置 DSH 0.2.0-rc.2）。其他版本安装器会停止。命令行版自带 DSH，不受此限。
 
 ## Windows
 
@@ -29,7 +29,7 @@
 
 3. 安装成功后重新打开 DeepSeek Harness，即进入酒馆。
 
-无需另装 Node.js。切回原版 DSH 见 [桌面版：切回原版](#桌面版切回原版)。
+**社区版 DSH NEXT 的安装命令与官方版相同**，两者共用 `.dsh` 数据目录，装一次两边都能用。无需另装 Node.js。切回原版 DSH 见 [桌面版：切回原版](#桌面版切回原版)。
 
 ### 方式二：命令行版（浏览器使用）
 
@@ -68,7 +68,7 @@ Invoke-Expression $tavernInstaller
 
 3. 安装成功后重新打开 DeepSeek Harness，即进入酒馆。
 
-无需另装 Node.js。切回原版 DSH 见 [桌面版：切回原版](#桌面版切回原版)。
+**社区版 DSH NEXT 的安装命令与官方版相同**，两者共用 `.dsh` 数据目录，装一次两边都能用。无需另装 Node.js。切回原版 DSH 见 [桌面版：切回原版](#桌面版切回原版)。
 
 ### 方式二：命令行版（浏览器使用）
 
@@ -98,6 +98,7 @@ curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%
 | --- | --- |
 | `dsh-tavern start` | 启动，按输出的地址在浏览器打开 |
 | `dsh-tavern stop` | 停止 |
+| `dsh-tavern restart` | 重启 |
 | `dsh-tavern status` | 查看状态 |
 | `dsh-tavern update` | 更新 |
 

@@ -13,4 +13,4 @@ if (profile.skippedBundles.length) throw new Error(profile.skippedBundles.map(it
 const homePatch = boot.loadOptionalPatches('dsh-tavern', path.join(process.env.DSH_HOME, 'cordis.patch.yml')) || []
 const entries = boot.composeEntries([...profile.layers.map(layer => layer.patches), profile.patches, homePatch], message => console.error(message))
 if (!profile.layers.some(layer => layer.packageName === (process.argv[2] ? 'dsh-profile-bridge' : 'dsh-tavern-plugin'))) throw new Error('Desktop 配置没有加载酒馆插件')
-console.log(`官方 Desktop 配置验证通过：${profile.layers.length} 个插件包，${entries.length} 个配置条目`)
+console.log(`桌面版配置验证通过：${profile.layers.length} 个插件包，${entries.length} 个配置条目`)

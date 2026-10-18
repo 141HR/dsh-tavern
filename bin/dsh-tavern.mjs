@@ -41,12 +41,14 @@ async function main() {
   updateDiagnostic('updater.started', { execPath: process.execPath, electron: process.versions.electron || '', runtimeHost: RUNTIME_HOST, cwd: process.cwd() })
   if (RUNTIME_HOST === 'desktop' && ['install', 'update'].includes(action)) {
     const executable = officialDesktop.discover()
-    if (!process.versions.electron || path.resolve(process.execPath) !== path.resolve(executable)) {
-      updateDiagnostic('updater.relaunch', { executable })
-      const setup = spawnSync(executable, ['--expose-internals', fileURLToPath(new URL('./official-desktop-runtime.cjs', import.meta.url)), DSH_ROOT],
-        { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8' })
-      if (setup.error || setup.status !== 0) throw new Error(setup.error?.message || setup.stderr || '官方 Desktop 环境准备失败')
-      const result = spawnSync(executable, ['--expose-internals', SCRIPT_PATH, ...process.argv.slice(2)],
+    // Official: the app's Electron in Node mode. Community: its bundled Node.
+    const runner = officialDesktop.runner(executable)
+    if (path.resolve(process.execPath) !== path.resolve(runner)) {
+      updateDiagnostic('updater.relaunch', { executable, runner })
+      const setup = spawnSync(runner, ['--expose-internals', fileURLToPath(new URL('./official-desktop-runtime.cjs', import.meta.url)), DSH_ROOT],
+        { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', DSH_DESKTOP_APP_EXECUTABLE: executable }, encoding: 'utf8' })
+      if (setup.error || setup.status !== 0) throw new Error(setup.error?.message || setup.stderr || '桌面环境准备失败')
+      const result = spawnSync(runner, ['--expose-internals', SCRIPT_PATH, ...process.argv.slice(2)],
         { env: { ...process.env, ...JSON.parse(setup.stdout), ELECTRON_RUN_AS_NODE: '1' }, stdio: 'inherit' })
       if (result.error) throw result.error
       process.exitCode = result.status ?? 1
