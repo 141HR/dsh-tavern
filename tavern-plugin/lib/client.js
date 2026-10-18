@@ -14976,6 +14976,17 @@ function bindTavernFontZoom(node, win) {
 				await refresh(["sessions"]);
 				setError("");
 			}
+			// 切到没有历史的模式时，旧代码用 clearMain() 收台面，留下一个没有 Session 的主视图。
+			// 宿主那些「空白会话专属入口」——特别是 better-sidebar 的底部面板和右上角的
+			// 「展开底部面板」按钮——都挂在已挂载的 Session 上（没有 sessionId 时
+			// [data-dsh-panel-host] 只渲染一个空壳），清空之后它们连同整套底部面板一起消失，
+			// 而且不会自己回来：只有重新打开/新建对话才会再出现。
+			// 因此这里保留台面上已有的 Session，只有在台面真的空着时才建一个空白会话，
+			// 避免每切一次模式就多建一个空 Session。
+			async function ensureLandingSession() {
+				if (current) return;
+				await openBlankConversation();
+			}
 			// clearMain() leaves no Session for the host's blank-session entries
 			// (including better-sidebar's bottom-panel toggle) to mount into.
 			async function openBlankConversation() {
@@ -15314,8 +15325,7 @@ function bindTavernFontZoom(node, win) {
 					try { await openSessionWhenReady(first.sessionId); }
 					catch (err) { setError("打开 Session 失败：" + String(err && err.message || err)); }
 				}
-				else if (nextMode === "card") openPicker();
-				else openPicker();
+				else { await ensureLandingSession(); openPicker(); }
 			}
 			async function switchPlayRequestMode(nextRequestMode) {
 				if (!compatibilityAvailable && nextRequestMode === "sillytavern") return;
@@ -15330,7 +15340,7 @@ function bindTavernFontZoom(node, win) {
 					const target = history.filter(function (item) {
 						return isPlayMode(item.mode) && (item.requestMode === "sillytavern" ? "sillytavern" : "dsh") === nextRequestMode;
 					})[0];
-					if (!target) { props.sessions.clear(); openPicker(); return; }
+					if (!target) { await ensureLandingSession(); openPicker(); return; }
 					if (target.sessionId !== current) await openSessionWhenReady(target.sessionId);
 				} catch (err) { setError("切换对话列表失败：" + String(err && err.message || err)); }
 				finally { setBusy(false); }

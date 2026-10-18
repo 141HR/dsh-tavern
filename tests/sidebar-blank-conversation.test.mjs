@@ -86,3 +86,60 @@ test('删掉当前仅剩的对话时回到空白会话，而不是只清空主�
   await ctx.deleteConversation({ sessionId: 'session-open', chatId: 'chat-1', cardName: '测试卡' }, '测试对话')
   assert.deepEqual(calls, [['prepareDeleteChats'], ['archive', 'session-open'], ['deleteChat'], ['blank'], ['picker']])
 })
+
+// 游玩 ↔ 卡片来回切换时，切到没有历史的一侧曾经直接 clearMain()：主视图再没有 Session，
+// better-sidebar 的底部面板与右上角「展开底部面板」按钮都挂在已挂载的会话上，于是整套消失且不会自己回来。
+function modeSwitchFixture(options = {}) {
+  const calls = []
+  const errors = []
+  const ctx = vm.createContext({
+    workspaceId: 'workspace-play',
+    playWorkspaceIdRef: { current: '' },
+    current: options.current ?? 'session-blank',
+    history: options.history ?? [],
+    requestMode: 'dsh',
+    compatibilityAvailable: false,
+    openingPicker: null,
+    isPlayMode: mode => mode !== 'card',
+    groupOfMode: mode => (mode === 'card' ? 'card' : 'play'),
+    playPrewarmRef: { current: { cancel() {} } },
+    setUiMode: mode => { calls.push(['uiMode', mode]) },
+    setRequestMode: mode => { calls.push(['requestMode', mode]) },
+    setPicking: value => { calls.push(['picking', value]) },
+    setMenuSession: () => {},
+    setBusy: value => { calls.push(['busy', value]) },
+    setError: message => { errors.push(message) },
+    window: { localStorage: { getItem: () => null, setItem: (key, value) => { calls.push(['store', key, value]) } } },
+    props: {
+      conversationHost: { connectWorkspace: async id => { calls.push(['connect', id]); return 'blank-session' } },
+      sessions: { clear() { calls.push(['clear']) } },
+    },
+    openSessionWhenReady: async id => { calls.push(['open', id]) },
+    openPicker: () => { calls.push(['picker']) },
+  })
+  vm.runInContext(source.slice(source.indexOf('async function ensureLandingSession()'), source.indexOf('// A turn the live Agent')), ctx)
+  vm.runInContext(source.slice(source.indexOf('async function switchMode('), source.indexOf('async function rescueConversation(item)')), ctx)
+  return { ctx, calls, errors }
+}
+
+test('切回游玩但没有游玩历史时保留当前会话，不再 clearMain', async () => {
+  const { ctx, calls, errors } = modeSwitchFixture()
+  await ctx.switchPlayRequestMode('dsh')
+  assert.deepEqual(calls.filter(call => ['clear', 'connect', 'open'].includes(call[0])), [])
+  assert.deepEqual(calls.filter(call => call[0] === 'picker'), [['picker']])
+  assert.deepEqual(errors.filter(Boolean), [])
+})
+
+test('台面已经空着时切模式补一个空白会话，底部面板入口才有会话可挂载', async () => {
+  const { ctx, calls, errors } = modeSwitchFixture({ current: '' })
+  await ctx.switchPlayRequestMode('dsh')
+  assert.deepEqual(calls.filter(call => ['clear', 'connect', 'open'].includes(call[0])), [['connect', 'workspace-play'], ['open', 'blank-session']])
+  assert.deepEqual(errors.filter(Boolean), [])
+})
+
+test('切到没有历史的卡片模式同样保留当前会话', async () => {
+  const { ctx, calls } = modeSwitchFixture()
+  await ctx.switchMode('card')
+  assert.deepEqual(calls.filter(call => ['clear', 'connect', 'open'].includes(call[0])), [])
+  assert.deepEqual(calls.filter(call => call[0] === 'picker'), [['picker']])
+})
