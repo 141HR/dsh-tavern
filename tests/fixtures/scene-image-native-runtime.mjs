@@ -47,8 +47,9 @@ export async function createSceneImageNativeRuntime(bootPath, { unifiedPlugin = 
       await beforeModelRequest?.(input)
       requests.push(structuredClone({ model: input.model, reasoningEffort: input.reasoningEffort, maxTokens: input.maxTokens, system: input.messages.filter(message => message.role === 'system').flatMap(message => message.content).map(block => block.text || '').join('\n\n'), messages: input.messages, tools: input.tools }))
       for (const tool of input.tools || []) assertImageToolSchema(tool)
-      const currentMessages = input.messages.slice(Math.max(0, input.messages.findLastIndex(message => message.source?.kind === 'plugin')))
-      const referenceResult = currentMessages.flatMap(message => message.content || []).find(block => block.type === 'tool-result' && block.toolCallId === 'reference-call')
+      // DSH 0.2: producer-owned source kinds ('plugin:dsh-tavern') and tool results as role: 'tool' messages.
+      const currentMessages = input.messages.slice(Math.max(0, input.messages.findLastIndex(message => message.source?.kind?.startsWith('plugin'))))
+      const referenceResult = currentMessages.filter(message => message.role === 'tool').find(message => message.toolCallId === 'reference-call')
       const referenceTool = !referenceResult && (characterQuery
         ? input.tools?.find(item => item.name === 'character_design_read')
         : referenceQuery && input.tools?.find(item => item.name === 'read_scene_reference'))
@@ -95,7 +96,7 @@ export async function createSceneImageNativeRuntime(bootPath, { unifiedPlugin = 
       let args = referenceTool ? (characterQuery ? { name: characterQuery } : { query: referenceQuery }) : { update }
       let callId = referenceTool ? 'reference-call' : 'image-call'
       if (tool?.name === 'submit_scene_plan') {
-        const done = new Set(currentMessages.flatMap(message => message.content || []).filter(block => block.type === 'tool-result').map(block => block.toolCallId))
+        const done = new Set(currentMessages.filter(message => message.role === 'tool').map(message => message.toolCallId))
         const index = plan.characters.findIndex((_person, index) => !done.has('image-character-' + index))
         if (index >= 0) {
           tool = input.tools.find(tool => tool.name === 'submit_scene_character')
