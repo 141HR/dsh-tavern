@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "4e88ec133fb42ed6faa7ed2e982dcc08bf89ddb4",
-  "releaseSequence": 671,
+  "revision": "2ba6f3c07f00d6be091013de33a9779ebf9c93f3",
+  "releaseSequence": 673,
   "version": "2.7.0",
   "files": [
     {
@@ -4391,8 +4391,8 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/lib/helper.mjs",
-      "sha256": "48bb03f6ba78f9d4d6211be50a4082ae2dc9cb3b0600df0810e9907e2db5217d",
-      "size": 5974
+      "sha256": "0ae9fe70a8857b7416452b8f0e7d4ff95a503e3f328d88862e3ce841da634692",
+      "size": 9373
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/lib/state.mjs",
@@ -4401,8 +4401,8 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/lib/worker.mjs",
-      "sha256": "d9cb0a680d33c2b42cda3b681d3c64bed0078b17cf4ec16c0b337486e23ac0e8",
-      "size": 1062
+      "sha256": "e41ded17315c46ee618946a9e76e847684b9c08eaf0c413672407cf7dfe5e45e",
+      "size": 1435
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/LICENSE",
@@ -4426,8 +4426,8 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/README.md",
-      "sha256": "bf2992e0d79f21ff61149ccf0eb09e6d7229b12c990b7c93b2aa046f5efd69a2",
-      "size": 2611
+      "sha256": "475dc11772733c1a1e7614570e551020cc0855b52f4575400eafd24bb10cc1fa",
+      "size": 2655
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-card-memory/index.js",
