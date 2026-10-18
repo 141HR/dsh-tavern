@@ -43,7 +43,7 @@
 
 ```json
 "plugins": [
-  { "name": "galgame", "path": "plugins/galgame/", "purpose": "每轮导演舞台：换场景、时段、服装和背景音乐，在舞台上显示" }
+  { "name": "dsh-card-dafeiyu-galgame", "path": "plugins/galgame/", "purpose": "每轮导演舞台：换场景、时段、服装和背景音乐，在舞台上显示" }
 ],
 "defaults": {
   "stage": true,
@@ -57,7 +57,7 @@
 ]
 ```
 
-- `plugins`：插件随卡启用，`purpose` 显示在卡片详情里给玩家看。Tavern 认插件用的是插件 `package.json` 里的 `name`。
+- `plugins`：插件随卡启用。`name` 和插件 `package.json` 里的 `name` 相同，`purpose` 显示在卡片详情里给玩家看。
 - `defaults.stage: true`：这张卡的局打开舞台，Tavern 会给每句台词标上说话人和情绪。插件的舞台就靠这份标注换表情。
 - `defaults.preset`：开新局默认用卡里的预设。
 - `defaults.settings`：打开后台结算。插件的导演借后台结算运行，玩家关掉所有结算项时，这一轮不结算，导演也不会工作。
@@ -146,7 +146,7 @@
 }
 ```
 
-插件名带上卡名：同名插件同时只能启用一个，撞名的卡导入时会被拒绝。
+插件名按约定写成 `dsh-card-<卡标识>-<插件名>`。Tavern 按这个名字识别插件，同名而内容不同的插件同时只能启用一个：撞名时后导入的卡照常导入，但它的插件不会启用。
 
 ### 宿主侧：导演
 
@@ -332,7 +332,7 @@ for (const item of beats.slice(0, index + 1)) if (figure && item.kind === 'line'
 
 **导入。** 人物卡库 → 导入人物卡 → 选文件，导入后刷新页面，插件的浏览器侧才会加载。
 
-**改插件，不用每次重新打包。** 导入后，插件被复制到 Tavern 数据目录的 `plugins/` 下，文件夹名形如 `card-…-galgame`。开发时直接改这里的文件：
+**改插件，不用每次重新打包。** 导入后，插件被复制到 Tavern 数据目录的 `plugins/` 下，文件夹名以 `card-` 开头。开发时直接改这里的文件：
 
 - 改了 `client.js`：刷新页面。
 - 改了 `index.mjs`：重启 Tavern。

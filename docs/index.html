@@ -1270,7 +1270,7 @@ dsh-tavern open</code></pre></div>
   &quot;card&quot;: { &quot;version&quot;: &quot;1.0.0&quot;, &quot;title&quot;: &quot;阿芙拉&quot;, &quot;author&quot;: &quot;你的名字&quot; },
   &quot;requires&quot;: { &quot;tavernApi&quot;: 2 },
   &quot;plugins&quot;: [
-    { &quot;name&quot;: &quot;dshcard-hello-mood&quot;, &quot;path&quot;: &quot;plugins/hello-mood/&quot;, &quot;purpose&quot;: &quot;每轮按剧情记下氛围，舞台底色跟着变&quot; }
+    { &quot;name&quot;: &quot;dsh-card-hello-mood&quot;, &quot;path&quot;: &quot;plugins/hello-mood/&quot;, &quot;purpose&quot;: &quot;每轮按剧情记下氛围，舞台底色跟着变&quot; }
   ],
   &quot;packs&quot;: [],
   &quot;defaults&quot;: { &quot;stage&quot;: true }
@@ -1294,7 +1294,7 @@ dsh-tavern open</code></pre></div>
 <ul><li><code>id</code>：包的标识，字母、数字、<code>.</code>、<code>_</code>、<code>-</code>，最多 80 个字符；<code>path</code> 必须是 <code>assets/&lt;包名&gt;/</code>。</li><li><code>format</code>：说明谁来解读这个包，Tavern 不看内容。大肥鱼用的是 Galgame 分支的 <code>dsh-asset-pack</code> 格式（<code>manifest.json</code> + <code>media/</code> + <code>credits/</code>），可以照着用。</li><li><code>contentHash</code>（可选）：包内容的摘要。多张卡带同一个包时，摘要相同的只存一份。</li><li><code>credits</code>：署名与许可文件。素材有许可要求时一定写清楚，转码、裁剪这类改动也要注明。</li><li>插件读包：宿主侧 <code>listCardPacks({ gameId })</code> 列出包，<code>readCardPackFile({ gameId, pack, path })</code> 读文件；浏览器侧用 <code>baseUrl + 包内路径</code> 直接加载。HTML、SVG、JS 只能下载，不会在页面里运行；要运行的代码一律放进 <code>plugins/</code>。</li></ul>
 <h2 id="dshcard-guide--section-8">卡内插件</h2>
 <p>卡内插件就是普通的 DSH Tavern 插件，写法和接口与全局插件相同，见<a href="https://github.com/flizzywine/dsh-tavern/blob/0.2.1%E7%89%88%E6%9C%AC/docs/plugin-api.md">插件开发：接口参考</a>。区别只在于它跟着卡走：</p>
-<ul><li>导入卡时随卡启用，不需要玩家另装；删除卡时一起卸载。</li><li>只在这张卡的局里生效：回调只对这张卡的局触发，带别的局的 <code>gameId</code> 调接口会被拒绝，浏览器侧注册的界面只在这张卡的局里出现。</li><li>在这张卡的局里，插件是这一局的一部分：总是启用，不出现在本局设置的「插件」开关里。玩家要停用，就在卡片详情里整体停用。</li><li>同名插件同时只能启用一个，插件名请带上你的卡名，避免和别人的撞。</li></ul>
+<ul><li>导入卡时随卡启用，不需要玩家另装；删除卡时一起卸载。</li><li>只在这张卡的局里生效：回调只对这张卡的局触发，带别的局的 <code>gameId</code> 调接口会被拒绝，浏览器侧注册的界面只在这张卡的局里出现。</li><li>在这张卡的局里，插件是这一局的一部分：总是启用，不出现在本局设置的「插件」开关里。玩家要停用，就在卡片详情里整体停用。</li><li>Tavern 按插件 <code>package.json</code> 的 <code>name</code> 识别插件，同名而内容不同的插件同时只能启用一个：撞名时后导入的卡照常导入，但它的插件不会启用。所以插件名按约定写成 <code>dsh-card-&lt;卡标识&gt;-&lt;插件名&gt;</code>，例如大肥鱼的 <code>dsh-card-dafeiyu-galgame</code>；<code>dsh.json</code> 里的 <code>name</code> 写成同一个。</li></ul>
 <p>一个插件文件夹有三个文件：</p>
 <div class="table-wrap" tabindex="0" role="region" aria-label="说明表格"><table><thead><tr><th scope="col">文件</th><th scope="col">作用</th></tr></thead><tbody><tr><td><code>package.json</code></td><td><code>name</code> 是插件名（与 <code>dsh.json</code> 里的 <code>name</code> 相同），<code>exports</code> 指向宿主侧和浏览器侧入口</td></tr><tr><td><code>index.mjs</code></td><td>宿主侧：在 Tavern 进程里运行，可以读写每轮数据、参与后台结算</td></tr><tr><td><code>client.js</code></td><td>浏览器侧：画舞台、面板，由页面直接加载，不需要打包</td></tr></tbody></table></div>
 <p>示例卡的 <a href="https://github.com/flizzywine/dsh-tavern/tree/0.2.1%E7%89%88%E6%9C%AC/examples/dshcard-hello/plugin">plugin</a> 文件夹可以直接复制改。</p>
@@ -1306,7 +1306,7 @@ dsh-tavern open</code></pre></div>
 <h2 id="dshcard-guide--section-9">打包与调试</h2>
 <ol><li>把文件按「一张卡里有什么」的结构放好，打成 ZIP，后缀改成 <code>.dshcard</code>。</li><li>在 Tavern 测试版的人物卡库「导入人物卡」，选这个文件。导入完成后刷新页面，插件的浏览器侧才会加载。</li><li>用这张卡开一局，确认舞台、立绘、插件的效果。</li><li>改了插件：在卡片详情删掉这张卡，重新打包导入；或者开发时直接改 Tavern 数据目录 <code>plugins/</code> 下这张卡的插件文件夹，刷新页面即可看到浏览器侧的改动，宿主侧的改动要重启 Tavern。</li><li>插件加载或运行出错时，Tavern 日志里有「插件 … 加载失败 / 出错」的记录；结算里的错误也会显示在本局设置。</li></ol>
 <p>导入时常见的提示：</p>
-<div class="table-wrap" tabindex="0" role="region" aria-label="说明表格"><table><thead><tr><th scope="col">提示</th><th scope="col">原因</th></tr></thead><tbody><tr><td>dsh.json 的 format 不是 dshcard</td><td><code>format</code> 写错或缺失</td></tr><tr><td>格式版本较新，请先更新 Tavern</td><td><code>formatVersion</code> 大于 1</td></tr><tr><td>素材包路径应为 assets/&lt;包名&gt;/</td><td><code>packs[].path</code> 不是一层目录，或包名是保留名</td></tr><tr><td>插件路径应为 plugins/&lt;文件夹&gt;/</td><td>插件文件夹名只能用小写字母、数字、点、下划线、连字符</td></tr><tr><td>插件 … 缺少可读的 package.json / 没有 name</td><td>插件文件夹里的 <code>package.json</code> 缺失或没写 <code>name</code></td></tr><tr><td>已经有同名插件 … 在用</td><td>另一张卡或全局插件用了同样的插件名</td></tr><tr><td>defaults.preset 应指向包内 presets/ 下的 JSON 预设</td><td>预设路径写错或文件不在包里</td></tr></tbody></table></div>
+<div class="table-wrap" tabindex="0" role="region" aria-label="说明表格"><table><thead><tr><th scope="col">提示</th><th scope="col">原因</th></tr></thead><tbody><tr><td>dsh.json 的 format 不是 dshcard</td><td><code>format</code> 写错或缺失</td></tr><tr><td>格式版本较新，请先更新 Tavern</td><td><code>formatVersion</code> 大于 1</td></tr><tr><td>素材包路径应为 assets/&lt;包名&gt;/</td><td><code>packs[].path</code> 不是一层目录，或包名是保留名</td></tr><tr><td>插件路径应为 plugins/&lt;文件夹&gt;/</td><td>插件文件夹名只能用小写字母、数字、点、下划线、连字符</td></tr><tr><td>插件 … 缺少可读的 package.json / 没有 name</td><td>插件文件夹里的 <code>package.json</code> 缺失或没写 <code>name</code></td></tr><tr><td>已经有同名插件 … 在用</td><td>另一张卡或全局插件用了同样的插件名；卡已导入，插件没有启用</td></tr><tr><td>defaults.preset 应指向包内 presets/ 下的 JSON 预设</td><td>预设路径写错或文件不在包里</td></tr></tbody></table></div>
 <h2 id="dshcard-guide--section-10">体积与分发</h2>
 <ul><li>图片用 WebP，音乐用 Ogg（Opus 或 Vorbis），体积通常能减半以上。大肥鱼的分发版就是这样从 270 MB 压到 90 MB，压缩脚本见 <a href="https://github.com/flizzywine/dsh-tavern/blob/0.2.1%E7%89%88%E6%9C%AC/examples/dafeiyu-card/compress.mjs">examples/dafeiyu-card/compress.mjs</a>。</li><li>大文件建议放 GitHub Releases（单文件上限 2 GB），再配一份国内网盘；Discord 免费用户单文件只有 10 MB。</li><li>用到别人的素材，先取得授权，按许可要求署名，并在 <code>credits/</code> 里注明你做了哪些改动。</li></ul>
 <h2 id="dshcard-guide--section-11">参考</h2>
@@ -1335,7 +1335,7 @@ dsh-tavern open</code></pre></div>
 <h2 id="dshcard-tutorial--section-3">各部分的作用</h2>
 <h3>dsh.json：告诉 Tavern 怎么导入</h3>
 <div class="code-block"><div class="code-heading"><span>json</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>&quot;plugins&quot;: [
-  { &quot;name&quot;: &quot;galgame&quot;, &quot;path&quot;: &quot;plugins/galgame/&quot;, &quot;purpose&quot;: &quot;每轮导演舞台：换场景、时段、服装和背景音乐，在舞台上显示&quot; }
+  { &quot;name&quot;: &quot;dsh-card-dafeiyu-galgame&quot;, &quot;path&quot;: &quot;plugins/galgame/&quot;, &quot;purpose&quot;: &quot;每轮导演舞台：换场景、时段、服装和背景音乐，在舞台上显示&quot; }
 ],
 &quot;defaults&quot;: {
   &quot;stage&quot;: true,
@@ -1347,7 +1347,7 @@ dsh-tavern open</code></pre></div>
     &quot;contentHash&quot;: &quot;f473aee5…&quot;, &quot;path&quot;: &quot;assets/china-backgrounds/&quot;,
     &quot;credits&quot;: [&quot;assets/china-backgrounds/credits/CREDITS.md&quot;, &quot;…&quot;] }
 ]</code></pre></div>
-<ul><li><code>plugins</code>：插件随卡启用，<code>purpose</code> 显示在卡片详情里给玩家看。Tavern 认插件用的是插件 <code>package.json</code> 里的 <code>name</code>。</li><li><code>defaults.stage: true</code>：这张卡的局打开舞台，Tavern 会给每句台词标上说话人和情绪。插件的舞台就靠这份标注换表情。</li><li><code>defaults.preset</code>：开新局默认用卡里的预设。</li><li><code>defaults.settings</code>：打开后台结算。插件的导演借后台结算运行，玩家关掉所有结算项时，这一轮不结算，导演也不会工作。</li><li><code>packs</code>：4 个素材包，<code>format</code> 都是 <code>dsh-asset-pack</code>。Tavern 只存储、提供文件，不看内容，由插件解读。</li></ul>
+<ul><li><code>plugins</code>：插件随卡启用。<code>name</code> 和插件 <code>package.json</code> 里的 <code>name</code> 相同，<code>purpose</code> 显示在卡片详情里给玩家看。</li><li><code>defaults.stage: true</code>：这张卡的局打开舞台，Tavern 会给每句台词标上说话人和情绪。插件的舞台就靠这份标注换表情。</li><li><code>defaults.preset</code>：开新局默认用卡里的预设。</li><li><code>defaults.settings</code>：打开后台结算。插件的导演借后台结算运行，玩家关掉所有结算项时，这一轮不结算，导演也不会工作。</li><li><code>packs</code>：4 个素材包，<code>format</code> 都是 <code>dsh-asset-pack</code>。Tavern 只存储、提供文件，不看内容，由插件解读。</li></ul>
 <h3>card.json：一张普通的 CCv3 卡</h3>
 <p>人设、开场白、世界书都和普通人物卡一样，拿去别的前端也能用。和 DSH 有关的有两处。</p>
 <p><code>data.assets</code> 列出卡面和表情图，<code>uri</code> 直接指向素材包里的文件，不用另存一份：</p>
@@ -1397,7 +1397,7 @@ dsh-tavern open</code></pre></div>
     }
   }
 }</code></pre></div>
-<p>插件名带上卡名：同名插件同时只能启用一个，撞名的卡导入时会被拒绝。</p>
+<p>插件名按约定写成 <code>dsh-card-&lt;卡标识&gt;-&lt;插件名&gt;</code>。Tavern 按这个名字识别插件，同名而内容不同的插件同时只能启用一个：撞名时后导入的卡照常导入，但它的插件不会启用。</p>
 <h3>宿主侧：导演</h3>
 <p>入口导出 <code>name</code>、<code>inject</code> 和 <code>apply</code>，接口都在 <code>ctx.tavern</code> 上：</p>
 <div class="code-block"><div class="code-heading"><span>js</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>export const name = &#39;dsh-card-dafeiyu-galgame&#39;
@@ -1514,7 +1514,7 @@ for (const item of beats.slice(0, index + 1)) if (figure &amp;&amp; item.kind ==
 <p><strong>打包。</strong> 把文件按上面的结构放好，压成 ZIP，后缀改成 <code>.dshcard</code>；压缩时选中这些文件本身，不要连外层文件夹一起压。大肥鱼的 <code>build.mjs</code> 是从 Galgame 分支的卡包转换过来的，只适用于它自己；做新卡照着<a href="https://github.com/flizzywine/dsh-tavern/blob/0.2.1%E7%89%88%E6%9C%AC/examples/dshcard-hello/build.mjs">最小示例的 build.mjs</a> 写，几十行。</p>
 <p><strong>压体积。</strong> 图片转 WebP、音乐转 Ogg Opus。大肥鱼用 <a href="https://github.com/flizzywine/dsh-tavern/blob/0.2.1%E7%89%88%E6%9C%AC/examples/dafeiyu-card/compress.mjs">compress.mjs</a> 从 270 MB 压到 90 MB，还在每个素材包的 <code>credits/</code> 里写了一份改动说明，素材许可要求注明改动。</p>
 <p><strong>导入。</strong> 人物卡库 → 导入人物卡 → 选文件，导入后刷新页面，插件的浏览器侧才会加载。</p>
-<p><strong>改插件，不用每次重新打包。</strong> 导入后，插件被复制到 Tavern 数据目录的 <code>plugins/</code> 下，文件夹名形如 <code>card-…-galgame</code>。开发时直接改这里的文件：</p>
+<p><strong>改插件，不用每次重新打包。</strong> 导入后，插件被复制到 Tavern 数据目录的 <code>plugins/</code> 下，文件夹名以 <code>card-</code> 开头。开发时直接改这里的文件：</p>
 <ul><li>改了 <code>client.js</code>：刷新页面。</li><li>改了 <code>index.mjs</code>：重启 Tavern。</li><li>改好了，把文件拷回自己的源码目录，重新打包。</li></ul>
 <p><strong>出错去哪看。</strong> 插件加载失败、运行出错，Tavern 日志里有记录；结算里的错误（比如导演工具抛错）显示在本局设置的「插件」里。<code>render</code> 出错时舞台退回内置画面，错误显示在错误提示里。</p>
 <p><strong>自检。</strong> 开一局，玩两三轮：</p>
