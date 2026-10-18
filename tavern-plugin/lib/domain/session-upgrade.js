@@ -7,6 +7,7 @@ import path from 'node:path'
 import { encodeCurrentGeneration, parseSessionLog } from './session-log-codec.js'
 
 import { SESSION_UPGRADE_EVENT } from './session-upgrade-references.js'
+import { findSessionDirectory } from './session-log-repair.js'
 
 const generationName = /^session(?:\.v(\d+))?\.jsonl(\.zstd)?$/
 const digest = bytes => createHash('sha256').update(bytes).digest('hex')
@@ -367,6 +368,15 @@ async function inventory(root) {
   }
   await walk(root)
   return { records: found.sort((a, b) => a.file.localeCompare(b.file)), directories }
+}
+
+// The newest generation on disk is authoritative (same rule as the upgrader).
+// Returns null when the session has no stored log at all.
+export async function storedSessionVersion(sessionsRoot, sessionId) {
+  const found = await findSessionDirectory(sessionsRoot, sessionId)
+  if (!found.ok) return null
+  const versions = (await readdir(found.path)).filter(name => generationName.test(name)).map(name => Number(name.match(generationName)[1] || 0))
+  return versions.length ? Math.max(...versions) : null
 }
 
 async function directoryStamp(directory) {

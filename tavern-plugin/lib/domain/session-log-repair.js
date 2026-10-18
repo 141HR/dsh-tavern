@@ -59,7 +59,8 @@ export async function repairCurrentSessionFile(file, catalog) {
  * the project directory above it is derived from the session working directory and
  * differs between installs, so every project is searched.
  */
-async function findSessionDirectory(sessionsRoot, sessionId) {
+export async function findSessionDirectory(sessionsRoot, sessionId) {
+  if (!SESSION_ID.test(sessionId)) return { ok: false, reason: '无效的会话编号' }
   let projects
   try { projects = await readdir(sessionsRoot, { withFileTypes: true }) }
   catch (error) { return { ok: false, reason: error.code === 'ENOENT' ? '没有会话存档目录' : (error.message || String(error)) } }

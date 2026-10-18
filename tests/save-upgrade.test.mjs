@@ -1,9 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, readFile, readdir } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { createSaveUpgrade, saveSessionIds } from '../tavern-plugin/lib/domain/save-upgrade.js'
+import { createSaveUpgrade, saveSessionIds, unreadySaveSessions } from '../tavern-plugin/lib/domain/save-upgrade.js'
+import { storedSessionVersion } from '../tavern-plugin/lib/domain/session-upgrade.js'
 import { createChatJournalStore } from '../tavern-plugin/lib/domain/chat-journal-store.js'
 
 test('one upgrade job checks host logs before storage and survives repeated clicks', async () => {
@@ -79,4 +80,24 @@ test('unified storage stage preserves history, variables, plugin data and origin
 
 test('upgrade includes the foreground, persistent workers and saved undo workers', () => {
   assert.deepEqual(saveSessionIds({ sessionId: 's', candidateAgent: { sessionId: 'c' }, timeline: { participants: { background: { sessionId: 'b' } } }, rollbackUndo: { foreground: { sessionId: 's' }, background: [{ sessionId: 'old-b' }] } }), ['s', 'c', 'b', 'old-b'])
+})
+
+test('sessions written after startup count as upgraded by their log on disk', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'tavern-session-version-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const project = path.join(root, '--project--')
+  for (const [id, files] of [['fresh-bg', ['session.v4.jsonl.zstd']], ['old', ['session.jsonl']], ['migrated', ['session.jsonl', 'session.v4.jsonl.zstd']]]) {
+    await mkdir(path.join(project, id), { recursive: true })
+    for (const file of files) await writeFile(path.join(project, id, file), '')
+  }
+  assert.equal(await storedSessionVersion(root, 'fresh-bg'), 4)
+  assert.equal(await storedSessionVersion(root, 'missing'), null)
+  assert.equal(await storedSessionVersion(root, '../escape'), null)
+  const prepared = { refused: { ready: false } }
+  const failed = await unreadySaveSessions(['live', 'fresh-bg', 'old', 'migrated', 'missing', 'refused'], {
+    live: id => id === 'live' ? { header: { version: 4 } } : undefined,
+    stored: id => storedSessionVersion(root, id),
+    prepared: id => prepared[id],
+  })
+  assert.deepEqual(failed, ['old', 'refused'])
 })

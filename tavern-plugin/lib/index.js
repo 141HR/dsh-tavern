@@ -34,7 +34,8 @@ import { withPluginWorldbookEntries } from './domain/plugin-worldbook.js'
 import { createTemplateWindowReader, templateStateFields } from './domain/template-window-reader.js'
 import { createSessionResourceAccess } from './domain/session-resource-access.js'
 import { worldBookDisplayName } from './domain/worldbook-resource.js'
-import { createSaveUpgrade, prepareSaveUpgrade, saveSessionIds } from './domain/save-upgrade.js'
+import { createSaveUpgrade, prepareSaveUpgrade, saveSessionIds, unreadySaveSessions } from './domain/save-upgrade.js'
+import { storedSessionVersion } from './domain/session-upgrade.js'
 import { createTaskStateReader, taskStateFields } from './domain/task-state-reader.js'
 import { installHostProjectionReplay } from './domain/host-projection-replay.js'
 import { createBoundedHistory, readRecentWindow, readRowsAt } from './domain/bounded-history.js'
@@ -4196,9 +4197,10 @@ export async function apply(ctx) {
     store: chatJournalStore,
     inspectSessions: async chat => {
       if (sessionPatch.status !== 'ready') return { ready: false, error: 'DSH 会话兼容模块未就绪，请重启酒馆后重试' }
-      const failed = saveSessionIds(chat).filter(id => {
-        const live = sessionStore.get(id) || agentRegistry.get(id)?.session
-        return live?.header?.version !== 4 && preparedSaveSessions.get(id)?.ready !== true
+      const failed = await unreadySaveSessions(saveSessionIds(chat), {
+        live: id => sessionStore.get(id) || agentRegistry.get(id)?.session,
+        stored: id => storedSessionVersion(path.join(path.dirname(resolveTavernDataRoot()), 'sessions'), id),
+        prepared: id => preparedSaveSessions.get(id),
       })
       return failed.length ? { ready: false, error: '会话日志未完成升级，请重启酒馆后重试。原档保留：' + failed.map(id => id + (preparedSaveSessions.get(id)?.error ? '（' + preparedSaveSessions.get(id).error + '）' : '')).join('、') } : { ready: true, version: 4 }
     },

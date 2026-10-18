@@ -59,3 +59,15 @@ export function saveSessionIds(chat) {
     ...(chat.rollbackUndo?.background || []).map(checkpoint => checkpoint.sessionId),
   ].filter(id => typeof id === 'string' && id))]
 }
+
+// A session counts as upgraded by what is on disk now, not by the startup
+// snapshot: games and workers created after startup are already current.
+export async function unreadySaveSessions(ids, { live, stored, prepared }) {
+  const failed = []
+  for (const id of ids) {
+    if (live(id)?.header?.version === 4) continue
+    const version = await stored(id)
+    if (version === null ? prepared(id)?.ready === false : version !== 4) failed.push(id)
+  }
+  return failed
+}
