@@ -1111,6 +1111,30 @@ export async function apply(ctx) {
         ...(defaults ? { startDefaults: { preset: defaults.presetPath ? defaults.presetPath.split('/').pop() : '', settings: defaults.settings || null } } : {}) }
     } finally { await zip.close() }
   }
+  // A card file in a format a plugin imports (tavern.cardImporter): the plugin converts, Tavern stores it as any card.
+  async function importPluginCardFile(file, name) {
+    const archiveSha256 = await cardImportIdentity.fileSha256(file)
+    const existing = await cardImportIdentity.find(archiveSha256)
+    if (existing) return { path: existing, name: (await cardSummaries.read(existing).catch(() => null))?.name || existing.split('/').pop(), duplicate: true }
+    const converted = await pluginApi.convertCard(name, await readFile(file))
+    const resolve = uri => {
+      if (typeof uri !== 'string') return undefined
+      if (uri.startsWith('embeded://')) return converted.files.get(uri.slice('embeded://'.length))
+      const match = /^data:[^,]*;base64,(.*)$/s.exec(uri)
+      return match ? Buffer.from(match[1], 'base64') : undefined
+    }
+    const packs = []
+    for (const pack of converted.packs) {
+      const { pack: stored, reused } = await assetPacks.importFiles(pack.files, { id: pack.id, format: pack.format, title: pack.title })
+      packs.push({ id: stored.id, contentHash: stored.contentHash, format: stored.format, title: stored.title, name: '', files: Object.keys(stored.files).length, reused })
+    }
+    const imported = await storeImportedCard(cardImportFromCard({ card: converted.card, resolve, name: str(name).replace(/\.[^.]+$/, '') }), { unique: true })
+    if (packs.length) await castAssets.bindPacks(imported.path, packs)
+    await cardImportIdentity.remember(imported.path, archiveSha256)
+    await pluginApi.cardImported(converted, imported.path)
+    return { ...imported, format: 'plugin', importer: converted.label,
+      ...(packs.length ? { packs: packs.map(({ id, contentHash, title, format, files, reused }) => ({ id, contentHash, title, format, files, reused })) } : {}) }
+  }
   // A card's suggested preset goes into the preset library (a new name when one is taken by another file).
   async function storeStartDefaults(cardPath, defaults) {
     let presetPath = ''
@@ -4626,7 +4650,12 @@ export async function apply(ctx) {
       case 'importCard': return { card: await importCard(args && args.payload) }
       case 'importCardUpload': {
         const upload = await uploads.take(args && args.uploadId)
-        try { return { card: await importCardArchiveFile(upload.file, str(args && args.name) || '人物卡.dshcard') } }
+        const name = str(args && args.name) || '人物卡.dshcard'
+        try {
+          if (/\.(charx|dshcard)$/i.test(name)) return { card: await importCardArchiveFile(upload.file, name) }
+          if (await pluginApi.cardImporterFor(name)) return { card: await importPluginCardFile(upload.file, name) }
+          throw new Error('无法识别的人物卡文件（需要 PNG、JSON、CHARX、DSH 人物卡 .dshcard，或装上能导入这种文件的插件）')
+        }
         finally { await upload.remove() }
       }
       case 'cardPacks': return { packs: await cardPacksOf(args && args.sessionId) }

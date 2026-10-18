@@ -327,9 +327,10 @@ window.__ModuleLoader__.load({
 		  return file.arrayBuffer().then(buffer => ({ name, type: file.type || 'application/epub+zip', fileB64: bytesToBase64(new Uint8Array(buffer)), chunkSize: 500 }));
 		}
 
-		/** Import one card file: archives (CHARX, DSH cards) go up as raw files, others as parsed JSON. */
+		/** Import one card file: PNG and JSON go as parsed JSON; archives (CHARX, DSH cards) and other
+		 * formats (a plugin's importer, tavern.cardImporter) go up as raw files. */
 		async function importTavernCardFile(file, call) {
-			if (/\.(charx|dshcard)$/i.test(String(file.name || ""))) {
+			if (!/\.(png|json)$/i.test(String(file.name || "")) && /\.[^./\\]+$/.test(String(file.name || ""))) {
 				const response = await fetch("/api/dsh-tavern/card-upload", { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
 				let reply = null;
 				try { reply = await response.json(); } catch (_error) {}

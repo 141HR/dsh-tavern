@@ -1050,3 +1050,31 @@ test('写角色素材与素材包：按人物卡写，走 Tavern 自己的素材
   assert.equal(await tavern.removeCardPack({ card: 'cards/a.json', id: 'bg' }), true)
   await assert.rejects(own.setCastCharacter({ card: 'cards/a.json', name: 'x' }), error => error.code === 'TAVERN_PLUGIN_SCOPE')
 })
+
+test('插件导入器：按扩展名接管 Tavern 不认识的人物卡文件，原生格式不能接管；交回的卡经校验，收尾出错不影响导入', { skip: !cordis }, async t => {
+  const h = await harness(t, { cardScope: async () => new Map([['card-own', { cards: ['cards/b.json'] }]]) })
+  const done = []
+  let tavern, own
+  await h.root.plugin({ name: 'vn-import', inject: ['tavern'], apply(ctx) {
+    tavern = ctx.tavern
+    ctx.tavern.cardImporter({ id: 'vn', label: '视觉小说包', extensions: ['.VNPACK'],
+      convert: async ({ name, data }) => name.startsWith('bad') ? { card: 'x' } : ({ card: { spec: 'chara_card_v3', data: { name: String(data.length) } }, files: { 'cover.png': new Uint8Array([1]) }, packs: [{ id: 'bg', files: [{ path: 'a.png', data: new Uint8Array([2]) }] }] }),
+      imported: async ({ card }) => { done.push(card); throw new Error('收尾失败') } })
+  } })
+  await h.root.plugin({ name: 'card-own', inject: ['tavern'], apply(ctx) { own = ctx.tavern } })
+  await tick()
+  assert.throws(() => tavern.cardImporter({ id: 'png', label: 'x', extensions: ['.png'], convert() {} }), /Tavern 自己导入/)
+  assert.throws(() => tavern.cardImporter({ id: 'again', label: 'x', extensions: ['.vnpack'], convert() {} }), /已由插件/)
+  assert.throws(() => tavern.cardImporter({ id: 'bad', label: 'x', extensions: ['vn'], convert() {} }), /\.xxx/)
+  own.cardImporter({ id: 'own', label: '卡内', extensions: ['.own'], convert: async () => ({ card: {} }) })
+  assert.equal(await h.api.cardImporterFor('story.own'), null, '卡内插件不导入别的卡')
+  assert.equal(await h.api.cardImporterFor('a.png'), null)
+  assert.deepEqual(await h.api.cardImporterFor('林岚.vnpack'), { owner: 'vn-import', id: 'vn', label: '视觉小说包' })
+  const converted = await h.api.convertCard('林岚.vnpack', Buffer.from('abc'))
+  assert.equal(converted.card.data.name, '3')
+  assert.deepEqual([...converted.files.keys()], ['cover.png'])
+  assert.equal(converted.packs[0].id, 'bg')
+  await assert.rejects(h.api.convertCard('bad.vnpack', Buffer.from('x')), /不合格/)
+  await h.api.cardImported(converted, 'cards/林岚.png')
+  assert.deepEqual(done, ['cards/林岚.png'])
+})

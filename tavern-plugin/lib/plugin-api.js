@@ -45,6 +45,9 @@ const MAX_VERSION_WATCHES = 2000
 const MAX_PUBLISHED_STATE = 256 * 1024
 const MAX_PUBLISHED_ENTRIES = 2000
 const MAX_PACK_FILES = 5000
+// Card files Tavern reads itself; a plugin importer never takes these.
+const NATIVE_CARD_EXTENSIONS = new Set(['.png', '.json', '.charx', '.dshcard'])
+const CARD_EXTENSION = /^\.[a-z0-9][a-z0-9._-]{0,19}$/
 // Stages a plugin may replace, and what a replacement must hand back (docs/plugin-design.md).
 const REPLACEABLE_STAGES = Object.freeze({ settlement: '结算' })
 
@@ -111,6 +114,7 @@ export function createTavernPluginApi(deps) {
   const timelineHandlers = new Set()
   const castHandlers = new Set()
   const cardHandlers = new Set()
+  const cardImporters = new Map()
   // Each plugin's own game settings (one declaration per plugin) and who listens for changes.
   const gameSettingDefs = new Map()
   const settingHandlers = new Set()
@@ -620,6 +624,25 @@ export function createTavernPluginApi(deps) {
       return await deps.removeCardPack(cardIdOf(card), String(id || ''))
     },
 
+    // Import card files of a format Tavern does not read: convert hands back the card (and its files).
+    cardImporter({ id, label, extensions, convert, imported } = {}) {
+      const owner = ownerOf(this)
+      sectionName(id)
+      if (typeof label !== 'string' || !label.trim() || label.trim().length > 30) throw new Error('label 必须是 1–30 字')
+      if (!Array.isArray(extensions) || !extensions.length || extensions.length > 10) throw new TypeError('extensions 需要 1–10 个扩展名')
+      const list = extensions.map(item => String(item || '').toLowerCase())
+      for (const item of list) {
+        if (!CARD_EXTENSION.test(item)) throw new Error('扩展名要写成 .xxx 的形式：' + item)
+        if (NATIVE_CARD_EXTENSIONS.has(item)) throw new Error(item + ' 由 Tavern 自己导入，插件不能接管')
+        const taken = Array.from(cardImporters.values()).find(entry => entry.extensions.includes(item))
+        if (taken) throw new Error(item + ' 已由插件 ' + taken.owner + ' 导入')
+      }
+      if (typeof convert !== 'function') throw new TypeError('cardImporter 需要 convert 函数')
+      if (imported !== undefined && typeof imported !== 'function') throw new TypeError('imported 必须是函数')
+      const entry = { owner, id, label: label.trim(), extensions: [...new Set(list)], convert, imported }
+      return register.call(this, cardImporters, owner + '/' + id, entry, 'tavern.cardImporter()', '导入器 ' + id + ' 已注册')
+    },
+
     // Where a tool this plugin registered with DSH shows: in play, in the card workbench, or both.
     // Tavern's own tools are not affected.
     toolModes({ name, modes } = {}) {
@@ -1054,6 +1077,44 @@ export function createTavernPluginApi(deps) {
     dispatch(cardHandlers, { card: cardPath, revision }, 'onCardChanged', elsewhere)
   }
 
+  /** Seam: the importer for a file name, by extension; a card's own plugins never import other cards. */
+  async function cardImporterFor(name) {
+    const extension = (/\.[^./\\]+$/.exec(String(name || '').toLowerCase()) || [''])[0]
+    if (!extension || NATIVE_CARD_EXTENSIONS.has(extension)) return null
+    const scopes = deps.cardScope ? await deps.cardScope().catch(() => null) : null
+    const entry = Array.from(cardImporters.values()).find(item => item.extensions.includes(extension) && !scopes?.has(item.owner))
+    return entry ? { owner: entry.owner, id: entry.id, label: entry.label } : null
+  }
+
+  /** Seam: run the importer for `name` on the file's bytes; the card and its files, checked. */
+  async function convertCard(name, data) {
+    const found = await cardImporterFor(name)
+    const entry = found && cardImporters.get(found.owner + '/' + found.id)
+    if (!entry) throw Object.assign(new Error('没有能导入这种文件的插件'), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
+    let value
+    try { value = await bounded(entry.convert({ name: String(name), data }), '导入器 ' + entry.label, REPLACEMENT_TIMEOUT_MS) }
+    catch (error) { recordError(null, entry.owner, '导入人物卡', error); throw new Error('插件「' + entry.label + '」没能导入这个文件：' + String(error?.message || error)) }
+    const fail = message => { throw new Error('插件「' + entry.label + '」交回的人物卡不合格：' + message) }
+    if (!value || typeof value !== 'object' || !value.card || typeof value.card !== 'object' || Array.isArray(value.card)) fail('card 必须是人物卡 JSON 对象')
+    const files = new Map()
+    for (const [path, bytes] of Object.entries(value.files && typeof value.files === 'object' ? value.files : {})) {
+      if (!(bytes instanceof Uint8Array)) fail('files 里的 ' + path + ' 必须是 Uint8Array 或 Buffer')
+      files.set(path, Buffer.from(bytes))
+    }
+    const packs = value.packs === undefined ? [] : value.packs
+    if (!Array.isArray(packs) || packs.length > 20) fail('packs 最多 20 个')
+    return { owner: entry.owner, label: entry.label, card: structuredClone(value.card), files,
+      packs: packs.map(pack => ({ id: pack?.id, format: String(pack?.format || ''), title: String(pack?.title || ''), files: Array.isArray(pack?.files) ? pack.files.map(file => ({ path: file?.path, data: file?.data })) : [] })),
+      imported: entry.imported }
+  }
+
+  /** Seam: tell the importing plugin where its card went; its failure never undoes the import. */
+  async function cardImported(converted, card) {
+    if (typeof converted.imported !== 'function') return
+    try { await bounded(converted.imported({ card }), '导入器收尾') }
+    catch (error) { recordError(null, converted.owner, '导入人物卡收尾', error) }
+  }
+
   function gameRemoved(gameId) {
     if (!gameId) return
     for (const key of Array.from(publishedStates.keys())) if (key.startsWith(gameId + '\u0000')) publishedStates.delete(key)
@@ -1393,6 +1454,6 @@ export function createTavernPluginApi(deps) {
   }
 
   return Object.freeze({ service, toolModesFor, callHandler, turnState, exportGame, importGame, turnSettled, castAnnotated, castAssetSources, gameRemoved,
-    speechProviders: () => Array.from(speechProviders.values()), timelineChanged, checkVersions, pluginState, cardChanged, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
+    speechProviders: () => Array.from(speechProviders.values()), timelineChanged, checkVersions, pluginState, cardChanged, cardImporterFor, convertCard, cardImported, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
     runSettlementTasks, manualTaskFor, runManualTask, stopTasks, runningTask, gamePlugins, setGamePlugin, pluginGameSettings })
 }

@@ -585,6 +585,31 @@ const raw = await ctx.tavern.readCardRaw({ card })
 await ctx.tavern.updateCardRaw({ card, operations, expectedRevision: revision })
 ```
 
+### `cardImporter({ id, label, extensions, convert, imported? })`（第 3 版）
+
+让 Tavern 能导入它自己不认识的人物卡文件，例如别的平台的卡包、视觉小说素材包。玩家在人物卡库导入这种扩展名的文件时，Tavern 把文件交给插件转换，再像导入普通卡一样保存：
+
+```js
+ctx.tavern.cardImporter({
+  id: 'vnpack', label: '视觉小说包', extensions: ['.vnpack'],
+  async convert({ name, data }) {           // data：文件的全部字节（Buffer）
+    const pack = parseMyFormat(data)
+    return {
+      card: pack.card,                       // SillyTavern 人物卡 JSON（v2 或 v3）
+      files: { 'cover.png': pack.cover },    // 可选：卡里 embeded://路径 引用的文件
+      packs: [{ id: 'sprites', format: 'my-vn', title: '立绘', files: pack.sprites }],  // 可选：同 saveCardPack
+    }
+  },
+  async imported({ card }) { /* 可选：卡已存好，card 是它在人物卡库的 id，可以接着 setCastImage 等 */ },
+})
+```
+
+- `extensions` 1–10 个，写成 `.xxx`，大小写不敏感。`.png`、`.json`、`.charx`、`.dshcard` 始终由 Tavern 自己导入，插件不能接管；同一扩展名只能有一个插件。
+- `card` 里 CCv3 的 `data.assets`（封面、表情、背景）按 `files` 里的文件导入，和 CHARX 一样进角色素材；`packs` 存成素材包挂到这张卡上。
+- 同一个文件再次导入时直接打开已导入的卡，不再调用 `convert`。
+- `convert` 抛错、120 秒没返回或交回的东西不合格时，这次导入失败并把原因告诉玩家。`imported` 出错只记进插件错误，不影响已经导入的卡。
+- 卡内插件不能注册导入器。
+
 ### `toolModes({ name, modes })`
 
 插件用 DSH 的 `tools` 服务注册的工具，默认在游玩和卡片工作台的对话里都会出现。用这个接口限定它出现在哪：`modes` 取 `play`（游玩时写正文的请求）、`card`（卡片工作台），一项或两项。
@@ -1003,4 +1028,4 @@ Tavern 尽量开放接口，并保持每个接口简单、稳定；接口按插�
 |---|---|
 | 1 | 首个版本。 |
 | 2 | 新增 `turnSection`、`worldbookSource`、`settlementSection`、`settlementTool`：插件可以往每轮正文请求和后台结算里添加内容。新增插件存档数据（`saveTurnData`、`readTurnData`、`saveGameData`、`readGameData`）与 `onTimelineChanged`；编辑正文后重新发 `onTurnSettled`；分叉时带上插件数据和媒体项。新增第一个替换类接口 `replaceSettlement`，以及本局插件面板（按局开关、选择结算由谁负责、错误记录）。新增 `candidateSection`、`compactionSection`、`worldbookEntries`；新增 `getCharacterDesigns`、`saveCharacterDesign`（人物设计档案）、`listCards`、`readCardRaw`、`updateCardRaw`、`toolModes` 与 Skill 读写（`listSkills`、`readSkill`、`saveSkill`、`removeSkill`）；浏览器侧新增 `registerPanel`、`registerStartGroup`、`registerCardListView`（`tavernUi.apiVersion` 为 2）。`onTurnSettled`、`getTurn` 增加只读的 `variables`。新增 `getCard`、`getCardImage`、`getHistory`、`setVariables`、`editTurn`、`runTask`。新增宿主侧 `handle` 与浏览器侧 `callHost`，插件的浏览器侧可以调用自己的宿主侧。新增 `settlementTask`、`manualTask`、`startTask`：插件可以定义每轮结算前后运行的任务和玩家手动运行的任务。新增 `getTurnState`，`onTurnSettled`、`getTurn` 增加 `greeting`；浏览器侧新增 `getTurnState`、`watchTurnState`、`setInput`、`submitInput`、`openOverlay`、`assetUrl`（插件文件夹的 `assets/` 静态资源）。导出存档包含插件存档数据和媒体项，导入后照常可读。插件可放进数据目录的 `plugins/` 文件夹加载。新增演出接口：宿主侧 `getCast`、`onCastAnnotated`、`getCastAssets`，浏览器侧 `getStage`、`watchStage`、`registerStageView`。新增配音接口：宿主侧 `speechProvider`、`synthesizeSpeech`，浏览器侧 `speak`、`stopSpeech`。新增背景音乐 `playMusic`、`stopMusic`。新增本局配置项 `gameSettings`、`getGameSettings`、`onGameSettingsChanged`，浏览器侧 `getGameSettings`、`watchGameSettings`。第 1 版接口不变。 |
-| 3 | 新增 `versionSignal`：正文版本失效时中止的信号，结算任务的 `signal` 也随版本失效中止；`onTimelineChanged` 增加 `textVersion`；结算任务新增 `phase: 'parallel'`，与 Tavern 自己的结算同时运行。新增写角色素材（`setCastImage`、`removeCastImage`、`setCastCharacter`、`setCastVoice`、`removeCastCharacter`）与素材包（`saveCardPack`、`removeCardPack`）。新增 `cardRevision`、`onCardChanged`，`updateCardRaw` 支持 `expectedRevision` 并返回 `revision`。新增 `getRequestContext`：读这一轮正文请求的本轮上下文。新增 `publishState` 与浏览器侧 `watchState`：插件把最新状态推给自己的页面（`tavernUi.apiVersion` 为 3）。第 1、2 版接口不变。 |
+| 3 | 新增 `versionSignal`：正文版本失效时中止的信号，结算任务的 `signal` 也随版本失效中止；`onTimelineChanged` 增加 `textVersion`；结算任务新增 `phase: 'parallel'`，与 Tavern 自己的结算同时运行。新增 `cardImporter`：插件导入 Tavern 不认识的人物卡格式。新增写角色素材（`setCastImage`、`removeCastImage`、`setCastCharacter`、`setCastVoice`、`removeCastCharacter`）与素材包（`saveCardPack`、`removeCardPack`）。新增 `cardRevision`、`onCardChanged`，`updateCardRaw` 支持 `expectedRevision` 并返回 `revision`。新增 `getRequestContext`：读这一轮正文请求的本轮上下文。新增 `publishState` 与浏览器侧 `watchState`：插件把最新状态推给自己的页面（`tavernUi.apiVersion` 为 3）。第 1、2 版接口不变。 |
