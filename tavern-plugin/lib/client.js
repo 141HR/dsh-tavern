@@ -11079,7 +11079,7 @@ function bindTavernFontZoom(node, win) {
 			}
 			const service = {
 				ctx: undefined,
-				apiVersion: 2,
+				apiVersion: 3,
 				registerMediaRenderer(kind, render) {
 					if (typeof kind !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}\/[a-z0-9][a-z0-9._-]{0,63}$/.test(kind)) throw new TypeError("只能为插件自定义的 <插件名>/<类型> 注册显示方式");
 					if (typeof render !== "function") throw new TypeError("registerMediaRenderer 需要 render 函数");
@@ -11241,6 +11241,29 @@ function bindTavernFontZoom(node, win) {
 						refresh();
 						return function () { disposed = true; stop(); };
 					}, "tavernUi.watchGameSettings()");
+				},
+				// Calls listener with the state this plugin's host side published (tavern.publishState) now and after each publish.
+				watchState(gameId, name, listener) {
+					if (typeof gameId !== "string" || !gameId) throw new TypeError("watchState 需要 gameId");
+					if (typeof name !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(name)) throw new TypeError("watchState 的 name 只能用小写字母、数字、点、下划线和连字符");
+					if (typeof listener !== "function") throw new TypeError("watchState 需要 listener 函数");
+					const owner = ownerOf(this);
+					return owned(this, function () {
+						let disposed = false, generation = 0, last;
+						function refresh() {
+							const request = ++generation;
+							rpc("pluginState", { plugin: owner, name: name }, gameId).then(function (reply) {
+								const data = reply ? reply.data : null, text = JSON.stringify(data);
+								if (disposed || request !== generation || text === last) return;
+								last = text;
+								try { listener(data); } catch (error) { try { tavernErrorHub.report("插件 " + owner, error); } catch (_) {} }
+							}, function () {});
+						}
+						let stop = function () {};
+						try { if (tavernSessionSignals && typeof tavernSessionSignals.subscribe === "function") stop = tavernSessionSignals.subscribe(gameId, "plugin-state:" + owner + ":" + name, refresh); } catch (_) {}
+						refresh();
+						return function () { disposed = true; stop(); };
+					}, "tavernUi.watchState()");
 				},
 				// The asset packs this game's card carries (apiVersion 2): { id, title, format, contentHash, baseUrl }.
 				getCardPacks(gameId) {

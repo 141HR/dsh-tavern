@@ -25,7 +25,7 @@ test('插件面板：注册为当前游戏的侧栏页，卸载时移除；没�
   const dispose = plugin.registerPanel({ id: 'state', title: '记忆', render: ({ gameId }) => { seen.push(gameId); return 'panel:' + gameId } })
   const tab = tabs.get('tavern-plugin:memory-plugin:state')
   assert.equal(tab.title, '记忆')
-  assert.equal(ui.service.apiVersion, 2)
+  assert.equal(ui.service.apiVersion, 3)
   const rendered = tab.component({ scope: { sessionId: 'game-1' } })
   assert.equal(rendered.type, 'Boundary')
   assert.equal(seen.length, 0, '渲染回调由边界内的子组件执行')
@@ -258,4 +258,29 @@ test('背景音乐：同一首接着放、换曲淡入；玩家的开关记在�
   ui.service.playMusic('')
   ui.service.stopMusic()
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [['c.mp3', { title: '夜' }], ['', null], ['stop']])
+})
+
+test('watchState：订阅本插件发布的状态，发布后重新读取，内容没变不重复回调，卸载后停止', async () => {
+  let wake = null, stopped = false, state = { scene: '酒馆' }
+  const calls = []
+  const ui = loadWith({
+    rpc: async (name, args, gameId) => { calls.push([name, args, gameId]); return { data: state } },
+    tavernSessionSignals: { subscribe(gameId, kind, listener) { calls.push(['subscribe', kind, gameId]); wake = listener; return () => { stopped = true } } }
+  })
+  const plugin = { ctx: { fiber: { name: 'director' } } }
+  Object.setPrototypeOf(plugin, ui.service)
+  const seen = []
+  const stop = plugin.watchState('game-1', 'stage', value => seen.push(value))
+  assert.throws(() => plugin.watchState('game-1', 'Bad Name', () => {}), /name/)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.deepEqual(calls[0], ['subscribe', 'plugin-state:director:stage', 'game-1'])
+  assert.equal(JSON.stringify(calls[1]), JSON.stringify(['pluginState', { plugin: 'director', name: 'stage' }, 'game-1']))
+  wake()
+  await new Promise(resolve => setTimeout(resolve, 0))
+  state = { scene: '街道' }
+  wake()
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.equal(JSON.stringify(seen), JSON.stringify([{ scene: '酒馆' }, { scene: '街道' }]))
+  stop()
+  assert.equal(stopped, true)
 })

@@ -196,6 +196,21 @@ export function apply(ctx) {
 
 读这局人物卡的图片，返回 `{ url, mediaType }`，卡没有图片（例如 JSON 格式的卡）时返回 `null`。`url` 是酒馆页面里可以直接显示的地址（例如 `<img src>`），只读；读到的是人物卡库里这张卡当前的图片，卡从卡库删除后返回 `null`。浏览器侧经 `callHost` 让宿主侧调用即可。
 
+### `publishState({ gameId, name, data })`（第 3 版）
+
+把插件的最新状态推给自己的浏览器侧，浏览器侧用 `tavernUi.watchState(gameId, name, listener)` 收到。适合导演定下这一幕后让舞台立刻换景，不用浏览器侧反复 `callHost` 轮询。
+
+```js
+// 宿主侧
+await ctx.tavern.publishState({ gameId, name: 'stage', data: { turn, textVersion, scene } })
+// 浏览器侧
+ctx.tavernUi.watchState(gameId, 'stage', state => render(state))
+```
+
+- 只保留每个 `name` 最新的一份（不是事件队列）；`data` 是 JSON 值，最多 256 KB，`null` 表示清空。`name` 规则同 `promptSection`。
+- 只有本插件自己的浏览器侧收得到。玩家在本局关闭插件后不能发布，浏览器侧读到 `null`。
+- 只存在内存里：DSH 重启或删局后没有了。要跟剧情走、要随存档保存的状态，存进 `saveTurnData`，这里只放给页面显示的那一份；建议带上 `textVersion`，浏览器侧据此判断是不是当前版本。
+
 ### `getCharacterDesigns({ gameId })`、`saveCharacterDesign({ gameId, name, ... })`（第 2 版）
 
 这一局的人物设计档案（酒馆状态里的「人物设计档案」）：正文、结算和插件读同一份，生图插件画人物时用它，文字和图片的人物设定就不会各说各的。
@@ -752,6 +767,10 @@ new Audio(ctx.tavernUi.assetUrl('sfx/hit.mp3')).play()
 - 音频、视频支持拖动进度（按范围读取）；文件修改后浏览器会重新取。
 - 插件按 `package.json` 的 `name` 认出自己（与浏览器侧 `factory` 返回的 `name` 相同）。只对放在 `plugins/` 文件夹里的插件有效。
 
+### `watchState(gameId, name, listener)`（第 3 版）
+
+先用当前的值调用一次 `listener(data)`，之后本插件宿主侧每次 `tavern.publishState` 同一个 `name` 时再调用（内容没变不调用）。没有发布过时收到 `null`。返回取消函数，插件卸载时自动取消。
+
 ### `getTurnState(gameId)`、`watchTurnState(gameId, listener)`（第 2 版）
 
 `getTurnState` 返回 Promise，结果与宿主侧 `tavern.getTurnState` 相同。`watchTurnState` 先用当前状态调用一次 `listener(state)`，之后每次状态变化（开始或写完正文、结算开始或结束、回退等）再调用；返回取消函数，插件卸载时自动取消。只在这一局在当前页面打开时有通知。
@@ -920,4 +939,4 @@ Tavern 尽量开放接口，并保持每个接口简单、稳定；接口按插�
 |---|---|
 | 1 | 首个版本。 |
 | 2 | 新增 `turnSection`、`worldbookSource`、`settlementSection`、`settlementTool`：插件可以往每轮正文请求和后台结算里添加内容。新增插件存档数据（`saveTurnData`、`readTurnData`、`saveGameData`、`readGameData`）与 `onTimelineChanged`；编辑正文后重新发 `onTurnSettled`；分叉时带上插件数据和媒体项。新增第一个替换类接口 `replaceSettlement`，以及本局插件面板（按局开关、选择结算由谁负责、错误记录）。新增 `candidateSection`、`compactionSection`、`worldbookEntries`；新增 `getCharacterDesigns`、`saveCharacterDesign`（人物设计档案）、`listCards`、`readCardRaw`、`updateCardRaw`、`toolModes` 与 Skill 读写（`listSkills`、`readSkill`、`saveSkill`、`removeSkill`）；浏览器侧新增 `registerPanel`、`registerStartGroup`、`registerCardListView`（`tavernUi.apiVersion` 为 2）。`onTurnSettled`、`getTurn` 增加只读的 `variables`。新增 `getCard`、`getCardImage`、`getHistory`、`setVariables`、`editTurn`、`runTask`。新增宿主侧 `handle` 与浏览器侧 `callHost`，插件的浏览器侧可以调用自己的宿主侧。新增 `settlementTask`、`manualTask`、`startTask`：插件可以定义每轮结算前后运行的任务和玩家手动运行的任务。新增 `getTurnState`，`onTurnSettled`、`getTurn` 增加 `greeting`；浏览器侧新增 `getTurnState`、`watchTurnState`、`setInput`、`submitInput`、`openOverlay`、`assetUrl`（插件文件夹的 `assets/` 静态资源）。导出存档包含插件存档数据和媒体项，导入后照常可读。插件可放进数据目录的 `plugins/` 文件夹加载。新增演出接口：宿主侧 `getCast`、`onCastAnnotated`、`getCastAssets`，浏览器侧 `getStage`、`watchStage`、`registerStageView`。新增配音接口：宿主侧 `speechProvider`、`synthesizeSpeech`，浏览器侧 `speak`、`stopSpeech`。新增背景音乐 `playMusic`、`stopMusic`。新增本局配置项 `gameSettings`、`getGameSettings`、`onGameSettingsChanged`，浏览器侧 `getGameSettings`、`watchGameSettings`。第 1 版接口不变。 |
-| 3 | 新增 `versionSignal`：正文版本失效时中止的信号，结算任务的 `signal` 也随版本失效中止；`onTimelineChanged` 增加 `textVersion`；结算任务新增 `phase: 'parallel'`，与 Tavern 自己的结算同时运行。第 1、2 版接口不变。 |
+| 3 | 新增 `versionSignal`：正文版本失效时中止的信号，结算任务的 `signal` 也随版本失效中止；`onTimelineChanged` 增加 `textVersion`；结算任务新增 `phase: 'parallel'`，与 Tavern 自己的结算同时运行。新增 `publishState` 与浏览器侧 `watchState`：插件把最新状态推给自己的页面（`tavernUi.apiVersion` 为 3）。第 1、2 版接口不变。 |

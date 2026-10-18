@@ -42,6 +42,8 @@ const TOOL_MODES = ['play', 'card']
 const MAX_TASK_INPUT = 4000
 const TASK_PHASES = Object.freeze({ before: '结算前', parallel: '与结算同时', after: '结算后' })
 const MAX_VERSION_WATCHES = 2000
+const MAX_PUBLISHED_STATE = 256 * 1024
+const MAX_PUBLISHED_ENTRIES = 2000
 // Stages a plugin may replace, and what a replacement must hand back (docs/plugin-design.md).
 const REPLACEABLE_STAGES = Object.freeze({ settlement: '结算' })
 
@@ -135,6 +137,8 @@ export function createTavernPluginApi(deps) {
   const notified = new Set()
   // Signals handed out by versionSignal: aborted once their text version stops being shown.
   const versionWatches = new Set()
+  // The latest state each plugin published for its page side, per game and name (memory only).
+  const publishedStates = new Map()
   const log = deps.logger || console
 
   function staleVersion() { return Object.assign(new Error('这一轮的正文版本已不是当前显示的版本'), { code: 'TAVERN_PLUGIN_STALE_VERSION' }) }
@@ -450,6 +454,21 @@ export function createTavernPluginApi(deps) {
 
     async getTurnState({ gameId } = {}) {
       return await turnState(gameId)
+    },
+
+    // The plugin's latest state for its own page side (tavernUi.watchState): kept in memory, replaced on each call.
+    async publishState({ gameId, name, data } = {}) {
+      const owner = ownerOf(this)
+      const game = await requireGame(gameId)
+      sectionName(name)
+      if ((await choicesFor(game.sessionId)).disabled.has(owner)) throw new Error('玩家在本局关闭了插件 ' + owner)
+      const json = data === undefined ? 'null' : JSON.stringify(data)
+      if (json === undefined || json.length > MAX_PUBLISHED_STATE) throw new Error('data 必须是不超过 256 KB 的 JSON 值')
+      const key = game.sessionId + '\u0000' + owner + '\u0000' + name
+      publishedStates.delete(key)
+      publishedStates.set(key, JSON.parse(json))
+      if (publishedStates.size > MAX_PUBLISHED_ENTRIES) publishedStates.delete(publishedStates.keys().next().value)
+      try { deps.publishState?.(game.sessionId, owner, name) } catch {}
     },
 
     // An AbortSignal that aborts once this turn's textVersion is no longer the shown one
@@ -959,8 +978,16 @@ export function createTavernPluginApi(deps) {
     void choicesFor(gameId).then(({ disabled }) => dispatch(castHandlers, { gameId, ...annotation }, 'onCastAnnotated', disabled))
   }
 
+  /** Seam: the state a plugin last published for a game (null when none, or the plugin is off there). */
+  async function pluginState(gameId, owner, name) {
+    const key = String(gameId) + '\u0000' + String(owner) + '\u0000' + String(name)
+    if (!publishedStates.has(key) || (await choicesFor(gameId)).disabled.has(String(owner))) return null
+    return structuredClone(publishedStates.get(key))
+  }
+
   function gameRemoved(gameId) {
     if (!gameId) return
+    for (const key of Array.from(publishedStates.keys())) if (key.startsWith(gameId + '\u0000')) publishedStates.delete(key)
     void checkVersions(gameId, { all: true })
     dispatch(removedHandlers, { gameId }, 'onGameRemoved')
   }
@@ -1296,6 +1323,6 @@ export function createTavernPluginApi(deps) {
   }
 
   return Object.freeze({ service, toolModesFor, callHandler, turnState, exportGame, importGame, turnSettled, castAnnotated, castAssetSources, gameRemoved,
-    speechProviders: () => Array.from(speechProviders.values()), timelineChanged, checkVersions, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
+    speechProviders: () => Array.from(speechProviders.values()), timelineChanged, checkVersions, pluginState, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
     runSettlementTasks, manualTaskFor, runManualTask, stopTasks, runningTask, gamePlugins, setGamePlugin, pluginGameSettings })
 }

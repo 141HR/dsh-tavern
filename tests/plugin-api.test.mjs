@@ -948,3 +948,23 @@ test('并行结算任务：phase parallel 读结算前的这一轮，不能改�
   assert.deepEqual(ran, ['parallel:pending-3'])
   assert.deepEqual((await h.api.gamePlugins('game-1')).tasks.settlement.map(task => task.phaseLabel), ['与结算同时'])
 })
+
+test('publishState：插件给自己的浏览器侧发布最新状态，按插件、按局隔离；关闭的插件读不到，删局后清除', { skip: !cordis }, async t => {
+  const signals = []
+  const h = await harness(t, { data: createPluginData({ store: memoryStore() }), publishState: (...args) => signals.push(args) })
+  let director
+  await h.root.plugin({ name: 'director', inject: ['tavern'], apply(ctx) { director = ctx.tavern } })
+  await tick()
+  await director.publishState({ gameId: 'game-1', name: 'stage', data: { scene: '酒馆' } })
+  assert.deepEqual(signals, [['game-1', 'director', 'stage']])
+  assert.deepEqual(await h.api.pluginState('game-1', 'director', 'stage'), { scene: '酒馆' })
+  assert.equal(await h.api.pluginState('game-1', 'other', 'stage'), null)
+  await assert.rejects(director.publishState({ gameId: 'game-1', name: 'Bad', data: 1 }), /name/)
+  await assert.rejects(director.publishState({ gameId: 'game-1', name: 'big', data: 'x'.repeat(300000) }), /256 KB/)
+  await h.api.setGamePlugin('game-1', { name: 'director', enabled: false })
+  assert.equal(await h.api.pluginState('game-1', 'director', 'stage'), null)
+  await assert.rejects(director.publishState({ gameId: 'game-1', name: 'stage', data: {} }), /关闭/)
+  await h.api.setGamePlugin('game-1', { name: 'director', enabled: true })
+  h.api.gameRemoved('game-1')
+  assert.equal(await h.api.pluginState('game-1', 'director', 'stage'), null)
+})
