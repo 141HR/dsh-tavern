@@ -12,7 +12,7 @@
 ## 开始之前
 
 - 先备份 `.dsh` 目录，并完整退出桌面版和旧酒馆。
-- 允许的宿主版本：官方 DeepSeek Harness **0.2.1-rc.2**（[官网下载](https://deepseek.com/harness/)）、DSHA 内置的 DSH **0.2.0**。其他版本安装器会停止。命令行版自带 DSH，不受此限。
+- 允许的宿主版本：官方 DeepSeek Harness **0.2.1-rc.2**（[官网下载](https://deepseek.com/harness/)）、DSHA **v0.2.0-rc2**（内置 DSH 0.2.0-rc.2）。其他版本安装器会停止。命令行版自带 DSH，不受此限。
 
 ## Windows
 
@@ -44,7 +44,7 @@ Invoke-Expression $tavernInstaller
 
 ## 安卓（DSHA）
 
-1. 安装 [DSHA](https://github.com/DSH-APP/DSHA/releases)，启动一次。
+1. 安装 [DSHA v0.2.0-rc2](https://github.com/DSH-APP/DSHA/releases/tag/v0.2.0-rc2)，启动一次。
 2. 打开底部 **终端**，粘贴执行：
 
    ```sh

@@ -184,7 +184,7 @@ curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | D
 
 ### 测试版：DSH 0.2.x（无需安装包）
 
-[测试版安装方法](https://github.com/flizzywine/dsh-tavern/blob/0.2.1%E7%89%88%E6%9C%AC/README-0.2.1-rc.2.md) · [测试版说明](https://github.com/flizzywine/dsh-tavern/releases/tag/v2.7.0-dsh0.2.1-test.2)。测试版不提供一键安装包：允许官方 DeepSeek Harness 0.2.1-rc.2 与 DSHA（内置 DSH 0.2.0），清单外的版本（含社区 Desktop）不支持。另有独立命令行版。支持从旧命令行版及自定义目录备份、校验并迁移数据。
+[测试版安装方法](https://github.com/flizzywine/dsh-tavern/blob/0.2.1%E7%89%88%E6%9C%AC/README-0.2.1-rc.2.md) · [测试版说明](https://github.com/flizzywine/dsh-tavern/releases/tag/v2.7.0-dsh0.2.1-test.2)。测试版不提供一键安装包：允许官方 DeepSeek Harness 0.2.1-rc.2 与 DSHA v0.2.0-rc2（内置 DSH 0.2.0-rc.2），清单外的版本（含社区 Desktop）不支持。另有独立命令行版。支持从旧命令行版及自定义目录备份、校验并迁移数据。
 
 ## 交流与反馈
 

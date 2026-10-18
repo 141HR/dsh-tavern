@@ -33,7 +33,7 @@ test('允许清单只认精确版本号，读不出版本也拦截', () => {
 
 test('安装脚本以 --check 执行清单：清单内退出码 0，清单外非 0', () => {
   const script = fileURLToPath(new URL('../bin/dsh-compatibility.mjs', import.meta.url))
-  const ok = spawnSync(process.execPath, [script, '--check', 'android', 'dsh 0.2.0'], { encoding: 'utf8' })
+  const ok = spawnSync(process.execPath, [script, '--check', 'android', 'dsh 0.2.0-rc.2'], { encoding: 'utf8' })
   assert.equal(ok.status, 0, ok.stderr)
   assert.match(ok.stdout, /在允许清单内/)
   assert.notEqual(spawnSync(process.execPath, [script, '--check', 'desktop', 'dsh 0.2.2'], { encoding: 'utf8' }).status, 0)
