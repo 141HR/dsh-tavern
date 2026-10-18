@@ -220,6 +220,7 @@ import { canonicalTavernSkillName, createTavernSkillModule } from './domain/tave
 import { readZipEntries, writeZipEntries } from './domain/zip-entries.js'
 import { createGameFootprint } from './domain/game-footprint.js'
 import { buildGameSave, collectSaveRevisions, readGameSave } from './domain/game-save.js'
+import { compressSaveImage } from './domain/save-image-compression.js'
 import { readFileSync } from 'node:fs'
 import { readdir, readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
@@ -1624,7 +1625,11 @@ export async function apply(ctx) {
       }
       const attachments = []
       for (const ref of media.values()) {
-        try { const image = await ctx.get('attachments').readImage(ref); attachments.push({ attachmentId: ref.attachmentId, mediaType: ref.mediaType, data: Buffer.from(image.data) }) }
+        try {
+          const image = await ctx.get('attachments').readImage(ref)
+          attachments.push(await compressSaveImage({ attachmentId: ref.attachmentId, mediaType: ref.mediaType, data: Buffer.from(image.data) }))
+          await new Promise(resolve => setImmediate(resolve))
+        }
         catch { /* A missing picture must not block the save; the game keeps its reference. */ }
       }
       if (scene) scene.attachments = attachments
