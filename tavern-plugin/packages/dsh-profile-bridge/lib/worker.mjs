@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, appendFileSync, unlinkSync, rmdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, unlinkSync, rmdirSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { waitForExit, switchProfile, relaunchApp } from './helper.mjs'
 const job = process.argv[2]
@@ -23,5 +23,6 @@ try {
     try { relaunchApp(request.relaunch); log('已重新打开官方桌面。') } catch (error) { log('ERROR: 无法重新打开官方桌面：' + error.message) }
   }
   unlinkSync(job)
+  rmSync(join(dirname(job), 'worker.json'), { force: true })
   rmdirSync(dirname(job))
 }

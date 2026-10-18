@@ -92,3 +92,15 @@ test('陈旧锁归档只保留最近几份', async t => {
  assert.equal(acquired.reclaimed,true)
  assert.equal(readdirSync(staleRoot).filter(name=>name.startsWith('pending-')).length,2)
 })
+
+test('worker 结束后释放 pending：登记的 worker.json 不会让锁目录残留', async t => {
+ const { execFileSync } = await import('node:child_process')
+ const { fileURLToPath } = await import('node:url')
+ const stateDir=mkdtempSync(join(tmpdir(),'pb-release-'));t.after(()=>rmSync(stateDir,{recursive:true,force:true}))
+ const lock=join(stateDir,'pending');mkdirSync(lock)
+ writeFileSync(join(lock,'request.json'),JSON.stringify({stateDir,pids:[]}))
+ writeFileSync(join(lock,'worker.json'),JSON.stringify({pid:1234,startedAt:0}))
+ const worker=fileURLToPath(new URL('../tavern-plugin/packages/dsh-profile-bridge/lib/worker.mjs',import.meta.url))
+ try { execFileSync(process.execPath,[worker,join(lock,'request.json')],{stdio:'ignore'}) } catch {}
+ assert.equal(existsSync(lock),false)
+})
