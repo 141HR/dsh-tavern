@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "544c22af9491109f271fb59e0c97875fd208616f",
-  "releaseSequence": 712,
+  "revision": "dc191a773d49d7eef243f457537b8db0a1006bae",
+  "releaseSequence": 713,
   "version": "3.0.0",
   "files": [
     {
@@ -771,8 +771,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/compaction-checkpoint.js",
-      "sha256": "cbe9156574ed151574ddd9b87196ba1920f29a37df930eed1f45f33aa1621204",
-      "size": 499
+      "sha256": "b1792c7f01e85de092305143ca4d723f3dc9e61778cd12049c5ba59ba8c1d499",
+      "size": 894
     },
     {
       "path": "tavern-plugin/lib/domain/compaction-failure.js",
