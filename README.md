@@ -1,6 +1,6 @@
 <p align="center">
 
-> **两个版本：** 稳定版即下方[快速开始](#快速开始)（含一键安装包，锁定 DSH 0.1.5）；[测试版](README-0.2.1-rc.2.md)不再提供安装包，直接装在官方 DeepSeek Harness、DSHA 或独立命令行上，DSH 版本按允许清单放行。测试版成熟后将取代稳定版。
+> **两个版本：** **稳定版仅适配 DSH 0.1.5-rc.2**，即下方[快速开始](#快速开始)（含一键安装包）；**[测试版](README-0.2.1-rc.2.md)适配 DSH 0.2.1-rc.2**（手机 DSHA v0.2.0-rc2 内置的 0.2.0-rc.2 也可用），不提供安装包，直接装在官方 DeepSeek Harness、DSHA 或独立命令行上。测试版成熟后将取代稳定版。
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/docs/assets/brand/dsh-tavern-lockup-on-dark.svg">
     <img src="docs/assets/brand/dsh-tavern-lockup.svg" width="360" alt="DSH 酒馆">
