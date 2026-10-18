@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "f37b23fa90f91ac04085681035cc8e163f3e3c36",
-  "releaseSequence": 709,
+  "revision": "68ba19b9c488fd20072fe85682c42ef4a88408dd",
+  "releaseSequence": 710,
   "version": "3.0.0",
   "files": [
     {
@@ -286,8 +286,8 @@
     },
     {
       "path": "package.json",
-      "sha256": "b8ce7ded104ca6644d58dcb188ee5b2baab47fd41683324acf2748b110ceacc1",
-      "size": 3822
+      "sha256": "de106177edd92bd1817289d27b067775372e1fe65026f8efdf7a42a55fcceb03",
+      "size": 3911
     },
     {
       "path": "patches/dsh-better-sidebar@0.26.0.patch",
@@ -311,8 +311,8 @@
     },
     {
       "path": "pnpm-lock.yaml",
-      "sha256": "d0a511c4f9164b70242d59569c268d5426f61be59799da8faf777cbda4322357",
-      "size": 86203
+      "sha256": "4b9439b33ed19f0291be48dc523725c4de378948a54c02dae7113f6caeda2e75",
+      "size": 87189
     },
     {
       "path": "pnpm-workspace.yaml",
@@ -1500,6 +1500,11 @@
       "size": 24215
     },
     {
+      "path": "tavern-plugin/lib/domain/save-image-compression.js",
+      "sha256": "05df4c74802b6f3e86c4bf5e02a68995d7bf556eb2a66797e3efb7f06b705bda",
+      "size": 2347
+    },
+    {
       "path": "tavern-plugin/lib/domain/save-maintenance.js",
       "sha256": "691a19fa9b5f46e3ec13a1aaf043bb97516e81503af5d3d092858b86d6a1e759",
       "size": 6091
@@ -2226,8 +2231,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "61b85ffb450df06f8c315e30eea0d866d242c153c30706a6a71893c260e95570",
-      "size": 365421
+      "sha256": "2b22fbc356bd41471486bb4dc43678db154c9188e0fa5e09a77e9a3c3d1e5391",
+      "size": 365606
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -4011,8 +4016,8 @@
     },
     {
       "path": "tavern-plugin/package.json",
-      "sha256": "1621bcd7bb28afa4cd22126468c097129cca76ec09e12ea1373072a6ec81521c",
-      "size": 2030
+      "sha256": "9de222ec5cff4f0cded0d43fc336c5b3ceea62a2260ee30a35241c86b437bac5",
+      "size": 2119
     },
     {
       "path": "tavern-plugin/packages/dsh-better-sidebar/lib/client-editor.js",
