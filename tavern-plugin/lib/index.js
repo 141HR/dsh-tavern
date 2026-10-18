@@ -180,6 +180,7 @@ import { readCardArchive } from './domain/card-archive.js'
 import { openZipFile } from './domain/zip-file.js'
 import { createUploads } from './domain/uploads.js'
 import { createCardPlugins } from './domain/card-plugins.js'
+import { createCardImportIdentity } from './domain/card-import-identity.js'
 import { createPostureItem, createSettlementItems, plainSettlementPlan, runPipelineStages } from './domain/background-pipeline.js'
 import { TAVERN_COMPATIBILITY_CAPABILITIES, createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
 import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics, sanitizeModuleFailure, sanitizeMvuLoadDiagnostic, redactMvuLoadError } from './domain/mvu-diagnostics.js'
@@ -1046,6 +1047,7 @@ export async function apply(ctx) {
   const uploads = createUploads({ root: dataRoot })
   const cardPlugins = createCardPlugins({ dataRoot, pluginsDir: userPluginPaths(dataRoot).plugins, keyOf: castAssets.keyOf })
   void uploads.sweep().catch(() => {})
+  const cardImportIdentity = createCardImportIdentity({ cardPaths: () => fileResources.list('card'), castAssets, readCardText: cardPath => fileResources.readText(cardPath) })
   // Voiced dialogue: channels are Tavern's and the plugins' (pluginApi is created later; read lazily).
   const speech = createSpeech({ store: profileData, credentials: () => ctx.get('credentials'), plugins: () => pluginApi.speechProviders() })
   resourceGraph = createResourceGraph({
@@ -1074,6 +1076,10 @@ export async function apply(ctx) {
   // A CHARX, DSH card or card bundle read from disk: its packs first, so a failure leaves no card behind.
   async function importCardArchiveFile(file, name) {
     const label = /\.dshcard$/i.test(name) ? 'DSH 人物卡' : 'CHARX'
+    // The very same file again: open the card already imported from it (if still unchanged).
+    const archiveSha256 = await cardImportIdentity.fileSha256(file)
+    const existing = await cardImportIdentity.find(archiveSha256)
+    if (existing) return { path: existing, name: (await cardSummaries.read(existing).catch(() => null))?.name || existing.split('/').pop(), duplicate: true }
     const zip = await openZipFile(file, { label })
     try {
       const archive = await readCardArchive(zip)
@@ -1084,6 +1090,7 @@ export async function apply(ctx) {
       }
       const imported = await storeImportedCard(cardImportFromCard({ card: archive.card, resolve: archive.resolve, name }), { unique: true })
       if (packs.length) await castAssets.bindPacks(imported.path, packs)
+      await cardImportIdentity.remember(imported.path, archiveSha256)
       // The card's plugins come on with it, confined to this card; the card library can turn them off.
       const plugins = archive.plugins.length ? await cardPlugins.stage(zip, { cardKey: castAssets.keyOf(imported.path), plugins: archive.plugins }) : []
       let pluginError = ''

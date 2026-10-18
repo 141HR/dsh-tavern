@@ -193,6 +193,8 @@ export async function castCardFileChecks({ page, step, report, savedChat }) {
       { path: 'plugins/ping/index.mjs', content: "export const name = 'dsh-e2e-card-ping'\nexport const inject = ['tavern']\nexport function apply(ctx) { ctx.tavern.handle('e2e-card/ping', async ({ gameId }) => ({ pong: true, gameId: gameId || '' })) }\n" }])
     const withPlugin = await importArchive(page, '插件卡验收.dshcard', pluginCard)
     assert.deepEqual(withPlugin.plugins.map(item => [item.name, item.enabled]), [['dsh-e2e-card-ping', true]], '导入即启用')
+    const repeated = await importArchive(page, '插件卡验收.dshcard', pluginCard)
+    assert.deepEqual([repeated.duplicate, repeated.path], [true, withPlugin.path], '同一个文件再导入一次，打开原来那张，不再多出一份')
     const call = (method, args) => page.evaluate(async ([method, args]) => (await fetch('/api/dsh-tavern/' + method, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(args) })).json(), [method, args])
     let pong = null
     for (let attempt = 0; attempt < 60 && !pong?.ok; attempt++) { await page.waitForTimeout(500); pong = await call('callPluginHandler', { name: 'e2e-card/ping', args: {} }) }
