@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "4ee89c2cf90acddf0a741f971e5aa0ad87c65fee",
-  "releaseSequence": 663,
+  "revision": "378896edf1f57e3a753657d837ec81ca08efdfd3",
+  "releaseSequence": 665,
   "version": "2.7.0",
   "files": [
     {
@@ -271,13 +271,13 @@
     },
     {
       "path": "install.ps1",
-      "sha256": "12d182de88acd8d4064b562fa5d23544f786ec47cedfaa0c7880873ece97f44f",
-      "size": 79467
+      "sha256": "1f0ffe3db739a4edfb398d4cb428b00b0684faad423f3ae28f0821e5b0d73b2a",
+      "size": 79469
     },
     {
       "path": "install.sh",
-      "sha256": "ac3142ce03b8c775cb12aa1a1645a6feb225554d3c048018ab915fc6bd31ab05",
-      "size": 60056
+      "sha256": "c9ce6c76afe1fc2664371b73eda4b493fbdb0952d973e3f4257a57fa20866c53",
+      "size": 60058
     },
     {
       "path": "package.json",
@@ -4371,8 +4371,8 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/client.js",
-      "sha256": "89ca8f7417dc4e294dcdc48d436c72f28307d321f23ea04737ef18ec6acc0759",
-      "size": 13399
+      "sha256": "a3ac965479a0e4fa84d47470d5dcb72c1c8477b96db6b223d5709742990b9694",
+      "size": 12999
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/cordis.patch.yml",
@@ -4386,23 +4386,23 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/index.js",
-      "sha256": "486341a79b23f0d9f556a23e4a33091a2389ec5bd4df9225ddae145e8170e598",
-      "size": 7844
+      "sha256": "9d47e62a65d205890f64dafdb90c25d2916f4c50fc47b61cc5ebb19fb5a46609",
+      "size": 8273
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/lib/helper.mjs",
-      "sha256": "af6d6eb68c3f6abbaad52ab006a4ddd23505d014672ab9294fbd42958cba4083",
-      "size": 4741
+      "sha256": "48bb03f6ba78f9d4d6211be50a4082ae2dc9cb3b0600df0810e9907e2db5217d",
+      "size": 5974
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/lib/state.mjs",
-      "sha256": "016e655d80c13ea408ceac03edd3bd3191f54e63bc2d8a20c9d8f418000d9897",
-      "size": 9777
+      "sha256": "df1c629ddc823fe60fc0af293bfbdfb024d10107bffcf4d84a2244fed6b8ab12",
+      "size": 10405
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/lib/worker.mjs",
-      "sha256": "3e1c7d0699d38bd564fe3c61e85b66f7d6cb7a1ae13e209b65ab0b2f4a62db82",
-      "size": 739
+      "sha256": "d9cb0a680d33c2b42cda3b681d3c64bed0078b17cf4ec16c0b337486e23ac0e8",
+      "size": 1062
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/LICENSE",
@@ -4411,13 +4411,13 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/locale/en.json",
-      "sha256": "f4e3bb83e0e7642de41e9a5147eab4d5213ee1a4357dfdfa59d7204420c7a111",
+      "sha256": "095ecac9c960161856678db6551df27aaf750f05a6b5fe319e5bfbaca37fbb14",
       "size": 234
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/locale/zh.json",
-      "sha256": "b0e91fa2db86ae4675f5ac3a2552d2f29673d8668f0223e43cf0cdd9e1448189",
-      "size": 229
+      "sha256": "b171b5ae435336db3e6ffbf530f72aea4014a6f08dac01f595995696396332bb",
+      "size": 225
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/package.json",
@@ -4426,8 +4426,8 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/README.md",
-      "sha256": "b8d2eee49b58659960c8657055de4eb28de560729c60967982a64fab54c285e9",
-      "size": 2303
+      "sha256": "466ba9167b0f2b39910218248f6479db8030af41366c419b5da532313828d83a",
+      "size": 2430
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-card-memory/index.js",
