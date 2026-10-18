@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import vm from 'node:vm'
 
-import { installHostSessionPatch, PINNED_SHA256, SESSION_PATCH_VERSION } from '../tavern-plugin/lib/domain/host-session-patch.js'
+import { installHostSessionPatch, PINNED_SHA256, SESSION_PATCH_VERSION, SESSION_PATCH_VERSIONS } from '../tavern-plugin/lib/domain/host-session-patch.js'
 
 // 0.2.0-rc.2 适配：本用例的宿主路径由环境变量给出（内容决定版本），断言跟随
 // SESSION_PATCH_VERSION 与模块自己的引脚表，不再另抄一份 0.1.5-rc.2 的哈希/字符串。
@@ -90,6 +90,16 @@ test(`${SESSION_PATCH_VERSION} 补丁允许替换，未打补丁的读取仍拒�
   assert.ok(PINNED_SHA256['@deepseek-ai/dsh-session/surface'].includes(surfaceHash),
     `宿主 surface 文件不在 ${SESSION_PATCH_VERSION} 引脚表内：${surfaceHash}`)
   await ctx.fiber.dispose()
+})
+
+test('补丁放行版本跟随已验证列表；列表外的版本 skipped，不碰宿主文件', async () => {
+  const policy = JSON.parse(readFileSync(new URL('../config/dsh-compatibility.json', import.meta.url), 'utf8'))
+  for (const version of [SESSION_PATCH_VERSION, ...policy.verifiedDshVersions]) assert.ok(SESSION_PATCH_VERSIONS.includes(version), version)
+  const root = await mkdtemp(join(tmpdir(), 'tavern-host-patch-version-'))
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-session', version: '0.0.0-unverified' }))
+  const handle = await installHostSessionPatch({ hostRequire: { resolve: name => name.endsWith('/package.json') ? join(root, 'package.json') : assert.fail('列表外版本不应解析宿主文件 ' + name) } })
+  assert.equal(handle.status, 'skipped')
+  assert.equal(handle.view().ready, false)
 })
 
 test('issue #74: patched persistence rewrites dynamic import("koffi") to a file URL', () => {

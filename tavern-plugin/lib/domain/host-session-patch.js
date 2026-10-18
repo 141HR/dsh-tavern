@@ -193,6 +193,10 @@ export const SESSION_PATCH_PROTOCOL = 1
 // 0.2.1-rc.2 适配：宿主 runtime 从 0.1.5-rc.2 升到 0.2.1-rc.2；补丁锚点在 0.2.0 全部
 // 仍唯一命中（见 tmp/audit-host.md 的 E1），因此这里是重钉版本 + 重算字节，不是重写补丁。
 export const SESSION_PATCH_VERSION = '0.2.1-rc.2'
+// Audited against SESSION_PATCH_VERSION; also admitted on every verified host release
+// (config/dsh-compatibility.json). PINNED_SHA256 still guards each file's bytes.
+const policy = JSON.parse(readFileSync(new URL('../../../config/dsh-compatibility.json', import.meta.url), 'utf8'))
+export const SESSION_PATCH_VERSIONS = Object.freeze([...new Set([SESSION_PATCH_VERSION, ...(policy.verifiedDshVersions || [])])])
 const INSTALLED = Symbol.for('dsh-tavern.host-session-patch.v1')
 // Each entry lists every known-good bytes of that file for 0.2.1-rc.2.
 // Official npm is always first. The 0.1.5-rc.2 list also carried DSHA v0.1.5-rc2
@@ -278,7 +282,7 @@ function createHandle(fields) {
       this.clientReason = ''
     },
     replacementAllowed() {
-      // 0.2.1-rc.2 适配：'skipped' 表示宿主版本与 SESSION_PATCH_VERSION 不符、补丁**没有装**。
+      // 'skipped' 表示宿主版本不在 SESSION_PATCH_VERSIONS（已验证版本）内、补丁**没有装**。
       // 旧实现把 skipped 当作「可写」，会让正文编辑/回退/重新生成在补丁缺失时假就绪：
       // 宿主 dsh-session 仍会拒绝 assistant/message + sourceEventSeqs 的 replace 写入。
       // 只有服务端补丁装好且页面完成握手才算就绪。
@@ -322,7 +326,7 @@ export async function installHostSessionPatch({ hostRequire, persistence, query 
     return loaded.sessionFormatCatalog
   }
   const finish = fields => Object.assign(createHandle(fields), { loadSessionCatalog })
-  if (hostVersion !== SESSION_PATCH_VERSION) return finish({ status: 'skipped', hostVersion })
+  if (!SESSION_PATCH_VERSIONS.includes(hostVersion)) return finish({ status: 'skipped', hostVersion })
   if (persistence?.[INSTALLED]) {
     const installed = persistence[INSTALLED]
     if (!installed.loadSessionCatalog) installed.loadSessionCatalog = loadSessionCatalog
@@ -350,7 +354,7 @@ export async function installHostSessionPatch({ hostRequire, persistence, query 
   }
   let patch
   try {
-    patch = await prepareExpandedPatch(runtimeRoot(require.resolve('@deepseek-ai/dsh-session')), { version: SESSION_PATCH_VERSION })
+    patch = await prepareExpandedPatch(runtimeRoot(require.resolve('@deepseek-ai/dsh-session')), { version: hostVersion })
     patch.patchPersistence(persistence)
     patch.patchQuery(query)
   } catch (error) {

@@ -7,7 +7,7 @@
 // 用真实 Session 的用例会以难以定位的方式失败）。
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
-import { prepareExpandedPatch, SESSION_PATCH_VERSION } from '../../tavern-plugin/lib/domain/host-session-patch.js'
+import { prepareExpandedPatch, SESSION_PATCH_VERSIONS } from '../../tavern-plugin/lib/domain/host-session-patch.js'
 
 const APPLIED = Symbol.for('dsh-tavern.host-session-patch-preload.v1')
 
@@ -26,7 +26,7 @@ if (!globalThis[APPLIED] && !process.argv.some(arg => arg.endsWith('/host-sessio
     const sessionPath = hostRequire.resolve('@deepseek-ai/dsh-session')
     runtimeRoot = sessionPath.split(/[/\\]node_modules[/\\]/)[0]
   }
-  if (version === SESSION_PATCH_VERSION) {
+  if (SESSION_PATCH_VERSIONS.includes(version)) {
     await prepareExpandedPatch(runtimeRoot, { version })
     globalThis[APPLIED] = true
   }
