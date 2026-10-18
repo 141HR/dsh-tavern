@@ -17,12 +17,9 @@ const replacements = {
 
 export function patchThemeFontLimit(directory) {
   const manifest = JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8'))
-  // 0.2.0-rc.2 适配：版本闸跟随 config/dsh-compatibility.json 的 adaptedDshVersion，
-  // 不再写死 0.1.5-rc.2——写死会让 0.2.0 宿主抛错，被 profile-installation.mjs:305-308
-  // 捕获后 rollback 整个安装。
-  if (manifest.name !== '@deepseek-ai/dsh-client-ui-theme' || manifest.version !== adaptedDshVersion) {
-    throw new Error(`字号补丁仅适用于 dsh-client-ui-theme ${adaptedDshVersion}`)
-  }
+  if (manifest.name !== '@deepseek-ai/dsh-client-ui-theme') throw new Error('字号补丁仅适用于 dsh-client-ui-theme')
+  // Cosmetic patch: an unverified host version skips it (null) instead of rolling back the install.
+  if (manifest.version !== adaptedDshVersion) return null
   // Validate every anchor before writing; repeated installation is a no-op.
   const changes = Object.entries(replacements).map(([name, pairs]) => {
     const file = path.join(directory, 'lib', name)

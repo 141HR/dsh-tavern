@@ -68,7 +68,7 @@ for (const host of ['desktop', 'android']) {
     const source = temporary(t), target = path.join(source, 'private')
     put(path.join(source, 'profiles/tavern/package.json'), JSON.stringify({ dshTavern: { host } }))
     assert.equal(migrateCliHome({ source, target }), false)
-    const notice = dshCompatibilityNotice('99.0.0', host)
+    const notice = dshCompatibilityNotice('0.1.5-rc.2', host)
     assert.match(notice, /已停止安装/)
     // 0.2.0-rc.2 适配：Desktop 的下载地址换成官方 https://www.deepseek.com/harness/，
     // 断言改为跟随 config/dsh-compatibility.json 的字段，不再假设发布页在 GitHub。

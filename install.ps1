@@ -1036,7 +1036,7 @@ try {
     } catch { Write-Warning "诊断日志写入失败：$($_.Exception.Message)" }
   }
   function Assert-InstallFiles([string]$Root) {
-    foreach ($Relative in @('package.json', 'pnpm-lock.yaml', 'bin\dsh-compatibility.mjs', 'bin\dsh-tavern.mjs', 'config\dsh-compatibility.json')) {
+    foreach ($Relative in @('package.json', 'pnpm-lock.yaml', 'bin\dsh-compatibility.mjs', 'tavern-plugin\lib\domain\host-compatibility.js', 'bin\dsh-tavern.mjs', 'config\dsh-compatibility.json')) {
       $Required = Join-Path $Root $Relative
       if (-not (Test-Path -LiteralPath $Required -PathType Leaf)) { throw "安装文件不完整，缺少：$Required" }
     }
@@ -1252,7 +1252,7 @@ try {
   if ($InstallHost -ne 'cli') {
     $CurrentDshVersion = Invoke-InstallCommand 'host.version' $DshCommand @('--version') -CaptureOutput -TimeoutMs 30000
     & node $CompatibilityScript --check $InstallHost ($CurrentDshVersion -join "`n")
-    Assert-LastCommand '宿主 DSH 版本不兼容，尚未覆盖程序文件。'
+    Assert-LastCommand '宿主 DSH 版本不可用，尚未覆盖程序文件。'
   }
 
   $Stager = Join-Path $SourceDir.FullName 'bin\staged-app-install.mjs'
