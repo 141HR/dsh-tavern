@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "68ba19b9c488fd20072fe85682c42ef4a88408dd",
-  "releaseSequence": 710,
+  "revision": "c545b15bf27d1fa67331d33b4951b3c02ffa5ef9",
+  "releaseSequence": 711,
   "version": "3.0.0",
   "files": [
     {
@@ -56,8 +56,8 @@
     },
     {
       "path": "bin/desktop-profile-installation.mjs",
-      "sha256": "4f5a4071299fb301649344dec94aabdb805af10cbf76d4b3ca92329b5811231c",
-      "size": 6554
+      "sha256": "b3ff13274b7d4e2b1b679323279f4f0fa4377769d2c9fc3e4775c612271b4c52",
+      "size": 7096
     },
     {
       "path": "bin/download.cjs",
@@ -151,8 +151,8 @@
     },
     {
       "path": "bin/profile-installation.mjs",
-      "sha256": "785315b6edc94d1bc94c7c66c36c4ee4356b101dcf5b23581f3dcf5858306fcd",
-      "size": 19989
+      "sha256": "32735054f7c2a26d43272f55064355b1db2cd91c7995675fa9023d4963e80f6f",
+      "size": 20001
     },
     {
       "path": "bin/prune-installed-files.mjs",
