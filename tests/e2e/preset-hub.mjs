@@ -32,7 +32,7 @@ export async function presetHubChecks({ page, step, output, report }) {
     assert.ok(!labels.includes('系统提示词') && !labels.includes('长期偏好') && !labels.includes('预设库'), '旧标签页不再单独出现：' + labels.join('、'))
     await start.locator('.dsh-tavern-start-card').filter({ hasText: /^预设$/ }).first().click()
     await hub.waitFor()
-    for (const name of ['预设', '系统提示词', '长期偏好']) await hub.getByRole('region', { name, exact: true }).waitFor()
+    for (const name of ['酒馆预设', '系统提示词', '长期偏好']) await hub.getByRole('region', { name, exact: true }).waitFor()
     await page.screenshot({ path: join(output, 'preset-hub.png'), fullPage: true })
   })
   await step('在预设页选择三项，导出成一个文件', async () => {
@@ -47,7 +47,16 @@ export async function presetHubChecks({ page, step, output, report }) {
     await profiles.selectOption({ label: '验收偏好' })
     await hub.getByRole('status').filter({ hasText: '新游戏默认长期偏好已更新' }).waitFor()
     assert.equal(await hub.getByRole('combobox', { name: '系统提示词方案' }).locator('option:checked').innerText(), '快节奏')
-    const [download] = await Promise.all([page.waitForEvent('download'), hub.getByRole('button', { name: '导出勾选项' }).click()])
+    // Unchecking an item leaves it out of the file.
+    await hub.getByRole('button', { name: '导出…', exact: true }).click()
+    const panel = hub.getByRole('region', { name: '选择导出内容' })
+    await panel.getByRole('checkbox', { name: /长期偏好/ }).uncheck()
+    await page.screenshot({ path: join(output, 'preset-hub-export.png'), fullPage: true })
+    const [partial] = await Promise.all([page.waitForEvent('download'), panel.getByRole('button', { name: '导出所选' }).click()])
+    const some = JSON.parse(await readFile(await partial.path(), 'utf8'))
+    assert.deepEqual(['preset', 'systemPrompts', 'userProfile'].filter(key => key in some), ['preset', 'systemPrompts'])
+    await hub.getByRole('button', { name: '导出…', exact: true }).click()
+    const [download] = await Promise.all([page.waitForEvent('download'), hub.getByRole('region', { name: '选择导出内容' }).getByRole('button', { name: '导出所选' }).click()])
     const file = join(output, download.suggestedFilename())
     await download.saveAs(file)
     const bundle = JSON.parse(await readFile(file, 'utf8'))
@@ -76,10 +85,22 @@ export async function presetHubChecks({ page, step, output, report }) {
     assert.equal(await hub.getByRole('combobox', { name: '系统提示词方案' }).locator('option:checked').innerText(), '快节奏 (2)')
     await page.screenshot({ path: join(output, 'preset-hub-imported.png'), fullPage: true })
   })
-  await step('详情可进入原有编辑页并返回', async () => {
-    await hub.getByRole('region', { name: '系统提示词', exact: true }).getByRole('button', { name: '详情 ›' }).click()
+  await step('详情可进入原有编辑页、单独导出、删除方案并返回', async () => {
+    await hub.getByRole('region', { name: '系统提示词', exact: true }).getByRole('button', { name: /详情/ }).click()
     const detail = page.locator('.dsh-tavern-preset-hub-detail').filter({ visible: true })
     await detail.getByRole('combobox', { name: '系统提示词方案' }).waitFor()
+    // Exporting one item lives in its own detail page.
+    const [single] = await Promise.all([page.waitForEvent('download'), detail.getByRole('button', { name: '导出', exact: true }).click()])
+    const one = JSON.parse(await readFile(await single.path(), 'utf8'))
+    assert.deepEqual(['preset', 'systemPrompts', 'userProfile'].filter(key => key in one), ['systemPrompts'])
+    assert.equal(one.systemPrompts.name, '快节奏 (2)')
+    // Deleting the set in use switches to another one.
+    await detail.getByRole('button', { name: '删除', exact: true }).click()
+    await confirmDialog()
+    await detail.getByRole('status').filter({ hasText: '方案已删除' }).waitFor()
+    const left = (await call('getSystemPrompts')).systemPrompts.promptSets
+    assert.deepEqual(left.sets.map(set => set.name), ['默认方案', '快节奏'])
+    assert.equal(left.sets.find(set => set.active).name, '快节奏')
     await detail.getByRole('button', { name: '← 返回预设' }).click()
     await hub.waitFor()
   })

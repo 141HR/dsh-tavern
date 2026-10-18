@@ -2924,11 +2924,27 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
 .dsh-tavern-prompt-set-bar select { min-width: 0; padding: 7px 9px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 7px; background: var(--dsw-specific-input-major); color: inherit; font: inherit; }
 .dsh-tavern-prompt-set-bar select:first-child { flex: 1; }
 .dsh-tavern-preset-hub > .dsh-tavern-dock-error, .dsh-tavern-preset-hub > .dsh-tavern-system-prompt-status { margin: 12px 18px 0; }
-.dsh-tavern-preset-hub-list { display: grid; gap: 10px; padding: 14px 18px 18px; }
-.dsh-tavern-preset-hub-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; background: var(--dsw-specific-input-major); }
-.dsh-tavern-preset-hub-main { display: grid; gap: 4px; min-width: 0; }
-.dsh-tavern-preset-hub-main small { color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.5; }
-.dsh-tavern-preset-hub-main select { margin-top: 4px; min-width: 0; max-width: 100%; }
-.dsh-tavern-preset-hub-include input { width: 16px; height: 16px; margin: 0; }
+.dsh-tavern-preset-hub-list { display: grid; gap: 12px; padding: 16px 18px 20px; }
+.dsh-tavern-preset-hub-row { display: grid; gap: 12px; padding: 6px 6px 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; background: var(--dsw-specific-input-major); }
+.dsh-tavern-preset-hub-head { display: flex; align-items: center; gap: 12px; min-width: 0; width: 100%; padding: 8px 10px; border: 0; border-radius: 9px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background .15s; }
+.dsh-tavern-preset-hub-head:hover:not(:disabled) { background: var(--dsh-tavern-accent-soft); }
+.dsh-tavern-preset-hub-icon { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--dsh-tavern-accent-soft); color: var(--dsh-tavern-accent); }
+.dsh-tavern-preset-hub-icon svg { width: 18px; height: 18px; }
+.dsh-tavern-preset-hub-titles { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.dsh-tavern-preset-hub-titles b { font-size: 14px; font-weight: 600; }
+.dsh-tavern-preset-hub-titles small { color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.5; }
+.dsh-tavern-preset-hub-open { flex: none; padding: 6px 12px; border: 1px solid var(--dsh-tavern-accent-border); border-radius: 999px; color: var(--dsh-tavern-accent); font-size: 12px; font-weight: 500; }
+.dsh-tavern-preset-hub-head:hover:not(:disabled) .dsh-tavern-preset-hub-open { background: var(--dsh-tavern-accent); border-color: transparent; color: var(--dsw-alias-label-primary-foreground, #fff); }
+.dsh-tavern-preset-hub-body { display: flex; padding: 0 10px 0 56px; }
+.dsh-tavern-preset-hub-body select { flex: 1; min-width: 0; max-width: 100%; }
+@container (max-width: 420px) { .dsh-tavern-preset-hub-body { padding-left: 10px; } }
 .dsh-tavern-preset-hub-detail { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .dsh-tavern-preset-hub-back { padding: 10px 18px 0; }
+.dsh-tavern-preset-hub { container-type: inline-size; }
+.dsh-tavern-preset-hub-export { display: grid; gap: 8px; margin: 14px 18px 0; padding: 14px 16px; border: 1px solid var(--dsh-tavern-accent-border); border-radius: 12px; background: var(--dsh-tavern-accent-soft); }
+.dsh-tavern-preset-hub-export > b { font-size: 13px; font-weight: 600; }
+.dsh-tavern-preset-hub-export label { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.dsh-tavern-preset-hub-export label.is-disabled { opacity: .5; cursor: default; }
+.dsh-tavern-preset-hub-export label small { margin-left: auto; color: var(--dsw-alias-label-tertiary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-tavern-preset-hub-export input { width: 15px; height: 15px; margin: 0; accent-color: var(--dsh-tavern-accent); }
+.dsh-tavern-preset-hub-export-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
