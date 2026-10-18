@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { copyFile, link, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
@@ -46,7 +47,7 @@ test('旧版 Desktop 经最新安装脚本走 CDN 覆盖升级：运行文件落
     files.set(file, await readFile(new URL('../' + file, import.meta.url)))
   }
   const revision = 'b'.repeat(40)
-  const manifest = { schemaVersion: 2, revision, releaseSequence: 42, version: '1.1.1', files: [...files].map(([file, bytes]) => ({ path: file, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') })) }
+  const manifest = { schemaVersion: 2, revision, releaseSequence: 42, version: JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version, files: [...files].map(([file, bytes]) => ({ path: file, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') })) }
   manifest.files.push({ path: 'docs/do-not-download.txt', size: 0, sha256: 'a'.repeat(64) })
   manifest.files.push({ path: 'patches/../escape.txt', size: 0, sha256: 'a'.repeat(64) })
   const requests = []
