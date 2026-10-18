@@ -1,62 +1,45 @@
-# DSH 0.2.1 测试版
+# DSH Tavern 测试版安装
 
-这是面向测试用户的预发布版本，使用 `0.2.1版本` 分支。原有安装方式仍保留在 [README 快速开始](README.md#快速开始)，本页仅提供额外的测试版安装方法。
+测试版适配 DSH 0.2.x，跟随 `0.2.1版本` 分支。它**不提供一键安装包**（EXE / APK），而是把酒馆装到你自己的 DSH 宿主上。稳定版的安装方法见 [README 快速开始](README.md#快速开始)，不要用稳定版的 EXE / APK 安装测试版。
 
-## 支持范围
+按你的系统直接跳到对应章节：
 
-测试版不再提供一键安装包，改为在宿主上安装酒馆插件。宿主 DSH 版本必须在允许清单内，清单外的版本安装器会停止，不修改任何文件。当前允许：
+| 系统 | 安装方式 |
+| --- | --- |
+| [Windows](#windows) | 官方桌面版，或命令行版（浏览器使用） |
+| [安卓](#安卓dsha) | DSHA |
+| [macOS](#macos) | 官方桌面版，或命令行版（浏览器使用） |
+| [Linux](#linux) | 命令行版（浏览器使用） |
 
-- 官方 DeepSeek Harness **0.2.1-rc.2**（[官网下载](https://deepseek.com/harness/)）。macOS 已本机验证，Windows 待测试用户验证。
-- DSHA 内置的 DSH **0.2.0**。
-- DSH 发布新版后，确认可用即加入清单，酒馆内更新即可生效。
-- 另提供独立命令行版，自带锁定的 DSH 0.2.1-rc.2，在浏览器使用酒馆，不需要安装官方桌面。
-- 不提供 EXE 安装包和独立 APK，不要用原有 EXE / APK 安装这个测试版。
+## 开始之前
 
-## 安装前
+1. **备份数据**。备份用户主目录下的 `.dsh` 目录，或在旧酒馆里导出重要存档。桌面版测试版直接使用现有酒馆数据，不是隔离的第二套存档。
+2. **完整退出**官方桌面和旧酒馆，确保没有正在生成的内容。
+3. **宿主版本必须在允许清单内**，不在清单内的版本，安装器会停止，不修改任何文件。当前允许：
+   - 官方 DeepSeek Harness **0.2.1-rc.2**（[官网下载](https://deepseek.com/harness/)）。macOS 已实机验证，Windows 待测试用户验证。
+   - DSHA 内置的 DSH **0.2.0**。
+   - 命令行版自带 DSH 0.2.1-rc.2，不受宿主版本影响。
 
-1. 完整退出官方桌面和旧酒馆，确保没有正在生成的内容。
-2. 备份原来的 `.dsh` 数据目录（默认位于用户主目录），或从旧酒馆导出重要存档。测试版会使用现有酒馆数据，不是隔离的第二套存档。
-3. 安装并首次启动官方 DeepSeek Harness 0.2.1-rc.2，然后完整退出。后续命令无需额外安装 Node.js，使用官方桌面内置运行环境。
+   DSH 发布新版后，确认可用即加入清单，在酒馆内更新即可生效。
 
-## macOS 安装
+## Windows
 
-打开系统“终端”，粘贴执行：
+### 方式一：官方桌面版
 
-```sh
-curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.sh' -o /tmp/dsh-tavern-testing-install.sh && DSH_TAVERN_HOST=desktop sh /tmp/dsh-tavern-testing-install.sh
-```
+1. 安装官方 [DeepSeek Harness 0.2.1-rc.2](https://deepseek.com/harness/)，首次启动一次，然后从托盘完整退出。
+2. 打开 PowerShell（支持 Windows PowerShell 5.1），粘贴执行：
 
-## Windows 安装
+   ```powershell
+   $env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.ps1')); Invoke-Expression $tavernInstaller
+   ```
 
-打开 PowerShell，粘贴执行（支持 Windows PowerShell 5.1）：
+3. 看到安装成功后，重新打开 DeepSeek Harness，即可进入酒馆。侧栏版本处显示「测试版 · DSH 0.2.1」。
 
-```powershell
-$env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.ps1')); Invoke-Expression $tavernInstaller
-```
+不需要另装 Node.js，安装器使用官方桌面内置的运行环境。想切回原版 DSH，见 [桌面版：在酒馆与原版之间切换](#桌面版在酒馆与原版之间切换)。
 
-看到安装成功后，重新打开官方 DeepSeek Harness，即可进入酒馆。侧栏版本处显示“测试版 · DSH 0.2.1”。
+### 方式二：命令行版（浏览器使用）
 
-## Android：DSHA
-
-DSHA 内置 DSH 0.2.0，在允许清单内。安装并首次启动 [DSHA](https://github.com/DSH-APP/DSHA/releases) 后，打开底部 **终端**，粘贴执行：
-
-```sh
-curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/android/setup.sh' -o /tmp/dsh-tavern-testing-setup.sh && bash /tmp/dsh-tavern-testing-setup.sh
-```
-
-看到 **全部完成** 后重启 DSHA，点击 **启动** → **进入** → **酒馆工作台**。反馈时请注明 DSHA 版本。
-
-## 独立命令行版（浏览器使用）
-
-先准备 Node.js 22.19 或更高版本以及 pnpm。安装器下载锁定版本的独立 DSH，不修改全局 DSH，不需要官方桌面。
-
-macOS / Linux 终端：
-
-```sh
-curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.sh' -o /tmp/dsh-tavern-testing-install.sh && DSH_TAVERN_HOST=cli DSH_TAVERN_CLI_HOME="$HOME/.dsh-tavern-testing" sh /tmp/dsh-tavern-testing-install.sh
-```
-
-Windows PowerShell：
+不需要官方桌面。需要先安装 Node.js 22.19 或更高版本，以及 pnpm。打开 PowerShell，粘贴执行：
 
 ```powershell
 $env:DSH_TAVERN_HOST='cli'
@@ -65,41 +48,108 @@ $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).Down
 Invoke-Expression $tavernInstaller
 ```
 
-安装后运行 `dsh-tavern start`，按输出地址在浏览器打开；`dsh-tavern stop` 停止，`dsh-tavern status` 查看状态，`dsh-tavern update` 更新。若命令尚未进入 PATH，进入安装目录下的 `apps/dsh-tavern`，运行 `node bin/dsh-tavern.mjs start`。
+安装完成后，用法见 [命令行版：启动与管理](#命令行版启动与管理)。
 
-上述命令使用专用测试目录 `.dsh-tavern-testing`，与官方桌面的 `.dsh` 分开。首次安装会尝试复制默认 `.dsh` 中的旧命令行酒馆数据（仅识别标记为 CLI 的配置），保留源数据；后续两套数据独立变化，不自动同步。自定义旧目录可设置 `DSH_TAVERN_LEGACY_DSH_HOME`，复制前先停止旧酒馆。已有命令行版的 `dsh-tavern` 命令入口会被测试版替换并备份；如需同时使用，分别用各安装目录中的 `node bin/dsh-tavern.mjs` 操作。
+## 安卓（DSHA）
 
-## 桌面版：独立 tavern 与原版切换
+1. 安装 [DSHA](https://github.com/DSH-APP/DSHA/releases)，首次启动一次。
+2. 打开底部 **终端**，粘贴执行：
 
-桌面安装会自动将酒馆装到独立 `profiles/tavern`，再让官方桌面的 `profiles/desktop` 入口链接到它。安装后启动即进入酒馆；这不是官方原生 profile 选择器。
+   ```sh
+   curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/android/setup.sh' -o /tmp/dsh-tavern-testing-setup.sh && bash /tmp/dsh-tavern-testing-setup.sh
+   ```
 
-两边都保留 **设置 → Profile 切换**：选「原版 DSH」或「DSH Tavern」，点“立即重启”。
+3. 看到 **全部完成** 后重启 DSHA，点击 **启动** → **进入** → **酒馆工作台**。
 
-- macOS/Linux：桌面版走正常退出流程（有任务时先请你确认），切换完成后自动重新打开。
-- Windows：点“确定”后从托盘退出桌面版，切换完成后自动重新打开。
-- 插件不强制结束进程；两分钟内没有退出则取消切换。
+反馈问题时请注明 DSHA 版本。
 
-安装前必须完整退出官方桌面；安装过程中不要重新打开。每次安装保留完整配置目录备份，位置显示在安装日志中：`.dsh/backups/profile-bridge-install-*`。原版配置另保留在 `profiles/desktop.fresh-*`，供切换入口还原；不要删除这些目录。存档正文、历史和附件不因 profile 切换而搬动；配置独立不代表账号或全部宿主数据隔离。
+## macOS
 
-已有测试版若占用了 `desktop`，安装器会将当前酒馆配置复制到 `tavern`，并查找原版目录备份或成对的配置文件备份。找不到原版备份时停止，不覆盖现有 profile；需先恢复原版 desktop 备份，再重试。安装失败会恢复之前的 profile 入口和目录，失败现场及备份仍保留；中断后的未完成目录事务在下次安装时恢复。
+### 方式一：官方桌面版
 
-重新运行安装命令会继续更新独立 `tavern`，安装成功后默认进入酒馆。macOS 与 Windows 11 均已实机验证往返切换。实现与来源见 [桥接插件说明](tavern-plugin/packages/dsh-profile-bridge/README.md)。
+1. 安装官方 [DeepSeek Harness 0.2.1-rc.2](https://deepseek.com/harness/)，首次启动一次，然后完整退出（⌘Q）。
+2. 打开「终端」，粘贴执行：
 
-## 从旧命令行版或自定义目录继承数据
+   ```sh
+   curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.sh' -o /tmp/dsh-tavern-testing-install.sh && DSH_TAVERN_HOST=desktop sh /tmp/dsh-tavern-testing-install.sh
+   ```
 
-默认社区桌面版与官方桌面都使用同一个 `.dsh` 主目录时，无需跨目录复制。旧命令行版通常使用 `~/.dsh-tavern`；自定义安装请选择**包含 `profiles`、`profile-data` 的旧 DSH 主目录**，不是 `apps/dsh-tavern` 程序目录，也不是单独的 `data` 子目录。
+3. 看到安装成功后，重新打开 DeepSeek Harness，即可进入酒馆。侧栏版本处显示「测试版 · DSH 0.2.1」。
 
-先执行旧酒馆的 `dsh-tavern stop`，并完整退出官方桌面。把以下示例中的旧目录替换为实际路径，再运行安装。即使测试版已安装，也可以用同样命令补做数据继承。
+不需要另装 Node.js。想切回原版 DSH，见 [桌面版：在酒馆与原版之间切换](#桌面版在酒馆与原版之间切换)。
 
-### macOS
+### 方式二：命令行版（浏览器使用）
+
+不需要官方桌面。需要先安装 Node.js 22.19 或更高版本，以及 pnpm。打开「终端」，粘贴执行：
+
+```sh
+curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.sh' -o /tmp/dsh-tavern-testing-install.sh && DSH_TAVERN_HOST=cli DSH_TAVERN_CLI_HOME="$HOME/.dsh-tavern-testing" sh /tmp/dsh-tavern-testing-install.sh
+```
+
+安装完成后，用法见 [命令行版：启动与管理](#命令行版启动与管理)。
+
+## Linux
+
+官方桌面暂无 Linux 版，Linux 使用命令行版（浏览器使用）。需要先安装 Node.js 22.19 或更高版本，以及 pnpm。在终端粘贴执行：
+
+```sh
+curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.sh' -o /tmp/dsh-tavern-testing-install.sh && DSH_TAVERN_HOST=cli DSH_TAVERN_CLI_HOME="$HOME/.dsh-tavern-testing" sh /tmp/dsh-tavern-testing-install.sh
+```
+
+安装完成后，用法见 [命令行版：启动与管理](#命令行版启动与管理)。
+
+---
+
+## 命令行版：启动与管理
+
+| 命令 | 作用 |
+| --- | --- |
+| `dsh-tavern start` | 启动，按输出的地址在浏览器打开 |
+| `dsh-tavern stop` | 停止 |
+| `dsh-tavern status` | 查看状态 |
+| `dsh-tavern update` | 更新 |
+
+如果提示找不到 `dsh-tavern` 命令，进入安装目录下的 `apps/dsh-tavern`，改用 `node bin/dsh-tavern.mjs start`。
+
+- 命令行版自带锁定的 DSH 0.2.1-rc.2，不修改全局 DSH。
+- 数据放在专用目录 `.dsh-tavern-testing`，与官方桌面的 `.dsh` 分开。
+- 首次安装会复制默认 `.dsh` 里的旧命令行酒馆数据（只识别标记为命令行版的配置），源数据保留；之后两套数据各自变化，不会自动同步。旧数据在自定义目录时，设置 `DSH_TAVERN_LEGACY_DSH_HOME` 指向它，复制前先停止旧酒馆。
+- 已有稳定版命令行酒馆时，`dsh-tavern` 命令会被测试版替换（原入口有备份）。两版都要用时，分别进入各自安装目录运行 `node bin/dsh-tavern.mjs`。
+
+## 桌面版：在酒馆与原版之间切换
+
+安装后，官方桌面默认进入酒馆。酒馆和原版 DSH 里都有 **设置 → Profile 切换**：选择「原版 DSH」或「DSH Tavern」，点「立即重启」。
+
+- macOS：桌面版正常退出（有任务时会先请你确认），切换完成后自动重新打开。
+- Windows：点「确定」后从托盘退出桌面版，切换完成后自动重新打开。
+- 插件不会强制结束进程；两分钟内没有退出，切换自动取消。
+
+需要知道的细节：
+
+- 酒馆装在独立的 `profiles/tavern`，官方桌面的 `profiles/desktop` 入口链接到它。这不是官方原生的 profile 选择器。
+- 每次安装都会完整备份配置目录到 `.dsh/backups/profile-bridge-install-*`，原版配置另存为 `profiles/desktop.fresh-*`，供切换回原版时还原。**不要删除这些目录。**
+- 存档正文、历史和附件不随切换搬动；配置独立不代表账号或全部宿主数据隔离。
+- 旧测试版占用了 `desktop` 时，安装器会把酒馆配置复制到 `tavern`，并寻找原版配置的备份；找不到时停止安装，不覆盖现有配置，需要先恢复原版 desktop 备份再重试。
+- 安装失败会恢复之前的入口和目录，失败现场和备份都会保留；中断的安装在下次运行时自动恢复。
+- 重新运行安装命令即可更新。实现细节见 [桥接插件说明](tavern-plugin/packages/dsh-profile-bridge/README.md)。
+
+## 从旧酒馆继承数据
+
+稳定版桌面和官方桌面默认共用同一个 `.dsh` 目录，这种情况不需要迁移。
+
+需要迁移的情况：旧的**命令行版**（通常在 `~/.dsh-tavern`），或装在**自定义目录**的旧酒馆。旧目录要选**包含 `profiles` 和 `profile-data` 的 DSH 主目录**，不是 `apps/dsh-tavern` 程序目录，也不是单独的 `data` 子目录。
+
+先运行旧酒馆的 `dsh-tavern stop`，并完整退出官方桌面，再按系统执行下面的命令（把示例里的旧目录换成实际路径）。测试版已经装好也可以执行，用来补做迁移。
+
+macOS：
 
 ```sh
 curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.sh' -o /tmp/dsh-tavern-testing-install.sh && DSH_TAVERN_IMPORT_HOME="$HOME/.dsh-tavern" DSH_TAVERN_HOST=desktop sh /tmp/dsh-tavern-testing-install.sh
 ```
 
-自定义目录示例：将 `"$HOME/.dsh-tavern"` 改成 `"/Volumes/Games/旧酒馆"`。
+自定义目录示例：把 `"$HOME/.dsh-tavern"` 改成 `"/Volumes/Games/旧酒馆"`。
 
-### Windows PowerShell
+Windows PowerShell：
 
 ```powershell
 $env:DSH_TAVERN_IMPORT_HOME=Join-Path $HOME '.dsh-tavern'
@@ -110,26 +160,25 @@ try {
 } finally { Remove-Item Env:DSH_TAVERN_IMPORT_HOME -ErrorAction SilentlyContinue }
 ```
 
-自定义目录示例：将第一行改成 `$env:DSH_TAVERN_IMPORT_HOME='D:\Games\旧酒馆'`。`DSH_TAVERN_IMPORT_HOME` 指旧目录，**不要把 `DSH_HOME` 改成旧目录**；目标仍为官方桌面的 `.dsh`。
+自定义目录示例：把第一行改成 `$env:DSH_TAVERN_IMPORT_HOME='D:\Games\旧酒馆'`。`DSH_TAVERN_IMPORT_HOME` 指向旧目录；**不要把 `DSH_HOME` 改成旧目录**，迁移目标始终是官方桌面的 `.dsh`。
 
-### 继承哪些内容，如何保护数据
+迁移会做什么：
 
-- 复制酒馆数据、原生会话日志、人物卡、正文及历史版本、变量、附件、用户工具和 Skill、预设，以及旧模型/账号配置。旧版保存在程序旁 `data` 或配置指定 `dataRoot` 的酒馆数据也会收集。
-- 旧目录只读保留，不复制旧 Node.js、宿主运行时或 `node_modules`。第三方插件的外部绝对路径仍需保持可访问，跨机器时需单独重新安装。
-- 写入前，对双方数据做备份并逐文件校验 SHA-256。备份位于目标 `.dsh/backups/tavern-home-import/`，安装日志会显示具体路径；里面有 `source`、`target` 和迁移记录。备份含账号配置，请妥善保管。
-- **模型和账号配置采用选定旧目录的内容**，原目标配置保存在 `target` 备份。目标现有的不冲突存档继续保留；同名但内容不同的存档、附件或预设会停止迁移，双方备份都保留，不自动混合故事历史。
-- 遇到冲突，请根据日志和双方备份确认要保留的版本，或先在原酒馆导出后通过酒馆的导入功能处理；不要直接覆盖冲突文件。符号链接或特殊文件也会停止迁移，需先整理为普通文件。
-- 迁移失败时回滚已替换的数据；进程中断后再次执行同一命令会先恢复中断记录，并保留中断时的文件。相同旧目录迁移成功后再次执行不会覆盖测试版的新进度。
-- 数据继承完成后打开旧存档，再在“酒馆状态”执行格式迁移。目录继承与存档格式迁移是两个步骤。
+- **复制的内容**：酒馆数据、原生会话日志、人物卡、正文和历史版本、变量、附件、用户工具和 Skill、预设，以及旧的模型和账号配置。旧版放在程序旁 `data` 目录或配置里 `dataRoot` 指定位置的数据也会一并收集。
+- **不复制的内容**：旧 Node.js、宿主运行时和 `node_modules`。旧目录只读保留。第三方插件引用的外部绝对路径需要保持可访问，换机器时要单独重装。
+- **先备份再写入**：写入前备份双方数据，并逐个文件校验 SHA-256。备份在目标 `.dsh/backups/tavern-home-import/`（安装日志会显示具体路径），里面有 `source`、`target` 和迁移记录。备份含账号配置，请妥善保管。
+- **冲突时停止**：模型和账号配置以旧目录为准，目标原有配置存进 `target` 备份。目标里不冲突的存档继续保留；同名但内容不同的存档、附件或预设会让迁移停止，不会自动混合故事历史。遇到冲突，请对照日志和双方备份决定保留哪份，或在原酒馆导出后用酒馆的导入功能处理，不要直接覆盖文件。符号链接和特殊文件也会让迁移停止，需先整理成普通文件。
+- **失败可恢复**：迁移失败会回滚已替换的数据；中途中断后再次执行同一命令，会先恢复中断现场。同一旧目录迁移成功后再执行，不会覆盖测试版里的新进度。
+- **之后还要迁移存档格式**：目录迁移完成后打开旧存档，在「酒馆状态」里执行格式迁移，见下一节。
 
-## 更新与迁移
+## 更新与存档迁移
 
-- 测试版的“检查更新”只跟随 `0.2.1版本` 分支；也可以再次执行本页安装命令。原有版本仍跟随 `main`，不会自动切到测试版。
-- 打开旧存档，在“酒馆状态”中点击“迁移存档”，等待完成。迁移保留正文、变量、分支及历史版本；完成后迁移入口自动隐藏。
-- 回到原有版本时，使用测试前的备份或导出存档，并安装原有版本对应宿主。不要让旧宿主直接读取迁移后的数据目录。
+- 测试版的「检查更新」只跟随 `0.2.1版本` 分支，也可以重新运行本页的安装命令。稳定版仍跟随 `main`，不会自动切到测试版。
+- 打开旧存档，在「酒馆状态」里点击「迁移存档」并等待完成。正文、变量、分支和历史版本都会保留，完成后迁移入口自动隐藏。
+- 回到稳定版时，使用测试前的备份或导出的存档，并安装稳定版对应的宿主。不要让旧宿主直接读取迁移后的数据目录。
 
 ## 测试反馈
 
-请在 [Issues](https://github.com/flizzywine/dsh-tavern/issues) 提交，标题注明“0.2.1 测试版”，附上系统、官方桌面版本、酒馆提交号、复现步骤和错误截图。优先验证：安装与更新、旧存档迁移、正文及历史版本、MVU 状态栏、候选项和后台结算。
+请在 [Issues](https://github.com/flizzywine/dsh-tavern/issues) 提交，标题注明「0.2.1 测试版」，附上系统、宿主（官方桌面 / DSHA / 命令行）及其版本、酒馆提交号、复现步骤和错误截图。优先验证：安装与更新、旧存档迁移、正文及历史版本、MVU 状态栏、候选项和后台结算。
 
-适配工作基于 [PR #216](https://github.com/flizzywine/dsh-tavern/pull/216)。这个测试分支与 `main` 独立推进，暂未包含主线的全部新功能。
+适配工作基于 [PR #216](https://github.com/flizzywine/dsh-tavern/pull/216)。测试分支与 `main` 独立推进，暂未包含主线的全部新功能。
