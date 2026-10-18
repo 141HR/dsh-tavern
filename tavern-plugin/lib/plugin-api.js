@@ -489,6 +489,12 @@ export function createTavernPluginApi(deps) {
       return await deps.readCardContext(await requireTurn(gameId, turn))
     },
 
+    // The context Tavern's own story request used for this turn: the player input and each section, read-only.
+    async getRequestContext({ gameId, turn } = {}) {
+      const game = await requireGame(gameId)
+      return structuredClone((await deps.readRequestContext?.(game.sessionId, positiveTurn(turn))) ?? null)
+    },
+
     // The game's character card as Tavern plays it, read-only.
     async getCard({ gameId } = {}) {
       const game = await requireGame(gameId)

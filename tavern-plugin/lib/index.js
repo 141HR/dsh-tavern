@@ -151,7 +151,7 @@ import { extractEpubText } from './domain/epub-text.js'
 import { createFileResourceStore, normalizeResourcePath, resourceKind, stripPngTextChunks } from './domain/file-resources.js'
 import { createMobileCardImport } from './domain/mobile-card-import.js'
 import { createForegroundHandoff } from './domain/foreground-handoff.js'
-import { createForegroundFrameBuilder } from './domain/agent-input-frame.js'
+import { createForegroundFrameBuilder, foregroundRequestContext } from './domain/agent-input-frame.js'
 import { retireForegroundFrames } from './domain/foreground-frame-retirement.js'
 import { compactionFailureMessage } from './domain/compaction-failure.js'
 import { createForegroundFrameSessionAdapter } from './domain/foreground-frame-session-adapter.js'
@@ -2935,6 +2935,7 @@ export async function apply(ctx) {
     },
     readHistory: readPluginHistory,
     readCast: (sessionId, turn) => castPresentation.annotation(sessionId, turn),
+    readRequestContext: async (sessionId, turn) => foregroundRequestContext(await chatHeaderForSession(sessionId, ['foregroundFrames', 'timeline']), turn),
     listCardPacks: sessionId => cardPacksOf(sessionId),
     cardScope: () => cardPlugins.scope(),
     cardPathOf: async sessionId => str((await chatHeaderForSession(str(sessionId), ['cardPath']))?.cardPath) || null,

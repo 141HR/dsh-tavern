@@ -968,3 +968,20 @@ test('publishState：插件给自己的浏览器侧发布最新状态，按插�
   h.api.gameRemoved('game-1')
   assert.equal(await h.api.pluginState('game-1', 'director', 'stage'), null)
 })
+
+test('getRequestContext：读这一轮正文请求用到的各段上下文，标明来自 Tavern、预设还是哪个插件', async () => {
+  const { createForegroundFrameBuilder, foregroundRequestContext } = await import('../tavern-plugin/lib/domain/agent-input-frame.js')
+  const { foregroundFrameInputs } = await import('../tavern-plugin/lib/domain/turn-orchestration.js')
+  const build = (operationId, turn, branchId, worldbook) => createForegroundFrameBuilder().build({ chatId: 'c', branchId, operationId, turn, basedOnRevision: 1,
+    inputs: foregroundFrameInputs({ sections: [{ kind: 'world-book', text: worldbook }, { kind: 'posture', text: '在酒馆' }] }, '你好', '你好', null, {},
+      [{ owner: 'memory', name: 'recent', text: '上次说到钟楼' }]) })
+  const chat = { timeline: { branchId: 'b2' }, foregroundFrames: { o1: build('o1', 3, 'b2', '旧世界书'), o2: build('o2', 3, 'b1', '别的分支'), o3: build('o3', 3, 'b2', '钟楼：……'), o4: build('o4', 4, 'b2', 'x') } }
+  const context = foregroundRequestContext(chat, 3)
+  assert.equal(context.input, '你好')
+  assert.deepEqual(context.sections, [
+    { slot: 'activeWorldbook', origin: 'tavern:world-book', text: '钟楼：……' },
+    { slot: 'currentStateProjection', origin: 'tavern:posture', text: '在酒馆' },
+    { slot: 'currentStateProjection', origin: 'plugin', plugin: 'memory', name: 'recent', text: '上次说到钟楼' }
+  ])
+  assert.equal(foregroundRequestContext(chat, 9), null)
+})
