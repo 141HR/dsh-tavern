@@ -74,3 +74,32 @@ test('存档包上限比其他压缩包宽', () => {
   assert.equal(GAME_SAVE_LIMITS.maxArchiveBytes, 256 * 1024 * 1024)
   assert.equal(GAME_SAVE_LIMITS.maxExpandedBytes, 1024 * 1024 * 1024)
 })
+
+test('长回退历史里重复的消息只存一份，存档大小不随回退点数成倍增长', () => {
+  const message = turn => ({ role: 'assistant', turn, text: '第' + turn + '回合。' + '正文'.repeat(800), variables: { hp: turn, bag: ['剑'.repeat(600)] } })
+  const at = turns => ({ id: 'chat-a', sessionId: 'session-a', _storageRevision: turns, cardDefinitionSnapshot: bigCard, messages: Array.from({ length: turns }, (_, index) => message(index + 1)), timeline: { checkpoints: [] } })
+  const revisions = Array.from({ length: 200 }, (_, index) => ({ revision: index + 1, state: at(index + 1) }))
+  const chat = at(201)
+  const raw = [chat, ...revisions.map(item => item.state)].reduce((size, value) => size + JSON.stringify(value).length, 0)
+  const buffer = buildGameSave({ chat, revisions, session: { events: [] }, tavernVersion: '2.5.0', exportedAt: 1 })
+  const files = readGameSave(buffer)
+  assert.deepEqual(files.chat, chat)
+  assert.deepEqual(files.revisions, revisions)
+  assert.equal(files.manifest.formatVersion, 2)
+  // 201 个状态原样几百 MB，几乎全是重复；去重后压缩包约 120 KB。
+  assert.ok(raw > 80 * 1024 * 1024, '原始体量：' + raw)
+  assert.ok(buffer.length < 1024 * 1024, '压缩包：' + buffer.length)
+})
+
+test('第 1 版存档包（只共享顶层大字段）仍能读回', () => {
+  const blob = JSON.stringify(bigCard)
+  const { createHash } = globalThis.process.getBuiltinModule('node:crypto')
+  const id = createHash('sha256').update(blob).digest('hex')
+  const current = state(2)
+  const manifest = { format: 'dsh-tavern-save', formatVersion: 1, tavernVersion: '2.5.0', exportedAt: 1,
+    source: { chatId: 'chat-a', cardPath: 'cards/a.json' }, contents: { revisions: [], card: false, script: false, sceneImages: false, attachments: 0 } }
+  const buffer = writeZipEntries([{ path: 'manifest.json', content: JSON.stringify(manifest) },
+    { path: 'chat/current.json', content: JSON.stringify({ ...current, cardDefinitionSnapshot: { $dshSaveBlob: id } }) },
+    { path: 'session/foreground.json', content: '{"events":[]}' }, { path: 'blobs/' + id + '.json', content: blob }])
+  assert.deepEqual(readGameSave(buffer).chat, current)
+})
