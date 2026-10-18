@@ -5,7 +5,7 @@ import { normalizeGameSettings, coerceSetting, settingValues } from './domain/pl
 // The public `tavern` service for third-party DSH plugins (docs/plugin-api.md).
 // Only additive changes are allowed here: published plugins depend on every
 // name and field. Internals are reached through `deps`, never exposed.
-export const TAVERN_PLUGIN_API_VERSION = 2
+export const TAVERN_PLUGIN_API_VERSION = 3
 const TRACKER = Symbol.for('cordis.tracker')
 const SECTION_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/
 const MAX_SECTION_TEXT = 8000
@@ -40,7 +40,8 @@ const MAX_CARD_OPERATIONS = 200
 const MAX_CARD_VALUE = 2 * 1024 * 1024
 const TOOL_MODES = ['play', 'card']
 const MAX_TASK_INPUT = 4000
-const TASK_PHASES = Object.freeze({ before: '结算前', after: '结算后' })
+const TASK_PHASES = Object.freeze({ before: '结算前', parallel: '与结算同时', after: '结算后' })
+const MAX_VERSION_WATCHES = 2000
 // Stages a plugin may replace, and what a replacement must hand back (docs/plugin-design.md).
 const REPLACEABLE_STAGES = Object.freeze({ settlement: '结算' })
 
@@ -132,7 +133,34 @@ export function createTavernPluginApi(deps) {
   const errors = new Map()
   const reservedToolNames = new Set(deps.reservedToolNames || [])
   const notified = new Set()
+  // Signals handed out by versionSignal: aborted once their text version stops being shown.
+  const versionWatches = new Set()
   const log = deps.logger || console
+
+  function staleVersion() { return Object.assign(new Error('这一轮的正文版本已不是当前显示的版本'), { code: 'TAVERN_PLUGIN_STALE_VERSION' }) }
+
+  /** A watch on (game, turn, textVersion): its controller aborts when that version is no longer current. */
+  function watchVersion(gameId, turn, textVersion, owner) {
+    const watch = { gameId, turn, textVersion, owner, controller: new AbortController() }
+    versionWatches.add(watch)
+    watch.controller.signal.addEventListener('abort', () => versionWatches.delete(watch), { once: true })
+    if (versionWatches.size > MAX_VERSION_WATCHES) versionWatches.delete(versionWatches.values().next().value)
+    return watch
+  }
+
+  /** Abort the watches of a game whose text version is no longer the shown one (or all of them). */
+  async function checkVersions(gameId, { all = false } = {}) {
+    const watches = Array.from(versionWatches).filter(watch => watch.gameId === gameId)
+    const keys = new Map()
+    for (const watch of watches) {
+      if (!all) {
+        if (!keys.has(watch.turn)) keys.set(watch.turn, await deps.currentKey(gameId, watch.turn).catch(() => undefined))
+        const key = keys.get(watch.turn)
+        if (key === undefined || key === watch.textVersion) continue
+      }
+      watch.controller.abort(staleVersion())
+    }
+  }
 
   /** Remember a plugin failure for the game's plugin panel, newest last. */
   function recordError(gameId, owner, stage, error) {
@@ -424,6 +452,20 @@ export function createTavernPluginApi(deps) {
       return await turnState(gameId)
     },
 
+    // An AbortSignal that aborts once this turn's textVersion is no longer the shown one
+    // (rollback, regenerate, edit, the game removed). Already aborted when it is not current now.
+    async versionSignal({ gameId, turn, textVersion } = {}) {
+      const owner = ownerOf(this)
+      const game = await requireGame(gameId)
+      const at = positiveTurn(turn)
+      if (typeof textVersion !== 'string' || !textVersion) throw new TypeError('textVersion 必须是 onTurnSettled 或 getTurn 给出的值')
+      if (await deps.currentKey(game.sessionId, at) !== textVersion) return AbortSignal.abort(staleVersion())
+      const watch = watchVersion(game.sessionId, at, textVersion, owner)
+      // A plugin that unloads lets go of its watches.
+      owned(this, () => () => versionWatches.delete(watch), 'tavern.versionSignal()')
+      return watch.controller.signal
+    },
+
     async getCardContext({ gameId, turn } = {}) {
       return await deps.readCardContext(await requireTurn(gameId, turn))
     },
@@ -553,7 +595,7 @@ export function createTavernPluginApi(deps) {
       const taskOperation = () => {
         if (!task) return null
         if (task.owner !== owner || task.gameId !== material.sessionId || task.textVersion !== material.key
-          || task.phase === 'before' || task.signal.aborted || taskRuns.get(task.gameId) !== task.run || !task.operationId) {
+          || task.phase !== 'after' && task.phase !== undefined || task.signal.aborted || taskRuns.get(task.gameId) !== task.run || !task.operationId) {
           throw Object.assign(new Error('插件任务已结束或不属于这一轮'), { code: 'TAVERN_PLUGIN_STALE_VERSION' })
         }
         return task.operationId
@@ -584,7 +626,7 @@ export function createTavernPluginApi(deps) {
     settlementTask({ name, title, phase = 'after', run } = {}) {
       const owner = ownerOf(this)
       sectionName(name)
-      if (!Object.hasOwn(TASK_PHASES, phase)) throw new Error("phase 只能是 'before' 或 'after'")
+      if (!Object.hasOwn(TASK_PHASES, phase)) throw new Error("phase 只能是 'before'、'parallel' 或 'after'")
       if (typeof run !== 'function') throw new TypeError('run 必须是函数')
       const entry = { owner, name, title: taskTitle(title, name), phase, run }
       return register.call(this, settlementTasks, taskKey(owner, name), entry, 'tavern.settlementTask()', '结算任务 ' + name + ' 已注册')
@@ -783,7 +825,9 @@ export function createTavernPluginApi(deps) {
   /** One plugin task under Tavern's watch: bounded, stoppable, its failure recorded for the panel. */
   async function executeTask(entry, kind, context, signal, onStart, operationId) {
     const controller = new AbortController()
-    const combined = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal
+    // A settlement task also stops once its text version is replaced (rollback, regenerate, edit).
+    const version = kind === 'settlement' && context.textVersion ? watchVersion(context.gameId, context.turn, context.textVersion, entry.owner) : null
+    const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : []), ...(version ? [version.controller.signal] : [])])
     const run = { plugin: entry.owner, task: entry.name, title: entry.title, kind, startedAt: Date.now(), controller }
     taskRuns.set(context.gameId, run)
     const finish = onStart?.(entry.owner + ' · ' + entry.title)
@@ -802,6 +846,7 @@ export function createTavernPluginApi(deps) {
     } finally {
       // A finished, failed or stopped task: whatever it left running is stopped too.
       controller.abort()
+      if (version) versionWatches.delete(version)
       if (taskRuns.get(context.gameId) === run) taskRuns.delete(context.gameId)
       finish?.()
     }
@@ -822,7 +867,9 @@ export function createTavernPluginApi(deps) {
     const choices = await choicesFor(gameId)
     const tasks = orderedTasks(phase, choices).filter(entry => !choices.disabledTasks.has(taskKey(entry.owner, entry.name)))
     if (!tasks.length) return
-    const material = phase === 'before' ? await deps.readPendingTurn(gameId) : await deps.readLatestSettledTurn(gameId)
+    // Before and alongside Tavern's settlement the turn is still pending; after it, settled.
+    const read = () => phase === 'after' ? deps.readLatestSettledTurn(gameId) : deps.readPendingTurn(gameId)
+    const material = await read()
     if (!material || material.greeting) return
     const id = phase + '\u0000' + material.chatId + '\u0000' + material.key
     if (phasesRan.has(id)) return
@@ -834,7 +881,7 @@ export function createTavernPluginApi(deps) {
       for (const entry of tasks) {
         if (signal?.aborted) return
         // Read again for each task: an earlier one may have changed the variables.
-        const current = phase === 'before' ? await deps.readPendingTurn(gameId) : await deps.readLatestSettledTurn(gameId)
+        const current = await read()
         if (!current || current.key !== material.key) return
         await executeTask(entry, 'settlement', { ...(await snapshotOf(current)), phase }, signal, onStart, operationId)
       }
@@ -913,15 +960,21 @@ export function createTavernPluginApi(deps) {
   }
 
   function gameRemoved(gameId) {
-    if (gameId) dispatch(removedHandlers, { gameId }, 'onGameRemoved')
+    if (!gameId) return
+    void checkVersions(gameId, { all: true })
+    dispatch(removedHandlers, { gameId }, 'onGameRemoved')
   }
 
   const TIMELINE_KINDS = new Set(['rollback', 'undo-rollback', 'regenerate', 'edit', 'fork'])
   /** Called by Tavern after the story line of a game changed; the change is informational. */
   function timelineChanged(gameId, change = {}) {
-    if (!gameId || !TIMELINE_KINDS.has(change.kind) || timelineHandlers.size === 0) return
+    if (!gameId || !TIMELINE_KINDS.has(change.kind)) return
+    if (change.kind !== 'fork') void checkVersions(gameId).catch(() => {})
+    if (timelineHandlers.size === 0) return
     const turn = Number(change.turn)
-    void choicesFor(gameId).then(({ disabled }) => dispatch(timelineHandlers, { gameId, kind: change.kind, ...(Number.isSafeInteger(turn) && turn > 0 ? { turn } : {}),
+    const known = Number.isSafeInteger(turn) && turn > 0
+    void Promise.all([choicesFor(gameId), known ? deps.currentKey(gameId, turn).catch(() => null) : null]).then(([{ disabled }, textVersion]) => dispatch(timelineHandlers, {
+      gameId, kind: change.kind, ...(known ? { turn } : {}), ...(textVersion ? { textVersion } : {}),
       ...(change.fromGameId ? { fromGameId: String(change.fromGameId) } : {}) }, 'onTimelineChanged', disabled))
   }
 
@@ -1243,6 +1296,6 @@ export function createTavernPluginApi(deps) {
   }
 
   return Object.freeze({ service, toolModesFor, callHandler, turnState, exportGame, importGame, turnSettled, castAnnotated, castAssetSources, gameRemoved,
-    speechProviders: () => Array.from(speechProviders.values()), timelineChanged, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
+    speechProviders: () => Array.from(speechProviders.values()), timelineChanged, checkVersions, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
     runSettlementTasks, manualTaskFor, runManualTask, stopTasks, runningTask, gamePlugins, setGamePlugin, pluginGameSettings })
 }

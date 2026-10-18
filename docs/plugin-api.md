@@ -1,6 +1,6 @@
 # Tavern 插件接口
 
-接口版本：**2**
+接口版本：**3**
 
 DSH Tavern 把扩展功能交给第三方 **DSH 插件**：文生图、文生视频、配音，以及记忆、叙事锚点这类需要参与提示词和后台结算的功能。Tavern 提供一层稳定的接口：让插件知道「这一轮写完了、写了什么」，把图片或别的内容「挂回这一轮」，并往正文请求和后台结算里**添加**内容。多数是添加类接口，插件出错只会丢掉它自己那一份，游戏照常进行；少数替换类接口（如 `replaceSettlement`）让插件接管某个流程，插件失败时自动退回 Tavern 自己的做法。
 
@@ -126,7 +126,7 @@ export function apply(ctx) {
 
 ### `apiVersion`
 
-当前为 `2`。以后新增能力时会增大，旧能力保持不变。浏览器侧的 `tavernUi.apiVersion` 单独计数，当前也是 `2`。
+当前为 `3`。以后新增能力时会增大，旧能力保持不变。浏览器侧的 `tavernUi.apiVersion` 单独计数，当前也是 `3`。标着「第 3 版」的接口，先判断 `apiVersion >= 3` 再用；旧版 Tavern 上没有时，关掉插件里对应的功能即可。
 
 ### `onTurnSettled(handler)`
 
@@ -275,9 +275,26 @@ item = {
 
 ### `onTimelineChanged(handler)`（第 2 版）
 
-这一局的剧情线变了之后调用：回退、撤销回退、重新生成、编辑正文、分叉。`handler` 收到 `{ gameId, kind, turn?, fromGameId? }`，`kind` 是 `rollback`、`undo-rollback`、`regenerate`、`edit`、`fork` 之一；`fork` 时 `gameId` 是新游戏，`fromGameId` 是原游戏。以后可能增加新的 `kind`，不认识的请忽略。
+这一局的剧情线变了之后调用：回退、撤销回退、重新生成、编辑正文、分叉。`handler` 收到 `{ gameId, kind, turn?, textVersion?, fromGameId? }`，`kind` 是 `rollback`、`undo-rollback`、`regenerate`、`edit`、`fork` 之一；`textVersion`（第 3 版）是变化之后第 `turn` 轮当前显示的正文版本，这一轮已不存在时没有这个字段；`fork` 时 `gameId` 是新游戏，`fromGameId` 是原游戏。以后可能增加新的 `kind`，不认识的请忽略。通知在变化保存之后发出。
 
 这个通知只是告知。插件的按轮数据会自动跟着剧情线走（见下面的「插件存档数据」），不需要在这里同步。编辑正文后，Tavern 还会对新的正文版本再发一次 `onTurnSettled`，插件可以据此重算这一轮。
+
+### `versionSignal({ gameId, turn, textVersion })`（第 3 版）
+
+返回一个 `AbortSignal`：这一轮的 `textVersion` 一旦不再是当前显示的版本（回退、重新生成、编辑正文、删局），它就中止，`signal.reason.code` 为 `TAVERN_PLUGIN_STALE_VERSION`。传入时已经不是当前版本的，直接返回已中止的信号。
+
+```js
+ctx.tavern.onTurnSettled(async ({ gameId, turn, textVersion, text }) => {
+  const signal = await ctx.tavern.versionSignal({ gameId, turn, textVersion })
+  const plan = await myDirector(text, { signal })          // 版本失效时自己的模型请求跟着停
+  await ctx.tavern.saveTurnData({ gameId, turn, textVersion, data: plan })  // 版本失效时这里也会被拒
+})
+```
+
+- 适合插件自己开的长任务（导演、生图、配音预合成）：剧情一变就停，不用自己监听 `onTimelineChanged` 再比对版本。
+- 结算任务 `run` 收到的 `signal` 已经包含它，不用再取。
+- 只负责「停」：迟到的写入照样由 `textVersion` 拦下（`saveTurnData`、`attach`、`setVariables`、`editTurn` 都会拒绝旧版本），插件不需要另做提交、回滚。
+- 插件卸载后，它取的信号不再更新。
 
 ### `onGameRemoved(handler)`
 
@@ -404,7 +421,7 @@ ctx.tavern.replaceSettlement({
 ctx.tavern.settlementTask({
   name: 'world-events',
   title: '世界推演',          // 显示给玩家；省略时用 name
-  phase: 'after',             // 'before'：在 Tavern 自己的结算之前；'after'（默认）：之后
+  phase: 'after',             // 'before'：Tavern 自己的结算之前；'parallel'（第 3 版）：和它同时；'after'（默认）：之后
   async run({ gameId, turn, textVersion, text, variables, phase, signal, runAgent }) {
     const { text: events } = await runAgent({ prompt: '按这一轮的剧情推演各方势力的进展，列成要点：\n' + text })
     await ctx.tavern.saveTurnData({ gameId, turn, textVersion, data: { events } })
@@ -412,15 +429,15 @@ ctx.tavern.settlementTask({
 })
 ```
 
-- **顺序**：每轮先跑所有 `before` 任务，再跑 Tavern 自己的结算，最后跑所有 `after` 任务。同一阶段的任务一个接一个运行，默认按插件名、任务名排序；玩家可以在「本局设置 → 高级 → 插件」里调整先后，也可以单独关掉某个任务。
+- **顺序**：每轮先跑所有 `before` 任务，再跑 Tavern 自己的结算，最后跑所有 `after` 任务。`parallel` 任务（第 3 版）在 Tavern 自己的结算开始时启动、和它同时运行，`after` 任务等它们和结算都结束才开始；适合导演、配音预合成这类只读正文、想尽早开工的工作。同一阶段的任务一个接一个运行，默认按插件名、任务名排序；玩家可以在「本局设置 → 高级 → 插件」里调整先后，也可以单独关掉某个任务。
 - **下一轮会等它们跑完**：玩家发下一轮时，Tavern 先等这些任务结束，所以这一轮的产出（存进 `saveTurnData`，再用 `turnSection` 注入）一定赶得上下一轮。任务越慢，玩家等得越久。
-- **`run` 收到**：这一轮的 `gameId`、`turn`、`textVersion`、`text`、`rawText`、`card`、`variables`（同 `onTurnSettled`），以及 `phase`、`signal`、`runAgent`。`before` 任务看到的是结算前的变量；`after` 任务看到的是 Tavern 结算之后的变量，前面的任务改过变量时，后面的任务读到的是改过的。
+- **`run` 收到**：这一轮的 `gameId`、`turn`、`textVersion`、`text`、`rawText`、`card`、`variables`（同 `onTurnSettled`），以及 `phase`、`signal`、`runAgent`。`before`、`parallel` 任务看到的是结算前的变量；`after` 任务看到的是 Tavern 结算之后的变量，前面的任务改过变量时，后面的任务读到的是改过的。
 - **`runAgent(input)`**：等同 `runTask`，参数相同（`prompt`、`tools`），`gameId` 和 `signal` 已经替你填好。提示词、工具、流程都由插件自己决定，也可以不用它，改用 DSH 的 `llm` 服务。
 - **每个正文版本只跑一次**：同一个 `textVersion` 的同一阶段不会重复运行（例如重试结算时）。编辑正文、重新生成产生新版本后会再跑。
-- **停止与超时**：玩家点「停止后台」时 `signal` 中止，这一阶段剩下的任务不再运行，不记为错误。单个任务 5 分钟没结束按出错处理。
+- **停止与超时**：玩家点「停止后台」、或这一轮的正文版本被替换（回退、重新生成、编辑）时 `signal` 中止，这一阶段剩下的任务不再运行，不记为错误。单个任务 5 分钟没结束按出错处理。
 - **出错**：只记进「本局设置 → 高级 → 插件」的错误记录，接着跑下一个任务；不影响 Tavern 自己的结算和下一轮。
 - **进度**：运行中，后台等待提示会写明「插件「插件名 · 任务名」正在结算」，期间本局显示后台忙，候选、编辑等操作要等它结束。
-- `before` 任务运行时这一轮还没结算完：可以 `saveTurnData`，不能用 `setVariables`、`editTurn`（它们要等结算结束）。想让 Tavern 的结算用上 `before` 任务的产出，配合 `settlementSection` 把它写进结算说明。
+- `before`、`parallel` 任务运行时这一轮还没结算完：可以 `saveTurnData`，不能用 `setVariables`、`editTurn`（它们要等结算结束）。想让 Tavern 的结算用上 `before` 任务的产出，配合 `settlementSection` 把它写进结算说明。
 - 开场白不触发结算任务。
 
 ### `manualTask({ name, title?, description?, input?, run })`（第 2 版）
@@ -903,3 +920,4 @@ Tavern 尽量开放接口，并保持每个接口简单、稳定；接口按插�
 |---|---|
 | 1 | 首个版本。 |
 | 2 | 新增 `turnSection`、`worldbookSource`、`settlementSection`、`settlementTool`：插件可以往每轮正文请求和后台结算里添加内容。新增插件存档数据（`saveTurnData`、`readTurnData`、`saveGameData`、`readGameData`）与 `onTimelineChanged`；编辑正文后重新发 `onTurnSettled`；分叉时带上插件数据和媒体项。新增第一个替换类接口 `replaceSettlement`，以及本局插件面板（按局开关、选择结算由谁负责、错误记录）。新增 `candidateSection`、`compactionSection`、`worldbookEntries`；新增 `getCharacterDesigns`、`saveCharacterDesign`（人物设计档案）、`listCards`、`readCardRaw`、`updateCardRaw`、`toolModes` 与 Skill 读写（`listSkills`、`readSkill`、`saveSkill`、`removeSkill`）；浏览器侧新增 `registerPanel`、`registerStartGroup`、`registerCardListView`（`tavernUi.apiVersion` 为 2）。`onTurnSettled`、`getTurn` 增加只读的 `variables`。新增 `getCard`、`getCardImage`、`getHistory`、`setVariables`、`editTurn`、`runTask`。新增宿主侧 `handle` 与浏览器侧 `callHost`，插件的浏览器侧可以调用自己的宿主侧。新增 `settlementTask`、`manualTask`、`startTask`：插件可以定义每轮结算前后运行的任务和玩家手动运行的任务。新增 `getTurnState`，`onTurnSettled`、`getTurn` 增加 `greeting`；浏览器侧新增 `getTurnState`、`watchTurnState`、`setInput`、`submitInput`、`openOverlay`、`assetUrl`（插件文件夹的 `assets/` 静态资源）。导出存档包含插件存档数据和媒体项，导入后照常可读。插件可放进数据目录的 `plugins/` 文件夹加载。新增演出接口：宿主侧 `getCast`、`onCastAnnotated`、`getCastAssets`，浏览器侧 `getStage`、`watchStage`、`registerStageView`。新增配音接口：宿主侧 `speechProvider`、`synthesizeSpeech`，浏览器侧 `speak`、`stopSpeech`。新增背景音乐 `playMusic`、`stopMusic`。新增本局配置项 `gameSettings`、`getGameSettings`、`onGameSettingsChanged`，浏览器侧 `getGameSettings`、`watchGameSettings`。第 1 版接口不变。 |
+| 3 | 新增 `versionSignal`：正文版本失效时中止的信号，结算任务的 `signal` 也随版本失效中止；`onTimelineChanged` 增加 `textVersion`；结算任务新增 `phase: 'parallel'`，与 Tavern 自己的结算同时运行。第 1、2 版接口不变。 |

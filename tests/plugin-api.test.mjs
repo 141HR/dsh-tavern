@@ -175,7 +175,7 @@ test('tavern 服务 v2：本轮上下文、世界书来源、结算说明与结�
       execute: async ({ gameId, turn, arguments: args }) => { calls.push([gameId, turn, args.text]); if (args.text === 'bad') throw new Error('写入失败'); return { ok: true } } })
   } })
   await tick()
-  assert.equal(tavern.apiVersion, 2)
+  assert.equal(tavern.apiVersion, TAVERN_PLUGIN_API_VERSION)
   assert.throws(() => tavern.settlementTool({ name: 'posture_submit', description: 'x', parameters: { type: 'object' }, execute() {} }), /Tavern 自己的工具/)
   assert.throws(() => tavern.settlementTool({ name: 'anchor_submit', description: 'x', parameters: { type: 'object' }, execute() {} }), /已被注册/)
   assert.throws(() => tavern.settlementTool({ name: 'Bad-Name', description: 'x', parameters: { type: 'object' }, execute() {} }), /工具名/)
@@ -246,7 +246,7 @@ test('插件存档数据：按轮数据绑定正文版本，回退与重新生�
   h.api.timelineChanged('game-1', { kind: 'rollback', turn: 3 })
   h.api.timelineChanged('game-1', { kind: 'not-a-kind' })
   await tick()
-  assert.deepEqual(changes, [{ gameId: 'game-1', kind: 'rollback', turn: 3 }])
+  assert.deepEqual(changes, [{ gameId: 'game-1', kind: 'rollback', turn: 3, textVersion: 'v3' }])
 })
 
 test('分叉：可见的插件数据与媒体按新游戏的正文版本带过去，旧版本与分叉点之后的不带', { skip: !cordis }, async t => {
@@ -892,4 +892,59 @@ test('本局配置项：插件声明字段，Tavern 画在本局设置并按局�
   assert.equal((await data.snapshot('chat-1')).settings.values.director.pace, 'high', '值存在这一局的插件数据里，随分叉和导出带走')
   await h.api.setGamePlugin('game-1', { name: 'director', enabled: false })
   assert.deepEqual((await h.api.gamePlugins('game-1')).settings, [], '本局关掉的插件不显示配置项')
+})
+
+test('版本失效信号：versionSignal 在正文版本被替换或删局时中止；结算任务的 signal 也跟着中止', { skip: !cordis }, async t => {
+  const h = await harness(t, { data: createPluginData({ store: memoryStore() }), readPendingTurn: async () => turnMaterial() })
+  let tavern
+  const seen = []
+  await h.root.plugin({ name: 'director', inject: ['tavern'], apply(ctx) {
+    tavern = ctx.tavern
+    ctx.tavern.onTimelineChanged(change => seen.push(change))
+  } })
+  await tick()
+  assert.equal(tavern.apiVersion, 3)
+  assert.equal((await tavern.versionSignal({ gameId: 'game-1', turn: 3, textVersion: 'old' })).aborted, true, '不是当前版本时立即中止')
+  const signal = await tavern.versionSignal({ gameId: 'game-1', turn: 3, textVersion: 'key-3' })
+  h.api.timelineChanged('game-1', { kind: 'edit', turn: 3 })
+  await tick()
+  assert.equal(signal.aborted, false, '版本没变时不中止')
+  h.setLatest(turnMaterial({ key: 'key-3b' }))
+  h.api.timelineChanged('game-1', { kind: 'regenerate', turn: 3 })
+  await tick()
+  assert.equal(signal.aborted, true)
+  assert.equal(signal.reason.code, 'TAVERN_PLUGIN_STALE_VERSION')
+  assert.equal(seen.at(-1).textVersion, 'key-3b', 'onTimelineChanged 带上这一轮当前的版本')
+  const removed = await tavern.versionSignal({ gameId: 'game-1', turn: 3, textVersion: 'key-3b' })
+  h.api.gameRemoved('game-1')
+  await tick()
+  assert.equal(removed.aborted, true)
+
+  // A settlement task's signal stops once its version is replaced while it runs.
+  let taskSignal
+  await h.root.plugin({ name: 'slow', inject: ['tavern'], apply(ctx) {
+    ctx.tavern.settlementTask({ name: 'wait', run: ({ signal }) => { taskSignal = signal; return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason))) } })
+  } })
+  await tick()
+  const pending = h.api.runSettlementTasks({ gameId: 'game-1', phase: 'after' })
+  await tick()
+  h.setLatest(turnMaterial({ key: 'key-3c' }))
+  await h.api.checkVersions('game-1')
+  await pending
+  assert.equal(taskSignal.aborted, true)
+})
+
+test('并行结算任务：phase parallel 读结算前的这一轮，不能改变量', { skip: !cordis }, async t => {
+  const h = await harness(t, { data: createPluginData({ store: memoryStore() }), readPendingTurn: async () => turnMaterial({ key: 'pending-3' }) })
+  const ran = []
+  await h.root.plugin({ name: 'director', inject: ['tavern'], apply(ctx) {
+    ctx.tavern.settlementTask({ name: 'stage', phase: 'parallel', run: async input => {
+      ran.push(input.phase + ':' + input.textVersion)
+      await assert.rejects(ctx.tavern.setVariables({ gameId: 'game-1', turn: 3, textVersion: 'key-3', variables: {} }))
+    } })
+  } })
+  await tick()
+  await h.api.runSettlementTasks({ gameId: 'game-1', phase: 'parallel' })
+  assert.deepEqual(ran, ['parallel:pending-3'])
+  assert.deepEqual((await h.api.gamePlugins('game-1')).tasks.settlement.map(task => task.phaseLabel), ['与结算同时'])
 })

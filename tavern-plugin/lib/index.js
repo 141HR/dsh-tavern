@@ -3757,11 +3757,19 @@ export async function apply(ctx) {
     const gameId = str(state?.sessionId)
     const onStart = label => pluginSettlementProgress.begin(gameId, label)
     const activity = state ? backgroundTasks.activity(state) : null
-    // The turn's pipeline (docs/design/background-task-pipeline.md): before-tasks, the main settlement, after-tasks.
+    const turnPending = () => Boolean(gameId) && activity?.role === 'settlement' && ['pending', 'running'].includes(activity.phase)
+    // A new turn may have replaced versions plugins are still working on.
+    if (gameId) await pluginApi.checkVersions(gameId).catch(() => {})
+    // The turn's pipeline (docs/design/background-task-pipeline.md): before-tasks, the main settlement
+    // with the parallel tasks running alongside it, after-tasks.
     await runPipelineStages([
-      { id: 'before', when: () => Boolean(gameId) && activity?.role === 'settlement' && ['pending', 'running'].includes(activity.phase),
+      { id: 'before', when: turnPending,
         run: () => pluginApi.runSettlementTasks({ gameId, phase: 'before', signal, onStart }) },
-      { id: 'settle', run: () => runSettlement(chatId, signal) },
+      { id: 'settle', run: async () => {
+        const alongside = turnPending() && !signal?.aborted ? pluginApi.runSettlementTasks({ gameId, phase: 'parallel', signal, onStart })
+          .catch(error => console.warn('dsh-tavern: 插件并行任务失败:', str(error?.message || error))) : null
+        try { await runSettlement(chatId, signal) } finally { await alongside }
+      } },
       // Tavern's settlement is committed by now: a plugin-task operation keeps the game busy (and stoppable).
       { id: 'after', when: () => Boolean(gameId) && !signal?.aborted,
         run: () => pluginApi.runSettlementTasks({ gameId, phase: 'after', signal, onStart, around: work => inPluginTaskOperation(chatId, work) }) }
