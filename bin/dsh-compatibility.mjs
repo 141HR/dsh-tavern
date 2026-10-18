@@ -5,8 +5,7 @@ import { classifyDshVersion } from '../tavern-plugin/lib/domain/host-compatibili
 // One release-specific source for bootstrap installers, the launcher and documentation checks.
 const compatibility = JSON.parse(readFileSync(new URL('../config/dsh-compatibility.json', import.meta.url), 'utf8'))
 export const { adaptedDshVersion, recommendedDesktopVersion, desktopReleasesUrl, recommendedDshaVersion, dshaReleasesUrl } = compatibility
-export const verifiedDshVersions = compatibility.verifiedDshVersions || [adaptedDshVersion]
-export const minDshVersion = compatibility.minDshVersion || adaptedDshVersion
+export const allowedDshVersions = compatibility.allowedDshVersions || [adaptedDshVersion]
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(adaptedDshVersion)) throw new Error('DSH 适配版本配置无效')
 
 export function extractDshVersion(output) {
@@ -21,16 +20,13 @@ function hostGuidance(host) {
     : `推荐官方 DeepSeek Harness ${recommendedDesktopVersion}：${desktopReleasesUrl}`
 }
 
-// Host versions pass a gate (see classifyDshVersion): verified and untested versions
-// install, only blocked ones stop. CLI owns its private runtime, so it stays exact.
+// Host versions must be on the allowlist. CLI owns its private runtime, so it stays exact.
 export function dshCompatibilityNotice(currentVersion = '', host = 'desktop') {
   if (host === 'cli') return `命令行版独立安装并使用 DSH ${adaptedDshVersion}，不复用或修改全局 DSH。`
-  const verified = verifiedDshVersions.join('、')
-  if (!currentVersion) return `已验证 DSH ${verified}，最低支持 ${minDshVersion}；${hostGuidance(host)}`
-  const result = classifyDshVersion(currentVersion, compatibility)
-  if (result.status === 'verified') return `当前 DSH ${currentVersion} 已验证。`
-  if (result.status === 'blocked') return `当前 DSH ${currentVersion} 不可用（${result.reason}）；已停止安装，不会修改宿主版本。已验证版本：${verified}；${hostGuidance(host)}`
-  return `当前 DSH ${currentVersion} 尚未验证，继续安装；重新生成、回退等功能可能无法使用，遇到问题请反馈。已验证版本：${verified}。`
+  const allowed = allowedDshVersions.join('、')
+  if (!currentVersion) return `允许的 DSH 版本：${allowed}；${hostGuidance(host)}`
+  if (classifyDshVersion(currentVersion, compatibility).status === 'allowed') return `当前 DSH ${currentVersion} 在允许清单内。`
+  return `当前 DSH ${currentVersion} 不在允许清单内；已停止安装，不会修改宿主版本。允许的版本：${allowed}；${hostGuidance(host)}`
 }
 
 export function assertCompatibleDshVersion(currentVersion, host = 'cli') {
@@ -38,7 +34,7 @@ export function assertCompatibleDshVersion(currentVersion, host = 'cli') {
     if (currentVersion === adaptedDshVersion) return
     throw new Error(`已停止安装：独立 DSH 版本不符，当前 ${currentVersion || '未知'}，应为 ${adaptedDshVersion}。请重新安装独立运行时：设置 DSH_TAVERN_REINSTALL_RUNTIME=1 后重试安装或更新。`)
   }
-  if (classifyDshVersion(currentVersion, compatibility).status !== 'blocked') return
+  if (classifyDshVersion(currentVersion, compatibility).status === 'allowed') return
   throw new Error(dshCompatibilityNotice(currentVersion, host))
 }
 

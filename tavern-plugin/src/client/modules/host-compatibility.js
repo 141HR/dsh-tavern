@@ -23,10 +23,10 @@ function TavernHostCompatibility() {
         return function () { active = false; };
     }, []);
     if (!info) return null;
-    // A verified host needs no sidebar line; mismatches and unread notices stay visible.
-    if (info.status === 'verified' && !(info.message && !dismissed)) return null;
+    // An allowed host needs no sidebar line; blocked hosts and unread notices stay visible.
+    if (info.status === 'allowed' && !(info.message && !dismissed)) return null;
     return React.createElement('div', { className: 'dsh-tavern-update-status' },
-        React.createElement('div', null, 'DSH 核心 ' + (info.version || '版本未知') + ' · ' + ({ verified: '已验证', untested: '未验证', blocked: '不可用' }[info.status] || '未验证') + ' · 已验证版本 ' + (info.verifiedVersions || []).join('、')),
+        React.createElement('div', null, 'DSH 核心 ' + (info.version || '版本未知') + ' · ' + (info.status === 'allowed' ? '在允许清单内' : '不在允许清单内') + ' · 允许版本 ' + (info.allowedVersions || []).join('、')),
         info.message && !dismissed ? React.createElement('div', { role: 'status' }, info.message,
             React.createElement('button', { type: 'button', className: 'dsh-tavern-btn', onClick: function () { hostCompatibilityNotice.dismiss(info); setDismissed(true); } }, '此版本不再提示')) : null);
 }

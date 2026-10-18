@@ -193,10 +193,10 @@ export const SESSION_PATCH_PROTOCOL = 1
 // 0.2.1-rc.2 适配：宿主 runtime 从 0.1.5-rc.2 升到 0.2.1-rc.2；补丁锚点在 0.2.0 全部
 // 仍唯一命中（见 tmp/audit-host.md 的 E1），因此这里是重钉版本 + 重算字节，不是重写补丁。
 export const SESSION_PATCH_VERSION = '0.2.1-rc.2'
-// Audited against SESSION_PATCH_VERSION; also admitted on every verified host release
+// Audited against SESSION_PATCH_VERSION; also admitted on every allowed host release
 // (config/dsh-compatibility.json). PINNED_SHA256 still guards each file's bytes.
 const policy = JSON.parse(readFileSync(new URL('../../../config/dsh-compatibility.json', import.meta.url), 'utf8'))
-export const SESSION_PATCH_VERSIONS = Object.freeze([...new Set([SESSION_PATCH_VERSION, ...(policy.verifiedDshVersions || [])])])
+export const SESSION_PATCH_VERSIONS = Object.freeze([...new Set([SESSION_PATCH_VERSION, ...(policy.allowedDshVersions || [])])])
 const INSTALLED = Symbol.for('dsh-tavern.host-session-patch.v1')
 // Each entry lists every known-good bytes of that file for 0.2.1-rc.2.
 // Official npm is always first. The 0.1.5-rc.2 list also carried DSHA v0.1.5-rc2
@@ -282,7 +282,7 @@ function createHandle(fields) {
       this.clientReason = ''
     },
     replacementAllowed() {
-      // 'skipped' 表示宿主版本不在 SESSION_PATCH_VERSIONS（已验证版本）内、补丁**没有装**。
+      // 'skipped' 表示宿主版本不在 SESSION_PATCH_VERSIONS（允许清单）内、补丁**没有装**。
       // 旧实现把 skipped 当作「可写」，会让正文编辑/回退/重新生成在补丁缺失时假就绪：
       // 宿主 dsh-session 仍会拒绝 assistant/message + sourceEventSeqs 的 replace 写入。
       // 只有服务端补丁装好且页面完成握手才算就绪。

@@ -1,8 +1,6 @@
 {
   "adaptedDshVersion": "0.2.1-rc.2",
-  "verifiedDshVersions": ["0.2.1-rc.2"],
-  "minDshVersion": "0.2.0",
-  "blockedDshVersions": {},
+  "allowedDshVersions": ["0.2.1-rc.2", "0.2.0"],
   "recommendedDesktopVersion": "0.2.1-rc.2",
   "desktopReleasesUrl": "https://www.deepseek.com/harness/",
   "recommendedDshaVersion": "0.2.0",

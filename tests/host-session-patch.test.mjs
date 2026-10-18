@@ -92,9 +92,9 @@ test(`${SESSION_PATCH_VERSION} 补丁允许替换，未打补丁的读取仍拒�
   await ctx.fiber.dispose()
 })
 
-test('补丁放行版本跟随已验证列表；列表外的版本 skipped，不碰宿主文件', async () => {
+test('补丁放行版本跟随允许清单；列表外的版本 skipped，不碰宿主文件', async () => {
   const policy = JSON.parse(readFileSync(new URL('../config/dsh-compatibility.json', import.meta.url), 'utf8'))
-  for (const version of [SESSION_PATCH_VERSION, ...policy.verifiedDshVersions]) assert.ok(SESSION_PATCH_VERSIONS.includes(version), version)
+  for (const version of [SESSION_PATCH_VERSION, ...policy.allowedDshVersions]) assert.ok(SESSION_PATCH_VERSIONS.includes(version), version)
   const root = await mkdtemp(join(tmpdir(), 'tavern-host-patch-version-'))
   writeFileSync(join(root, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-session', version: '0.0.0-unverified' }))
   const handle = await installHostSessionPatch({ hostRequire: { resolve: name => name.endsWith('/package.json') ? join(root, 'package.json') : assert.fail('列表外版本不应解析宿主文件 ' + name) } })

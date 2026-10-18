@@ -2,36 +2,19 @@ import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
-// Gate, not pin: verified versions pass silently, known-broken or too-old versions
-// are blocked, everything else is "untested" — allowed with a warning, so users can
-// follow upstream DSH before we have verified each release.
-const CORE = /^(\d+)\.(\d+)\.(\d+)/
-
-function coreBelow(version, floor) {
-  const a = CORE.exec(version), b = CORE.exec(floor)
-  if (!a || !b) return false
-  for (let i = 1; i <= 3; i++) if (Number(a[i]) !== Number(b[i])) return Number(a[i]) < Number(b[i])
-  return false
-}
-
+// Allowlist: listed DSH versions run; any other (or unreadable) version is blocked.
+// Maintained by hand in config/dsh-compatibility.json when a new DSH release is checked.
 export function classifyDshVersion(version, policy) {
-  const verified = policy.verifiedDshVersions || [policy.adaptedDshVersion]
-  const blocked = policy.blockedDshVersions || {}
-  const base = { version: version || '', verifiedVersions: verified, minVersion: policy.minDshVersion || '' }
-  if (version && verified.includes(version)) return { ...base, status: 'verified', reason: '' }
-  if (version && Object.hasOwn(blocked, version)) return { ...base, status: 'blocked', reason: String(blocked[version]) }
-  if (version && policy.minDshVersion && coreBelow(version, policy.minDshVersion)) {
-    return { ...base, status: 'blocked', reason: `低于最低支持版本 ${policy.minDshVersion}` }
-  }
-  return { ...base, status: 'untested', reason: version ? '' : '无法识别当前 DSH 版本' }
+  const allowed = policy.allowedDshVersions || [policy.adaptedDshVersion]
+  const base = { version: version || '', allowedVersions: allowed }
+  if (version && allowed.includes(version)) return { ...base, status: 'allowed', reason: '' }
+  return { ...base, status: 'blocked', reason: version ? `DSH ${version} 不在允许清单` : '无法识别当前 DSH 版本' }
 }
 
 export function classifyHostVersion(version, policy) {
   const result = classifyDshVersion(version, policy)
-  const verified = result.verifiedVersions.join('、')
-  const message = result.status === 'verified' ? ''
-    : result.status === 'blocked' ? `当前 DSH 版本不可用（${result.reason}）。请改用已验证版本 ${verified}。`
-    : `${result.reason || '当前 DSH 版本尚未验证'}；重新生成、回退等功能可能无法使用，遇到问题请反馈。已验证版本：${verified}。`
+  const message = result.status === 'allowed' ? ''
+    : `${result.reason}，酒馆可能无法正常使用。允许的版本：${result.allowedVersions.join('、')}。`
   return Object.freeze({ ...result, packageName: '@deepseek-ai/dsh-session', message })
 }
 

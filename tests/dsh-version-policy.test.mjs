@@ -3,41 +3,40 @@ import { readFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
-import { adaptedDshVersion, assertCompatibleDshVersion, desktopReleasesUrl, dshaReleasesUrl, dshCompatibilityNotice, minDshVersion } from '../bin/dsh-compatibility.mjs'
+import { adaptedDshVersion, allowedDshVersions, assertCompatibleDshVersion, desktopReleasesUrl, dshaReleasesUrl } from '../bin/dsh-compatibility.mjs'
 import { classifyDshVersion } from '../tavern-plugin/lib/domain/host-compatibility.js'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const unix = await readFile(new URL('../install.sh', import.meta.url), 'utf8')
 
-test('宿主走闸门：已验证、未验证放行，低于下限或已知坏版本拦截；CLI 独立运行时仍精确匹配', () => {
+test('宿主按允许清单：清单内放行，清单外拦截；CLI 独立运行时仍精确匹配', () => {
   for (const host of ['desktop', 'android']) {
-    for (const version of [adaptedDshVersion, '0.2.0', '0.2.2', '99.0.0']) assert.doesNotThrow(() => assertCompatibleDshVersion(version, host), version)
-    for (const version of ['0.1.5-rc.2', '0.1.1-rc.2']) {
+    for (const version of allowedDshVersions) assert.doesNotThrow(() => assertCompatibleDshVersion(version, host), version)
+    for (const version of ['0.1.5-rc.2', '0.2.2', '99.0.0']) {
       assert.throws(() => assertCompatibleDshVersion(version, host), error => {
-        assert.match(error.message, /已停止安装/)
-        assert.ok(error.message.includes(minDshVersion))
+        assert.match(error.message, /不在允许清单内；已停止安装/)
+        assert.ok(error.message.includes(allowedDshVersions.join('、')))
         assert.ok(error.message.includes(host === 'desktop' ? desktopReleasesUrl : dshaReleasesUrl), error.message)
         return true
       })
     }
-    assert.match(dshCompatibilityNotice('0.2.2', host), /尚未验证，继续安装/)
   }
+  assert.ok(allowedDshVersions.includes(adaptedDshVersion))
   assert.doesNotThrow(() => assertCompatibleDshVersion(adaptedDshVersion, 'cli'))
   for (const version of ['', '0.2.0', '99.0.0']) assert.throws(() => assertCompatibleDshVersion(version, 'cli'), /DSH_TAVERN_REINSTALL_RUNTIME/)
 })
 
-test('已知坏版本即使高于下限也拦截', () => {
-  const policy = { adaptedDshVersion: '0.2.1-rc.2', verifiedDshVersions: ['0.2.1-rc.2'], minDshVersion: '0.2.0', blockedDshVersions: { '0.2.3': '会话格式不兼容' } }
-  assert.deepEqual(['0.2.1-rc.2', '0.2.0-rc.1', '0.2.3', '0.1.9', ''].map(v => classifyDshVersion(v, policy).status), ['verified', 'untested', 'blocked', 'blocked', 'untested'])
-  assert.equal(classifyDshVersion('0.2.3', policy).reason, '会话格式不兼容')
+test('允许清单只认精确版本号，读不出版本也拦截', () => {
+  const policy = { adaptedDshVersion: '0.2.1-rc.2', allowedDshVersions: ['0.2.1-rc.2'] }
+  assert.deepEqual(['0.2.1-rc.2', '0.2.1-rc.1', '0.2.1', ''].map(v => classifyDshVersion(v, policy).status), ['allowed', 'blocked', 'blocked', 'blocked'])
 })
 
-test('安装脚本以 --check 执行闸门：未验证版本退出码 0，过低版本非 0', () => {
+test('安装脚本以 --check 执行清单：清单内退出码 0，清单外非 0', () => {
   const script = fileURLToPath(new URL('../bin/dsh-compatibility.mjs', import.meta.url))
   const ok = spawnSync(process.execPath, [script, '--check', 'android', 'dsh 0.2.0'], { encoding: 'utf8' })
   assert.equal(ok.status, 0, ok.stderr)
-  assert.match(ok.stdout, /尚未验证/)
-  assert.notEqual(spawnSync(process.execPath, [script, '--check', 'desktop', 'dsh 0.1.5-rc.2'], { encoding: 'utf8' }).status, 0)
+  assert.match(ok.stdout, /在允许清单内/)
+  assert.notEqual(spawnSync(process.execPath, [script, '--check', 'desktop', 'dsh 0.2.2'], { encoding: 'utf8' }).status, 0)
 })
 
 test('Unix 工具准备只处理 pnpm，不提前复用或更换 DSH', { skip: process.platform === 'win32' }, () => {
@@ -83,7 +82,7 @@ fail() { printf 'FAIL:%s\\n' "$1"; exit 1; }
   }
 })
 
-test('未验证宿主上字号补丁跳过（返回 null），不让整个安装回滚', async t => {
+test('非适配版本宿主上字号补丁跳过（返回 null），不让整个安装回滚', async t => {
   const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
   const { tmpdir } = await import('node:os')
   const { patchThemeFontLimit } = await import('../bin/theme-font-limit.mjs')
