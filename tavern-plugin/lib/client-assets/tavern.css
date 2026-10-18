@@ -2672,8 +2672,11 @@ button.dsh-tavern-play-fullscreen {
   /* 文件入口已在移动抽屉中提供，顶栏保留会话标题和常用操作。 */
   body.dsh-tavern-shell-active :is([data-phase] > header, [data-slot="conversation.session.header"] > header) svg { display: block; flex-shrink: 0; }
   .dsh-tavern-sidebar { padding-top: 2px; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
-  .dsh-tavern-side-head { height: 56px; }
-  .dsh-tavern-side-brand { height: 46px; }
+  .dsh-tavern-side-head { height: 48px; }
+  .dsh-tavern-side-brand { height: 40px; }
+  .dsh-tavern-side-title { margin-top: 10px; }
+  /* 酒馆在对话「…」菜单里已有日志导出（含会话日志），宿主抽屉底部这颗按钮只占高度。 */
+  body.dsh-tavern-shell-active [data-mobile-nav="drawer-actions"] { display: none !important; }
 
   /* 输入区保持宿主的滚动与草稿生命周期，不再用 bottom 额外上推一个键盘高度。 */
   html.dsh-tavern-coarse-play [data-composer-seat] {
