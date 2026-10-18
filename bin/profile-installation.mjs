@@ -19,6 +19,7 @@ import { migrateLegacyTavernData, resolveTavernDataRoot } from '../tavern-plugin
 import { ensureUserExtensions } from '../tavern-plugin/lib/domain/user-extensions.js'
 import { beginProfileConfigurationUpdate, loadProfileManifest, mergeProfileManifest, prepareProfilePatch, prepareProfileWorkspace, syncProfileDependencyPatches } from './profile-configuration.mjs'
 import { ensureSidebarDefaults } from './launcher-settings.mjs'
+import { assertProfileBundlesLoad } from './profile-bundle-check.mjs'
 import { INSTALL_HOSTS, SOURCE_ROOT, DSH_ROOT, LEGACY_DSH_ROOT, CLI_RUNTIME_ROOT, RUNTIME_HOST, PROFILE_DIR, LOG_DIR, SCRIPT_PATH, PROFILE, RELEASE_FILE, DEFAULT_COMMIT_URL, REQUIRED_SOURCE_FILES, findDshCommand, pinnedDesktopDsh, requireCommand, run, runInstallCommand, runInstallDsh } from './launcher-environment.mjs'
 
 // Own installation transaction and legacy-source discovery. Desktop never installs a CLI shim.
@@ -315,7 +316,11 @@ async function installProfileOwned(host, { attemptId, runInstall, runDsh }) {
       // Its previous lockfile is not the source repository's frozen lockfile.
       await runInstall('pnpm', ['install', '--no-frozen-lockfile'], { cwd: PROFILE_DIR })
       if (host === 'desktop') await runInstall('node', [path.join(SOURCE_ROOT, 'bin', 'validate-desktop-profile.mjs')], { label: '验证桌面版配置', timeoutMs: 60_000 })
-      else await runDsh(dsh, ['--profile', PROFILE, '--dump-config'], { host, timeoutMs: 60_000 })
+      else {
+        await runDsh(dsh, ['--profile', PROFILE, '--dump-config'], { host, timeoutMs: 60_000 })
+        // --dump-config passes even when DSH would skip a bundle at boot; the desktop validator already checks this.
+        await assertProfileBundlesLoad({ dsh, host, profileDir: PROFILE_DIR, managedBundles: configuration.manifest.dshTavern.managedBundles })
+      }
       // --dump-config never imports the plugin; a partial node_modules would only fail after restart.
       assertRuntimeDependencies(SOURCE_ROOT)
       ensureSidebarDefaults()
