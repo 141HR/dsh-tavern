@@ -93,12 +93,16 @@ export function foldStorySubmission(session, result, bodyText) {
     source: { kind: 'model', provider: 'dsh-tavern', model: 'reply-projection' },
     content: [{ type: 'text', text: bodyText }]
   }
-  const shown = surface.append('assistant/message', { turn, step, message: reply }, { surfaceOp: 'append', sourceEventSeqs: [] })
-  const shownSeq = Number(typeof shown === 'number' ? shown : shown.seq)
-  const end = session.surface.nodes.map(Number).indexOf(shownSeq)
-  if (end < to) return
-  surface.replace('assistant/message', { turn, step, message: reply },
-    { start, end: shownSeq, sourceEventSeqs: session.surface.nodes.slice(from, end + 1).map(Number) })
+  // Settlement runs after the submission's step closed: the copy and its replacement
+  // share one edit step, so the log stays loadable and the step still shows the answer.
+  surface.editStep(() => {
+    const shown = surface.append('assistant/message', { turn, step, message: reply }, { surfaceOp: 'append', sourceEventSeqs: [] })
+    const shownSeq = Number(typeof shown === 'number' ? shown : shown.seq)
+    const end = session.surface.nodes.map(Number).indexOf(shownSeq)
+    if (end < to) return
+    surface.replace('assistant/message', { turn, step, message: reply },
+      { start, end: shownSeq, sourceEventSeqs: session.surface.nodes.slice(from, end + 1).map(Number) })
+  })
 }
 
 export function activeStoryTurn(session) {
