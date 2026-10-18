@@ -1,7 +1,10 @@
-import { readFileSync, appendFileSync, unlinkSync, rmdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, unlinkSync, rmdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { waitForExit, switchProfile, relaunchApp } from './helper.mjs'
 const job = process.argv[2]
+// Register before parsing the request: even a corrupt job then leaves a pid the
+// next switch can use to tell this helper is gone.
+try { writeFileSync(join(dirname(job), 'worker.json'), JSON.stringify({ pid: process.pid, startedAt: Date.now() }), { flag: 'wx', mode: 0o600 }) } catch {}
 const request = JSON.parse(readFileSync(job, 'utf8'))
 const log = message => appendFileSync(join(request.stateDir, 'last-run.log'), new Date().toISOString() + ' ' + message + '\n')
 let exited = false

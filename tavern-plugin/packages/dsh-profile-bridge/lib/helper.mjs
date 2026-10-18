@@ -1,8 +1,13 @@
 // Tavern compatibility fork of 2NF/dsh-profile-bridge (MIT).
 import { spawn } from 'node:child_process'
-import { mkdirSync, writeFileSync, existsSync, lstatSync, renameSync, symlinkSync, unlinkSync, readFileSync, readdirSync, realpathSync } from 'node:fs'
+import { mkdirSync, writeFileSync, existsSync, lstatSync, renameSync, symlinkSync, unlinkSync, readFileSync, readdirSync, realpathSync, statSync, rmSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+/** A lock older than this without a live helper is safe to reclaim. */
+const PENDING_STALE_MS = 3 * 60 * 1000
+/** How many reclaimed lock directories to keep for diagnosis. */
+const STALE_LIMIT = 5
 
 function manifest(dir) {
   const doc = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
@@ -85,24 +90,98 @@ export function relaunchApp(exe) {
   spawn(command, args, { detached: true, stdio: 'ignore', env }).unref()
 }
 
-// Lock is acquired before responding, so repeated clicks cannot schedule competing switches.
-export function scheduleSwitch(request) {
-  mkdirSync(request.stateDir, { recursive: true })
-  const lock = join(request.stateDir, 'pending')
+function readJson(file) {
+  try { return JSON.parse(readFileSync(file, 'utf8')) } catch { return undefined }
+}
+
+function pendingIsStale(lock, alive, now) {
+  const worker = readJson(join(lock, 'worker.json'))
+  const pid = worker?.pid
+  if (Number.isInteger(pid) && pid > 1) return !alive(pid)
+  // Locks written by older versions carry no worker pid. Keep them while the
+  // app they were waiting for is still running; otherwise only age can tell.
+  const request = readJson(join(lock, 'request.json'))
+  if (Array.isArray(request?.pids) && request.pids.some(candidate => alive(candidate))) return false
+  const startedAt = Number.isFinite(worker?.startedAt) ? worker.startedAt : (() => {
+    try { return statSync(lock).mtimeMs } catch { return 0 }
+  })()
+  return now() - startedAt > PENDING_STALE_MS
+}
+
+function pruneStale(staleRoot, keep) {
   try {
-    mkdirSync(lock)
-  } catch (error) {
-    if (error.code !== 'EEXIST') throw error
-    throw Object.assign(new Error(`已有一个切换在等待桌面退出（最长两分钟），请稍后再试；若长时间存在，确认桌面已退出后删除 ${lock}`), { code: 'busy' })
+    const entries = readdirSync(staleRoot, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && entry.name.startsWith('pending-'))
+      .map(entry => {
+        try { return { name: entry.name, at: statSync(join(staleRoot, entry.name)).mtimeMs } } catch { return undefined }
+      })
+      .filter(Boolean)
+      .sort((left, right) => right.at - left.at)
+    for (const entry of entries.slice(keep)) {
+      try { rmSync(join(staleRoot, entry.name), { recursive: true, force: true }) } catch {}
+    }
+  } catch {}
+}
+
+function archiveStale(lock, stateDir, now, keep) {
+  const staleRoot = join(stateDir, 'stale')
+  mkdirSync(staleRoot, { recursive: true })
+  const stamp = new Date(now()).toISOString().replace(/[:.]/g, '-')
+  const target = join(staleRoot, `pending-${stamp}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`)
+  renameSync(lock, target)
+  pruneStale(staleRoot, keep)
+  return target
+}
+
+function busyError(lock, detail = '') {
+  const suffix = detail === '' ? '' : `；${detail}`
+  return Object.assign(new Error(`已有一个切换在等待桌面退出（最长两分钟），请稍后再试${suffix}；若桌面已退出且超过三分钟，重试时系统会自动清理陈旧记录（${lock}）。`), { code: 'busy' })
+}
+
+/**
+ * Claim the single pending slot, archiving a lock whose helper is gone.
+ * @param {string} stateDir - profile-bridge state directory.
+ * @param {{ alive?: Function, now?: Function, keep?: number }} [options] - test seams.
+ * @returns {{ lock: string, reclaimed: boolean }} claimed lock and whether an old one was archived.
+ */
+export function acquirePendingLock(stateDir, { alive = processAlive, now = Date.now, keep = STALE_LIMIT } = {}) {
+  mkdirSync(stateDir, { recursive: true })
+  const lock = join(stateDir, 'pending')
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      mkdirSync(lock)
+      return { lock, reclaimed: attempt > 0 }
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error
+      if (attempt === 0 && pendingIsStale(lock, alive, now)) {
+        try {
+          archiveStale(lock, stateDir, now, keep)
+        } catch (archiveError) {
+          if (archiveError.code === 'ENOENT') continue
+          throw busyError(lock, `陈旧记录无法自动归档：${archiveError.message}`)
+        }
+        continue
+      }
+      throw busyError(lock)
+    }
   }
+  throw busyError(lock)
+}
+
+// Lock is acquired before responding, so repeated clicks cannot schedule competing switches.
+export function scheduleSwitch(request, options = {}) {
+  const { lock, reclaimed } = acquirePendingLock(request.stateDir, options)
   const job = join(lock, 'request.json')
   const worker = fileURLToPath(new URL('./worker.mjs', import.meta.url))
   try {
     writeFileSync(job, JSON.stringify(request), { flag: 'wx', mode: 0o600 })
     const child = spawn(process.execPath, [worker, job], { detached: true, stdio: 'ignore', cwd: request.stateDir, env: { ...process.env, ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {}) } })
+    if (Number.isInteger(child.pid) && child.pid > 1) {
+      try { writeFileSync(join(lock, 'worker.json'), JSON.stringify({ pid: child.pid, startedAt: Date.now() }), { flag: 'wx', mode: 0o600 }) } catch {}
+    }
     child.on('error', () => { /* request stays on disk for diagnosis; no profile was changed */ })
     child.unref()
-    return { pid: child.pid, logPath: join(request.stateDir, 'last-run.log') }
+    return { pid: child.pid, logPath: join(request.stateDir, 'last-run.log'), reclaimed }
   } catch (error) {
     throw new Error(`无法启动切换助手，待处理记录位于 ${lock}：${error.message}`)
   }

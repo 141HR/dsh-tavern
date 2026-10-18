@@ -6,7 +6,7 @@
 
 两边都安装此插件后，在设置 → Profile 切换选择目标，点“立即重启”。macOS/Linux 向桌面主进程发 SIGTERM，等同菜单退出（有任务时先确认）；Windows 需从托盘退出。助手等待 GUI 和宿主全部退出再切换，然后自动重新打开应用。原版 desktop 保存为 `desktop.fresh-*`，可从此设置页还原。
 
-兼容修正：不再修改目标 YAML；不强杀进程；无备份不删除入口；失败恢复原入口；并发请求被 pending 锁拒绝。异常终止遗留的 `profile-bridge/pending` 需先确认助手已退出，再人工检查记录，避免自动抢占未完成操作。
+兼容修正：不再修改目标 YAML；不强杀进程；无备份不删除入口；失败恢复原入口；并发请求被 pending 锁拒绝。异常终止遗留的 `profile-bridge/pending` 会记录助手 pid；确认助手已退出后，下一次切换会自动把陈旧记录归档到 `profile-bridge/stale/` 再重试。
 
 ## 使用与验证范围
 
