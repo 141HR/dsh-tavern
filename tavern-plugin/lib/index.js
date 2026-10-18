@@ -63,7 +63,7 @@ import { rescueHistoryNotice } from './domain/chat-history-rescue.js'
 import { readHostCompatibility } from './domain/host-compatibility.js'
 import { installHostSessionPatch } from './domain/host-session-patch.js'
 import { installHostSubprocessPatch } from './domain/host-subprocess-patch.js'
-import { repairStoredSessionLog } from './domain/session-log-repair.js'
+import { installSessionLogAutoRepair, repairStoredSessionLog } from './domain/session-log-repair.js'
 import { measureForegroundPressure } from './domain/foreground-context-pressure.js'
 import { replaceSessionSurface } from './domain/session-surface-mutations.js'
 import { createPresetDiagnostics } from './domain/preset-diagnostics.js'
@@ -274,6 +274,12 @@ export async function apply(ctx) {
     if (open) console.warn('dsh-tavern: 会话已经打开，旧档留到下次启动再升级')
     else saveUpgradePreparation = await prepareSaveUpgrade(resolveTavernDataRoot(), sessionPatch.loadSessionMigration)
   }
+  // Older Agents numbered a turn twice; the host then refuses the whole log on every
+  // read. Repair it where the read fails, so restoring after a restart heals it too.
+  ctx.effect(() => installSessionLogAutoRepair({
+    persistence,
+    repair: sessionId => repairStoredSessionLog(resolveTavernDataRoot(), sessionId, sessionPatch.loadSessionCatalog),
+  }))
   await clearLegacyTavernDefault(ctx.get('settings'))
   const llm = ctx.get('llm')
   const agentRegistry = ctx.get('agents')
@@ -4747,7 +4753,6 @@ export async function apply(ctx) {
       case 'markConversationOpened': return await conversationRegistry.touch(args && args.sessionId, Date.now())
       // A log the host cannot open is repaired on demand: the client retries the open
       // once after this reports a rewrite, and untouched logs cost one read.
-      case 'repairSessionLog': return await repairStoredSessionLog(resolveTavernDataRoot(), str(args && args.sessionId), sessionPatch.loadSessionCatalog)
       case 'listMobileCardImports': return await mobileCardImport.list()
       case 'importMobileCard': {
         const archive = await mobileCardImport.archive(args && args.id)

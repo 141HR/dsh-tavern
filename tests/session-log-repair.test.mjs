@@ -6,7 +6,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { createRequire } from 'node:module'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { repairCurrentSessionBuffer, repairCurrentSessionFile, repairStoredSessionLog } from '../tavern-plugin/lib/domain/session-log-repair.js'
+import { installSessionLogAutoRepair, repairCurrentSessionBuffer, repairCurrentSessionFile, repairStoredSessionLog } from '../tavern-plugin/lib/domain/session-log-repair.js'
 
 // The host catalog is the only judge of whether a log opens, so these tests use it
 // instead of a stand-in. Without a boot module the whole file is skipped.
@@ -118,4 +118,55 @@ test('the repair finds one session by id and never touches a healthy one', needs
   const missing = await repairStoredSessionLog(dataRoot, 'session-unknown', async () => catalog)
   assert.equal(missing.ok, false)
   assert.equal(missing.repaired, false)
+})
+
+// The host reports a broken log only when something reads it (history pane, resume,
+// query), never through the call that switched to the session. The repair therefore
+// sits on the real persistence read.
+test('a read of a broken log repairs it in place and then succeeds', needsHost, async t => {
+  const { sessionFormatCatalog: catalog } = await import(catalogUrl)
+  const hostRequire = createRequire(fileURLToPath(bootModule))
+  const load = name => import(pathToFileURL(hostRequire.resolve(name)).href)
+  const { Context } = await load('@deepseek-ai/cordis')
+  const loaded = await load('@deepseek-ai/dsh-session-persistence-jsonl')
+  const Jsonl = typeof loaded.apply === 'function' ? loaded : loaded.default
+  const root = await mkdtemp(path.join(tmpdir(), 'tavern-log-autorepair-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const ctx = new Context()
+  await ctx.plugin(Jsonl, { root: path.join(root, 'sessions'), compression: 'zstd' }).await()
+  t.after(() => ctx.fiber.dispose())
+  const persistence = ctx.sessionPersistence
+  const corrupt = duplicatedTurnArtifact(catalog)
+  const header = corrupt.header
+  const file = persistence.locate(header).path
+  await mkdir(path.dirname(file), { recursive: true })
+  await writeFile(file, encodeCurrentGeneration(corrupt, catalog))
+  await assert.rejects(persistence.open(header.id, 'read'), /turn\/start does not open the expected turn/)
+
+  const dataRoot = path.join(root, 'data')
+  let repairs = 0
+  const restore = installSessionLogAutoRepair({ persistence, repair: id => { repairs += 1; return repairStoredSessionLog(dataRoot, id, async () => catalog) } })
+  const handle = await persistence.open(header.id, 'read')
+  const { events } = await handle.read(0)
+  await handle.close()
+  assert.deepEqual(turnNumbers(events), [1, 2])
+  assert.equal(repairs, 1)
+  // A healthy read afterwards never calls the repair again.
+  await (await persistence.open(header.id, 'read')).close()
+  assert.equal(repairs, 1)
+  const wrapped = persistence.open
+  restore()
+  assert.notEqual(persistence.open, wrapped)
+})
+
+test('a log the repair cannot fix keeps the host error and is not retried', async () => {
+  const failure = Object.assign(new Error('stored log is corrupt: something else'), { name: 'SessionPersistenceCorruptionError' })
+  let reads = 0
+  let repairs = 0
+  const persistence = { async open() { reads += 1; throw failure } }
+  installSessionLogAutoRepair({ persistence, repair: async () => { repairs += 1; return { ok: false, repaired: false } } })
+  await assert.rejects(persistence.open('s', 'read'), failure)
+  await assert.rejects(persistence.open('s', 'read'), failure)
+  assert.equal(repairs, 1)
+  assert.equal(reads, 2)
 })

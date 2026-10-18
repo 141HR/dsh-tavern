@@ -96,6 +96,46 @@ export async function repairStoredSessionLog(dataRoot, sessionId, loadCatalog) {
   return { ok: result.ok, repaired: Boolean(result.ok && result.changed), reason: result.reason, file }
 }
 
+/**
+ * Repair a stored log at the moment the host fails to read it. DSH reads a log only
+ * when something needs its contents (history pane, resume, query), and those reads
+ * report corruption asynchronously, never through the UI call that switched to the
+ * session, so the repair has to sit on the persistence read itself. Each failing
+ * session is repaired at most once at a time and retried once; a log the repair
+ * cannot fix keeps failing with the host's original error.
+ */
+export function installSessionLogAutoRepair({ persistence, repair }) {
+  if (typeof persistence?.open !== 'function' || typeof repair !== 'function') return () => {}
+  const original = persistence.open
+  const ownOpen = Object.hasOwn(persistence, 'open')
+  const pending = new Map()
+  const unrepairable = new Set()
+  function repairOnce(id) {
+    if (!pending.has(id)) {
+      pending.set(id, Promise.resolve().then(() => repair(id)).then(result => Boolean(result?.repaired), () => false).finally(() => pending.delete(id)))
+    }
+    return pending.get(id)
+  }
+  const open = async function (id, access, options) {
+    try {
+      return await original.call(this, id, access, options)
+    } catch (error) {
+      if (error?.name !== 'SessionPersistenceCorruptionError' || options?.signal?.aborted || unrepairable.has(id)) throw error
+      if (!await repairOnce(id)) {
+        unrepairable.add(id)
+        throw error
+      }
+      return await original.call(this, id, access, options)
+    }
+  }
+  persistence.open = open
+  return () => {
+    if (persistence.open !== open) return
+    if (ownOpen) persistence.open = original
+    else delete persistence.open
+  }
+}
+
 function assignTurnNumbers(events) {
   let next = 1
   let changed = false

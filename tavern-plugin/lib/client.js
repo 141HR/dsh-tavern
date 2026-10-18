@@ -14972,7 +14972,7 @@ function bindTavernFontZoom(node, win) {
 				await sessionListRecoveryRef.current.wait(sessionId);
 			}
 			async function openSessionWhenReady(sessionId) {
-				await openSessionOrRepair(sessionId);
+				await sessionListRecoveryRef.current.open(sessionId);
 				await call("markConversationOpened", { sessionId: sessionId });
 				await refresh(["sessions"]);
 				setError("");
@@ -14987,24 +14987,6 @@ function bindTavernFontZoom(node, win) {
 				} catch (err) {
 					props.sessions.clear();
 					setError("创建新对话失败：" + String(err && err.message || err));
-				}
-			}
-			// A turn the live Agent numbered twice leaves the stored log unreadable and DSH
-			// refuses to open it. Ask the host to repair that one log, then open again.
-			async function openSessionOrRepair(sessionId) {
-				try {
-					await sessionListRecoveryRef.current.open(sessionId);
-					return;
-				} catch (openError) {
-					let repaired = false;
-					try {
-						const result = await call("repairSessionLog", { sessionId: sessionId });
-						repaired = Boolean(result && result.repaired);
-					} catch (repairError) {
-						// A host without the repair route reports the original open failure.
-					}
-					if (!repaired) throw openError;
-					await sessionListRecoveryRef.current.open(sessionId);
 				}
 			}
 			async function finishPendingOpen(pending) {
