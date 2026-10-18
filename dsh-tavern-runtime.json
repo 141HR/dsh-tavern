@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "daf7ed78589757ff3bc0808b5f69f9d8a7284ef4",
-  "releaseSequence": 698,
+  "revision": "05d60b93823765d041077a8c254435e1b2c1c12f",
+  "releaseSequence": 699,
   "version": "3.0.0",
   "files": [
     {
@@ -206,8 +206,8 @@
     },
     {
       "path": "bin/validate-desktop-profile.mjs",
-      "sha256": "fe030a39ef6a610cd0a2ada3cfd7ee62682688db8f6f3b9ad9e6a9a18185fb0d",
-      "size": 1491
+      "sha256": "c6513c5a956bf1551b5916d3cfffa1f7ec51634ca40e38700137a29c5b233fbf",
+      "size": 2237
     },
     {
       "path": "bin/vendor-dream-skin.mjs",
