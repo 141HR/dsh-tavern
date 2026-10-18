@@ -8,6 +8,10 @@ export const GAME_SAVE_FORMAT = 'dsh-tavern-save'
 export const GAME_SAVE_FORMAT_VERSION = 1
 const MAX_REVISIONS = 400
 const BLOB_MIN_CHARS = 64 * 1024
+// Saves carry whole histories and every scene image, so they get more room than other archives.
+// The archive travels as one base64 string each way; 256 MB stays well under V8's string limit.
+export const GAME_SAVE_LIMITS = { maxArchiveBytes: 256 * 1024 * 1024, maxExpandedBytes: 1024 * 1024 * 1024 }
+const SIZE_PARTS = [['对话与回退历史', /^(chat|blobs|session)\//], ['图片', /^(scene|plugins)\/attachments\//], ['角色卡与世界书', /^(card|script|scene\/worldbooks)\//]]
 const sha = value => createHash('sha256').update(value).digest('hex')
 const safeSegment = value => String(value).replace(/[^a-zA-Z0-9_.-]/g, '_')
 
@@ -63,7 +67,7 @@ function unpackState(packed, blobs) {
  *   attachments: [{attachmentId, mediaType, data}]}, plugins?: {data, media, attachments: [{attachmentId, mediaType?, name?, data}]},
  *   tavernVersion, exportedAt }
  */
-export function buildGameSave(input) {
+export function buildGameSave(input, limits = GAME_SAVE_LIMITS) {
   const chat = input.chat
   const blobs = new Map()
   const entries = []
@@ -96,12 +100,22 @@ export function buildGameSave(input) {
     source: { chatId: chat.id, sessionId: chat.sessionId, cardPath: chat.cardPath, cardName: chat.cardName, title: chat.title || '', mode: chat.mode || 'story', turns: assistantTurns },
     contents: { revisions: input.revisions.map(item => item.revision), card: Boolean(input.card?.payload), script: Boolean(input.script), sceneImages: Boolean(scene), attachments: scene ? scene.attachments.length : 0, plugins: Boolean(plugins) }
   }, null, 2) })
-  return writeZipEntries(entries, { readable: true, label: '存档包' })
+  return writeZipEntries(entries, { readable: true, label: '存档包', ...limits, oversized: () => '（' + describeSize(entries) + '）' })
+}
+
+// Which part made the save too big: raw sizes per part, largest first.
+function describeSize(entries) {
+  const totals = new Map()
+  for (const entry of entries) {
+    const part = SIZE_PARTS.find(([, pattern]) => pattern.test(entry.path))?.[0] || '其他'
+    totals.set(part, (totals.get(part) || 0) + (Buffer.isBuffer(entry.content) ? entry.content.length : Buffer.byteLength(String(entry.content))))
+  }
+  return [...totals].sort((a, b) => b[1] - a[1]).map(([part, bytes]) => part + ' ' + (bytes / 1048576).toFixed(1) + ' MB').join('，')
 }
 
 /** Parse and validate a package; returns the same shape buildGameSave takes, with states unpacked. */
-export function readGameSave(buffer, { tavernVersion } = {}) {
-  const files = readZipEntries(buffer, { label: '存档包' })
+export function readGameSave(buffer, { tavernVersion, limits = GAME_SAVE_LIMITS } = {}) {
+  const files = readZipEntries(buffer, { label: '存档包', ...limits })
   const text = path => { const data = files.get(path); if (!data) throw new Error('存档包缺少 ' + path); return data.toString('utf8') }
   const parse = (value, path) => { try { return JSON.parse(value) } catch { throw new Error('存档包已损坏：' + path + ' 无法读取') } }
   const manifest = parse(text('manifest.json'), 'manifest.json')

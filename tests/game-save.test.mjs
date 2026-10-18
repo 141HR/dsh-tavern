@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildGameSave, collectSaveRevisions, readGameSave } from '../tavern-plugin/lib/domain/game-save.js'
+import { GAME_SAVE_LIMITS, buildGameSave, collectSaveRevisions, readGameSave } from '../tavern-plugin/lib/domain/game-save.js'
 import { writeZipEntries } from '../tavern-plugin/lib/domain/zip-entries.js'
 
 const bigCard = { raw: { data: { name: '卡', description: 'x'.repeat(200000) } } }
@@ -57,14 +57,20 @@ test('导出时跳过已清理的早期历史版本', async () => {
 })
 
 
-test('导出拒绝读回不支持的存档大小，不返回无法导入的备份', async () => {
+test('导出拒绝读回不支持的存档大小，不返回无法导入的备份，并说明各部分大小', async () => {
   const { randomBytes } = await import('node:crypto')
+  const limits = { maxArchiveBytes: 2 * 1024 * 1024, maxExpandedBytes: 6 * 1024 * 1024 }
   const input = { chat: { id: 'c', sessionId: 's', messages: [] }, revisions: [], session: { events: [] }, tavernVersion: '2.7.0',
-    scene: { files: [], worldbooks: [], attachments: [{ attachmentId: 'a', mediaType: 'image/png', data: randomBytes(51 * 1024 * 1024) }] } }
-  assert.throws(() => buildGameSave(input), /超过 50 MB/)
-  const block = Buffer.alloc(51 * 1024 * 1024)
+    scene: { files: [], worldbooks: [], attachments: [{ attachmentId: 'a', mediaType: 'image/png', data: randomBytes(3 * 1024 * 1024) }] } }
+  assert.throws(() => buildGameSave(input, limits), /存档包超过 2 MB（图片 3\.0 MB，/)
+  const block = Buffer.alloc(3 * 1024 * 1024)
   input.scene.attachments = [1, 2, 3].map(id => ({ attachmentId: String(id), data: block }))
-  assert.throws(() => buildGameSave(input), /超过 150 MB/)
+  assert.throws(() => buildGameSave(input, limits), /解压后内容超过 6 MB（图片 9\.0 MB，/)
   input.scene.attachments = [{ attachmentId: 'small', data: Buffer.from('small') }]
-  assert.equal(readGameSave(buildGameSave(input)).scene.attachments[0].data.toString(), 'small')
+  assert.equal(readGameSave(buildGameSave(input, limits), { limits }).scene.attachments[0].data.toString(), 'small')
+})
+
+test('存档包上限比其他压缩包宽', () => {
+  assert.equal(GAME_SAVE_LIMITS.maxArchiveBytes, 256 * 1024 * 1024)
+  assert.equal(GAME_SAVE_LIMITS.maxExpandedBytes, 1024 * 1024 * 1024)
 })

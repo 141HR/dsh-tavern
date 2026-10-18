@@ -613,7 +613,7 @@
 				if (busy) return;
 				setBusy(true); setError("");
 				try {
-					if (file.size > 512 * 1024 * 1024) throw new Error("存档文件超过 512 MB");
+					if (file.size > 256 * 1024 * 1024) throw new Error("存档文件超过 256 MB");
 					const bytes = new Uint8Array(await file.arrayBuffer());
 					let binary = "";
 					for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode.apply(null, bytes.subarray(index, index + 0x8000));
