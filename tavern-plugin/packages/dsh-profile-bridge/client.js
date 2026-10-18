@@ -19,63 +19,62 @@ window.__ModuleLoader__.load({
     const zh = {
       section: '配置档案',
       title: '配置档案',
-      subtitle: '选择桌面版要使用的 profile。',
-      original: '原版桌面配置',
-      originalHint: '桌面版自带的 profile',
-      current: '使用中',
-      switch: '切换',
-      working: '切换中…',
+      subtitle: '选择桌面版使用哪套配置。',
+      original: '原版 DSH',
+      originalHint: '桌面版自带的配置',
+      tavern: 'DSH Tavern',
+      tavernHint: '装好了酒馆插件的配置',
+      pending: '退出后生效',
       loading: '读取中…',
-      noModules: '缺少 node_modules',
-      closing: '已准备切换到「{0}」。请在两分钟内正常退出桌面版，退出后自动切换，再重新打开即可。超时会自动取消。',
-      cliHint: '当前不是桌面版。命令行用户直接用 dsh --profile <名称> 切换即可。',
-      noTargets: '没有可切换的 profile。',
-      failure: '切换失败',
+      noModules: '缺少 node_modules，插件尚未安装',
+      closing: '已选择「{0}」。请在两分钟内正常退出桌面版，重新打开后生效；超时则保持原样。',
+      cliHint: '当前不是桌面版。命令行用户直接用 dsh --profile <名称> 选择即可。',
+      failure: '操作失败',
       more: '说明与日志',
       logEmpty: '（还没有日志）',
-      why: '桌面版固定使用 profiles/desktop。切换时会把它链接到你选的 profile（Windows 用 junction，macOS/Linux 用符号链接），原版配置先备份，随时可以切回。切换必须先正常退出桌面版，不会强制结束进程。',
+      why: '桌面版固定读取 profiles/desktop。选择其他配置时，会把它链接到所选配置（Windows 用 junction，macOS/Linux 用符号链接）；原版配置先备份，随时可以选回。更换必须先正常退出桌面版，不会强制结束进程。',
     }
     const en = {
       section: 'Profiles',
       title: 'Profiles',
-      subtitle: 'Choose the profile the Desktop app uses.',
-      original: 'Original Desktop profile',
-      originalHint: 'The profile Desktop ships with',
-      current: 'In use',
-      switch: 'Switch',
-      working: 'Switching…',
+      subtitle: 'Choose which setup the Desktop app uses.',
+      original: 'Original DSH',
+      originalHint: 'The setup Desktop ships with',
+      tavern: 'DSH Tavern',
+      tavernHint: 'The setup with the Tavern plugins installed',
+      pending: 'After restart',
       loading: 'Loading…',
-      noModules: 'node_modules missing',
-      closing: 'Ready to switch to "{0}". Quit Desktop normally within two minutes; it switches after exit, then reopen it. A timeout cancels the switch.',
-      cliHint: 'This is not the Desktop app. Command-line users can switch with dsh --profile <name>.',
-      noTargets: 'There is no profile to switch to.',
-      failure: 'Switch failed',
+      noModules: 'node_modules missing; plugins are not installed yet',
+      closing: 'Chose "{0}". Quit Desktop normally within two minutes; it takes effect when you reopen it. A timeout leaves things as they are.',
+      cliHint: 'This is not the Desktop app. Command-line users can pick one with dsh --profile <name>.',
+      failure: 'Failed',
       more: 'Details and log',
       logEmpty: '(no log yet)',
-      why: 'Desktop always runs profiles/desktop. Switching links it to the profile you pick (a junction on Windows, a symlink elsewhere); the original profile is backed up first and you can switch back any time. Desktop must be quit normally first; it is never force-closed.',
+      why: 'Desktop always reads profiles/desktop. Choosing another setup links it there (a junction on Windows, a symlink elsewhere); the original is backed up first and you can choose it again any time. Desktop must be quit normally first; it is never force-closed.',
     }
 
     /** Scoped stylesheet; class names are prefixed so they never leak into the host. */
     const CSS = `
-.pb { display: grid; gap: 16px; font-size: 13px; line-height: 1.6; color: inherit; max-width: 640px;
-  --pb-accent: #4d6bfe; --pb-accent-soft: rgba(77,107,254,0.08); --pb-line: rgba(127,127,127,0.22); --pb-fill: rgba(127,127,127,0.06); }
+.pb { display: grid; gap: 16px; font-size: 13px; line-height: 1.6; color: inherit; width: 100%; max-width: 640px; min-width: 0;
+  --pb-accent: #4d6bfe; --pb-accent-soft: rgba(77,107,254,0.07); --pb-line: rgba(127,127,127,0.25); --pb-fill: rgba(127,127,127,0.06); }
+.pb * { box-sizing: border-box; }
 .pb-head { display: grid; gap: 2px; }
 .pb-title { margin: 0; font-size: 16px; font-weight: 600; }
 .pb-sub { margin: 0; opacity: 0.6; }
-.pb-list { border: 1px solid var(--pb-line); border-radius: 12px; overflow: hidden; }
-.pb-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
-.pb-row + .pb-row { border-top: 1px solid var(--pb-line); }
-.pb-row.is-current { background: var(--pb-accent-soft); }
+.pb-list { display: grid; gap: 10px; }
+.pb-option { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; border: 1px solid var(--pb-line); border-radius: 12px; cursor: pointer; transition: border-color .15s, background .15s; }
+.pb-option:hover:not(:disabled) { border-color: rgba(127,127,127,0.5); }
+.pb-option:focus-visible { outline: 2px solid var(--pb-accent); outline-offset: 2px; }
+.pb-option:disabled { cursor: default; }
+.pb-option.is-on { border-color: var(--pb-accent); background: var(--pb-accent-soft); }
+.pb-dot { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid rgba(127,127,127,0.55); display: grid; place-items: center; }
+.pb-option.is-on .pb-dot { border-color: var(--pb-accent); }
+.pb-option.is-on .pb-dot::after { content: ''; width: 9px; height: 9px; border-radius: 50%; background: var(--pb-accent); }
 .pb-info { flex: 1; min-width: 0; display: grid; }
 .pb-name { font-size: 14px; font-weight: 500; }
-.pb-hint { font-size: 12px; opacity: 0.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-hint { font-size: 12px; opacity: 0.55; }
 .pb-bad { color: #e5484d; opacity: 1; }
-.pb-tag { font-size: 12px; font-weight: 500; color: var(--pb-accent); white-space: nowrap; }
-.pb-tag::before { content: '✓ '; }
-.pb-btn { appearance: none; font: inherit; font-size: 13px; color: inherit; background: transparent; border: 1px solid rgba(127,127,127,0.35); border-radius: 8px; padding: 4px 14px; cursor: pointer; white-space: nowrap; }
-.pb-btn:hover:not(:disabled) { border-color: var(--pb-accent); color: var(--pb-accent); }
-.pb-btn:disabled { opacity: 0.4; cursor: default; }
-.pb-empty { padding: 16px; text-align: center; opacity: 0.6; }
+.pb-tag { flex: none; font-size: 12px; color: var(--pb-accent); }
 .pb-note { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--pb-accent-soft); }
 .pb-error { margin: 0; padding: 10px 12px; border-radius: 10px; color: #e5484d; background: rgba(229,72,77,0.08); }
 .pb-fold summary { list-style: none; cursor: pointer; opacity: 0.55; font-size: 12px; user-select: none; }
@@ -84,7 +83,7 @@ window.__ModuleLoader__.load({
 .pb-fold[open] summary::before { transform: rotate(90deg); }
 .pb-fold summary:hover { opacity: 1; }
 .pb-fold p { margin: 6px 0; opacity: 0.6; font-size: 12px; }
-.pb-pre { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--pb-fill); max-height: 200px; overflow: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+.pb-pre { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--pb-fill); max-height: 200px; overflow: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; }
 `
 
     /** Describe one RPC failure for display. */
@@ -95,13 +94,13 @@ window.__ModuleLoader__.load({
       return `${code}: ${message}`
     }
 
-    /** Key of the row for Desktop's own (unlinked) profile. */
+    /** Key of the option for Desktop's own (unlinked) profile. */
     const ORIGINAL = ''
 
     /**
-     * One settings page: a single list of profiles, the one in use marked, every
-     * other one switchable. Desktop's own profile is a row like any other; picking
-     * it reverts the link.
+     * One settings page: the setups Desktop can run as a single-choice list. The
+     * one in use is selected; choosing another queues the link (or, for Desktop's
+     * own profile, the revert) and takes effect after the app restarts.
      * @param {{ t: Function, rpcCall: Function }} props - injected faces from the registration.
      */
     function ProfileBridgeSettings(props) {
@@ -111,7 +110,7 @@ window.__ModuleLoader__.load({
       const [loading, setLoading] = React.useState(true)
       const [failure, setFailure] = React.useState(null)
       const [queued, setQueued] = React.useState(null)
-      const [busy, setBusy] = React.useState(null)
+      const [busy, setBusy] = React.useState(false)
 
       const load = React.useCallback(async () => {
         setLoading(true)
@@ -130,36 +129,37 @@ window.__ModuleLoader__.load({
         void load()
       }, [load])
 
-      const switchTo = React.useCallback(async (row) => {
-        setBusy(row.key)
+      const choose = React.useCallback(async (option) => {
+        setBusy(true)
         setFailure(null)
         try {
-          const result = row.key === ORIGINAL
+          const result = option.key === ORIGINAL
             ? await call('unlink', {})
-            : await call('link', { target: row.key })
-          if (result?.ok === true) setQueued({ label: row.label, warnings: result.value?.warnings ?? [] })
+            : await call('link', { target: option.key })
+          if (result?.ok === true) setQueued({ key: option.key, label: option.label, warnings: result.value?.warnings ?? [] })
           else setFailure(describeFailure(result?.error))
         } catch (error) {
           setFailure(describeFailure({ code: 'transport', message: error?.message ?? String(error) }))
         } finally {
-          setBusy(null)
+          setBusy(false)
         }
       }, [call])
 
       const isDesktop = status?.appKind === 'desktop'
       const linked = status?.activeIsLink === true
       const currentKey = linked ? status?.linkTargetName : ORIGINAL
-      // Desktop's own profile can only be returned to when its backup still exists.
+      const chosenKey = queued !== null ? queued.key : currentKey
+      // Desktop's own profile can only be chosen again while its backup still exists.
       const canRevert = !linked || (status?.backups ?? []).length > 0
-      const rows = status === null ? [] : [
+      const options = status === null ? [] : [
         ...(canRevert ? [{ key: ORIGINAL, label: t('original'), hint: t('originalHint') }] : []),
         ...(status.profiles ?? [])
           // Only profiles that also carry this page: from any other the app has no way back.
-          .filter((profile) => profile.name !== status.activeName && profile.hasBridge)
+          .filter((profile) => profile.name !== status.activeName && (profile.bundles ?? []).includes('dsh-profile-bridge'))
           .map((profile) => ({
             key: profile.name,
-            label: profile.name,
-            hint: profile.dir,
+            label: profile.name === 'tavern' ? t('tavern') : profile.name,
+            hint: profile.name === 'tavern' ? t('tavernHint') : profile.dir,
             bad: profile.hasNodeModules ? null : t('noModules'),
           })),
       ]
@@ -171,29 +171,29 @@ window.__ModuleLoader__.load({
           h('p', { className: 'pb-sub' }, isDesktop || status === null ? t('subtitle') : t('cliHint')),
         ),
 
-        status !== null && !isDesktop ? null : h('div', { className: 'pb-list' },
-          status === null
-            ? h('div', { className: 'pb-empty' }, loading ? t('loading') : t('noTargets'))
-            : rows.length <= 1 && rows.every((row) => row.key === currentKey)
-              ? h('div', { className: 'pb-empty' }, t('noTargets'))
-              : rows.map((row) => {
-                  const isCurrent = row.key === currentKey
-                  return h('div', { key: row.key || '(original)', className: isCurrent ? 'pb-row is-current' : 'pb-row' },
-                    h('div', { className: 'pb-info' },
-                      h('span', { className: 'pb-name' }, row.label),
-                      h('span', { className: row.bad ? 'pb-hint pb-bad' : 'pb-hint', title: row.hint }, row.bad ?? row.hint),
-                    ),
-                    isCurrent
-                      ? h('span', { className: 'pb-tag' }, t('current'))
-                      : h('button', {
-                          type: 'button',
-                          className: 'pb-btn',
-                          disabled: !isDesktop || busy !== null || queued !== null,
-                          onClick: () => void switchTo(row),
-                        }, busy === row.key ? t('working') : t('switch')),
-                  )
-                }),
-        ),
+        status === null
+          ? h('p', { className: 'pb-sub' }, loading ? t('loading') : '')
+          : !isDesktop ? null : h('div', { className: 'pb-list', role: 'radiogroup', 'aria-label': t('title') },
+              options.map((option) => {
+                const on = option.key === chosenKey
+                return h('button', {
+                  key: option.key || '(original)',
+                  type: 'button',
+                  role: 'radio',
+                  'aria-checked': on,
+                  className: on ? 'pb-option is-on' : 'pb-option',
+                  disabled: on || busy || queued !== null,
+                  onClick: () => void choose(option),
+                },
+                  h('span', { className: 'pb-dot' }),
+                  h('span', { className: 'pb-info' },
+                    h('span', { className: 'pb-name' }, option.label),
+                    h('span', { className: option.bad ? 'pb-hint pb-bad' : 'pb-hint' }, option.bad ?? option.hint),
+                  ),
+                  on && queued !== null ? h('span', { className: 'pb-tag' }, t('pending')) : null,
+                )
+              }),
+            ),
 
         queued !== null
           ? h('p', { className: 'pb-note' },
