@@ -98,6 +98,7 @@ export function inspectProfile(dir, paths) {
     dependencies: Object.keys(dependencies),
     bundleCount: bundles.length,
     bundles,
+    hasBridge: hasBridge(manifest),
     hasNodeModules: existsSync(join(dir, 'node_modules')),
     hasPatch: existsSync(join(dir, 'cordis.patch.yml')),
   }
@@ -212,6 +213,15 @@ export function statusPayload(paths) {
 }
 
 /**
+ * Whether a profile manifest enables this plugin, i.e. the app can switch back from it.
+ * @param {object | undefined} manifest - parsed profile package.json.
+ * @returns {boolean} true when dsh-profile-bridge is one of its bundles.
+ */
+export function hasBridge(manifest) {
+  return (manifest?.dsh?.profile?.bundles ?? []).includes('dsh-profile-bridge')
+}
+
+/**
  * Validate one switch request before anything is written.
  * @param {ReturnType<typeof resolvePaths>} paths - resolved plugin paths.
  * @param {unknown} name - requested profile directory name.
@@ -227,6 +237,10 @@ export function validateTarget(paths, name) {
   const dir = join(paths.profilesDir, trimmed)
   if (!existsSync(join(dir, 'package.json'))) {
     fail('missing-profile', `No profile manifest at ${join(dir, 'package.json')}.`)
+  }
+  // A profile without this page has no way back from inside the app.
+  if (!hasBridge(readManifest(dir))) {
+    fail('no-bridge', `"${trimmed}" does not enable dsh-profile-bridge, so the app could not switch back from it.`)
   }
   const warnings = []
   if (!existsSync(join(dir, 'node_modules'))) {

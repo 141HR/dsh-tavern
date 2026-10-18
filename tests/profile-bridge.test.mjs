@@ -30,3 +30,14 @@ test('桥接安装更新始终写 tavern，不取决于 desktop 当前是否是�
  assert.equal(installedProfile('desktop',home),'tavern')
  assert.equal(installedProfile('cli',home),'tavern')
 })
+
+test('只能切到同样启用桥接的 profile，否则切过去后无法在应用内切回', async t => {
+ const { validateTarget, listProfiles } = await import('../tavern-plugin/packages/dsh-profile-bridge/lib/state.mjs')
+ const root=mkdtempSync(join(tmpdir(),'pb-target-'));t.after(()=>rmSync(root,{recursive:true,force:true}))
+ const profile=(name,bundles)=>{mkdirSync(join(root,name));writeFileSync(join(root,name,'package.json'),JSON.stringify({dependencies:{a:'1'},dsh:{profile:{bundles}}}))}
+ profile('desktop',['dsh-profile-bridge']);profile('tavern',['@deepseek-ai/dsh-base','dsh-profile-bridge']);profile('web',['@deepseek-ai/dsh-base'])
+ const paths={profilesDir:root,activeDir:join(root,'desktop'),activeName:'desktop'}
+ assert.equal(validateTarget(paths,'tavern').name,'tavern')
+ assert.throws(()=>validateTarget(paths,'web'),/dsh-profile-bridge/)
+ assert.deepEqual(listProfiles(paths).map(p=>[p.name,p.hasBridge]),[['desktop',true],['tavern',true],['web',false]])
+})

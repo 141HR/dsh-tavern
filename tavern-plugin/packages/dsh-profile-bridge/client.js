@@ -154,7 +154,8 @@ window.__ModuleLoader__.load({
       const rows = status === null ? [] : [
         ...(canRevert ? [{ key: ORIGINAL, label: t('original'), hint: t('originalHint') }] : []),
         ...(status.profiles ?? [])
-          .filter((profile) => profile.name !== status.activeName)
+          // Only profiles that also carry this page: from any other the app has no way back.
+          .filter((profile) => profile.name !== status.activeName && profile.hasBridge)
           .map((profile) => ({
             key: profile.name,
             label: profile.name,
