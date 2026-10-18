@@ -89,7 +89,12 @@ export function relaunchApp(exe) {
 export function scheduleSwitch(request) {
   mkdirSync(request.stateDir, { recursive: true })
   const lock = join(request.stateDir, 'pending')
-  mkdirSync(lock)
+  try {
+    mkdirSync(lock)
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error
+    throw Object.assign(new Error(`已有一个切换在等待桌面退出（最长两分钟），请稍后再试；若长时间存在，确认桌面已退出后删除 ${lock}`), { code: 'busy' })
+  }
   const job = join(lock, 'request.json')
   const worker = fileURLToPath(new URL('./worker.mjs', import.meta.url))
   try {

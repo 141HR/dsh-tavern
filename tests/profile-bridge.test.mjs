@@ -48,3 +48,10 @@ test('切换后重新打开桌面：macOS 打开 .app，其他平台直接启动
  assert.deepEqual(relaunchCommand('C:\\Apps\\DeepSeek Harness.exe','win32'),['C:\\Apps\\DeepSeek Harness.exe',[]])
  assert.deepEqual(relaunchCommand('/opt/dsh/deepseek-harness','linux'),['/opt/dsh/deepseek-harness',[]])
 })
+
+test('已有切换在排队时给出可读的 busy 错误', async t => {
+ const { scheduleSwitch } = await import('../tavern-plugin/packages/dsh-profile-bridge/lib/helper.mjs')
+ const stateDir=mkdtempSync(join(tmpdir(),'pb-lock-'));t.after(()=>rmSync(stateDir,{recursive:true,force:true}))
+ mkdirSync(join(stateDir,'pending'))
+ assert.throws(()=>scheduleSwitch({stateDir}),e=>e.code==='busy'&&/等待桌面退出/.test(e.message))
+})

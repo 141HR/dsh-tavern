@@ -101,9 +101,7 @@ window.__ModuleLoader__.load({
     /** Describe one RPC failure for display. */
     function describeFailure(error) {
       if (error === undefined || error === null) return 'unknown error'
-      const code = typeof error.code === 'string' ? error.code : 'error'
-      const message = typeof error.message === 'string' ? error.message : String(error)
-      return `${code}: ${message}`
+      return typeof error.message === 'string' ? error.message : String(error)
     }
 
     /** Key of the option for Desktop's own (unlinked) profile. */

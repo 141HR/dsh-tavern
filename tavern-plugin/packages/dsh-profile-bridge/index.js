@@ -62,6 +62,8 @@ async function handleCall(endpoint, payload) {
       error: {
         code: typeof error?.code === 'string' ? error.code : 'bridge-error',
         message: error instanceof Error ? error.message : String(error),
+        // The Connection client rejects a failure without a details record.
+        details: {},
       },
     }
   }
