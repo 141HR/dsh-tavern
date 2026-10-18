@@ -1,8 +1,8 @@
 // Based on 2NF/dsh-profile-bridge (MIT); Tavern compatibility fork.
-// Queue a directory switch after the user exits Desktop normally.
+// Queue a directory switch for when Desktop exits, then ask it to quit and reopen it.
 import { basename } from 'node:path'
 import { scheduleSwitch } from './lib/helper.mjs'
-import { fail, resolvePaths, statusPayload, validateTarget } from './lib/state.mjs'
+import { detectAppExe, fail, resolvePaths, statusPayload, validateTarget } from './lib/state.mjs'
 
 /** Shared RPC channel owned by this plugin; the browser half calls it by name. */
 const CHANNEL = '/profile-bridge'
@@ -36,9 +36,12 @@ function runSwitch(mode, paths, payload) {
   const result = scheduleSwitch({ mode, profilesRoot: paths.profilesDir, liveDir: paths.activeDir,
     activeName: paths.activeName, targetDir: target?.dir, stateDir: paths.stateDir,
     stamp: new Date().toISOString().replace(/[:.]/g, '-') + '-' + process.pid,
-    pids: [process.pid, process.ppid] })
-  return { ...result, mode, target: target?.name, warnings: target?.warnings ?? [], closesApp: false, reopensApp: false,
-    outcome: '请在两分钟内正常退出官方桌面，等待切换完成后重新打开。' }
+    pids: [process.pid, process.ppid], relaunch: detectAppExe() })
+  // Electron answers SIGTERM like the Quit menu (before-quit, task confirmation), so this is a
+  // normal quit, not a kill. Windows has no such signal; there the user quits from the tray.
+  const closesApp = process.platform !== 'win32'
+  if (closesApp) setTimeout(() => { try { process.kill(process.ppid, 'SIGTERM') } catch { /* the user can still quit by hand */ } }, 500)
+  return { ...result, mode, target: target?.name, warnings: target?.warnings ?? [], closesApp, reopensApp: true }
 }
 
 /**

@@ -1321,7 +1321,7 @@ try {
   }
   if ($InstallHost -eq 'desktop') {
     Write-Host 'DSH Tavern Desktop 版安装完成。'
-    Write-Host '请重启官方 DeepSeek Harness，酒馆已安装到独立 tavern 配置；原版 desktop 已备份，可在设置 → 配置档案中切换。'
+    Write-Host '请重启官方 DeepSeek Harness，酒馆已安装到独立 tavern 配置；原版 desktop 已备份，可在设置 → Profile 切换中切换。'
   }
   else {
     if ($env:DSH_TAVERN_DEFER_SERVICE_START -ne '1') {

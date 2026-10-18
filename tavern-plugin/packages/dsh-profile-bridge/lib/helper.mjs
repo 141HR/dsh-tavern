@@ -61,6 +61,30 @@ export async function waitForExit(pids, { timeout = 120000, alive = processAlive
   }
 }
 
+/**
+ * Command that reopens Desktop once it has exited.
+ * @param {string} exe - the running application binary.
+ * @param {string} platform - process.platform.
+ * @returns {[string, string[]]} command and arguments.
+ */
+export function relaunchCommand(exe, platform = process.platform) {
+  // On macOS the binary sits inside the .app bundle; open the bundle so Launch Services owns it.
+  const bundle = platform === 'darwin' ? /^(.*?\.app)(?:\/|$)/u.exec(exe)?.[1] : undefined
+  return bundle === undefined ? [exe, []] : ['open', [bundle]]
+}
+
+/**
+ * Reopen Desktop detached from the helper.
+ * @param {string} exe - the running application binary.
+ */
+export function relaunchApp(exe) {
+  const [command, args] = relaunchCommand(exe)
+  // The helper itself runs the app binary as node; the reopened app must not.
+  const env = { ...process.env }
+  delete env.ELECTRON_RUN_AS_NODE
+  spawn(command, args, { detached: true, stdio: 'ignore', env }).unref()
+}
+
 // Lock is acquired before responding, so repeated clicks cannot schedule competing switches.
 export function scheduleSwitch(request) {
   mkdirSync(request.stateDir, { recursive: true })

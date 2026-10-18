@@ -41,3 +41,10 @@ test('只能切到同样启用桥接的 profile，否则切过去后无法在应
  assert.throws(()=>validateTarget(paths,'web'),/dsh-profile-bridge/)
  assert.deepEqual(listProfiles(paths).map(p=>[p.name,p.hasBridge]),[['desktop',true],['tavern',true],['web',false]])
 })
+
+test('切换后重新打开桌面：macOS 打开 .app，其他平台直接启动可执行文件', async () => {
+ const { relaunchCommand } = await import('../tavern-plugin/packages/dsh-profile-bridge/lib/helper.mjs')
+ assert.deepEqual(relaunchCommand('/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness','darwin'),['open',['/Applications/DeepSeek Harness.app']])
+ assert.deepEqual(relaunchCommand('C:\\Apps\\DeepSeek Harness.exe','win32'),['C:\\Apps\\DeepSeek Harness.exe',[]])
+ assert.deepEqual(relaunchCommand('/opt/dsh/deepseek-harness','linux'),['/opt/dsh/deepseek-harness',[]])
+})

@@ -17,40 +17,48 @@ window.__ModuleLoader__.load({
     const NS = 'profileBridge'
 
     const zh = {
-      section: '配置档案',
-      title: '配置档案',
+      section: 'Profile 切换',
+      title: 'Profile 切换',
       subtitle: '选择桌面版使用哪套配置。',
       original: '原版 DSH',
       originalHint: '桌面版自带的配置',
       tavern: 'DSH Tavern',
       tavernHint: '装好了酒馆插件的配置',
-      pending: '退出后生效',
+      pending: '重启后生效',
+      restartHint: '重启桌面版后生效。',
+      restart: '立即重启',
+      restarting: '正在重启…',
+      quitHint: '请从托盘退出桌面版，切换完成后会自动重新打开（两分钟内有效）。',
+      confirm: '确定',
       loading: '读取中…',
       noModules: '缺少 node_modules，插件尚未安装',
-      closing: '已选择「{0}」。请在两分钟内正常退出桌面版，重新打开后生效；超时则保持原样。',
       cliHint: '当前不是桌面版。命令行用户直接用 dsh --profile <名称> 选择即可。',
       failure: '操作失败',
       more: '说明与日志',
       logEmpty: '（还没有日志）',
-      why: '桌面版固定读取 profiles/desktop。选择其他配置时，会把它链接到所选配置（Windows 用 junction，macOS/Linux 用符号链接）；原版配置先备份，随时可以选回。更换必须先正常退出桌面版，不会强制结束进程。',
+      why: '桌面版固定读取 profiles/desktop。选择其他配置时，会把它链接到所选配置（Windows 用 junction，macOS/Linux 用符号链接）；原版配置先备份，随时可以选回。更换需要桌面版先退出：重启走正常退出流程，有任务时会先请你确认，不会强制结束进程。',
     }
     const en = {
-      section: 'Profiles',
-      title: 'Profiles',
+      section: 'Profile switch',
+      title: 'Profile switch',
       subtitle: 'Choose which setup the Desktop app uses.',
       original: 'Original DSH',
       originalHint: 'The setup Desktop ships with',
       tavern: 'DSH Tavern',
       tavernHint: 'The setup with the Tavern plugins installed',
       pending: 'After restart',
+      restartHint: 'Takes effect after Desktop restarts.',
+      restart: 'Restart now',
+      restarting: 'Restarting…',
+      quitHint: 'Quit Desktop from the tray; it reopens by itself after the switch (valid for two minutes).',
+      confirm: 'OK',
       loading: 'Loading…',
       noModules: 'node_modules missing; plugins are not installed yet',
-      closing: 'Chose "{0}". Quit Desktop normally within two minutes; it takes effect when you reopen it. A timeout leaves things as they are.',
       cliHint: 'This is not the Desktop app. Command-line users can pick one with dsh --profile <name>.',
       failure: 'Failed',
       more: 'Details and log',
       logEmpty: '(no log yet)',
-      why: 'Desktop always reads profiles/desktop. Choosing another setup links it there (a junction on Windows, a symlink elsewhere); the original is backed up first and you can choose it again any time. Desktop must be quit normally first; it is never force-closed.',
+      why: 'Desktop always reads profiles/desktop. Choosing another setup links it there (a junction on Windows, a symlink elsewhere); the original is backed up first and you can choose it again any time. Desktop has to exit first: restarting is a normal quit that asks for confirmation when tasks are running, never a forced kill.',
     }
 
     /** Scoped stylesheet; class names are prefixed so they never leak into the host. */
@@ -75,7 +83,11 @@ window.__ModuleLoader__.load({
 .pb-hint { font-size: 12px; opacity: 0.55; }
 .pb-bad { color: #e5484d; opacity: 1; }
 .pb-tag { flex: none; font-size: 12px; color: var(--pb-accent); }
-.pb-note { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--pb-accent-soft); }
+.pb-bar { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-radius: 10px; background: var(--pb-accent-soft); }
+.pb-bar-text { flex: 1; min-width: 0; }
+.pb-btn { appearance: none; font: inherit; font-size: 13px; flex: none; color: #fff; background: var(--pb-accent); border: 0; border-radius: 8px; padding: 6px 16px; cursor: pointer; }
+.pb-btn:hover:not(:disabled) { background: #3d5bf0; }
+.pb-btn:disabled { opacity: 0.5; cursor: default; }
 .pb-error { margin: 0; padding: 10px 12px; border-radius: 10px; color: #e5484d; background: rgba(229,72,77,0.08); }
 .pb-fold summary { list-style: none; cursor: pointer; opacity: 0.55; font-size: 12px; user-select: none; }
 .pb-fold summary::-webkit-details-marker { display: none; }
@@ -99,8 +111,8 @@ window.__ModuleLoader__.load({
 
     /**
      * One settings page: the setups Desktop can run as a single-choice list. The
-     * one in use is selected; choosing another queues the link (or, for Desktop's
-     * own profile, the revert) and takes effect after the app restarts.
+     * one in use is selected; picking another offers a restart, which queues the
+     * link (or, for Desktop's own profile, the revert) and quits and reopens the app.
      * @param {{ t: Function, rpcCall: Function }} props - injected faces from the registration.
      */
     function ProfileBridgeSettings(props) {
@@ -109,7 +121,9 @@ window.__ModuleLoader__.load({
       const [status, setStatus] = React.useState(null)
       const [loading, setLoading] = React.useState(true)
       const [failure, setFailure] = React.useState(null)
-      const [queued, setQueued] = React.useState(null)
+      // The option the user picked (not yet applied), and the receipt once the switch is queued.
+      const [picked, setPicked] = React.useState(null)
+      const [applied, setApplied] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
 
       const load = React.useCallback(async () => {
@@ -129,26 +143,28 @@ window.__ModuleLoader__.load({
         void load()
       }, [load])
 
-      const choose = React.useCallback(async (option) => {
+      const apply = React.useCallback(async () => {
+        if (picked === null) return
         setBusy(true)
         setFailure(null)
         try {
-          const result = option.key === ORIGINAL
+          const result = picked === ORIGINAL
             ? await call('unlink', {})
-            : await call('link', { target: option.key })
-          if (result?.ok === true) setQueued({ key: option.key, label: option.label, warnings: result.value?.warnings ?? [] })
+            : await call('link', { target: picked })
+          if (result?.ok === true) setApplied(result.value ?? {})
           else setFailure(describeFailure(result?.error))
         } catch (error) {
           setFailure(describeFailure({ code: 'transport', message: error?.message ?? String(error) }))
         } finally {
           setBusy(false)
         }
-      }, [call])
+      }, [call, picked])
 
       const isDesktop = status?.appKind === 'desktop'
       const linked = status?.activeIsLink === true
       const currentKey = linked ? status?.linkTargetName : ORIGINAL
-      const chosenKey = queued !== null ? queued.key : currentKey
+      const chosenKey = picked !== null ? picked : currentKey
+      const canQuit = status?.platform !== 'win32'
       // Desktop's own profile can only be chosen again while its backup still exists.
       const canRevert = !linked || (status?.backups ?? []).length > 0
       const options = status === null ? [] : [
@@ -182,25 +198,31 @@ window.__ModuleLoader__.load({
                   role: 'radio',
                   'aria-checked': on,
                   className: on ? 'pb-option is-on' : 'pb-option',
-                  disabled: on || busy || queued !== null,
-                  onClick: () => void choose(option),
+                  disabled: busy || applied !== null,
+                  onClick: () => setPicked(option.key === currentKey ? null : option.key),
                 },
                   h('span', { className: 'pb-dot' }),
                   h('span', { className: 'pb-info' },
                     h('span', { className: 'pb-name' }, option.label),
                     h('span', { className: option.bad ? 'pb-hint pb-bad' : 'pb-hint' }, option.bad ?? option.hint),
                   ),
-                  on && queued !== null ? h('span', { className: 'pb-tag' }, t('pending')) : null,
+                  on && picked !== null ? h('span', { className: 'pb-tag' }, t('pending')) : null,
                 )
               }),
             ),
 
-        queued !== null
-          ? h('p', { className: 'pb-note' },
-              t('closing').replace('{0}', queued.label),
-              ...queued.warnings.map((warning) => h('span', { key: warning, style: { display: 'block', opacity: 0.75 } }, `• ${warning}`)),
-            )
-          : null,
+        picked === null ? null : h('div', { className: 'pb-bar' },
+          h('span', { className: 'pb-bar-text' },
+            applied === null ? t('restartHint') : applied.closesApp ? t('restarting') : t('quitHint'),
+            ...(applied?.warnings ?? []).map((warning) => h('span', { key: warning, style: { display: 'block', opacity: 0.75 } }, `• ${warning}`)),
+          ),
+          applied !== null ? null : h('button', {
+            type: 'button',
+            className: 'pb-btn',
+            disabled: busy,
+            onClick: () => void apply(),
+          }, busy ? t('restarting') : canQuit ? t('restart') : t('confirm')),
+        ),
 
         failure !== null ? h('p', { className: 'pb-error' }, `${t('failure')}: ${failure}`) : null,
 
