@@ -116,7 +116,7 @@
 > [!TIP]
 > **🧪 测试版：适配 DSH 0.2.1（欢迎参与测试）**
 >
-> 不再提供一键安装包，直接装在你自己的宿主上：官方 DeepSeek Harness **0.2.1-rc.2** 桌面版（macOS / Windows）、手机 DSHA（内置 DSH 0.2.0），或独立命令行版（浏览器使用）。DSH 版本按允许清单放行，清单外的版本（含社区 Desktop）安装器会停止。可从旧命令行版及自定义目录备份、校验并迁移数据。
+> 不再提供一键安装包，直接装在你自己的宿主上：官方 DeepSeek Harness **0.2.1-rc.2** 桌面版（macOS / Windows）、手机 DSHA v0.2.0-rc2（内置 DSH 0.2.0-rc.2），或独立命令行版（浏览器使用）。DSH 版本按允许清单放行，清单外的版本（含社区 Desktop）安装器会停止。可从旧命令行版及自定义目录备份、校验并迁移数据。
 >
 > **[测试版安装方法 →](https://github.com/flizzywine/dsh-tavern/blob/0.2.1%E7%89%88%E6%9C%AC/README-0.2.1-rc.2.md)** · [测试版说明](https://github.com/flizzywine/dsh-tavern/releases/tag/v2.7.0-dsh0.2.1-test.2)
 >
