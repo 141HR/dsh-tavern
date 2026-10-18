@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "165a3b9e2fde218e78333a4dc552f37de71b5281",
-  "releaseSequence": 695,
+  "revision": "117a1c49e009d197aa1a4b5b6812f4dbf868ae3c",
+  "releaseSequence": 696,
   "version": "2.7.0",
   "files": [
     {
@@ -286,8 +286,8 @@
     },
     {
       "path": "patches/dsh-pocket@2.12.0.patch",
-      "sha256": "4948ff0852c69976b3a439b49f9c0144f97236fa65e8d6e74a02fe513d2622b2",
-      "size": 635
+      "sha256": "1b0fac9bc15853908a97cd3cd9cea13aa17484e649ce423b5f9bcbecd61ef42e",
+      "size": 684
     },
     {
       "path": "patches/dsh-web-mobile@3.1.0.patch",
@@ -296,7 +296,7 @@
     },
     {
       "path": "pnpm-lock.yaml",
-      "sha256": "6648e1d7a3d49b3ede2b31c40b803211b68bb9a8bd6a4e2f53425d293eff003d",
+      "sha256": "b032f81c9fcba4b8a460684d74b50a0c15679abc37fc825d753704fd44e2a9cd",
       "size": 85955
     },
     {
