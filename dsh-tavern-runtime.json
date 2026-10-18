@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "6c4f7fbe69d13e27e283e06dc444308f81144096",
-  "releaseSequence": 705,
+  "revision": "86f8a4b014d5b6498144c388228ad4c18418a528",
+  "releaseSequence": 706,
   "version": "3.0.0",
   "files": [
     {
@@ -126,8 +126,8 @@
     },
     {
       "path": "bin/plugin-dependencies.mjs",
-      "sha256": "1d8add21e8656dc8f5f71da9f406784a959671e65946849b810d85bc46d7cedd",
-      "size": 20444
+      "sha256": "119e0b71a0ae8b65305e92243287fb5c6bc007ddb427947c944a4782c2c08e1e",
+      "size": 20451
     },
     {
       "path": "bin/plugin-package-guard.mjs",
@@ -140,14 +140,19 @@
       "size": 2643
     },
     {
+      "path": "bin/profile-bundle-check.mjs",
+      "sha256": "c12c6df3ca2eb9cca5976f05c9f5e58c2c8501cf2eebc49ca57bc5b8326f40ec",
+      "size": 1843
+    },
+    {
       "path": "bin/profile-configuration.mjs",
       "sha256": "149f9d6b8f8cb7351d8ab3a455b8610b205353cbe01c12a03adb4d523fd77f24",
       "size": 14770
     },
     {
       "path": "bin/profile-installation.mjs",
-      "sha256": "dfd63f2d09ae4dc85d4c8e1bc57c69d4ef99e9f408e750060471d44a9caa9b3a",
-      "size": 19636
+      "sha256": "853093463d27ebc54ba5b9d3b9fd457b3bfa7ec611e83d5426fb6d409880aa3d",
+      "size": 19986
     },
     {
       "path": "bin/prune-installed-files.mjs",
