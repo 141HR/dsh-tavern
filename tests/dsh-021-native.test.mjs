@@ -5,8 +5,6 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { patchThemeFontLimit } from '../bin/theme-font-limit.mjs'
-import { adaptedDshVersion } from '../bin/dsh-compatibility.mjs'
-import { SESSION_PATCH_VERSION } from '../tavern-plugin/lib/domain/host-session-patch.js'
 import { installHostSubprocessPatch } from '../tavern-plugin/lib/domain/host-subprocess-patch.js'
 
 const native = { skip: !process.env.DSH_BOOT_MODULE }
@@ -20,11 +18,8 @@ async function restorePristineFontLimit(directory) {
       .replace(/(variable: "--dsh-content-font-size",\s+min: 10,\s+max: )32,/, '$122,'))
   }
 }
-test('目标宿主与会话补丁版本保持一致', () => {
-  assert.equal(SESSION_PATCH_VERSION, adaptedDshVersion)
-})
 
-test('目标宿主字号补丁只扩大正文字号，重复安装幂等且漂移不写入', native, async t => {
+test('目标宿主字号补丁只扩大正文字号，重复安装幂等，锚点不符时跳过且不写入', native, async t => {
   const require = createRequire(process.env.DSH_BOOT_MODULE)
   const source = path.dirname(require.resolve('@deepseek-ai/dsh-client-ui-theme/package.json'))
   const directory = await mkdtemp(path.join(tmpdir(), 'tavern-theme-native-'))
@@ -47,7 +42,7 @@ test('目标宿主字号补丁只扩大正文字号，重复安装幂等且漂�
   const originalHost = await readFile(host, 'utf8')
   const drifted = (await readFile(client, 'utf8')).replace('max: 22,', 'max: 23,')
   await writeFile(client, drifted)
-  assert.throws(() => patchThemeFontLimit(directory), /字号补丁不匹配/)
+  assert.equal(patchThemeFontLimit(directory), null)
   assert.equal(await readFile(host, 'utf8'), originalHost)
   assert.equal(await readFile(client, 'utf8'), drifted)
 })

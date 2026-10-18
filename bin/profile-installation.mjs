@@ -331,7 +331,7 @@ async function installProfileOwned(host, { attemptId, runInstall, runDsh }) {
       if (isAsarPath(theme.directory)) console.log('0.2.0 桌面把 dsh-client-ui-theme 放在 app.asar 内（只读归档），字号上限补丁跳过；界面字号仍以宿主上限为准。')
       else {
         const patched = patchThemeFontLimit(theme.directory)
-        if (patched === null) console.log('当前 DSH 版本未验证字号补丁，已跳过；界面字号仍以宿主上限为准。')
+        if (patched === null) console.log('当前 DSH 的字号设置与补丁不符，已跳过；界面字号仍以宿主上限为准。')
         else if (patched) console.log('已将 DSH 原有字号上限放宽到 32px。')
       }
       if (bridge) {
