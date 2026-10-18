@@ -99,8 +99,10 @@
 			const scopes = useTavernCardPluginScopes();
 			const [, setVersion] = React.useState(0);
 			const views = tavernUiExtensions.stageViews().filter(function (entry) { return tavernPluginAllowed(entry.owner, sessionId); });
-			const cardView = views.find(function (entry) { return scopes[entry.owner]; }) || null;
-			const storageKey = cardView ? TAVERN_STAGE_VIEW_KEY + ":" + scopes[cardView.owner] : TAVERN_STAGE_VIEW_KEY;
+			const cardView = views.find(function (entry) { return Array.isArray(scopes[entry.owner]) && scopes[entry.owner].length; }) || null;
+			// Kept per card: the card this game plays (a plugin may be shared by copies of a card).
+			const snapshot = cardView && sessionId ? liveTavernView.getSnapshot(sessionId).view : null;
+			const storageKey = cardView && snapshot && snapshot.card ? TAVERN_STAGE_VIEW_KEY + ":" + snapshot.card.path : TAVERN_STAGE_VIEW_KEY;
 			let chosen = "";
 			try { chosen = window.localStorage.getItem(storageKey) || ""; } catch (_) {}
 			const view = chosen === TAVERN_STAGE_BUILTIN ? null : views.find(function (entry) { return entry.key === chosen; }) || cardView || views[0] || null;

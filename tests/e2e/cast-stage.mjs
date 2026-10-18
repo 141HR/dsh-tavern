@@ -198,7 +198,7 @@ export async function castCardFileChecks({ page, step, report, savedChat }) {
     for (let attempt = 0; attempt < 60 && !pong?.ok; attempt++) { await page.waitForTimeout(500); pong = await call('callPluginHandler', { name: 'e2e-card/ping', args: {} }) }
     assert.deepEqual(pong.result, { pong: true, gameId: '' }, '导入后宿主侧几秒内加载')
     const scopes = await call('cardPluginScopes', {})
-    assert.equal(scopes.scopes['dsh-e2e-card-ping'], withPlugin.path)
+    assert.deepEqual(scopes.scopes['dsh-e2e-card-ping'], [withPlugin.path])
     const sessionId = (await savedChat()).sessionId
     const other = await call('callPluginHandler', { name: 'e2e-card/ping', args: { gameId: sessionId } })
     assert.equal(other.ok, false, '别的卡的局调用被拒：' + JSON.stringify(other))

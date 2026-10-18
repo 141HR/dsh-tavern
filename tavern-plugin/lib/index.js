@@ -1044,12 +1044,13 @@ export async function apply(ctx) {
   // DSH cards (docs/design/dsh-card-format.md): asset packs stored once by content; big files uploaded to disk.
   const assetPacks = createAssetPacks({ root: dataRoot, store: profileData })
   const uploads = createUploads({ root: dataRoot })
-  const cardPlugins = createCardPlugins({ dataRoot, pluginsDir: userPluginPaths(dataRoot).plugins })
+  const cardPlugins = createCardPlugins({ dataRoot, pluginsDir: userPluginPaths(dataRoot).plugins, keyOf: castAssets.keyOf })
   void uploads.sweep().catch(() => {})
   // Voiced dialogue: channels are Tavern's and the plugins' (pluginApi is created later; read lazily).
   const speech = createSpeech({ store: profileData, credentials: () => ctx.get('credentials'), plugins: () => pluginApi.speechProviders() })
   resourceGraph = createResourceGraph({
     castAssets,
+    cardPlugins,
     cardOrganization,
     resources: fileResources,
     presets: runtimePresets,
@@ -1366,14 +1367,14 @@ export async function apply(ctx) {
     if (!plugins.length) throw new Error('这张人物卡没有卡内插件')
     const cardKey = castAssets.keyOf(cardPath)
     if (enabled) await cardPlugins.enable({ cardKey, cardPath, plugins })
-    else await cardPlugins.disable({ cardKey, plugins })
+    else await cardPlugins.disable({ cardPath, plugins })
     const next = await castAssets.setPlugins(cardPath, plugins.map(plugin => ({ ...plugin, enabled: enabled === true })))
     return next.plugins
   }
   async function deleteCard(cardPath) {
     const plugins = (await castAssets.read(normalizeResourcePath(cardPath, 'card')).catch(() => null))?.plugins || []
     const result = await cardDeletion.remove(cardPath)
-    if (result.deleted && plugins.length) await cardPlugins.remove({ cardKey: castAssets.keyOf(normalizeResourcePath(cardPath, 'card')), plugins }).catch(error => console.warn('dsh-tavern: 删除卡内插件失败', error?.message || error))
+    if (result.deleted && plugins.length) await cardPlugins.remove({ cardKey: castAssets.keyOf(normalizeResourcePath(cardPath, 'card')), cardPath: normalizeResourcePath(cardPath, 'card'), plugins }).catch(error => console.warn('dsh-tavern: 删除卡内插件失败', error?.message || error))
     if (result.deleted) await cardOrganization.movePath(normalizeResourcePath(cardPath, 'card'), null)
     return result
   }
@@ -4573,7 +4574,7 @@ export async function apply(ctx) {
       case 'setCardPlugins': return { plugins: await setCardPlugins(args && args.path, args && args.enabled === true) }
       case 'cardStage': return { enabled: (await castAssets.read(normalizeResourcePath(args && args.path, 'card'))).stage === true }
       case 'setCardStage': return { enabled: (await castAssets.setStage(normalizeResourcePath(args && args.path, 'card'), args && args.enabled === true)).stage === true }
-      case 'cardPluginScopes': return { scopes: Object.fromEntries([...await cardPlugins.scope()].map(([name, scope]) => [name, scope.cardPath])) }
+      case 'cardPluginScopes': return { scopes: Object.fromEntries([...await cardPlugins.scope()].map(([name, scope]) => [name, scope.cards])) }
       case 'deleteCard': return await deleteCard(args && args.path)
       case 'prepareDeleteChats': return await deleteChats(args && args.chatIds, true)
       case 'deleteChats': return await deleteChats(args && args.chatIds)

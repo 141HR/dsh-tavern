@@ -830,7 +830,7 @@ test('卡内插件只在所属人物卡的局里出现：回调不触发、调�
   const settled = []
   const h = await harness(t, {
     data: createPluginData({ store: memoryStore() }),
-    cardScope: async () => new Map([['fish-plugin', { cardPath: 'cards/fish.json', folder: 'card-x-fish' }]]),
+    cardScope: async () => new Map([['fish-plugin', { cards: ['cards/fish.json'], folder: 'card-x-fish' }]]),
     cardPathOf: async () => cardOfGame,
     listCards: async () => [{ path: 'cards/fish.json', name: '鱼' }, { path: 'cards/other.json', name: '别的' }],
     readCardRaw: async () => ({ data: {} })

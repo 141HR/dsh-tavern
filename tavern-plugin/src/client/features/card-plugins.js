@@ -20,11 +20,11 @@
 
 		/** Whether a plugin may show itself in this game: everything does, except another card's own plugins. */
 		function tavernPluginAllowed(owner, sessionId) {
-			const cardPath = tavernCardPluginScopes.get()[owner];
-			if (!cardPath) return true;
+			const cards = tavernCardPluginScopes.get()[owner];
+			if (!Array.isArray(cards) || !cards.length) return true;
 			if (!sessionId) return false;
 			const view = liveTavernView.getSnapshot(sessionId).view;
-			return Boolean(view && view.card && view.card.path === cardPath);
+			return Boolean(view && view.card && cards.indexOf(view.card.path) >= 0);
 		}
 		function useTavernCardPluginScopes() {
 			return React.useSyncExternalStore(tavernCardPluginScopes.subscribe, tavernCardPluginScopes.get);

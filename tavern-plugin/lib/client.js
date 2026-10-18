@@ -12162,8 +12162,10 @@ function bindTavernFontZoom(node, win) {
 			const scopes = useTavernCardPluginScopes();
 			const [, setVersion] = React.useState(0);
 			const views = tavernUiExtensions.stageViews().filter(function (entry) { return tavernPluginAllowed(entry.owner, sessionId); });
-			const cardView = views.find(function (entry) { return scopes[entry.owner]; }) || null;
-			const storageKey = cardView ? TAVERN_STAGE_VIEW_KEY + ":" + scopes[cardView.owner] : TAVERN_STAGE_VIEW_KEY;
+			const cardView = views.find(function (entry) { return Array.isArray(scopes[entry.owner]) && scopes[entry.owner].length; }) || null;
+			// Kept per card: the card this game plays (a plugin may be shared by copies of a card).
+			const snapshot = cardView && sessionId ? liveTavernView.getSnapshot(sessionId).view : null;
+			const storageKey = cardView && snapshot && snapshot.card ? TAVERN_STAGE_VIEW_KEY + ":" + snapshot.card.path : TAVERN_STAGE_VIEW_KEY;
 			let chosen = "";
 			try { chosen = window.localStorage.getItem(storageKey) || ""; } catch (_) {}
 			const view = chosen === TAVERN_STAGE_BUILTIN ? null : views.find(function (entry) { return entry.key === chosen; }) || cardView || views[0] || null;
@@ -17975,11 +17977,11 @@ function bindTavernFontZoom(node, win) {
 
 		/** Whether a plugin may show itself in this game: everything does, except another card's own plugins. */
 		function tavernPluginAllowed(owner, sessionId) {
-			const cardPath = tavernCardPluginScopes.get()[owner];
-			if (!cardPath) return true;
+			const cards = tavernCardPluginScopes.get()[owner];
+			if (!Array.isArray(cards) || !cards.length) return true;
 			if (!sessionId) return false;
 			const view = liveTavernView.getSnapshot(sessionId).view;
-			return Boolean(view && view.card && view.card.path === cardPath);
+			return Boolean(view && view.card && cards.indexOf(view.card.path) >= 0);
 		}
 		function useTavernCardPluginScopes() {
 			return React.useSyncExternalStore(tavernCardPluginScopes.subscribe, tavernCardPluginScopes.get);

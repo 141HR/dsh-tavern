@@ -164,7 +164,7 @@ export function createTavernPluginApi(deps) {
     if (!scopes?.size) return { elsewhere: new Set(), own: new Set() }
     const cardPath = game && deps.cardPathOf ? await deps.cardPathOf(game.sessionId).catch(() => null) : null
     const elsewhere = new Set(), own = new Set()
-    for (const [name, scope] of scopes) (scope.cardPath === cardPath ? own : elsewhere).add(name)
+    for (const [name, scope] of scopes) (scope.cards.includes(cardPath) ? own : elsewhere).add(name)
     return { elsewhere, own }
   }
 
@@ -174,8 +174,8 @@ export function createTavernPluginApi(deps) {
     const scope = scopes?.get(owner)
     if (!scope) return
     const refuse = () => { throw Object.assign(new Error('卡内插件 ' + owner + ' 只能用于它所在的人物卡'), { code: 'TAVERN_PLUGIN_SCOPE' }) }
-    if (input.card !== undefined && String(input.card) !== scope.cardPath) refuse()
-    if (input.gameId !== undefined && (typeof input.gameId !== 'string' || await deps.cardPathOf?.(input.gameId).catch(() => null) !== scope.cardPath)) refuse()
+    if (input.card !== undefined && !scope.cards.includes(String(input.card))) refuse()
+    if (input.gameId !== undefined && (typeof input.gameId !== 'string' || !scope.cards.includes(await deps.cardPathOf?.(input.gameId).catch(() => null)))) refuse()
   }
 
   function dispatch(handlers, payload, label, disabled) {
@@ -464,7 +464,7 @@ export function createTavernPluginApi(deps) {
     // Every character card in the library, read-only. `id` is what card-taking methods accept.
     async listCards() {
       const scope = deps.cardScope ? (await deps.cardScope().catch(() => null))?.get(ownerOf(this)) : null
-      return (await deps.listCards()).filter(card => !scope || card.path === scope.cardPath).map(card => ({
+      return (await deps.listCards()).filter(card => !scope || scope.cards.includes(card.path)).map(card => ({
         id: card.path, name: card.name, fileName: String(card.path).split('/').pop(),
         imageUrl: card.hasImage ? '/api/dsh-tavern/card-image?path=' + encodeURIComponent(card.path) : '',
         script: card.script ? { title: card.script.title } : null,
