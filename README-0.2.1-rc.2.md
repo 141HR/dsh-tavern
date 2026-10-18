@@ -19,13 +19,13 @@
 ### 方式一：官方桌面版
 
 1. 安装 DeepSeek Harness 0.2.1-rc.2，启动一次后从托盘退出。
-2. 打开 [安装程序页面](https://github.com/flizzywine/dsh-tavern/blob/0.2.1%E7%89%88%E6%9C%AC/dsh-tavern-testing-install.cmd)，点右上角的下载按钮（Download raw file），然后双击下载的文件。弹出安全提示时点「运行」。
+2. 安装酒馆，以下两种方式**任选其一**：
+   - **双击安装**：[下载安装程序](https://github.com/flizzywine/dsh-tavern/releases/download/v2.7.0-dsh0.2.1-test.2/dsh-tavern-testing-install.cmd)，双击运行。弹出安全提示时点「运行」（或「更多信息 → 仍要运行」）。
+   - **命令安装**：打开 PowerShell（支持 Windows PowerShell 5.1），粘贴执行：
 
-   也可以打开 PowerShell（支持 Windows PowerShell 5.1），粘贴执行：
-
-   ```powershell
-   $env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.ps1')); Invoke-Expression $tavernInstaller
-   ```
+     ```powershell
+     $env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.ps1')); Invoke-Expression $tavernInstaller
+     ```
 
 3. 安装成功后重新打开 DeepSeek Harness，即进入酒馆。
 
