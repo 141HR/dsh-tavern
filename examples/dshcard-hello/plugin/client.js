@@ -2,7 +2,7 @@
 // 底色按宿主侧记下的氛围变，人物用 Tavern 的「角色素材」（导入卡时从 card.json 的 assets 带进来），
 // 翻页、朗读、全屏这些阅读流程仍由 Tavern 负责，插件只画场景，把 footer 放进自己的对白框。
 window.__ModuleLoader__.load({
-  id: 'dshcard-hello-mood',
+  id: 'dsh-card-hello-mood',
   factory: (require) => {
     const React = require('react')
     const h = React.createElement
@@ -38,7 +38,7 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      name: 'dshcard-hello-mood',
+      name: 'dsh-card-hello-mood',
       inject: ['tavernUi'],
       apply(ctx) {
         const ui = ctx.tavernUi

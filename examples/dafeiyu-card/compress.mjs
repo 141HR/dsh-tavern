@@ -47,6 +47,9 @@ const dsh = JSON.parse(files.get('dsh.json').toString('utf8'))
 // The card plugin always comes from ./plugin, so a distributed card never carries a stale copy.
 const pluginDir = path.join(path.dirname(new URL(import.meta.url).pathname), 'plugin')
 for (const file of ['client.js', 'index.mjs', 'package.json']) files.set('plugins/galgame/' + file, await readFile(path.join(pluginDir, file)))
+// dsh.json names the plugin as its package.json does.
+const pluginName = JSON.parse(await readFile(path.join(pluginDir, 'package.json'), 'utf8')).name
+for (const plugin of dsh.plugins || []) if (plugin.path === 'plugins/galgame/') plugin.name = pluginName
 
 // Live2D models: their bundle files, the manifest's bundle entries and each outfit's binding.
 if (dropLive2d) {

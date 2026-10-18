@@ -74,7 +74,7 @@ node examples/dshcard-hello/build.mjs
   "card": { "version": "1.0.0", "title": "阿芙拉", "author": "你的名字" },
   "requires": { "tavernApi": 2 },
   "plugins": [
-    { "name": "dshcard-hello-mood", "path": "plugins/hello-mood/", "purpose": "每轮按剧情记下氛围，舞台底色跟着变" }
+    { "name": "dsh-card-hello-mood", "path": "plugins/hello-mood/", "purpose": "每轮按剧情记下氛围，舞台底色跟着变" }
   ],
   "packs": [],
   "defaults": { "stage": true }
@@ -134,7 +134,7 @@ node examples/dshcard-hello/build.mjs
 - 导入卡时随卡启用，不需要玩家另装；删除卡时一起卸载。
 - 只在这张卡的局里生效：回调只对这张卡的局触发，带别的局的 `gameId` 调接口会被拒绝，浏览器侧注册的界面只在这张卡的局里出现。
 - 在这张卡的局里，插件是这一局的一部分：总是启用，不出现在本局设置的「插件」开关里。玩家要停用，就在卡片详情里整体停用。
-- 同名插件同时只能启用一个，插件名请带上你的卡名，避免和别人的撞。
+- Tavern 按插件 `package.json` 的 `name` 识别插件，同名而内容不同的插件同时只能启用一个：撞名时后导入的卡照常导入，但它的插件不会启用。所以插件名按约定写成 `dsh-card-<卡标识>-<插件名>`，例如大肥鱼的 `dsh-card-dafeiyu-galgame`；`dsh.json` 里的 `name` 写成同一个。
 
 一个插件文件夹有三个文件：
 
@@ -183,7 +183,7 @@ node examples/dshcard-hello/build.mjs
 | 素材包路径应为 assets/<包名>/ | `packs[].path` 不是一层目录，或包名是保留名 |
 | 插件路径应为 plugins/<文件夹>/ | 插件文件夹名只能用小写字母、数字、点、下划线、连字符 |
 | 插件 … 缺少可读的 package.json / 没有 name | 插件文件夹里的 `package.json` 缺失或没写 `name` |
-| 已经有同名插件 … 在用 | 另一张卡或全局插件用了同样的插件名 |
+| 已经有同名插件 … 在用 | 另一张卡或全局插件用了同样的插件名；卡已导入，插件没有启用 |
 | defaults.preset 应指向包内 presets/ 下的 JSON 预设 | 预设路径写错或文件不在包里 |
 
 ## 体积与分发

@@ -2,7 +2,7 @@
 // 用到的接口：gameSettings（本局设置里的开关）、settlementSection + settlementTool（让结算模型顺带做一件事）、
 // saveTurnData / readTurnData（按轮存数据，回退和重新生成时自动跟着正文走）、handle（给浏览器侧读）。
 
-export const name = 'dshcard-hello-mood'
+export const name = 'dsh-card-hello-mood'
 export const inject = ['tavern']
 
 const MOODS = ['warm', 'calm', 'tense', 'night']
