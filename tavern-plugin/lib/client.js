@@ -11044,6 +11044,8 @@ function bindTavernFontZoom(node, win) {
 			const startGroups = [];
 			const cardListViews = [];
 			const stageViews = [];
+			const statusSections = [];
+			const turnViews = [];
 			const listeners = new Set();
 			// Tavern's own context, for the sidebar a plugin panel opens in (set at apply).
 			let host = null;
@@ -11344,6 +11346,31 @@ function bindTavernFontZoom(node, win) {
 					const entry = { owner: owner, title: input.title.trim(), tabs: input.tabs.map(function (tab) { return tab.indexOf(":") >= 0 ? tab : "tavern-plugin:" + owner + ":" + tab; }) };
 					return owned(this, function () { return addTo(startGroups, entry); }, "tavernUi.registerStartGroup()");
 				},
+				// A section of the plugin's own on the game's 酒馆状态 page, after Tavern's own sections.
+				registerStatusSection(input) {
+					if (!input || typeof input.id !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(input.id)) throw new TypeError("registerStatusSection 的 id 只能用小写字母、数字、点、下划线和连字符");
+					if (typeof input.title !== "string" || !input.title.trim() || input.title.trim().length > 20) throw new TypeError("registerStatusSection 需要 1–20 字的 title");
+					if (typeof input.render !== "function") throw new TypeError("registerStatusSection 需要 render 函数");
+					const owner = ownerOf(this);
+					const entry = { key: owner + ":" + input.id, owner: owner, title: input.title.trim(), render: input.render };
+					return owned(this, function () {
+						if (statusSections.some(function (section) { return section.key === entry.key; })) throw new Error("状态分节 " + input.id + " 已注册");
+						return addTo(statusSections, entry);
+					}, "tavernUi.registerStatusSection()");
+				},
+				// Another look for a whole turn's story text (bubbles, a script layout): the view gets Tavern's
+				// own rendering as children and may wrap it; Tavern's own is used when it fails or returns null.
+				registerTurnView(input) {
+					if (!input || typeof input.id !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(input.id)) throw new TypeError("registerTurnView 的 id 只能用小写字母、数字、点、下划线和连字符");
+					if (typeof input.label !== "string" || !input.label.trim() || input.label.trim().length > 20) throw new TypeError("registerTurnView 需要 1–20 字的 label");
+					if (typeof input.render !== "function") throw new TypeError("registerTurnView 需要 render 函数");
+					const owner = ownerOf(this);
+					const entry = { key: owner + ":" + input.id, owner: owner, label: input.label.trim(), render: input.render };
+					return owned(this, function () {
+						if (turnViews.some(function (view) { return view.key === entry.key; })) throw new Error("正文视图 " + input.id + " 已注册");
+						return addTo(turnViews, entry);
+					}, "tavernUi.registerTurnView()");
+				},
 				// Another way to show the card library and the play picker (a grid, covers); Tavern keeps
 				// searching, groups and batch actions, and falls back to its own list when the view fails.
 				registerCardListView(input) {
@@ -11370,10 +11397,78 @@ function bindTavernFontZoom(node, win) {
 				composerActions: function () { return composerActions.slice(); },
 				cardListViews: function () { return cardListViews.slice(); },
 				stageViews: function () { return stageViews.slice(); },
+				statusSections: function () { return statusSections.slice(); },
+				turnViews: function () { return turnViews.slice(); },
 				startGroups: function () { return startGroups.map(function (group) { return { title: group.title, tabs: group.tabs.slice() }; }); }
 			};
 		}
 		const tavernUiExtensions = createTavernUiExtensions();
+
+		// Which of several plugin views (stage, turn text) a game shows: Tavern's own, or a plugin's;
+		// remembered per browser. With no choice made a plugin view is used: installing one is asking for it.
+		// A card that brings its own view (a DSH card's plugin) opens on it; the choice is then kept per card.
+		const TAVERN_VIEW_BUILTIN = "dsh-tavern:builtin";
+		function useTavernPluginViewChoice(all, storageBase, sessionId) {
+			useTavernUiExtensions();
+			const scopes = useTavernCardPluginScopes();
+			const [, setVersion] = React.useState(0);
+			const views = all.filter(function (entry) { return tavernPluginAllowed(entry.owner, sessionId); });
+			const cardView = views.find(function (entry) { return Array.isArray(scopes[entry.owner]) && scopes[entry.owner].length; }) || null;
+			// Kept per card: the card this game plays (a plugin may be shared by copies of a card).
+			const snapshot = cardView && sessionId ? liveTavernView.getSnapshot(sessionId).view : null;
+			const storageKey = cardView && snapshot && snapshot.card ? storageBase + ":" + snapshot.card.path : storageBase;
+			let chosen = "";
+			try { chosen = window.localStorage.getItem(storageKey) || ""; } catch (_) {}
+			const view = chosen === TAVERN_VIEW_BUILTIN ? null : views.find(function (entry) { return entry.key === chosen; }) || cardView || views[0] || null;
+			function choose(key) {
+				try { window.localStorage.setItem(storageKey, key); } catch (_) {}
+				setVersion(function (value) { return value + 1; });
+			}
+			return { views: views, view: view, card: Boolean(cardView), choose: choose };
+		}
+		function TavernPluginViewSwitch(props) {
+			const h = React.createElement;
+			if (!props.choice.views.length) return null;
+			const current = props.choice.view ? props.choice.view.key : TAVERN_VIEW_BUILTIN;
+			return h("select", { className: props.className, value: current, "aria-label": props.label, onChange: function (event) { props.choice.choose(event.target.value); } },
+				[{ key: TAVERN_VIEW_BUILTIN, label: "内置" }].concat(props.choice.views).map(function (entry) {
+					return h("option", { key: entry.key, value: entry.key, title: entry.owner || undefined }, entry.label);
+				}));
+		}
+
+		function useTavernTurnView(sessionId) {
+			return useTavernPluginViewChoice(tavernUiExtensions.turnViews(), "dsh-tavern-turn-view", sessionId);
+		}
+		function TavernTurnPluginView(props) {
+			const rendered = props.view.render(props.input);
+			return rendered === null || rendered === undefined ? props.fallback : rendered;
+		}
+		/** A turn's story in the chosen plugin look; Tavern's own rendering when there is none or it fails. */
+		function tavernTurnViewElement(view, input, body) {
+			if (!view) return body;
+			const fallback = React.createElement(React.Fragment, null, body);
+			return React.createElement(tavernPluginBoundary(), { key: view.key, owner: view.owner, fallback: fallback },
+				React.createElement(TavernTurnPluginView, { view: view, input: Object.assign({}, input, { children: fallback }), fallback: fallback }));
+		}
+
+		function TavernPluginStatusSection(props) { return props.section.render({ gameId: props.sessionId }) || null; }
+		/** Plugins' own sections of 酒馆状态, and the switch for how turn text is shown when a plugin offers one. */
+		function TavernPluginStatusSections(props) {
+			const h = React.createElement;
+			useTavernUiExtensions();
+			const turnView = useTavernTurnView(props.sessionId);
+			const sections = tavernUiExtensions.statusSections().filter(function (section) { return tavernPluginAllowed(section.owner, props.sessionId); });
+			return h(React.Fragment, null,
+				turnView.views.length ? h("section", { className: "dsh-tavern-status-section" },
+					h("div", { className: "dsh-tavern-status-label" }, "正文样式"),
+					h(TavernPluginViewSwitch, { choice: turnView, label: "正文样式", className: "dsh-tavern-turn-view-switch" })) : null,
+				sections.map(function (section) {
+					return h("section", { key: section.key, className: "dsh-tavern-status-section dsh-tavern-plugin-status-section" },
+						h("div", { className: "dsh-tavern-status-label" }, section.title),
+						h(tavernPluginBoundary(), { owner: section.owner, fallback: h("div", { className: "dsh-tavern-plugin-error" }, "插件 " + section.owner + " 的内容出错了") },
+							h(TavernPluginStatusSection, { section: section, sessionId: props.sessionId })));
+				}));
+		}
 		function useTavernUiExtensions() {
 			return React.useSyncExternalStore(tavernUiExtensions.subscribe, tavernUiExtensions.getSnapshot, tavernUiExtensions.getSnapshot);
 		}
@@ -12205,36 +12300,13 @@ function bindTavernFontZoom(node, win) {
 
 		// The look of the stage: Tavern's own, or a plugin's registerStageView; remembered per browser.
 		// With no choice made, a plugin view is used: installing one is asking for it.
-		const TAVERN_STAGE_VIEW_KEY = "dsh-tavern-stage-view";
-		const TAVERN_STAGE_BUILTIN = "dsh-tavern:builtin";
-		// A card that brings its own stage (a DSH card's plugin) opens on it; the choice is then kept per card.
 		function useTavernStageView(sessionId) {
-			useTavernUiExtensions();
-			const scopes = useTavernCardPluginScopes();
-			const [, setVersion] = React.useState(0);
-			const views = tavernUiExtensions.stageViews().filter(function (entry) { return tavernPluginAllowed(entry.owner, sessionId); });
-			const cardView = views.find(function (entry) { return Array.isArray(scopes[entry.owner]) && scopes[entry.owner].length; }) || null;
-			// Kept per card: the card this game plays (a plugin may be shared by copies of a card).
-			const snapshot = cardView && sessionId ? liveTavernView.getSnapshot(sessionId).view : null;
-			const storageKey = cardView && snapshot && snapshot.card ? TAVERN_STAGE_VIEW_KEY + ":" + snapshot.card.path : TAVERN_STAGE_VIEW_KEY;
-			let chosen = "";
-			try { chosen = window.localStorage.getItem(storageKey) || ""; } catch (_) {}
-			const view = chosen === TAVERN_STAGE_BUILTIN ? null : views.find(function (entry) { return entry.key === chosen; }) || cardView || views[0] || null;
-			function choose(key) {
-				try { window.localStorage.setItem(storageKey, key); } catch (_) {}
-				setVersion(function (value) { return value + 1; });
-			}
-			return { views: views, view: view, card: Boolean(cardView), choose: choose };
+			return useTavernPluginViewChoice(tavernUiExtensions.stageViews(), "dsh-tavern-stage-view", sessionId);
 		}
 
 		function TavernStageViewSwitch(props) {
-			const h = React.createElement;
 			if (!props.choice.views.length) return null;
-			const current = props.choice.view ? props.choice.view.key : TAVERN_STAGE_BUILTIN;
-			return h("select", { className: "dsh-tavern-stage-view-switch", value: current, "aria-label": "舞台样式", onChange: function (event) { props.choice.choose(event.target.value); } },
-				[{ key: TAVERN_STAGE_BUILTIN, label: "内置" }].concat(props.choice.views).map(function (entry) {
-					return h("option", { key: entry.key, value: entry.key, title: entry.owner || undefined }, entry.label);
-				}));
+			return React.createElement(TavernPluginViewSwitch, { choice: props.choice, label: "舞台样式", className: "dsh-tavern-stage-view-switch" });
 		}
 
 		function TavernStagePluginScene(props) {
@@ -13851,6 +13923,7 @@ function bindTavernFontZoom(node, win) {
 				const waitingForHistory = Boolean(currentView?.historyWindow && ownsTurn && !projection && settled && storyTurn>0 && storyTurn<latestProjectionTurn);
 				const playView = isPlayMode(liveState.view && liveState.view.mode) && storyTurn > 0 && !sessionTransitioning && ownsTurn;
 				useTavernUiExtensions();
+				const turnView = useTavernTurnView(props.sessionId);
 				const pluginMedia = useTavernPluginMedia(props.sessionId, storyTurn, playView && settled);
 				const castLines = useTavernCast(props.sessionId, storyTurn, playView && settled);
 				const castCard = liveState.view && liveState.view.card;
@@ -13923,7 +13996,11 @@ function bindTavernFontZoom(node, win) {
                     && prepared?.lifecycleRevision === Number(helper?.lifecycleRevision || 0)
                     && typeof prepared.text === "string" && prepared.text.trim()
                     ? React.createElement(TavernPreparedScriptMessage, {key:props.sessionId+":"+prepared.lifecycleRevision, sessionId:props.sessionId, preparedText:prepared.text, executeSlash:props.executeSlash}) : null;
-                const body = legacyGreeting ? React.createElement(TavernLegacyGreeting, {key:props.sessionId+":greeting", source:greetingSource, sessionId:props.sessionId, executeSlash:props.executeSlash}, rendered) : rendered;
+                const tavernBody = legacyGreeting ? React.createElement(TavernLegacyGreeting, {key:props.sessionId+":greeting", source:greetingSource, sessionId:props.sessionId, executeSlash:props.executeSlash}, rendered) : rendered;
+                // A plugin's look for the whole turn (registerTurnView) wraps Tavern's own rendering.
+                const body = playView && !waitingForHistory ? tavernTurnViewElement(turnView.view, { gameId: props.sessionId, turn: storyTurn, settled: settled, streaming: data.status === "running",
+                    greeting: greetingId === 0, text: (data.blocks || []).filter(block => block && block.kind === "text").map(block => String(block.text || "")).join("\n"),
+                    lines: castLines || [] }, tavernBody) : tavernBody;
                 const refusalNotice = settled && !sessionTransitioning ? tavernModelRefusalNotice((data.blocks || []).filter(block => block && block.kind === "text").map(block => String(block.text || "")).join("\n")) : "";
                 const refusalNode = refusalNotice ? React.createElement("div", { className: "dsh-tavern-refusal-notice", role: "note" }, refusalNotice) : null;
 				// Plugin media without a found anchor goes after the text.
@@ -19782,6 +19859,7 @@ function bindTavernFontZoom(node, win) {
 						)
 					),
 					h(TavernPluginTasks, { sessionId: props.sessionId, activity: view.activity, busy: running || view.activity?.busy || view.activity?.phase === "pending" }),
+					h(TavernPluginStatusSections, { sessionId: props.sessionId }),
 					h(TavernLedger, { sessionId: props.sessionId, ledger: view.ledger, ledgerTask: view.ledgerTask, busy: running || view.activity?.busy })
 
 				)

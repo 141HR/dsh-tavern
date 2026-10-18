@@ -190,7 +190,8 @@ test('舞台视图：插件注册后默认用它，拿到舞台数据与当前�
   assert.throws(() => plugin.registerStageView({ id: 'Bad', label: 'x', render() {} }), /id/)
 
   const start = source.indexOf('function tavernStagePublicData(data)')
-  const code = source.slice(start, source.indexOf('function useTavernStageReader(', start))
+  const choiceStart = source.indexOf('const TAVERN_VIEW_BUILTIN')
+  const code = source.slice(choiceStart, source.indexOf('function useTavernTurnView(', choiceStart)) + source.slice(start, source.indexOf('function useTavernStageReader(', start))
   const h = (type, props, ...children) => ({ type, props, children: children.flat() })
   const stored = new Map()
   const stage = vm.runInNewContext(code + '; ({ useTavernStageView, TavernStageSceneView, TavernStageViewSwitch })', {
@@ -214,7 +215,8 @@ test('舞台视图：插件注册后默认用它，拿到舞台数据与当前�
   tree = stage.TavernStageSceneView(props(false))
   assert.equal(tree.children[0].type(tree.children[0].props).type, 'Builtin', '返回 null 时用内置舞台')
 
-  const options = stage.TavernStageViewSwitch({ choice }).children
+  const viewSwitch = stage.TavernStageViewSwitch({ choice })
+  const options = viewSwitch.type(viewSwitch.props).children
   assert.deepEqual(options.map(option => option.props.value), ['dsh-tavern:builtin', 'dsh-tavern-galgame:vn'])
   choice.choose('dsh-tavern:builtin')
   choice = stage.useTavernStageView()
@@ -283,4 +285,44 @@ test('watchState：订阅本插件发布的状态，发布后重新读取，内�
   assert.equal(JSON.stringify(seen), JSON.stringify([{ scene: '酒馆' }, { scene: '街道' }]))
   stop()
   assert.equal(stopped, true)
+})
+
+test('状态分节与正文视图：注册校验；正文视图拿到 Tavern 自己的渲染作 children，返回 null 时用内置；状态页列出插件分节和正文样式选择', () => {
+  const ui = loadWith({})
+  const plugin = { ctx: { fiber: { name: 'bubbles' } } }
+  Object.setPrototypeOf(plugin, ui.service)
+  let input = null
+  plugin.registerTurnView({ id: 'bubble', label: '气泡', render: value => { input = value; return value.settled ? ['wrapped', value.children] : null } })
+  plugin.registerStatusSection({ id: 'scene', title: '当前场景', render: ({ gameId }) => 'scene:' + gameId })
+  assert.throws(() => plugin.registerTurnView({ id: 'bubble', label: '重复', render() {} }), /已注册/)
+  assert.throws(() => plugin.registerStatusSection({ id: 'Bad', title: 'x', render() {} }), /id/)
+  assert.throws(() => plugin.registerStatusSection({ id: 'x', title: '', render() {} }), /title/)
+
+  const start = source.indexOf('const TAVERN_VIEW_BUILTIN')
+  const code = source.slice(start, source.indexOf('function useTavernUiExtensions()', start))
+  const h = (type, props, ...children) => ({ type, props, children: children.flat() })
+  const stored = new Map()
+  const view = vm.runInNewContext(code + '; ({ useTavernTurnView, tavernTurnViewElement, TavernPluginStatusSections })', {
+    React: { createElement: h, Fragment: 'Fragment', useState: init => [typeof init === 'function' ? init() : init, () => {}] },
+    useTavernUiExtensions() {}, useTavernCardPluginScopes() { return {} }, tavernPluginAllowed: () => true, tavernUiExtensions: ui, tavernPluginBoundary: () => 'Boundary',
+    window: { localStorage: { getItem: key => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value) } }
+  })
+  const choice = view.useTavernTurnView('game-1')
+  assert.equal(choice.view.label, '气泡')
+  const tree = view.tavernTurnViewElement(choice.view, { gameId: 'game-1', turn: 3, settled: true, streaming: false, text: 't', lines: [] }, 'tavern-body')
+  assert.equal(tree.type, 'Boundary')
+  const inner = tree.children[0]
+  const result = inner.type(inner.props)
+  assert.equal(result[0], 'wrapped')
+  assert.equal(input.children.children[0], 'tavern-body', 'children 是 Tavern 自己的渲染')
+  const streaming = view.tavernTurnViewElement(choice.view, { settled: false }, 'tavern-body')
+  assert.equal(streaming.children[0].type(streaming.children[0].props).children[0], 'tavern-body', '返回 null 时用内置')
+  assert.equal(view.tavernTurnViewElement(null, {}, 'tavern-body'), 'tavern-body')
+
+  const page = view.TavernPluginStatusSections({ sessionId: 'game-1' })
+  const [turnSwitch, section] = page.children
+  assert.equal(turnSwitch.children[0].children[0], '正文样式')
+  assert.equal(section.children[0].children[0], '当前场景')
+  const content = section.children[1].children[0]
+  assert.equal(content.type(content.props), 'scene:game-1')
 })

@@ -648,6 +648,7 @@
 				const waitingForHistory = Boolean(currentView?.historyWindow && ownsTurn && !projection && settled && storyTurn>0 && storyTurn<latestProjectionTurn);
 				const playView = isPlayMode(liveState.view && liveState.view.mode) && storyTurn > 0 && !sessionTransitioning && ownsTurn;
 				useTavernUiExtensions();
+				const turnView = useTavernTurnView(props.sessionId);
 				const pluginMedia = useTavernPluginMedia(props.sessionId, storyTurn, playView && settled);
 				const castLines = useTavernCast(props.sessionId, storyTurn, playView && settled);
 				const castCard = liveState.view && liveState.view.card;
@@ -720,7 +721,11 @@
                     && prepared?.lifecycleRevision === Number(helper?.lifecycleRevision || 0)
                     && typeof prepared.text === "string" && prepared.text.trim()
                     ? React.createElement(TavernPreparedScriptMessage, {key:props.sessionId+":"+prepared.lifecycleRevision, sessionId:props.sessionId, preparedText:prepared.text, executeSlash:props.executeSlash}) : null;
-                const body = legacyGreeting ? React.createElement(TavernLegacyGreeting, {key:props.sessionId+":greeting", source:greetingSource, sessionId:props.sessionId, executeSlash:props.executeSlash}, rendered) : rendered;
+                const tavernBody = legacyGreeting ? React.createElement(TavernLegacyGreeting, {key:props.sessionId+":greeting", source:greetingSource, sessionId:props.sessionId, executeSlash:props.executeSlash}, rendered) : rendered;
+                // A plugin's look for the whole turn (registerTurnView) wraps Tavern's own rendering.
+                const body = playView && !waitingForHistory ? tavernTurnViewElement(turnView.view, { gameId: props.sessionId, turn: storyTurn, settled: settled, streaming: data.status === "running",
+                    greeting: greetingId === 0, text: (data.blocks || []).filter(block => block && block.kind === "text").map(block => String(block.text || "")).join("\n"),
+                    lines: castLines || [] }, tavernBody) : tavernBody;
                 const refusalNotice = settled && !sessionTransitioning ? tavernModelRefusalNotice((data.blocks || []).filter(block => block && block.kind === "text").map(block => String(block.text || "")).join("\n")) : "";
                 const refusalNode = refusalNotice ? React.createElement("div", { className: "dsh-tavern-refusal-notice", role: "note" }, refusalNotice) : null;
 				// Plugin media without a found anchor goes after the text.

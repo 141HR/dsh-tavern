@@ -91,36 +91,13 @@
 
 		// The look of the stage: Tavern's own, or a plugin's registerStageView; remembered per browser.
 		// With no choice made, a plugin view is used: installing one is asking for it.
-		const TAVERN_STAGE_VIEW_KEY = "dsh-tavern-stage-view";
-		const TAVERN_STAGE_BUILTIN = "dsh-tavern:builtin";
-		// A card that brings its own stage (a DSH card's plugin) opens on it; the choice is then kept per card.
 		function useTavernStageView(sessionId) {
-			useTavernUiExtensions();
-			const scopes = useTavernCardPluginScopes();
-			const [, setVersion] = React.useState(0);
-			const views = tavernUiExtensions.stageViews().filter(function (entry) { return tavernPluginAllowed(entry.owner, sessionId); });
-			const cardView = views.find(function (entry) { return Array.isArray(scopes[entry.owner]) && scopes[entry.owner].length; }) || null;
-			// Kept per card: the card this game plays (a plugin may be shared by copies of a card).
-			const snapshot = cardView && sessionId ? liveTavernView.getSnapshot(sessionId).view : null;
-			const storageKey = cardView && snapshot && snapshot.card ? TAVERN_STAGE_VIEW_KEY + ":" + snapshot.card.path : TAVERN_STAGE_VIEW_KEY;
-			let chosen = "";
-			try { chosen = window.localStorage.getItem(storageKey) || ""; } catch (_) {}
-			const view = chosen === TAVERN_STAGE_BUILTIN ? null : views.find(function (entry) { return entry.key === chosen; }) || cardView || views[0] || null;
-			function choose(key) {
-				try { window.localStorage.setItem(storageKey, key); } catch (_) {}
-				setVersion(function (value) { return value + 1; });
-			}
-			return { views: views, view: view, card: Boolean(cardView), choose: choose };
+			return useTavernPluginViewChoice(tavernUiExtensions.stageViews(), "dsh-tavern-stage-view", sessionId);
 		}
 
 		function TavernStageViewSwitch(props) {
-			const h = React.createElement;
 			if (!props.choice.views.length) return null;
-			const current = props.choice.view ? props.choice.view.key : TAVERN_STAGE_BUILTIN;
-			return h("select", { className: "dsh-tavern-stage-view-switch", value: current, "aria-label": "舞台样式", onChange: function (event) { props.choice.choose(event.target.value); } },
-				[{ key: TAVERN_STAGE_BUILTIN, label: "内置" }].concat(props.choice.views).map(function (entry) {
-					return h("option", { key: entry.key, value: entry.key, title: entry.owner || undefined }, entry.label);
-				}));
+			return React.createElement(TavernPluginViewSwitch, { choice: props.choice, label: "舞台样式", className: "dsh-tavern-stage-view-switch" });
 		}
 
 		function TavernStagePluginScene(props) {
