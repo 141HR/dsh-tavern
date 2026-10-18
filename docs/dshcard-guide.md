@@ -8,7 +8,7 @@ DSH 人物卡（后缀 `.dshcard`）是一张普通的 Character Card V3，加�
 
 它是 CHARX 的超集：去掉 DSH 专有的部分，剩下的 `card.json` 仍是一张合法的 CCv3 卡。Tavern 也能把它导出成 CHARX，给其他支持 CCv3 的前端用，只是少了插件和舞台。
 
-想先看效果，导入[大肥鱼样板卡](https://github.com/flizzywine/dsh-tavern/releases/tag/dafeiyu-card-v1)；想动手做，从下面的最小示例开始。
+想先看效果，导入[大肥鱼样板卡](https://github.com/flizzywine/dsh-tavern/releases/tag/dafeiyu-card-v1)；想动手做，从下面的最小示例开始；想看一张完整的 Galgame 式卡怎么搭起来，读[开发实例：大肥鱼](dshcard-tutorial.md)。
 
 ## 一张卡里有什么
 
@@ -194,6 +194,7 @@ node examples/dshcard-hello/build.mjs
 
 ## 参考
 
+- [开发实例：大肥鱼](dshcard-tutorial.md)：按动手顺序拆解大肥鱼：卡片结构、卡内插件怎么导演和画舞台、打包与调试。
 - [大肥鱼样板卡](https://github.com/flizzywine/dsh-tavern/releases/tag/dafeiyu-card-v1)：4 个素材包、导演插件、全身立绘舞台、背景音乐、本局配置项，源码在 [examples/dafeiyu-card](https://github.com/flizzywine/dsh-tavern/tree/0.2.1%E7%89%88%E6%9C%AC/examples/dafeiyu-card)。
 - [格式设计](https://github.com/flizzywine/dsh-tavern/blob/0.2.1%E7%89%88%E6%9C%AC/docs/design/dsh-card-format.md)：为什么这样设计、存储和安全的细节。
 - [插件开发：接口参考](https://github.com/flizzywine/dsh-tavern/blob/0.2.1%E7%89%88%E6%9C%AC/docs/plugin-api.md)：每个接口的参数和行为。
