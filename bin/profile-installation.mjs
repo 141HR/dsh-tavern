@@ -281,7 +281,7 @@ async function installProfileOwned(host, { attemptId, runInstall, runDsh }) {
     }
     if (host === 'desktop') {
       bridge = beginDesktopProfileInstallation({ home: DSH_ROOT, sourceRoot: SOURCE_ROOT })
-      console.log(`Profile 完整备份：${bridge.backup}`)
+      if (bridge) console.log(`Profile 完整备份：${bridge.backup}`)
     }
     mkdirSync(PROFILE_DIR, { recursive: true })
     mkdirSync(LOG_DIR, { recursive: true })
