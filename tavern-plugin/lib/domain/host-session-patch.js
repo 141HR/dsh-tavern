@@ -1,4 +1,5 @@
-// In-memory host/client patch for DSH 0.2.1-rc.2. Official package files stay unchanged.
+// In-memory host/client patch, audited on DSH 0.2.1-rc.2 and admitted by file bytes
+// (any host release whose pinned files are identical). Official package files stay unchanged.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -9,7 +10,6 @@ import { join, sep } from 'node:path'
 import { hostRequireCandidates } from './host-package-resolution.js'
 
 export async function prepareExpandedPatch(runtime, options = {}) {
-  const expectedVersion = options.version ?? '0.2.1-rc.2'
   const marker = 'dsh-tavern/required-session-patch-v1'
   const require = createRequire(join(runtime, 'package.json'))
   const originals = new Map()
@@ -54,7 +54,7 @@ export async function prepareExpandedPatch(runtime, options = {}) {
     urls.set(name, 'data:text/javascript;base64,' + Buffer.from(text).toString('base64'))
   }
   const pkg = JSON.parse(await readFile(require.resolve('@deepseek-ai/dsh-session/package.json'), 'utf8'))
-  assert.equal(pkg.version, expectedVersion)
+  if (options.version !== undefined) assert.equal(pkg.version, options.version)
   const { Session } = await load('@deepseek-ai/dsh-session')
   const patchedSurface = await compile('@deepseek-ai/dsh-session/surface', text => once(text,
     "if (event.type === 'assistant/message' && raw !== undefined) {",
@@ -193,7 +193,19 @@ export const SESSION_PATCH_PROTOCOL = 1
 // 0.2.1-rc.2 适配：宿主 runtime 从 0.1.5-rc.2 升到 0.2.1-rc.2；补丁锚点在 0.2.0 全部
 // 仍唯一命中（见 tmp/audit-host.md 的 E1），因此这里是重钉版本 + 重算字节，不是重写补丁。
 export const SESSION_PATCH_VERSION = '0.2.1-rc.2'
+// First pinned file whose bytes differ (or cannot be read); '' when the patch applies.
+export function unpinnedSessionFile(require) {
+  for (const [name, allowed] of Object.entries(PINNED_SHA256)) {
+    try { if (allowed.includes(createHash('sha256').update(readFileSync(require.resolve(name))).digest('hex'))) continue }
+    catch { /* Missing counts as different. */ }
+    return name
+  }
+  return ''
+}
 const INSTALLED = Symbol.for('dsh-tavern.host-session-patch.v1')
+// Bytes, not the version label, decide whether the patch applies: DSH releases often
+// leave these files untouched (0.2.1-rc.1 and rc.2 are identical), and a later release
+// with the same bytes gets editing/rollback/regeneration without a Tavern update.
 // Each entry lists every known-good bytes of that file for 0.2.1-rc.2.
 // Official npm is always first. The 0.1.5-rc.2 list also carried DSHA v0.1.5-rc2
 // packaging variants; no 0.2.0 DSHA/Android build has been audited yet, so those
@@ -278,7 +290,7 @@ function createHandle(fields) {
       this.clientReason = ''
     },
     replacementAllowed() {
-      // 0.2.1-rc.2 适配：'skipped' 表示宿主版本与 SESSION_PATCH_VERSION 不符、补丁**没有装**。
+      // 'skipped' 表示宿主会话文件与审计版本 SESSION_PATCH_VERSION 字节不同、补丁**没有装**。
       // 旧实现把 skipped 当作「可写」，会让正文编辑/回退/重新生成在补丁缺失时假就绪：
       // 宿主 dsh-session 仍会拒绝 assistant/message + sourceEventSeqs 的 replace 写入。
       // 只有服务端补丁装好且页面完成握手才算就绪。
@@ -322,7 +334,6 @@ export async function installHostSessionPatch({ hostRequire, persistence, query 
     return loaded.sessionFormatCatalog
   }
   const finish = fields => Object.assign(createHandle(fields), { loadSessionCatalog })
-  if (hostVersion !== SESSION_PATCH_VERSION) return finish({ status: 'skipped', hostVersion })
   if (persistence?.[INSTALLED]) {
     const installed = persistence[INSTALLED]
     if (!installed.loadSessionCatalog) installed.loadSessionCatalog = loadSessionCatalog
@@ -332,9 +343,14 @@ export async function installHostSessionPatch({ hostRequire, persistence, query 
     let actual = ''
     try { actual = createHash('sha256').update(readFileSync(require.resolve(name))).digest('hex') }
     catch (error) {
+      if (hostVersion !== SESSION_PATCH_VERSION) return finish({ status: 'skipped', hostVersion, reason: `宿主 DSH ${hostVersion} 缺少已审计的会话文件 ${name}，正文编辑、回退和重新生成不可用` })
       return finish({ status: 'failed', hostVersion, reason: '无法校验宿主文件 ' + name + '：' + (error.message || error) })
     }
-    if (!allowed.includes(actual)) return finish({ status: 'failed', hostVersion, reason: `宿主文件与 ${SESSION_PATCH_VERSION} 补丁清单不一致：` + name })
+    if (allowed.includes(actual)) continue
+    // A different release with changed files is unsupported, not broken; the audited
+    // release with changed files is a damaged or repackaged install.
+    if (hostVersion !== SESSION_PATCH_VERSION) return finish({ status: 'skipped', hostVersion, reason: `宿主 DSH ${hostVersion} 的会话文件与已审计的 ${SESSION_PATCH_VERSION} 不同（${name}），正文编辑、回退和重新生成不可用` })
+    return finish({ status: 'failed', hostVersion, reason: `宿主文件与 ${SESSION_PATCH_VERSION} 补丁清单不一致：` + name })
   }
   if (!persistence?.tracker?.openHandles || !persistence?.tracker?.writers) {
     return finish({ status: 'failed', hostVersion, reason: '宿主没有 JSONL 会话存储，不能安装补丁' })
@@ -350,7 +366,7 @@ export async function installHostSessionPatch({ hostRequire, persistence, query 
   }
   let patch
   try {
-    patch = await prepareExpandedPatch(runtimeRoot(require.resolve('@deepseek-ai/dsh-session')), { version: SESSION_PATCH_VERSION })
+    patch = await prepareExpandedPatch(runtimeRoot(require.resolve('@deepseek-ai/dsh-session')))
     patch.patchPersistence(persistence)
     patch.patchQuery(query)
   } catch (error) {
