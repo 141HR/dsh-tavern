@@ -1,8 +1,6 @@
 # DSH Tavern 测试版安装
 
-测试版适配 DSH 0.2.x，跟随 `0.2.1版本` 分支。它**不提供一键安装包**（EXE / APK），而是把酒馆装到你自己的 DSH 宿主上。稳定版的安装方法见 [README 快速开始](README.md#快速开始)，不要用稳定版的 EXE / APK 安装测试版。
-
-按你的系统直接跳到对应章节：
+测试版适配 DSH 0.2.x，不提供一键安装包，直接装在你自己的 DSH 上。稳定版见 [README 快速开始](README.md#快速开始)。
 
 | 系统 | 安装方式 |
 | --- | --- |
@@ -13,33 +11,27 @@
 
 ## 开始之前
 
-1. **备份数据**。备份用户主目录下的 `.dsh` 目录，或在旧酒馆里导出重要存档。桌面版测试版直接使用现有酒馆数据，不是隔离的第二套存档。
-2. **完整退出**官方桌面和旧酒馆，确保没有正在生成的内容。
-3. **宿主版本必须在允许清单内**，不在清单内的版本，安装器会停止，不修改任何文件。当前允许：
-   - 官方 DeepSeek Harness **0.2.1-rc.2**（[官网下载](https://deepseek.com/harness/)）。macOS 已实机验证，Windows 待测试用户验证。
-   - DSHA 内置的 DSH **0.2.0**。
-   - 命令行版自带 DSH 0.2.1-rc.2，不受宿主版本影响。
-
-   DSH 发布新版后，确认可用即加入清单，在酒馆内更新即可生效。
+- 先备份 `.dsh` 目录，并完整退出桌面版和旧酒馆。
+- 允许的宿主版本：官方 DeepSeek Harness **0.2.1-rc.2**（[官网下载](https://deepseek.com/harness/)）、DSHA 内置的 DSH **0.2.0**。其他版本安装器会停止。命令行版自带 DSH，不受此限。
 
 ## Windows
 
 ### 方式一：官方桌面版
 
-1. 安装官方 [DeepSeek Harness 0.2.1-rc.2](https://deepseek.com/harness/)，首次启动一次，然后从托盘完整退出。
+1. 安装 DeepSeek Harness 0.2.1-rc.2，启动一次后从托盘退出。
 2. 打开 PowerShell（支持 Windows PowerShell 5.1），粘贴执行：
 
    ```powershell
    $env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.ps1')); Invoke-Expression $tavernInstaller
    ```
 
-3. 看到安装成功后，重新打开 DeepSeek Harness，即可进入酒馆。侧栏版本处显示「测试版 · DSH 0.2.1」。
+3. 安装成功后重新打开 DeepSeek Harness，即进入酒馆。
 
-不需要另装 Node.js，安装器使用官方桌面内置的运行环境。想切回原版 DSH，见 [桌面版：在酒馆与原版之间切换](#桌面版在酒馆与原版之间切换)。
+无需另装 Node.js。切回原版 DSH 见 [桌面版：在酒馆与原版之间切换](#桌面版在酒馆与原版之间切换)。
 
 ### 方式二：命令行版（浏览器使用）
 
-不需要官方桌面。需要先安装 Node.js 22.19 或更高版本，以及 pnpm。打开 PowerShell，粘贴执行：
+需要 Node.js 22.19+ 和 pnpm，不需要官方桌面。打开 PowerShell，粘贴执行：
 
 ```powershell
 $env:DSH_TAVERN_HOST='cli'
@@ -48,11 +40,11 @@ $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).Down
 Invoke-Expression $tavernInstaller
 ```
 
-安装完成后，用法见 [命令行版：启动与管理](#命令行版启动与管理)。
+用法见 [命令行版：启动与管理](#命令行版启动与管理)。
 
 ## 安卓（DSHA）
 
-1. 安装 [DSHA](https://github.com/DSH-APP/DSHA/releases)，首次启动一次。
+1. 安装 [DSHA](https://github.com/DSH-APP/DSHA/releases)，启动一次。
 2. 打开底部 **终端**，粘贴执行：
 
    ```sh
@@ -61,42 +53,40 @@ Invoke-Expression $tavernInstaller
 
 3. 看到 **全部完成** 后重启 DSHA，点击 **启动** → **进入** → **酒馆工作台**。
 
-反馈问题时请注明 DSHA 版本。
-
 ## macOS
 
 ### 方式一：官方桌面版
 
-1. 安装官方 [DeepSeek Harness 0.2.1-rc.2](https://deepseek.com/harness/)，首次启动一次，然后完整退出（⌘Q）。
+1. 安装 DeepSeek Harness 0.2.1-rc.2，启动一次后退出（⌘Q）。
 2. 打开「终端」，粘贴执行：
 
    ```sh
    curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.sh' -o /tmp/dsh-tavern-testing-install.sh && DSH_TAVERN_HOST=desktop sh /tmp/dsh-tavern-testing-install.sh
    ```
 
-3. 看到安装成功后，重新打开 DeepSeek Harness，即可进入酒馆。侧栏版本处显示「测试版 · DSH 0.2.1」。
+3. 安装成功后重新打开 DeepSeek Harness，即进入酒馆。
 
-不需要另装 Node.js。想切回原版 DSH，见 [桌面版：在酒馆与原版之间切换](#桌面版在酒馆与原版之间切换)。
+无需另装 Node.js。切回原版 DSH 见 [桌面版：在酒馆与原版之间切换](#桌面版在酒馆与原版之间切换)。
 
 ### 方式二：命令行版（浏览器使用）
 
-不需要官方桌面。需要先安装 Node.js 22.19 或更高版本，以及 pnpm。打开「终端」，粘贴执行：
+需要 Node.js 22.19+ 和 pnpm，不需要官方桌面。打开「终端」，粘贴执行：
 
 ```sh
 curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.sh' -o /tmp/dsh-tavern-testing-install.sh && DSH_TAVERN_HOST=cli DSH_TAVERN_CLI_HOME="$HOME/.dsh-tavern-testing" sh /tmp/dsh-tavern-testing-install.sh
 ```
 
-安装完成后，用法见 [命令行版：启动与管理](#命令行版启动与管理)。
+用法见 [命令行版：启动与管理](#命令行版启动与管理)。
 
 ## Linux
 
-官方桌面暂无 Linux 版，Linux 使用命令行版（浏览器使用）。需要先安装 Node.js 22.19 或更高版本，以及 pnpm。在终端粘贴执行：
+官方桌面没有 Linux 版，使用命令行版。需要 Node.js 22.19+ 和 pnpm：
 
 ```sh
 curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.sh' -o /tmp/dsh-tavern-testing-install.sh && DSH_TAVERN_HOST=cli DSH_TAVERN_CLI_HOME="$HOME/.dsh-tavern-testing" sh /tmp/dsh-tavern-testing-install.sh
 ```
 
-安装完成后，用法见 [命令行版：启动与管理](#命令行版启动与管理)。
+用法见 [命令行版：启动与管理](#命令行版启动与管理)。
 
 ---
 
