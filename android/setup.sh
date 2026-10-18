@@ -5,9 +5,9 @@ DSH_ROOT="${DSH_HOME:-${HOME}/.dsh}"
 APP_DIR="${DSH_TAVERN_SOURCE_ROOT:-${DSH_TAVERN_ANDROID_APP_DIR:-${DSH_ROOT}/apps/dsh-tavern}}"
 DEFAULT_REPOSITORY="https://github.com/flizzywine/dsh-tavern.git"
 REPOSITORY="${DSH_TAVERN_REPOSITORY:-${DEFAULT_REPOSITORY}}"
-# Testing channel: follow the 0.2.1版本 branch, same as install.sh on this branch.
-BRANCH="${DSH_TAVERN_BRANCH:-0.2.1版本}"
-DEFAULT_TARBALL_URL="https://codeload.github.com/flizzywine/dsh-tavern/tar.gz/refs/heads/0.2.1%E7%89%88%E6%9C%AC"
+# Follows the main branch, same as install.sh.
+BRANCH="${DSH_TAVERN_BRANCH:-main}"
+DEFAULT_TARBALL_URL="https://codeload.github.com/flizzywine/dsh-tavern/tar.gz/refs/heads/main"
 TARBALL_URL="${DSH_TAVERN_TARBALL_URL:-${DEFAULT_TARBALL_URL}}"
 SOURCE_MARKER=".dsh-tavern-tarball-source"
 TEMP_ROOT=""

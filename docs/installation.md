@@ -1,6 +1,6 @@
 # 安装、更新与数据备份
 
-> 本分支适配 DSH **0.2.1-rc.2**，尚未正式发布。下文主分支安装命令仍安装主分支；DSHA 0.1.5-rc2 的说明仅供旧版参考，不适用于本分支。参见 [分支说明](../README-0.2.1-rc.2.md)。
+> 当前版本适配 DSH **0.2.1-rc.2**（官方 DeepSeek Harness、DSH NEXT、DSHA v0.2.0-rc2 内置的 0.2.0-rc.2、独立命令行）。下文的 Android 一键 APK、Windows 一键安装版和 DSHA 0.1.5-rc2 说明属于[稳定版](https://github.com/flizzywine/dsh-tavern/blob/stable/docs/installation.md)（DSH 0.1.5，`stable` 分支）。
 
 ## Android 一键 APK（Android 11+ / ARM64）
 
@@ -82,13 +82,13 @@ Desktop / DSHA 安装器会检查宿主内置的 DSH 版本：与适配版本不
 Windows：
 
 ```powershell
-$env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.ps1')); Invoke-Expression $tavernInstaller
+$env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.ps1')); Invoke-Expression $tavernInstaller
 ```
 
 macOS：
 
 ```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | DSH_TAVERN_HOST=desktop sh
+curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.sh' -o /tmp/dsh-tavern-install.sh && DSH_TAVERN_HOST=desktop sh /tmp/dsh-tavern-install.sh
 ```
 
 安装完成后重新打开官方 DeepSeek Harness。安装器将酒馆注册到官方固定使用的 `desktop` 配置，不需要切换 Profile。旧 `tavern` 配置中的自定义插件和用户补丁会合并到新配置，原配置保留；人物卡、正文、会话历史继续使用 `profile-data/tavern/`。更新前退出桌面应用，再运行同一安装命令。
@@ -106,7 +106,7 @@ Windows 安装失败时，请提供终端显示的 `update-diagnostics.jsonl` �
 打开 PowerShell，运行：
 
 ```powershell
-$env:DSH_TAVERN_HOST='cli'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.ps1')); Invoke-Expression $tavernInstaller
+$env:DSH_TAVERN_HOST='cli'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.ps1')); Invoke-Expression $tavernInstaller
 ```
 
 #### macOS / Linux / WSL2
@@ -114,7 +114,7 @@ $env:DSH_TAVERN_HOST='cli'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((Ne
 打开终端，运行：
 
 ```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | DSH_TAVERN_HOST=cli sh
+curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.sh' -o /tmp/dsh-tavern-install.sh && DSH_TAVERN_HOST=cli sh /tmp/dsh-tavern-install.sh
 ```
 
 安装程序会自动安装依赖、启动 dsh-tavern，并在首次安装时打开网页。关闭页面后，运行 `dsh-tavern open` 可重新打开；也可运行 `dsh-tavern status`，复制显示的完整访问地址（含鉴权 token，请勿分享）。不要只输入不带 token 的地址，以免出现鉴权提示。更新时优先使用 Git 增量同步；Git 不可用或同步失败时才下载完整 ZIP。
@@ -165,7 +165,7 @@ v2.1 要求宿主 DSH `0.1.5-rc.2`。请安装 **[DSHA v0.1.5-rc2](https://githu
 2. 打开 DSHA 底部的 **终端**，把下面整条命令复制进去并回车。安装脚本会自行完成下载、配置、校验、启动和失败回滚：
 
 ```bash
-node -e "fetch('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@69d74f5/android/setup.sh').then(async r=>{if(!r.ok)throw Error('HTTP '+r.status);require('fs').writeFileSync('/tmp/dsh-tavern-setup.sh',await r.text())}).then(()=>{const r=require('child_process').spawnSync('bash',['/tmp/dsh-tavern-setup.sh'],{stdio:'inherit'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"
+node -e "fetch('https://raw.githubusercontent.com/flizzywine/dsh-tavern/stable/android/setup.sh').then(async r=>{if(!r.ok)throw Error('HTTP '+r.status);require('fs').writeFileSync('/tmp/dsh-tavern-setup.sh',await r.text())}).then(()=>{const r=require('child_process').spawnSync('bash',['/tmp/dsh-tavern-setup.sh'],{stdio:'inherit'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"
 ```
 
 3. 如果不会使用终端，也可以打开“创造模式”，完整复制下面这一整段话发给 Agent：
@@ -173,7 +173,7 @@ node -e "fetch('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@69d74f5/androi
 ```text
 请帮我安装 DSH Tavern。只需要原样执行下面这一条命令，等待它结束，然后把最后的结果告诉我；不要拆解步骤，也不要修改命令：
 
-node -e "fetch('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@69d74f5/android/setup.sh').then(async r=>{if(!r.ok)throw Error('HTTP '+r.status);require('fs').writeFileSync('/tmp/dsh-tavern-setup.sh',await r.text())}).then(()=>{const r=require('child_process').spawnSync('bash',['/tmp/dsh-tavern-setup.sh'],{stdio:'inherit'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"
+node -e "fetch('https://raw.githubusercontent.com/flizzywine/dsh-tavern/stable/android/setup.sh').then(async r=>{if(!r.ok)throw Error('HTTP '+r.status);require('fs').writeFileSync('/tmp/dsh-tavern-setup.sh',await r.text())}).then(()=>{const r=require('child_process').spawnSync('bash',['/tmp/dsh-tavern-setup.sh'],{stdio:'inherit'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"
 ```
 
 4. 看到“全部完成”后重启 DSHA，在底部 **启动** 页点 **启动**；显示“已就绪，可进入”后点 **进入**，再从侧栏打开 **酒馆工作台**。

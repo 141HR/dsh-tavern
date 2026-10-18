@@ -2,7 +2,7 @@ name: Publish runtime manifest
 
 on:
   push:
-    branches: ['0.2.1版本']
+    branches: [main, stable]
     paths-ignore:
       - dsh-tavern-runtime.json
 
@@ -48,9 +48,9 @@ jobs:
           for attempt in 1 2 3 4 5 6; do
             sleep $((attempt * 10))
             for f in install.ps1 install.sh dsh-tavern-runtime.json; do
-              curl -fsS --retry 3 "https://purge.jsdelivr.net/gh/${repo}@0.2.1%E7%89%88%E6%9C%AC/${f}" > /dev/null || true
+              curl -fsS --retry 3 "https://purge.jsdelivr.net/gh/${repo}@${GITHUB_REF_NAME}/${f}" > /dev/null || true
             done
-            served="$(curl -fsS "https://cdn.jsdelivr.net/gh/${repo}@0.2.1%E7%89%88%E6%9C%AC/dsh-tavern-runtime.json" | node -e "let s='';process.stdin.on('data',c=>s+=c).on('end',()=>{try{console.log(JSON.parse(s).revision)}catch{console.log('')}})" || true)"
+            served="$(curl -fsS "https://cdn.jsdelivr.net/gh/${repo}@${GITHUB_REF_NAME}/dsh-tavern-runtime.json" | node -e "let s='';process.stdin.on('data',c=>s+=c).on('end',()=>{try{console.log(JSON.parse(s).revision)}catch{console.log('')}})" || true)"
             echo "attempt ${attempt}: CDN manifest revision=${served:-<none>} expected=${expected}"
             if [ "$served" = "$expected" ]; then exit 0; fi
           done

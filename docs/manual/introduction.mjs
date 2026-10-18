@@ -1,12 +1,11 @@
 // Commands mirror docs/installation.md; tests guard against drift.
 export const installCommands = {
-  desktopWindows: "$env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.ps1')); Invoke-Expression $tavernInstaller",
-  desktopMac: 'curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | DSH_TAVERN_HOST=desktop sh',
-  cliWindows: "$env:DSH_TAVERN_HOST='cli'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.ps1')); Invoke-Expression $tavernInstaller",
-  cliUnix: 'curl -fsSL https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/install.sh | DSH_TAVERN_HOST=cli sh',
-  // Pin the bootstrap itself so jsDelivr cannot serve an older @main script.
-  // The bootstrap still installs or updates the application from current main.
-  android: 'node -e "fetch(\'https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@69d74f5/android/setup.sh\').then(async r=>{if(!r.ok)throw Error(\'HTTP \'+r.status);require(\'fs\').writeFileSync(\'/tmp/dsh-tavern-setup.sh\',await r.text())}).then(()=>{const r=require(\'child_process\').spawnSync(\'bash\',[\'/tmp/dsh-tavern-setup.sh\'],{stdio:\'inherit\'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"',
+  desktopWindows: "$env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.ps1')); Invoke-Expression $tavernInstaller",
+  desktopMac: "curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.sh' -o /tmp/dsh-tavern-install.sh && DSH_TAVERN_HOST=desktop sh /tmp/dsh-tavern-install.sh",
+  cliWindows: "$env:DSH_TAVERN_HOST='cli'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.ps1')); Invoke-Expression $tavernInstaller",
+  cliUnix: "curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.sh' -o /tmp/dsh-tavern-install.sh && DSH_TAVERN_HOST=cli sh /tmp/dsh-tavern-install.sh",
+  // DSHA 0.1.5 (stable release): the stable branch bootstrap, which installs and updates from stable.
+  android: 'node -e "fetch(\'https://raw.githubusercontent.com/flizzywine/dsh-tavern/stable/android/setup.sh\').then(async r=>{if(!r.ok)throw Error(\'HTTP \'+r.status);require(\'fs\').writeFileSync(\'/tmp/dsh-tavern-setup.sh\',await r.text())}).then(()=>{const r=require(\'child_process\').spawnSync(\'bash\',[\'/tmp/dsh-tavern-setup.sh\'],{stdio:\'inherit\'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"',
 }
 export const androidAgentPrompt = '请帮我安装 DSH Tavern。只需要原样执行下面这一条命令，等待它结束，然后把最后的结果告诉我；不要拆解步骤，也不要修改命令：\n\n' + installCommands.android
 const code = (language, text) => '\n```' + language + '\n' + text + '\n```\n'

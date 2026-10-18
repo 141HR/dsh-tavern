@@ -1,6 +1,6 @@
 # 从旧酒馆继承数据（测试版）
 
-用法见 [测试版安装说明](../README-0.2.1-rc.2.md#从旧酒馆继承数据)。`DSH_TAVERN_IMPORT_HOME` 指向旧的 DSH 主目录（包含 `profiles`、`profile-data`，不是 `apps/dsh-tavern` 程序目录或 `data` 子目录）。**不要把 `DSH_HOME` 改成旧目录**，迁移目标始终是官方桌面的 `.dsh`。测试版已安装时也可执行，用来补做迁移。
+安装命令见 [README 快速开始](../README.md#快速开始)。`DSH_TAVERN_IMPORT_HOME` 指向旧的 DSH 主目录（包含 `profiles`、`profile-data`，不是 `apps/dsh-tavern` 程序目录或 `data` 子目录）。**不要把 `DSH_HOME` 改成旧目录**，迁移目标始终是官方桌面的 `.dsh`。测试版已安装时也可执行，用来补做迁移。
 
 ## 迁移会做什么
 

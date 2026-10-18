@@ -14,6 +14,8 @@ export function extractDshVersion(output) {
   return match[1]
 }
 
+const STABLE_GUIDE = 'https://github.com/flizzywine/dsh-tavern/blob/stable/README.md#快速开始'
+
 function hostGuidance(host) {
   return host === 'android'
     ? `推荐 DSHA ${recommendedDshaVersion}：${dshaReleasesUrl}`
@@ -26,7 +28,9 @@ export function dshCompatibilityNotice(currentVersion = '', host = 'desktop') {
   const allowed = allowedDshVersions.join('、')
   if (!currentVersion) return `允许的 DSH 版本：${allowed}；${hostGuidance(host)}`
   if (classifyDshVersion(currentVersion, compatibility).status === 'allowed') return `当前 DSH ${currentVersion} 在允许清单内。`
-  return `当前 DSH ${currentVersion} 不在允许清单内；已停止安装，不会修改宿主版本。允许的版本：${allowed}；${hostGuidance(host)}`
+  // DSH 0.1.x hosts: the release for them lives on the stable branch (installed copies there update from it).
+  const stable = /^0\.1\./.test(currentVersion) ? `\n要继续使用 DSH ${currentVersion}，请改装稳定版（跟随 stable 分支，安装命令见 ${STABLE_GUIDE}），重新运行一次即可，以后的更新跟随稳定版。` : ''
+  return `当前 DSH ${currentVersion} 不在允许清单内；已停止安装，不会修改宿主版本。允许的版本：${allowed}；${hostGuidance(host)}${stable}`
 }
 
 export function assertCompatibleDshVersion(currentVersion, host = 'cli') {
