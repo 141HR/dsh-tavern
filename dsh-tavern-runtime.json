@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "38e2bc3e04b57016510718dca1e12fb0326d0abf",
-  "releaseSequence": 685,
+  "revision": "3bafcb8b593ca5c6dbf3efc8c43a751520e470d2",
+  "releaseSequence": 686,
   "version": "2.7.0",
   "files": [
     {
@@ -81,13 +81,13 @@
     },
     {
       "path": "bin/dsh-tavern.mjs",
-      "sha256": "7bfb48ded52703ad6096e64ea0973b00018d2fd6a1cebd6454272a14a18edaef",
-      "size": 4884
+      "sha256": "d9c57e11339ec76f8d7eb643b8fc0a87997053e2fa3493cd56dabbe01516b0a5",
+      "size": 5014
     },
     {
       "path": "bin/import-user-home.mjs",
-      "sha256": "9ca8ff72fc668d1932cbf1d1e0c1e34f04ded879e7ee1250b542616a3eb1402c",
-      "size": 10092
+      "sha256": "f3f1e8c1ee393932013dc532d6e6e8a31243c459677b0e8654496816a131ba9c",
+      "size": 10147
     },
     {
       "path": "bin/installation-process.mjs",
@@ -121,8 +121,8 @@
     },
     {
       "path": "bin/official-desktop-runtime.cjs",
-      "sha256": "b91628c2a435fdd49f662fb1722623b6e8f37217bafca5d4201e5f3df2d3bdc5",
-      "size": 4131
+      "sha256": "d37661959497a386cbf225dfc65b9522dc2d840cd4a1b3ed0b904f9130edd1a6",
+      "size": 5998
     },
     {
       "path": "bin/plugin-dependencies.mjs",
@@ -146,8 +146,8 @@
     },
     {
       "path": "bin/profile-installation.mjs",
-      "sha256": "5b65a6ff87916d7cf329c6d473c1ca3796155a041f680298e2ce591d95a1c05a",
-      "size": 19621
+      "sha256": "dfd63f2d09ae4dc85d4c8e1bc57c69d4ef99e9f408e750060471d44a9caa9b3a",
+      "size": 19636
     },
     {
       "path": "bin/prune-installed-files.mjs",
@@ -206,8 +206,8 @@
     },
     {
       "path": "bin/validate-desktop-profile.mjs",
-      "sha256": "fe30ed8d95bceb954177c6e3eeccd3420c08a82123042595ae29f43f85922c42",
-      "size": 1497
+      "sha256": "fe030a39ef6a610cd0a2ada3cfd7ee62682688db8f6f3b9ad9e6a9a18185fb0d",
+      "size": 1491
     },
     {
       "path": "bin/vendor-dream-skin.mjs",
@@ -271,13 +271,13 @@
     },
     {
       "path": "install.ps1",
-      "sha256": "d97f7b098d875c581e0278648eab4b19a784ef2d07e04d18666c06b2c7445481",
-      "size": 79519
+      "sha256": "d50f2cfafa8068ee7923d1184f78ed1a6b979c41ae837919dc1caa5a56c2eab7",
+      "size": 82235
     },
     {
       "path": "install.sh",
-      "sha256": "c9ce6c76afe1fc2664371b73eda4b493fbdb0952d973e3f4257a57fa20866c53",
-      "size": 60058
+      "sha256": "86239688c03ba3da04d991595468c561e49b019554cee168ca316a7266e5967e",
+      "size": 62544
     },
     {
       "path": "package.json",
