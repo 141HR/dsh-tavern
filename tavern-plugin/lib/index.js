@@ -2838,6 +2838,12 @@ export async function apply(ctx) {
     return ((await castAssets.read(card.path)).packs || []).map(pack => ({ ...pack,
       baseUrl: '/api/dsh-tavern/pack-file?' + new URLSearchParams({ pack: pack.id, v: pack.contentHash }).toString() + '&path=' }))
   }
+  // A card's cast or packs changed outside the stage page: games of that card re-read them.
+  async function castAssetsChanged(cardPath) {
+    for (const item of await conversationRegistry.list().catch(() => [])) {
+      if (item && item.cardPath === cardPath && item.sessionId) sessionSignals.publish(item.sessionId, { kind: 'cast', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
+    }
+  }
   async function castEdit(sessionId, edit) {
     const card = await castCardOf(sessionId)
     const result = await edit(card.path, card)
@@ -2927,6 +2933,30 @@ export async function apply(ctx) {
       if (await readCardWorkspace(cardPath) === undefined) throw Object.assign(new Error('人物卡不存在：' + card), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
       const changed = (await updateCard(cardPath, {}, { ts: Date.now(), summary: '插件 ' + owner + ' 修改' }, operations, options)).changed === true
       return { changed, revision: await cardProjectionRevision(cardPath) }
+    },
+    // Plugins writing a card's cast and packs: the same store and checks as the player's stage page.
+    editCast: async (card, change) => {
+      const cardPath = normalizeResourcePath(card, 'card')
+      if (await readCardWorkspace(cardPath) === undefined) throw Object.assign(new Error('人物卡不存在：' + card), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
+      await change(castAssets, cardPath)
+      await castAssetsChanged(cardPath)
+    },
+    saveCardPack: async (card, { id, format, title, files }) => {
+      const cardPath = normalizeResourcePath(card, 'card')
+      if (await readCardWorkspace(cardPath) === undefined) throw Object.assign(new Error('人物卡不存在：' + card), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
+      const { pack } = await assetPacks.importFiles(files, { id, format, title })
+      const current = (await castAssets.read(cardPath)).packs || []
+      await castAssets.bindPacks(cardPath, current.filter(item => item.id !== pack.id).concat([{ id: pack.id, contentHash: pack.contentHash, format: pack.format, title: pack.title, name: '' }]))
+      await castAssetsChanged(cardPath)
+      return { id: pack.id, contentHash: pack.contentHash }
+    },
+    removeCardPack: async (card, id) => {
+      const cardPath = normalizeResourcePath(card, 'card')
+      const current = (await castAssets.read(cardPath)).packs || []
+      if (!current.some(item => item.id === id)) return false
+      await castAssets.bindPacks(cardPath, current.filter(item => item.id !== id))
+      await castAssetsChanged(cardPath)
+      return true
     },
     cardRevision: async card => {
       const cardPath = normalizeResourcePath(card, 'card')

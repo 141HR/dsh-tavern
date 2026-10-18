@@ -230,3 +230,17 @@ test('开局默认：dsh.json 指向包内预设，只认少数几项设置，�
   assert.deepEqual((await readCardArchive(staged)).defaults, { stage: true }, '卡可以要求打开自己的舞台')
   await staged.close()
 })
+
+test('素材包：插件用零散文件建包，与卡带的包同一存储；路径不安全、重复或空包时拒绝', async t => {
+  const dir = await temp(t)
+  const packs = createAssetPacks({ root: dir, store: memoryStore() })
+  const first = await packs.importFiles([{ path: 'bg/night.png', data: PNG }, { path: 'manifest.json', data: Buffer.from('{}') }], { id: 'stage-bg', format: 'my-director', title: '背景' })
+  assert.equal(first.reused, false)
+  assert.equal(first.pack.format, 'my-director')
+  assert.deepEqual(await readFile((await packs.file('stage-bg', first.pack.contentHash, 'bg/night.png')).path), PNG)
+  assert.equal((await packs.importFiles([{ path: 'manifest.json', data: Buffer.from('{}') }, { path: 'bg/night.png', data: PNG }], { id: 'stage-bg' })).reused, true, '内容相同就复用')
+  for (const bad of ['../x.png', '/x.png', 'a/.hidden', 'a\\b.png', '']) await assert.rejects(packs.importFiles([{ path: bad, data: PNG }], { id: 'p' }), /路径无效/)
+  await assert.rejects(packs.importFiles([{ path: 'a.png', data: PNG }, { path: 'a.png', data: PNG }], { id: 'p' }), /重复/)
+  await assert.rejects(packs.importFiles([{ path: 'a.png', data: 'x' }], { id: 'p' }), /Uint8Array/)
+  await assert.rejects(packs.importFiles([], { id: 'p' }), /空/)
+})

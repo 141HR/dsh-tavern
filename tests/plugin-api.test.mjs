@@ -1023,3 +1023,30 @@ test('改卡带版本：expectedRevision 在卡的编辑队列里比对，不一
   await tick()
   assert.deepEqual(heard, [['workbench', { card: 'cards/a.json', revision: 6 }]])
 })
+
+test('写角色素材与素材包：按人物卡写，走 Tavern 自己的素材存储；卡内插件只能写自己的卡', { skip: !cordis }, async t => {
+  const calls = []
+  const cast = new Proxy({}, { get: (_target, method) => async input => { calls.push([method, input]) } })
+  const h = await harness(t, {
+    editCast: async (card, change) => change(cast, card),
+    saveCardPack: async (card, input) => { calls.push(['saveCardPack', card, input.id, input.files.length]); return { id: input.id, contentHash: 'h' } },
+    removeCardPack: async (card, id) => id === 'bg',
+    cardScope: async () => new Map([['card-own', { cards: ['cards/b.json'] }]])
+  })
+  let tavern, own
+  await h.root.plugin({ name: 'painter', inject: ['tavern'], apply(ctx) { tavern = ctx.tavern } })
+  await h.root.plugin({ name: 'card-own', inject: ['tavern'], apply(ctx) { own = ctx.tavern } })
+  await tick()
+  await tavern.setCastImage({ card: 'cards/a.json', name: '林岚', slot: 'joy', data: new Uint8Array([1, 2]) })
+  await assert.rejects(tavern.setCastImage({ card: 'cards/a.json', name: '林岚', slot: 'joy', data: 'x' }), /Uint8Array/)
+  await tavern.setCastVoice({ card: 'cards/a.json', name: '林岚', provider: 'painter/edge', voice: 'v' })
+  await tavern.setCastCharacter({ card: 'cards/a.json', name: '林岚', aliases: ['岚'] })
+  await tavern.removeCastImage({ card: 'cards/a.json', name: '林岚', slot: 'joy' })
+  await tavern.removeCastCharacter({ card: 'cards/a.json', name: '林岚' })
+  assert.deepEqual(calls.map(call => call[0]), ['setImage', 'setVoice', 'setCharacter', 'removeImage', 'removeCharacter'])
+  assert.equal(calls[0][1].cardPath, 'cards/a.json')
+  assert.deepEqual(await tavern.saveCardPack({ card: 'cards/a.json', id: 'bg', files: [{ path: 'a.png', data: new Uint8Array([1]) }] }), { id: 'bg', contentHash: 'h' })
+  await assert.rejects(tavern.saveCardPack({ card: 'cards/a.json', id: 'bg', files: [] }), /files/)
+  assert.equal(await tavern.removeCardPack({ card: 'cards/a.json', id: 'bg' }), true)
+  await assert.rejects(own.setCastCharacter({ card: 'cards/a.json', name: 'x' }), error => error.code === 'TAVERN_PLUGIN_SCOPE')
+})

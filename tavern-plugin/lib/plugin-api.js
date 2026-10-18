@@ -44,6 +44,7 @@ const TASK_PHASES = Object.freeze({ before: '结算前', parallel: '与结算同
 const MAX_VERSION_WATCHES = 2000
 const MAX_PUBLISHED_STATE = 256 * 1024
 const MAX_PUBLISHED_ENTRIES = 2000
+const MAX_PACK_FILES = 5000
 // Stages a plugin may replace, and what a replacement must hand back (docs/plugin-design.md).
 const REPLACEABLE_STAGES = Object.freeze({ settlement: '结算' })
 
@@ -583,6 +584,40 @@ export function createTavernPluginApi(deps) {
       if (typeof handler !== 'function') throw new TypeError('onCardChanged 需要一个函数')
       const entry = { owner: ownerOf(this), handler }
       return owned(this, () => { cardHandlers.add(entry); return () => cardHandlers.delete(entry) }, 'tavern.onCardChanged()')
+    },
+
+    // A card's cast (avatars, expression sprites, voices), written as the player's stage page does.
+    async setCastImage({ card, name, slot, data } = {}) {
+      if (!(data instanceof Uint8Array)) throw new TypeError('data 必须是 Uint8Array 或 Buffer')
+      await deps.editCast(cardIdOf(card), (cast, cardPath) => cast.setImage({ cardPath, name, slot, bytes: Buffer.from(data) }))
+    },
+
+    async removeCastImage({ card, name, slot } = {}) {
+      await deps.editCast(cardIdOf(card), (cast, cardPath) => cast.removeImage({ cardPath, name, slot }))
+    },
+
+    async setCastCharacter({ card, name, rename, aliases } = {}) {
+      await deps.editCast(cardIdOf(card), (cast, cardPath) => cast.setCharacter({ cardPath, name, rename, aliases }))
+    },
+
+    async setCastVoice({ card, name, provider, voice } = {}) {
+      await deps.editCast(cardIdOf(card), (cast, cardPath) => cast.setVoice({ cardPath, name, provider, voice }))
+    },
+
+    async removeCastCharacter({ card, name } = {}) {
+      await deps.editCast(cardIdOf(card), (cast, cardPath) => cast.removeCharacter({ cardPath, name }))
+    },
+
+    // Store an asset pack (files by path) and attach it to the card, replacing a pack with the same id.
+    async saveCardPack({ card, id, format = '', title = '', files } = {}) {
+      const id_ = cardIdOf(card)
+      if (!Array.isArray(files) || !files.length || files.length > MAX_PACK_FILES) throw new TypeError('files 需要 1–' + MAX_PACK_FILES + ' 个 { path, data }')
+      if (typeof format !== 'string' || typeof title !== 'string') throw new TypeError('format、title 必须是字符串')
+      return await deps.saveCardPack(id_, { id, format, title, files: files.map(file => ({ path: file?.path, data: file?.data })) })
+    },
+
+    async removeCardPack({ card, id } = {}) {
+      return await deps.removeCardPack(cardIdOf(card), String(id || ''))
     },
 
     // Where a tool this plugin registered with DSH shows: in play, in the card workbench, or both.

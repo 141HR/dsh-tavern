@@ -638,6 +638,36 @@ Tavern 的 Skill：`listSkills` 返回 `[{ name, source, description }]`，`sour
 
 DSH 人物卡（`.dshcard`，见[格式设计](design/dsh-card-format.md)）带的素材包。`listCardPacks` 返回这局人物卡带的包：`[{ id, contentHash, format, title, name, baseUrl }]`。Tavern 不解读包的内容，`format` 说明由谁解读（例如 `dsh-asset-pack`）。读文件：宿主侧用 `readCardPackFile`，返回 `{ data, mediaType, size }`；浏览器侧直接用 `baseUrl + 包内路径`，支持分段读取（音频、视频可以边下边播）。图片、音频、视频、字体、JSON、文本按原类型提供，其他类型（包括 HTML、SVG、JS）只能下载，不会在页面里运行。浏览器侧用 `tavernUi.getCardPacks(gameId)` 拿同样的列表。
 
+### 写角色素材：`setCastImage`、`removeCastImage`、`setCastCharacter`、`setCastVoice`、`removeCastCharacter`（第 3 版）
+
+和玩家在舞台页「角色素材」里做的一样，按人物卡写（`card` 是 `listCards` 的 `id`，或 `onTurnSettled` 里 `card.id`）。适合生图插件把画好的立绘存进卡、导入器插件导入素材、配音插件给人物配上声音：
+
+```js
+await ctx.tavern.setCastImage({ card, name: '林岚', slot: 'joy', data: pngBytes })   // slot：'avatar' 或 28 个情绪名之一
+await ctx.tavern.setCastCharacter({ card, name: '林岚', aliases: ['岚'] })           // 新建或改别名；rename 改名
+await ctx.tavern.setCastVoice({ card, name: '林岚', provider: 'dsh-tavern-edge/edge', voice: 'zh-CN-XiaoxiaoNeural' })  // voice 为 '' 时清除
+await ctx.tavern.removeCastImage({ card, name: '林岚', slot: 'joy' })
+await ctx.tavern.removeCastCharacter({ card, name: '林岚' })
+```
+
+- 图片 `data` 是 `Uint8Array` 或 `Buffer`，PNG、JPEG、WebP、GIF，单张最多 8 MB；同样的内容只存一份。规则和限制与玩家上传相同，不合格时抛错。
+- 写的是玩家自己的素材：玩家在舞台页里看得到、改得了、删得掉；与 `castAssetSource`（插件临时提供、玩家清不掉）不同。
+- 写完后这张卡的各局（正文头像、舞台）自动刷新。卡内插件只能写自己的卡。
+
+### `saveCardPack({ card, id, format?, title?, files })`、`removeCardPack({ card, id })`（第 3 版）
+
+把一组文件存成素材包并挂到人物卡上，和 DSH 人物卡自带的包存在同一处、按同样方式读取（`listCardPacks`、`readCardPackFile`、浏览器侧 `baseUrl`）。适合插件导入 Live2D 模型、背景、BGM 这类成套素材：
+
+```js
+const { id, contentHash } = await ctx.tavern.saveCardPack({ card, id: 'stage-bg', format: 'my-director', title: '背景',
+  files: [{ path: 'bg/night.png', data: pngBytes }, { path: 'manifest.json', data: Buffer.from(JSON.stringify(manifest)) }] })
+```
+
+- `id` 用字母、数字、点、下划线和连字符；同一张卡上已有同 `id` 的包时整个替换。`files` 1–5000 个，`path` 是包内相对路径（不能以 `/` 开头，不能含 `..` 或以 `.` 开头的部分），`data` 是 `Uint8Array` 或 `Buffer`。
+- 每个文件按内容只存一份，内容完全相同的包直接复用；`contentHash` 由 Tavern 计算，包的内容一变它就变，浏览器可以放心长期缓存。
+- `format` 说明由谁解读包的内容，Tavern 不解读。图片、音视频、字体、JSON、文本按原类型提供，其他类型只能下载、不会在页面里运行。
+- `removeCardPack` 只是把包从卡上取下，返回是否取下了。卡内插件只能写自己的卡。
+
 ### `speechProvider({ id, label, description?, voices?, defaultVoice?, synthesize })`
 
 添加一个配音渠道，例如 Edge TTS、火山、自己部署的语音服务。玩家在「设置 → DSH Tavern → 显示与交互 → 配音」的渠道列表里选中它后，台词朗读、舞台朗读和其他插件的 `synthesizeSpeech` 都走这个渠道。
@@ -973,4 +1003,4 @@ Tavern 尽量开放接口，并保持每个接口简单、稳定；接口按插�
 |---|---|
 | 1 | 首个版本。 |
 | 2 | 新增 `turnSection`、`worldbookSource`、`settlementSection`、`settlementTool`：插件可以往每轮正文请求和后台结算里添加内容。新增插件存档数据（`saveTurnData`、`readTurnData`、`saveGameData`、`readGameData`）与 `onTimelineChanged`；编辑正文后重新发 `onTurnSettled`；分叉时带上插件数据和媒体项。新增第一个替换类接口 `replaceSettlement`，以及本局插件面板（按局开关、选择结算由谁负责、错误记录）。新增 `candidateSection`、`compactionSection`、`worldbookEntries`；新增 `getCharacterDesigns`、`saveCharacterDesign`（人物设计档案）、`listCards`、`readCardRaw`、`updateCardRaw`、`toolModes` 与 Skill 读写（`listSkills`、`readSkill`、`saveSkill`、`removeSkill`）；浏览器侧新增 `registerPanel`、`registerStartGroup`、`registerCardListView`（`tavernUi.apiVersion` 为 2）。`onTurnSettled`、`getTurn` 增加只读的 `variables`。新增 `getCard`、`getCardImage`、`getHistory`、`setVariables`、`editTurn`、`runTask`。新增宿主侧 `handle` 与浏览器侧 `callHost`，插件的浏览器侧可以调用自己的宿主侧。新增 `settlementTask`、`manualTask`、`startTask`：插件可以定义每轮结算前后运行的任务和玩家手动运行的任务。新增 `getTurnState`，`onTurnSettled`、`getTurn` 增加 `greeting`；浏览器侧新增 `getTurnState`、`watchTurnState`、`setInput`、`submitInput`、`openOverlay`、`assetUrl`（插件文件夹的 `assets/` 静态资源）。导出存档包含插件存档数据和媒体项，导入后照常可读。插件可放进数据目录的 `plugins/` 文件夹加载。新增演出接口：宿主侧 `getCast`、`onCastAnnotated`、`getCastAssets`，浏览器侧 `getStage`、`watchStage`、`registerStageView`。新增配音接口：宿主侧 `speechProvider`、`synthesizeSpeech`，浏览器侧 `speak`、`stopSpeech`。新增背景音乐 `playMusic`、`stopMusic`。新增本局配置项 `gameSettings`、`getGameSettings`、`onGameSettingsChanged`，浏览器侧 `getGameSettings`、`watchGameSettings`。第 1 版接口不变。 |
-| 3 | 新增 `versionSignal`：正文版本失效时中止的信号，结算任务的 `signal` 也随版本失效中止；`onTimelineChanged` 增加 `textVersion`；结算任务新增 `phase: 'parallel'`，与 Tavern 自己的结算同时运行。新增 `cardRevision`、`onCardChanged`，`updateCardRaw` 支持 `expectedRevision` 并返回 `revision`。新增 `getRequestContext`：读这一轮正文请求的本轮上下文。新增 `publishState` 与浏览器侧 `watchState`：插件把最新状态推给自己的页面（`tavernUi.apiVersion` 为 3）。第 1、2 版接口不变。 |
+| 3 | 新增 `versionSignal`：正文版本失效时中止的信号，结算任务的 `signal` 也随版本失效中止；`onTimelineChanged` 增加 `textVersion`；结算任务新增 `phase: 'parallel'`，与 Tavern 自己的结算同时运行。新增写角色素材（`setCastImage`、`removeCastImage`、`setCastCharacter`、`setCastVoice`、`removeCastCharacter`）与素材包（`saveCardPack`、`removeCardPack`）。新增 `cardRevision`、`onCardChanged`，`updateCardRaw` 支持 `expectedRevision` 并返回 `revision`。新增 `getRequestContext`：读这一轮正文请求的本轮上下文。新增 `publishState` 与浏览器侧 `watchState`：插件把最新状态推给自己的页面（`tavernUi.apiVersion` 为 3）。第 1、2 版接口不变。 |
