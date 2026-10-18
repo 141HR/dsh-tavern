@@ -558,6 +558,8 @@ export async function apply(ctx) {
     await profileData.writeJson(rel, value)
   }
   const CARD_PROJECTION_REVISIONS = 'card-projection-revisions.json'
+  // Told after a card's working copy changed (plugins' onCardChanged).
+  const cardRevisionListeners = new Set()
   async function cardProjectionRevision(cardPath) {
     const state = await readJson(CARD_PROJECTION_REVISIONS)
     return Math.max(0, Number(state && state.cards && state.cards[str(cardPath)]) || 0)
@@ -571,6 +573,7 @@ export async function apply(ctx) {
       return { version, cards: Object.assign({}, cards, { [normalized]: version }) }
     })
     void coordinationEvents?.publishAll()
+    for (const listener of cardRevisionListeners) { try { listener(normalized, Number(saved?.cards?.[normalized]) || 0) } catch {} }
     return saved
   }
   function groupOfMode(mode) {
@@ -1326,7 +1329,7 @@ export async function apply(ctx) {
       })
     }
   }
-  const updateCard = createCardEditor({ readCardWorkspace, cardPreparation, fileResources, bumpCardProjectionRevision, syncCardName })
+  const updateCard = createCardEditor({ readCardWorkspace, cardPreparation, fileResources, bumpCardProjectionRevision, syncCardName, cardRevision: path => cardProjectionRevision(normalizeResourcePath(path, 'card')) })
   async function replaceCardVariables(cardPath, variables) {
     const workspace = await readCardWorkspace(cardPath)
     if (workspace === undefined) throw new Error('人物卡不存在: ' + cardPath)
@@ -2919,10 +2922,16 @@ export async function apply(ctx) {
       const workspace = await readCardWorkspace(cardPath)
       return workspace === undefined ? null : cardPreparation.present({ card: workspace, as: 'raw' })
     },
-    updateCardRaw: async (card, operations, owner) => {
+    updateCardRaw: async (card, operations, owner, options = {}) => {
       const cardPath = normalizeResourcePath(card, 'card')
       if (await readCardWorkspace(cardPath) === undefined) throw Object.assign(new Error('人物卡不存在：' + card), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
-      return (await updateCard(cardPath, {}, { ts: Date.now(), summary: '插件 ' + owner + ' 修改' }, operations)).changed === true
+      const changed = (await updateCard(cardPath, {}, { ts: Date.now(), summary: '插件 ' + owner + ' 修改' }, operations, options)).changed === true
+      return { changed, revision: await cardProjectionRevision(cardPath) }
+    },
+    cardRevision: async card => {
+      const cardPath = normalizeResourcePath(card, 'card')
+      if (await readCardWorkspace(cardPath) === undefined) throw Object.assign(new Error('人物卡不存在：' + card), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
+      return await cardProjectionRevision(cardPath)
     },
     // Tavern decides where its own tools show; a plugin may only scope the tools it registered.
     isControlledTool: name => controlledToolNames.has(name),
@@ -2967,6 +2976,7 @@ export async function apply(ctx) {
     publish: sessionId => sessionSignals.publish(sessionId, { kind: 'plugin-media', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
   })
   ctx.provide('tavern', pluginApi.service)
+  cardRevisionListeners.add((cardPath, revision) => pluginApi.cardChanged(cardPath, revision))
   // Tell plugins the story line changed (informational: their turn data follows text versions
   // by itself). After an edit or an undone rollback the visible version may be new to them.
   function notifyPluginTimeline(sessionId, kind, { turn, settled = false } = {}) {

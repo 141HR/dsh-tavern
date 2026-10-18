@@ -985,3 +985,41 @@ test('getRequestContext：读这一轮正文请求用到的各段上下文，标
   ])
   assert.equal(foregroundRequestContext(chat, 9), null)
 })
+
+test('改卡带版本：expectedRevision 在卡的编辑队列里比对，不一致时报冲突、不改卡；onCardChanged 只告诉卡内插件它自己的卡', { skip: !cordis }, async t => {
+  const { createCardEditor } = await import('../tavern-plugin/lib/domain/card-editor.js')
+  let revision = 4
+  const writes = []
+  const updateCard = createCardEditor({
+    readCardWorkspace: async () => ({ data: {} }),
+    cardPreparation: { update: () => ({ changed: true, card: { data: { x: 1 } }, view: {} }), present: () => ({}) },
+    fileResources: { writeWorking: async (path, text) => writes.push(path) },
+    bumpCardProjectionRevision: async () => { revision += 1 },
+    syncCardName: async () => {},
+    cardRevision: async () => revision
+  })
+  await updateCard('cards/a.json', {}, {}, [], { expectedRevision: 4 })
+  await assert.rejects(updateCard('cards/a.json', {}, {}, [], { expectedRevision: 4 }), error => error.code === 'REVISION_CONFLICT')
+  assert.equal(writes.length, 1)
+
+  const passed = []
+  const h = await harness(t, {
+    updateCardRaw: async (card, operations, owner, options) => { passed.push(options); if (options.expectedRevision === 1) throw Object.assign(new Error('冲突'), { code: 'REVISION_CONFLICT' }); return { changed: true, revision: 6 } },
+    cardRevision: async () => 5,
+    cardScope: async () => new Map([['card-own', { cards: ['cards/b.json'] }]])
+  })
+  const heard = []
+  let tavern
+  await h.root.plugin({ name: 'workbench', inject: ['tavern'], apply(ctx) { tavern = ctx.tavern; ctx.tavern.onCardChanged(change => heard.push(['workbench', change])) } })
+  await h.root.plugin({ name: 'card-own', inject: ['tavern'], apply(ctx) { ctx.tavern.onCardChanged(change => heard.push(['card-own', change])) } })
+  await tick()
+  assert.equal(await tavern.cardRevision({ card: 'cards/a.json' }), 5)
+  const operations = [{ op: 'set', path: '/data/x', value: 1 }]
+  assert.deepEqual(await tavern.updateCardRaw({ card: 'cards/a.json', operations, expectedRevision: 5 }), { changed: true, revision: 6 })
+  await assert.rejects(tavern.updateCardRaw({ card: 'cards/a.json', operations, expectedRevision: 1 }), error => error.code === 'TAVERN_PLUGIN_REVISION_CONFLICT')
+  await assert.rejects(tavern.updateCardRaw({ card: 'cards/a.json', operations, expectedRevision: 'x' }), /expectedRevision/)
+  assert.deepEqual(passed[0], { expectedRevision: 5 })
+  await h.api.cardChanged('cards/a.json', 6)
+  await tick()
+  assert.deepEqual(heard, [['workbench', { card: 'cards/a.json', revision: 6 }]])
+})

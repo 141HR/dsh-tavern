@@ -109,6 +109,7 @@ export function createTavernPluginApi(deps) {
   const removedHandlers = new Set()
   const timelineHandlers = new Set()
   const castHandlers = new Set()
+  const cardHandlers = new Set()
   // Each plugin's own game settings (one declaration per plugin) and who listens for changes.
   const gameSettingDefs = new Map()
   const settingHandlers = new Set()
@@ -548,9 +549,10 @@ export function createTavernPluginApi(deps) {
 
     // Change a card's working copy with JSON Pointer set/delete. The imported original is kept,
     // so the player can still restore it in Tavern.
-    async updateCardRaw({ card, operations } = {}) {
+    async updateCardRaw({ card, operations, expectedRevision } = {}) {
       const owner = ownerOf(this)
       const id = cardIdOf(card)
+      if (expectedRevision !== undefined && (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)) throw new TypeError('expectedRevision 必须是 cardRevision 返回的数字')
       if (!Array.isArray(operations) || !operations.length || operations.length > MAX_CARD_OPERATIONS) throw new TypeError('operations 需要 1–' + MAX_CARD_OPERATIONS + ' 项')
       const plain = operations.map((operation, index) => {
         const label = 'operations[' + index + ']'
@@ -562,7 +564,25 @@ export function createTavernPluginApi(deps) {
         if (json === undefined || json.length > MAX_CARD_VALUE) throw new TypeError(label + '.value 必须是不超过 2 MB 的 JSON 值')
         return { op: 'set', path: operation.path, value: JSON.parse(json) }
       })
-      return { changed: await deps.updateCardRaw(id, plain, owner) }
+      try {
+        const result = await deps.updateCardRaw(id, plain, owner, expectedRevision === undefined ? {} : { expectedRevision })
+        return typeof result === 'object' && result ? { changed: result.changed === true, revision: result.revision } : { changed: result === true }
+      } catch (error) {
+        if (error?.code === 'REVISION_CONFLICT') error.code = 'TAVERN_PLUGIN_REVISION_CONFLICT'
+        throw error
+      }
+    },
+
+    // The card's working-copy revision: a number that grows with every change (0 before the first).
+    async cardRevision({ card } = {}) {
+      return await deps.cardRevision(cardIdOf(card))
+    },
+
+    // Called with { card, revision } after a card's working copy changed (an edit, a restore, a plugin).
+    onCardChanged(handler) {
+      if (typeof handler !== 'function') throw new TypeError('onCardChanged 需要一个函数')
+      const entry = { owner: ownerOf(this), handler }
+      return owned(this, () => { cardHandlers.add(entry); return () => cardHandlers.delete(entry) }, 'tavern.onCardChanged()')
     },
 
     // Where a tool this plugin registered with DSH shows: in play, in the card workbench, or both.
@@ -991,6 +1011,14 @@ export function createTavernPluginApi(deps) {
     return structuredClone(publishedStates.get(key))
   }
 
+  /** Called by Tavern after a card's working copy changed; a card plugin hears only about its own card. */
+  async function cardChanged(cardPath, revision) {
+    if (cardHandlers.size === 0) return
+    const scopes = deps.cardScope ? await deps.cardScope().catch(() => null) : null
+    const elsewhere = new Set(Array.from(scopes || []).filter(([, scope]) => !scope.cards.includes(cardPath)).map(([name]) => name))
+    dispatch(cardHandlers, { card: cardPath, revision }, 'onCardChanged', elsewhere)
+  }
+
   function gameRemoved(gameId) {
     if (!gameId) return
     for (const key of Array.from(publishedStates.keys())) if (key.startsWith(gameId + '\u0000')) publishedStates.delete(key)
@@ -1094,6 +1122,7 @@ export function createTavernPluginApi(deps) {
     for (const entry of timelineHandlers) use(entry.owner, '生命周期', '观察')
     for (const entry of removedHandlers) use(entry.owner, '生命周期', '观察')
     for (const entry of castHandlers) use(entry.owner, '演出', '观察')
+    for (const entry of cardHandlers) use(entry.owner, '人物卡', '观察')
     for (const entry of castSources.values()) use(entry.owner, '演出', '添加')
     for (const entry of speechProviders.values()) use(entry.owner, '配音', '添加')
     for (const entry of [...sections.values(), ...turnSections.values(), ...worldbookSources.values()]) use(entry.owner, '上下文', '添加')
@@ -1329,6 +1358,6 @@ export function createTavernPluginApi(deps) {
   }
 
   return Object.freeze({ service, toolModesFor, callHandler, turnState, exportGame, importGame, turnSettled, castAnnotated, castAssetSources, gameRemoved,
-    speechProviders: () => Array.from(speechProviders.values()), timelineChanged, checkVersions, pluginState, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
+    speechProviders: () => Array.from(speechProviders.values()), timelineChanged, checkVersions, pluginState, cardChanged, gameForked, forkTurns, promptSections, turnContext, worldbookPoolEntries, settlement, candidate, compactionNotes, replaceSettlement,
     runSettlementTasks, manualTaskFor, runManualTask, stopTasks, runningTask, gamePlugins, setGamePlugin, pluginGameSettings })
 }
