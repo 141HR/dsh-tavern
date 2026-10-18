@@ -297,3 +297,12 @@ test('Windows 更新器启动后，预留锁记下它的进程号，进程未接
   assert.ok(events.includes('updater.launched'))
   assert.ok(events.includes('updater.notadopted'))
 })
+
+test('从 Git 仓库运行时不启动应用内更新，提示用 git pull；检查更新照常', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-tavern-checkout-'))
+  try {
+    await mkdir(path.join(root, '.git'), { recursive: true })
+    const updater = createApplicationUpdater({ dataRoot: path.join(root, 'data'), sourceRoot: root, runtimeHost: 'cli', ...verifiedUpdate })
+    await assert.rejects(updater.start(), /Git 仓库运行.*git pull/)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
