@@ -104,7 +104,7 @@ test('Android 入口在 Tavern 离线时仍可启动更新或修复', async (t) 
   await writeFile(path.join(appDir, '.dsh-tavern-release.json'), JSON.stringify({ commit: currentCommit }))
   t.mock.method(globalThis, 'fetch', async (url) => {
     const value = String(url).endsWith('/package.json') ? { version: '1.1.0' }
-      : String(url).endsWith('/commits/main') ? { sha: latestCommit }
+      : String(url).endsWith('/commits/0.2.1%E7%89%88%E6%9C%AC') ? { sha: latestCommit }
       : String(url).endsWith(`/compare/${currentCommit}...${latestCommit}`) ? { status: 'ahead', base_commit: { sha: currentCommit } }
       : assert.fail(`unexpected request: ${url}`)
     return new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } })
@@ -278,7 +278,7 @@ test('Android setup 通过同一命令完成首次安装和后续更新', async 
     assert.equal(result.status, 0, result.stderr)
   }
 
-  const environment = { ...process.env, DSH_HOME: dshHome, DSH_TAVERN_REPOSITORY: source }
+  const environment = { ...process.env, DSH_HOME: dshHome, DSH_TAVERN_REPOSITORY: source, DSH_TAVERN_BRANCH: 'main' }
   const first = spawnSync('bash', [new URL('../android/setup.sh', import.meta.url).pathname], { env: environment, encoding: 'utf8' })
   assert.equal(first.status, 0, first.stderr)
   assert.match(first.stdout, /全部完成/)
@@ -371,7 +371,7 @@ test('Git 下载失败时通过 tarball 安装更新，保留旧数据并在安�
   const environment = {
     ...process.env,
     DSH_HOME: dshHome,
-    DSH_TAVERN_REPOSITORY: path.join(directory, 'missing-git-repository'),
+    DSH_TAVERN_REPOSITORY: path.join(directory, 'missing-git-repository'), DSH_TAVERN_BRANCH: 'main',
     DSH_TAVERN_TARBALL_URL: `file://${archive}`,
   }
   const setupPath = new URL('../android/setup.sh', import.meta.url).pathname
@@ -422,7 +422,7 @@ test('DSHA 升级留下的空依赖目录可安全重装，真实用户文件仍
   await mkdir(path.join(appDir, 'node_modules', '.bin'), { recursive: true })
   await mkdir(path.join(appDir, 'tavern-plugin', 'node_modules', '.bin'), { recursive: true })
   await symlink('../missing-package/bin.js', path.join(appDir, 'node_modules', '.bin', 'generated-link'))
-  const environment = { ...process.env, DSH_HOME: dshHome, DSH_TAVERN_REPOSITORY: source }
+  const environment = { ...process.env, DSH_HOME: dshHome, DSH_TAVERN_REPOSITORY: source, DSH_TAVERN_BRANCH: 'main' }
 
   const recovered = spawnSync('bash', [setupPath], { env: environment, encoding: 'utf8' })
   assert.equal(recovered.status, 0, recovered.stderr)
@@ -465,7 +465,7 @@ test('Git 仓库 fetch 失败时切换为 tarball 更新', async (t) => {
   const packed = spawnSync('tar', ['-czf', archive, '-C', archiveParent, 'dsh-tavern-main'], { encoding: 'utf8' })
   assert.equal(packed.status, 0, packed.stderr)
 
-  const baseEnvironment = { ...process.env, DSH_HOME: dshHome, DSH_TAVERN_REPOSITORY: source, DSH_TAVERN_TARBALL_URL: `file://${archive}` }
+  const baseEnvironment = { ...process.env, DSH_HOME: dshHome, DSH_TAVERN_REPOSITORY: source, DSH_TAVERN_BRANCH: 'main', DSH_TAVERN_TARBALL_URL: `file://${archive}` }
   const first = spawnSync('bash', [setupPath], { env: baseEnvironment, encoding: 'utf8' })
   assert.equal(first.status, 0, first.stderr)
   assert.equal(await readFile(path.join(appDir, 'version.txt'), 'utf8'), 'git-v1\n')

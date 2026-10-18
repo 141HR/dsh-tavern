@@ -17,13 +17,13 @@ const RELEASE_FILE = '.dsh-tavern-release.json'
 const RUNNING_TIMEOUT_MS = 15 * 60 * 1000
 // Matches the installation lock's stale-idle limit.
 const ORPHAN_RECORD_MS = 60 * 60 * 1000
-const VERSION_URL = 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/package.json'
-const COMMIT_URL = 'https://api.github.com/repos/flizzywine/dsh-tavern/commits/main'
+const VERSION_URL = 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/package.json'
+const COMMIT_URL = 'https://api.github.com/repos/flizzywine/dsh-tavern/commits/0.2.1%E7%89%88%E6%9C%AC'
 const COMPARE_URL = 'https://api.github.com/repos/flizzywine/dsh-tavern/compare'
 const execFileAsync = promisify(execFile)
 const UPDATE_CHECK_POLICY = 5
 const BUSY_PHASES = new Set(['running', 'cancelling', 'blocked'])
-const CDN_METADATA_URL = 'https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/dsh-tavern-runtime.json'
+const CDN_METADATA_URL = 'https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@0.2.1%E7%89%88%E6%9C%AC/dsh-tavern-runtime.json'
 const RUNTIME_FILES = new Set(['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'cordis.patch.yml', 'install.ps1', 'install.sh'])
 const RUNTIME_DIRECTORIES = ['bin/', 'config/', 'presets/', 'tavern-plugin/', 'patches/']
 
@@ -180,11 +180,11 @@ export function createApplicationUpdater(options) {
   const dataRoot = path.resolve(options.dataRoot)
   const sourceRoot = path.resolve(options.sourceRoot)
   const dshHome = path.resolve(options.dshHome || path.join(dataRoot, '../../..'))
-  const profileManifest = path.join(dshHome, 'profiles', 'tavern', 'package.json')
   const execPath = options.execPath || process.execPath
   const hostDependencyAnchor = options.hostDependencyAnchor || ''
   const platform = options.platform || process.platform
   const runtimeHost = options.runtimeHost || process.env.DSH_TAVERN_RUNTIME_HOST
+  const profileManifest = path.join(dshHome, 'profiles', (runtimeHost || (process.versions.electron ? 'desktop' : 'cli')) === 'desktop' ? 'desktop' : 'tavern', 'package.json')
   const spawnProcess = options.spawnProcess || spawn
   const now = typeof options.now === 'function' ? options.now : Date.now
   const isProcessAlive = typeof options.isProcessAlive === 'function' ? options.isProcessAlive : processIsAlive
@@ -392,9 +392,15 @@ export function createApplicationUpdater(options) {
     }
     // Status must apply the same stale-lock rule as a new install would; otherwise a
     // lock the installer would reclaim keeps the update button disabled forever.
+    // A reservation is never adopted when the launched updater dies before its first
+    // line of Tavern code; nothing inside it can report that, so say it here.
+    const notAdopted = owner?.state === 'reserved' && owner.launcherPid > 1
     if (owner && installationState.reclaimStaleInstallation(dshHome, owner)) {
       if (current?.phase === 'completed' && current.attemptId === owner.attemptId) return { ...current, ...identity }
-      const interrupted = { phase: 'failed', attemptId: owner.attemptId, repairRequired: true, repairSince: now(), host: await host(), failedAt: now(), error: '上次更新已中断（安装进程均已退出或超过 1 小时无进展），已解除安装锁，可以修复安装。' }
+      if (notAdopted) record('updater.notadopted', { attemptId: owner.attemptId, launcherPid: owner.launcherPid, reservedForMs: now() - (Number(owner.startedAt) || now()) })
+      const interrupted = { phase: 'failed', attemptId: owner.attemptId, repairRequired: true, repairSince: now(), host: await host(), failedAt: now(),
+        error: notAdopted ? '更新进程启动后没有开始安装就退出了，已解除安装锁。可以重试；仍失败时请从外部终端运行安装命令。'
+          : '上次更新已中断（安装进程均已退出或超过 1 小时无进展），已解除安装锁，可以修复安装。' }
       await writeStatus(interrupted, { expectedAttemptId: current?.attemptId })
       return { ...interrupted, ...identity }
     }
@@ -535,6 +541,11 @@ export function createApplicationUpdater(options) {
   async function start() {
     const managed = await packageManagedStatus()
     if (managed) throw new Error(`此酒馆由 DSH 插件管理器安装。请关闭酒馆后在终端运行：${managed.updateCommand}，然后重新启动 tavern Profile。`)
+    // A Git checkout is the developer's: the updater would install a separate copy (or replace this one
+    // and drop its .git), never update what is running. Checking for updates still works.
+    if (await stat(path.join(sourceRoot, '.git')).then(() => true, () => false)) {
+      throw new Error(`此酒馆从 Git 仓库运行（${sourceRoot}），应用内更新不会更新它。请在仓库里用 git pull 更新，然后重新启动酒馆。`)
+    }
     const identity = await localIdentity(true)
     record('identity', identity)
     const current = await statusWithIdentity(identity)
@@ -604,7 +615,7 @@ export function createApplicationUpdater(options) {
         cwd: dshHome,
         detached: true,
         windowsHide: true,
-        stdio: platform === 'win32' ? ['ignore', 'ignore', 'pipe'] : 'ignore',
+        stdio: platform === 'win32' ? ['ignore', 'pipe', 'pipe'] : 'ignore',
         env: process.versions.electron
           ? {
               ...launchEnvironment, DSH_HOME: dshHome, ...(installHost === 'cli' ? { DSH_TAVERN_CLI_HOME: dshHome } : {}),
@@ -616,13 +627,19 @@ export function createApplicationUpdater(options) {
               ...(hostDependencyAnchor ? { DSH_TAVERN_HOST_DEPENDENCY_ANCHOR: hostDependencyAnchor } : {}),
             },
       })
+      let launcherPid = Number(child.pid)
       if (typeof child.once === 'function') {
         await new Promise(function (resolve, reject) {
           child.once('spawn', () => { launchObserved = true })
           if (platform === 'win32') {
-            let launchError = ''
+            let launchError = '', launchOutput = ''
+            child.stdout?.on('data', chunk => { launchOutput = (launchOutput + chunk.toString('utf8')).slice(-200) })
             child.stderr?.on('data', chunk => { launchError = (launchError + chunk.toString('utf8')).slice(-6000) })
-            child.once('close', code => code === 0 ? resolve() : reject(new Error(sanitizeUpdateError(launchError.trim() || `Windows 更新器启动失败（退出码 ${code}）`))))
+            child.once('close', code => {
+              // The helper prints the WMI-created updater's PID.
+              launcherPid = Number(launchOutput.trim())
+              code === 0 ? resolve() : reject(new Error(sanitizeUpdateError(launchError.trim() || `Windows 更新器启动失败（退出码 ${code}）`)))
+            })
           } else child.once('spawn', resolve)
           child.once('error', reject)
         })
@@ -635,6 +652,13 @@ export function createApplicationUpdater(options) {
       if (platform !== 'win32' && Number.isInteger(childPid) && childPid > 0) {
         running.pid = childPid
         await writeStatus(value => ({ ...value, pid: childPid }), { attemptId, expectedAttemptId: attemptId, onlyIf: value => value?.phase === 'running' && !value?.supervisorReady })
+      }
+      // An updater that dies before adopting the reservation otherwise leaves a pid:0
+      // lock that only the 1-hour idle limit clears; with its PID, status reclaims it.
+      record('updater.launched', { launcherPid, execPath, electronNode: Boolean(process.versions.electron) })
+      if (Number.isSafeInteger(launcherPid) && launcherPid > 1) {
+        // Already adopted, or the lock is momentarily busy: the idle limit still applies.
+        try { lease.update({ launcherPid }) } catch {}
       }
     } catch (error) {
       if (!launchObserved) {
