@@ -31,6 +31,8 @@ window.__ModuleLoader__.load({
       bundles: 'bundle',
       modules: 'node_modules',
       active: '使用中',
+      linked: '已链接',
+      standalone: '独立',
       use: '使用它',
       revert: '还原为独立 profile',
       working: '执行中…',
@@ -60,6 +62,8 @@ window.__ModuleLoader__.load({
       bundles: 'bundles',
       modules: 'node_modules',
       active: 'in use',
+      linked: 'Linked',
+      standalone: 'Standalone',
       use: 'Use this one',
       revert: 'Revert to a standalone profile',
       working: 'Working…',
@@ -75,21 +79,63 @@ window.__ModuleLoader__.load({
       how: 'How it works',
     }
 
-    const styles = {
-      page: { display: 'grid', gap: '14px', fontSize: '13px', lineHeight: 1.6, color: 'inherit', maxWidth: '720px' },
-      title: { margin: 0, fontSize: '15px', fontWeight: 600 },
-      subtitle: { margin: 0, opacity: 0.75 },
-      card: { border: '1px solid rgba(127,127,127,0.35)', borderRadius: '10px', padding: '12px 14px', display: 'grid', gap: '8px' },
-      code: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', border: '1px solid rgba(127,127,127,0.35)', borderRadius: '5px', padding: '1px 6px' },
-      button: { appearance: 'none', border: '1px solid rgba(127,127,127,0.4)', background: 'transparent', color: 'inherit', borderRadius: '8px', padding: '6px 12px', fontSize: '13px', cursor: 'pointer' },
-      primary: { appearance: 'none', border: '1px solid transparent', background: '#4d6bfe', color: '#fff', borderRadius: '8px', padding: '6px 12px', fontSize: '13px', cursor: 'pointer' },
-      quiet: { appearance: 'none', border: '1px solid transparent', background: 'transparent', color: 'inherit', opacity: 0.7, borderRadius: '8px', padding: '6px 8px', fontSize: '13px', cursor: 'pointer' },
-      row: { display: 'grid', gridTemplateColumns: '1fr auto auto auto auto', gap: '10px', alignItems: 'center', padding: '6px 0', borderTop: '1px solid rgba(127,127,127,0.2)' },
-      muted: { opacity: 0.7 },
-      error: { color: '#e5484d' },
-      pre: { margin: 0, padding: '10px', border: '1px solid rgba(127,127,127,0.3)', borderRadius: '8px', maxHeight: '220px', overflow: 'auto', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px', whiteSpace: 'pre-wrap' },
-      actions: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' },
-    }
+    /** Scoped stylesheet; class names are prefixed so they never leak into the host. */
+    const CSS = `
+.pb { display: grid; gap: 18px; font-size: 13px; line-height: 1.6; color: inherit; max-width: 720px;
+  --pb-accent: #4d6bfe; --pb-accent-soft: rgba(77,107,254,0.08); --pb-line: rgba(127,127,127,0.22);
+  --pb-fill: rgba(127,127,127,0.06); --pb-ok: #30a46c; --pb-ok-soft: rgba(48,164,108,0.12); }
+.pb * { box-sizing: border-box; }
+.pb-head { display: grid; gap: 4px; }
+.pb-title { margin: 0; font-size: 16px; font-weight: 600; }
+.pb-sub { margin: 0; opacity: 0.65; }
+.pb-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.pb-muted { opacity: 0.6; }
+.pb-label { font-size: 12px; font-weight: 500; opacity: 0.6; letter-spacing: 0.02em; }
+.pb-current { display: grid; gap: 6px; padding: 14px 16px; border-radius: 12px; background: var(--pb-fill); border: 1px solid var(--pb-line); }
+.pb-current-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pb-current-name { display: flex; align-items: baseline; gap: 10px; font-size: 18px; font-weight: 600; flex-wrap: wrap; }
+.pb-arrow { font-weight: 400; opacity: 0.4; }
+.pb-path { font-size: 12px; opacity: 0.55; word-break: break-all; }
+.pb-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; padding: 1px 9px; border-radius: 999px; background: var(--pb-fill); white-space: nowrap; }
+.pb-badge-ok { background: var(--pb-ok-soft); color: var(--pb-ok); }
+.pb-badge-ok::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pb-badge-accent { background: var(--pb-accent-soft); color: var(--pb-accent); }
+.pb-list { display: grid; gap: 8px; }
+.pb-option { position: relative; display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--pb-line); cursor: pointer; transition: border-color .15s, background .15s; }
+.pb-option:hover { border-color: rgba(127,127,127,0.45); }
+.pb-option.is-selected { border-color: var(--pb-accent); background: var(--pb-accent-soft); }
+.pb-option input { position: absolute; opacity: 0; pointer-events: none; }
+.pb-dot { width: 16px; height: 16px; margin-top: 3px; border-radius: 50%; border: 1.5px solid rgba(127,127,127,0.55); display: grid; place-items: center; transition: border-color .15s; }
+.pb-option.is-selected .pb-dot { border-color: var(--pb-accent); }
+.pb-option.is-selected .pb-dot::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--pb-accent); }
+.pb-option:focus-within { outline: 2px solid var(--pb-accent-soft); outline-offset: 2px; }
+.pb-option-body { display: grid; gap: 4px; min-width: 0; }
+.pb-option-name { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; flex-wrap: wrap; }
+.pb-stats { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.pb-stat { font-size: 12px; padding: 0 8px; border-radius: 6px; background: var(--pb-fill); opacity: 0.85; }
+.pb-stat-bad { color: #e5484d; }
+.pb-empty { padding: 14px; border-radius: 12px; border: 1px dashed var(--pb-line); text-align: center; opacity: 0.6; }
+.pb-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pb-spacer { flex: 1; }
+.pb-btn { appearance: none; font: inherit; font-size: 13px; color: inherit; background: transparent; border: 1px solid rgba(127,127,127,0.35); border-radius: 8px; padding: 6px 14px; cursor: pointer; transition: background .15s, opacity .15s; }
+.pb-btn:hover:not(:disabled) { background: var(--pb-fill); }
+.pb-btn:disabled { opacity: 0.4; cursor: default; }
+.pb-btn-primary { background: var(--pb-accent); border-color: transparent; color: #fff; }
+.pb-btn-primary:hover:not(:disabled) { background: #3d5bf0; }
+.pb-btn-quiet { border-color: transparent; opacity: 0.65; padding: 6px 8px; }
+.pb-btn-quiet:hover:not(:disabled) { opacity: 1; }
+.pb-note { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--pb-accent-soft); }
+.pb-note-warn { background: rgba(245,166,35,0.12); display: grid; gap: 2px; }
+.pb-error { margin: 0; padding: 10px 12px; border-radius: 10px; color: #e5484d; background: rgba(229,72,77,0.08); }
+.pb-folds { display: grid; gap: 2px; border-top: 1px solid var(--pb-line); padding-top: 8px; }
+.pb-fold summary { list-style: none; cursor: pointer; padding: 6px 0; opacity: 0.65; display: flex; align-items: center; gap: 6px; user-select: none; }
+.pb-fold summary::-webkit-details-marker { display: none; }
+.pb-fold summary::before { content: '›'; display: inline-block; width: 10px; transition: transform .15s; }
+.pb-fold[open] summary::before { transform: rotate(90deg); }
+.pb-fold summary:hover { opacity: 1; }
+.pb-fold p { margin: 4px 0 8px 16px; opacity: 0.65; }
+.pb-pre { margin: 4px 0 8px; padding: 10px 12px; border-radius: 8px; background: var(--pb-fill); max-height: 220px; overflow: auto; font-size: 12px; white-space: pre-wrap; }
+`
 
     /** Describe one RPC failure for display. */
     function describeFailure(error) {
@@ -101,7 +147,8 @@ window.__ModuleLoader__.load({
 
     /** The first profile a user could switch to. */
     function firstCandidate(status) {
-      const profile = (status?.profiles ?? []).find((entry) => entry.name !== status.activeName)
+      const others = (status?.profiles ?? []).filter((entry) => entry.name !== status.activeName)
+      const profile = others.find((entry) => entry.name !== status.linkTargetName) ?? others[0]
       return profile === undefined ? '' : profile.name
     }
 
@@ -158,40 +205,41 @@ window.__ModuleLoader__.load({
       const isDesktop = status?.appKind === 'desktop'
       const candidates = (status?.profiles ?? []).filter((profile) => profile.name !== status?.activeName)
 
-      return h('section', { style: styles.page },
-        h('h2', { style: styles.title }, t('title')),
-        h('p', { style: styles.subtitle }, t('subtitle')),
+      const linked = status?.activeIsLink === true
+      const inUse = (name) => linked && name === status?.linkTargetName
+      const canUse = busy === '' && selected !== '' && isDesktop && !inUse(selected)
 
-        h('div', { style: styles.card },
-          h('div', null,
-            `${t('current')}: `,
-            h('code', { style: styles.code }, status?.activeName ?? '—'),
-            status?.activeIsLink === true
-              ? ` ${t('linkedTo')} `
-              : ` · ${t('independent')}`,
-            status?.activeIsLink === true ? h('code', { style: styles.code }, status?.linkTargetName ?? '?') : null,
-          ),
-          h('div', { style: styles.muted },
-            h('span', null, status?.activeDir ?? ''),
-          ),
-          isDesktop || status === null ? null : h('p', { style: { ...styles.muted, margin: 0 } }, t('cliHint')),
+      return h('section', { className: 'pb' },
+        h('style', null, CSS),
+        h('header', { className: 'pb-head' },
+          h('h2', { className: 'pb-title' }, t('title')),
+          h('p', { className: 'pb-sub' }, t('subtitle')),
         ),
 
-        h('div', { style: styles.card },
-          h('strong', null, t('profiles')),
+        h('div', { className: 'pb-current' },
+          h('div', { className: 'pb-current-top' },
+            h('span', { className: 'pb-label' }, t('current')),
+            status === null
+              ? null
+              : h('span', { className: linked ? 'pb-badge pb-badge-ok' : 'pb-badge' }, linked ? t('linked') : t('standalone')),
+          ),
+          h('div', { className: 'pb-current-name' },
+            h('span', { className: 'pb-mono' }, status?.activeName ?? '—'),
+            linked ? h('span', { className: 'pb-arrow' }, '→') : null,
+            linked ? h('span', { className: 'pb-mono' }, status?.linkTargetName ?? '?') : null,
+          ),
+          h('div', { className: 'pb-path pb-mono' }, status?.activeDir ?? (loading ? t('loading') : '')),
+          isDesktop || status === null ? null : h('p', { className: 'pb-note', style: { marginTop: '4px' } }, t('cliHint')),
+        ),
+
+        h('div', { className: 'pb-list' },
+          h('span', { className: 'pb-label' }, t('profiles')),
           candidates.length === 0
-            ? h('span', { style: styles.muted }, t('noTargets'))
-            : candidates.map((profile) => h('label', { key: profile.name, style: styles.row },
-                h('span', { style: { display: 'grid' } },
-                  h('span', null,
-                    h('code', { style: styles.code }, profile.name),
-                    profile.isLink ? h('span', { style: styles.muted }, ` → ${profile.linkTargetName}`) : null,
-                  ),
-                  h('span', { style: styles.muted }, profile.dir),
-                ),
-                h('span', { style: styles.muted }, `${t('deps')} ${profile.dependencyCount}`),
-                h('span', { style: styles.muted }, `${t('bundles')} ${profile.bundleCount}`),
-                h('span', { style: styles.muted }, profile.hasNodeModules ? 'node_modules ✓' : 'node_modules ✗'),
+            ? h('div', { className: 'pb-empty' }, t('noTargets'))
+            : candidates.map((profile) => h('label', {
+                key: profile.name,
+                className: selected === profile.name ? 'pb-option is-selected' : 'pb-option',
+              },
                 h('input', {
                   type: 'radio',
                   name: 'profile-bridge-target',
@@ -199,54 +247,69 @@ window.__ModuleLoader__.load({
                   onChange: () => setSelected(profile.name),
                   'aria-label': profile.name,
                 }),
+                h('span', { className: 'pb-dot' }),
+                h('span', { className: 'pb-option-body' },
+                  h('span', { className: 'pb-option-name' },
+                    h('span', { className: 'pb-mono' }, profile.name),
+                    profile.isLink ? h('span', { className: 'pb-muted pb-mono' }, `→ ${profile.linkTargetName}`) : null,
+                    inUse(profile.name) ? h('span', { className: 'pb-badge pb-badge-accent' }, t('active')) : null,
+                  ),
+                  h('span', { className: 'pb-path pb-mono' }, profile.dir),
+                  h('span', { className: 'pb-stats' },
+                    h('span', { className: 'pb-stat' }, `${t('deps')} ${profile.dependencyCount}`),
+                    h('span', { className: 'pb-stat' }, `${t('bundles')} ${profile.bundleCount}`),
+                    h('span', { className: profile.hasNodeModules ? 'pb-stat' : 'pb-stat pb-stat-bad' },
+                      `${t('modules')} ${profile.hasNodeModules ? '✓' : '✗'}`),
+                  ),
+                ),
               )),
         ),
 
-        h('div', { style: styles.actions },
+        h('div', { className: 'pb-actions' },
           h('button', {
             type: 'button',
-            style: { ...styles.primary, opacity: busy !== '' || selected === '' || isDesktop !== true ? 0.5 : 1 },
-            disabled: busy !== '' || selected === '' || isDesktop !== true,
+            className: 'pb-btn pb-btn-primary',
+            disabled: !canUse,
             onClick: () => void run('link', { target: selected }),
           }, busy === 'link' ? t('working') : t('use')),
           h('button', {
             type: 'button',
-            style: { ...styles.button, opacity: busy !== '' || status?.activeIsLink !== true ? 0.5 : 1 },
-            disabled: busy !== '' || status?.activeIsLink !== true,
+            className: 'pb-btn',
+            disabled: busy !== '' || !linked,
             onClick: () => void run('unlink', {}),
           }, busy === 'unlink' ? t('working') : t('revert')),
-          h('button', { type: 'button', style: styles.quiet, disabled: busy !== '', onClick: () => void load() }, t('refresh')),
-          loading ? h('span', { style: styles.muted }, t('loading')) : null,
+          h('span', { className: 'pb-spacer' }),
+          h('button', { type: 'button', className: 'pb-btn pb-btn-quiet', disabled: busy !== '' || loading, onClick: () => void load() },
+            loading ? t('loading') : `↻ ${t('refresh')}`),
         ),
 
         receipt?.value?.warnings?.length > 0
-          ? h('div', { style: styles.card },
+          ? h('div', { className: 'pb-note pb-note-warn' },
               h('strong', null, t('warnings')),
-              receipt.value.warnings.map((warning) => h('div', { key: warning, style: styles.muted }, `• ${warning}`)),
+              receipt.value.warnings.map((warning) => h('div', { key: warning }, `• ${warning}`)),
             )
           : null,
 
-        receipt !== null
-          ? h('p', { style: { margin: 0, opacity: 0.85 } }, t('closing'))
-          : null,
+        receipt !== null ? h('p', { className: 'pb-note' }, t('closing')) : null,
 
-        failure !== null ? h('p', { style: { ...styles.error, margin: 0 } }, `${t('failure')}: ${failure}`) : null,
+        failure !== null ? h('p', { className: 'pb-error' }, `${t('failure')}: ${failure}`) : null,
 
-        h('details', null,
-          h('summary', { style: { cursor: 'pointer', opacity: 0.8 } }, t('log')),
-          // The structured log is empty when the helper never reached its first
-          // line (for example a PowerShell startup failure); the launcher
-          // transcript is where that shows up.
-          h('pre', { style: styles.pre },
-            status?.logTail?.trim()
-              ? status.logTail
-              : status?.transcriptTail?.trim() ? status.transcriptTail : t('logEmpty')),
-        ),
-
-        h('details', null,
-          h('summary', { style: { cursor: 'pointer', opacity: 0.8 } }, t('how')),
-          h('p', { style: { ...styles.muted, margin: '8px 0 0' } }, t('why')),
-          h('p', { style: { ...styles.muted, margin: 0 } }, t('mustClose')),
+        h('div', { className: 'pb-folds' },
+          h('details', { className: 'pb-fold' },
+            h('summary', null, t('log')),
+            // The structured log is empty when the helper never reached its first
+            // line (for example a PowerShell startup failure); the launcher
+            // transcript is where that shows up.
+            h('pre', { className: 'pb-pre pb-mono' },
+              status?.logTail?.trim()
+                ? status.logTail
+                : status?.transcriptTail?.trim() ? status.transcriptTail : t('logEmpty')),
+          ),
+          h('details', { className: 'pb-fold' },
+            h('summary', null, t('how')),
+            h('p', null, t('why')),
+            h('p', null, t('mustClose')),
+          ),
         ),
       )
     }
