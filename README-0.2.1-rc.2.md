@@ -4,11 +4,13 @@
 
 ## 支持范围
 
-- 桌面宿主支持**官方 DeepSeek Harness 0.2.1-rc.2**，从[官网下载](https://deepseek.com/harness/)。安装器会核对内置 DSH 版本，不匹配时停止安装。
-- macOS（Apple 芯片）和 Windows（64 位）官方桌面；macOS 已本机验证，Windows 安装流程待测试用户验证。
-- 另提供独立命令行版，锁定 DSH 0.2.1-rc.2，在浏览器使用酒馆，不需要安装官方桌面。
-- 暂不支持社区 DSH Desktop、DSHA 或 Android APK。桌面与命令行安装方法分别见下文。
-- 本轮不发布一键 EXE 安装包，不要使用原有 EXE 安装这个测试版。
+测试版不再提供一键安装包，改为在宿主上安装酒馆插件，宿主版本按“闸门”放行：
+
+- **已验证**：官方 DeepSeek Harness **0.2.1-rc.2**（[官网下载](https://deepseek.com/harness/)）。macOS 已本机验证，Windows 待测试用户验证。
+- **未验证**：DSH 0.2.0 及以上、但还没验证过的版本（例如 DSHA 内置的 0.2.0，或更新的官方版本）可以安装，安装时和酒馆侧栏会提示“未验证”，重新生成、回退等功能可能无法使用，欢迎反馈。
+- **不可用**：低于 0.2.0 的版本（例如社区 DSH Desktop 2.0.13 内置的 0.1.5），以及已确认有问题的版本，安装器会停止，不修改任何文件。
+- 另提供独立命令行版，自带锁定的 DSH 0.2.1-rc.2，在浏览器使用酒馆，不需要安装官方桌面。
+- 不提供 EXE 安装包和独立 APK，不要用原有 EXE / APK 安装这个测试版。
 
 ## 安装前
 
@@ -33,6 +35,16 @@ $env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString
 ```
 
 看到安装成功后，重新打开官方 DeepSeek Harness，即可进入酒馆。侧栏版本处显示“测试版 · DSH 0.2.1”。
+
+## Android：DSHA
+
+DSHA 内置 DSH 0.2.0，属于“未验证”版本，可以安装试用。安装并首次启动 [DSHA](https://github.com/DSH-APP/DSHA/releases) 后，打开底部 **终端**，粘贴执行：
+
+```sh
+curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/android/setup.sh' -o /tmp/dsh-tavern-testing-setup.sh && bash /tmp/dsh-tavern-testing-setup.sh
+```
+
+看到 **全部完成** 后重启 DSHA，点击 **启动** → **进入** → **酒馆工作台**。反馈时请注明 DSHA 版本。
 
 ## 独立命令行版（浏览器使用）
 
