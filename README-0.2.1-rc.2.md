@@ -19,7 +19,9 @@
 ### 方式一：官方桌面版
 
 1. 安装 DeepSeek Harness 0.2.1-rc.2，启动一次后从托盘退出。
-2. 打开 PowerShell（支持 Windows PowerShell 5.1），粘贴执行：
+2. 下载 [安装程序](https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@0.2.1%E7%89%88%E6%9C%AC/dsh-tavern-testing-install.cmd)，双击运行。弹出安全提示时点「运行」。
+
+   也可以打开 PowerShell（支持 Windows PowerShell 5.1），粘贴执行：
 
    ```powershell
    $env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/0.2.1%E7%89%88%E6%9C%AC/install.ps1')); Invoke-Expression $tavernInstaller
@@ -27,7 +29,7 @@
 
 3. 安装成功后重新打开 DeepSeek Harness，即进入酒馆。
 
-无需另装 Node.js。切回原版 DSH 见 [桌面版：在酒馆与原版之间切换](#桌面版在酒馆与原版之间切换)。
+无需另装 Node.js。切回原版 DSH 见 [桌面版：切回原版](#桌面版切回原版)。
 
 ### 方式二：命令行版（浏览器使用）
 
@@ -66,7 +68,7 @@ Invoke-Expression $tavernInstaller
 
 3. 安装成功后重新打开 DeepSeek Harness，即进入酒馆。
 
-无需另装 Node.js。切回原版 DSH 见 [桌面版：在酒馆与原版之间切换](#桌面版在酒馆与原版之间切换)。
+无需另装 Node.js。切回原版 DSH 见 [桌面版：切回原版](#桌面版切回原版)。
 
 ### 方式二：命令行版（浏览器使用）
 
