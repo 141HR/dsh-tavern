@@ -3250,8 +3250,10 @@ export async function apply(ctx) {
   async function withCompactionSession(id, work) {
     const live = agentRegistry.get(id)
     if (live) return work(live)
-    // The compaction engine comes from the preset: mount it as DSH's session controller does.
-    const handle = await agentRegistry.resume({ resumeSessionId: id, setup: tavernPresetSetup() })
+    // The compaction engine comes from the preset and needs a model: resume as DSH's session controller does.
+    const selection = agentDefaultModel?.currentSelection?.() || {}
+    const handle = await agentRegistry.resume({ resumeSessionId: id, setup: tavernPresetSetup(),
+      agentOptions: { provider: selection.provider, model: selection.model } })
     try { return await work(handle.agent) } finally { await handle.dispose() }
   }
   async function retireOldForegroundFrames(agent, keepTurn) {
