@@ -36,6 +36,7 @@ import { createSessionResourceAccess } from './domain/session-resource-access.js
 import { worldBookDisplayName } from './domain/worldbook-resource.js'
 import { createSaveUpgrade, prepareSaveUpgrade, saveSessionIds, unreadySaveSessions } from './domain/save-upgrade.js'
 import { storedSessionVersion } from './domain/session-upgrade.js'
+import { exportSessionDiagnostics } from './domain/session-diagnostics.js'
 import { createTaskStateReader, taskStateFields } from './domain/task-state-reader.js'
 import { installHostProjectionReplay } from './domain/host-projection-replay.js'
 import { createBoundedHistory, readRecentWindow, readRowsAt } from './domain/bounded-history.js'
@@ -4388,7 +4389,11 @@ export async function apply(ctx) {
         stored: id => storedSessionVersion(path.join(path.dirname(resolveTavernDataRoot()), 'sessions'), id),
         prepared: id => preparedSaveSessions.get(id),
       })
-      return failed.length ? { ready: false, error: '会话日志未完成升级，请重启酒馆后重试。原档保留：' + failed.map(id => id + (preparedSaveSessions.get(id)?.error ? '（' + preparedSaveSessions.get(id).error + '）' : '')).join('、') } : { ready: true, version: 4 }
+      // A log the upgrader refused fails the same way on every restart; only a skipped one waits for it.
+      const refused = failed.filter(id => preparedSaveSessions.get(id)?.error)
+      return !failed.length ? { ready: true, version: 4 } : { ready: false, error: refused.length
+        ? '会话日志无法升级，原档保留：' + refused.map(id => id + '（' + preparedSaveSessions.get(id).error + '）').join('、')
+        : '会话日志未完成升级，请重启酒馆后重试。原档保留：' + failed.join('、') }
     },
     assertIdle: chat => {
       if (chat.mode === 'card' || backgroundTasks.activity(chat).busy || chat.regenInProgress || agentRegistry.get(chat.sessionId)?.phase?.kind === 'running') {
@@ -4409,6 +4414,18 @@ export async function apply(ctx) {
         const chatId = (await readSessionMap())[str(args?.sessionId)]
         if (!chatId) throw new Error('找不到当前存档')
         return method === 'getSaveUpgrade' ? saveUpgrade.status(chatId) : saveUpgrade.start(chatId)
+      }
+      case 'exportSessionDiagnostics': {
+        const chatId = str(args?.chatId) || (await readSessionMap())[str(args?.sessionId)]
+        const chat = chatId && await readChat(chatId)
+        if (!chat) throw new Error('找不到这局存档')
+        const report = await exportSessionDiagnostics({
+          sessionsRoot: path.join(path.dirname(resolveTavernDataRoot()), 'sessions'),
+          sessionIds: saveSessionIds(chat),
+          errorOf: id => preparedSaveSessions.get(id)?.error,
+          tavernVersion: TAVERN_PACKAGE_VERSION,
+        })
+        return { filename: '酒馆诊断-' + chat.id.slice(0, 8) + '.json', text: JSON.stringify(report) }
       }
       case 'getCardOrganization': return { groups: (await cardOrganization.read()).groups }
       case 'organizeCards': return { groups: (await cardOrganization.update(args || {}, await fileResources.list('card'))).groups }

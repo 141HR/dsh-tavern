@@ -1458,6 +1458,17 @@ window.__ModuleLoader__.load({
 		}
 		const beginSessionViewRead = createSessionViewReader();
 
+		// A save whose session log cannot be upgraded may not open at all, so this works from the
+		// conversation menu too: the structure goes to the developer, the story text stays home.
+		async function downloadSessionDiagnostics(args, sessionId) {
+			const result = await rpc("exportSessionDiagnostics", args, sessionId);
+			const url = URL.createObjectURL(new Blob([result.text], { type: "application/json;charset=utf-8" }));
+			const link = document.createElement("a");
+			link.href = url; link.download = result.filename;
+			document.body.appendChild(link); link.click(); link.remove();
+			window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+		}
+
 		function rpc(method, args, sessionId, requestOptions) {
 			const runtimeControl = ["claimTavernScriptWork", "startTavernScriptWork", "getTavernScriptWorkState", "heartbeatTavernScriptRuntime", "completeTavernHelperEvent", "releaseTavernHelperRuntime"].includes(method);
 			const controlChannel = runtimeControl && typeof tavernSessionSignals !== "undefined" && typeof tavernSessionSignals.control === "function" ? tavernSessionSignals : null;
@@ -15508,6 +15519,7 @@ function bindTavernFontZoom(node, win) {
 					!managing && menuSession === item.sessionId ? h("div", { className: "dsh-tavern-side-row-menu" },
 						h("button", { disabled: busy, onClick: function () { renameConversation(item, title); } }, "重命名"),
                         isPlayMode(item.mode || "story") ? h("button", { disabled: busy, onClick: () => rescueConversation(item) }, "存档救援") : null,
+                        isPlayMode(item.mode || "story") ? h("button", { disabled: busy, title: "存档打不开或迁移失败时，导出会话结构发给开发者；不含剧情正文", onClick: () => { setMenuSession(null); downloadSessionDiagnostics({ chatId: item.chatId }).catch(err => setError("导出诊断文件失败：" + String(err.message || err))); } }, "导出诊断文件") : null,
 						h("button", { className: "danger", disabled: busy, onClick: function () { deleteConversation(item, title); } }, "删除")
 					) : null
 				);
@@ -19735,6 +19747,8 @@ function bindTavernFontZoom(node, win) {
                 h("div", {className:"dsh-tavern-status-empty"}, "统一迁移本局的会话日志与剧情存储，保留正文、变量、分支和历史版本。旧文件保留原样；迁移后的新进度写入新版存档。"),
                 busy ? h("div", {role:"status"}, stage + " 大存档可能需要较长时间，暂时不要关闭或重启酒馆。") : null,
                 error || state?.phase === "failed" ? h("div", {className:"dsh-card-error",role:"alert"}, error || state.error) : null,
+                state?.phase === "failed" && !state.sessions?.ready ? h("div", {className:"dsh-tavern-status-empty"}, "这局的旧会话日志暂时无法升级，原档已保留。请点「导出诊断文件」，把文件发给开发者（不含剧情正文）；修复发布后更新酒馆即可自动升级。想先接着玩，可以在左侧对话菜单「⋯」里用「存档救援」把剧情转到新对话。") : null,
+                state?.phase === "failed" && !state.sessions?.ready ? h("button", {type:"button",className:"dsh-tavern-btn",onClick:() => downloadSessionDiagnostics({}, props.sessionId).catch(err => setError("导出诊断文件失败：" + String(err.message || err)))}, "导出诊断文件") : null,
                 !state ? h("button", {className:"dsh-tavern-btn",onClick:()=>setRefresh(value=>value+1)}, "重新检查存档迁移") :
                 h("button", {type:"button",className:"dsh-tavern-btn",disabled:busy || props.busy,onClick:migrate}, busy ? "迁移中…" : state.phase === "failed" ? "重试迁移" : "迁移存档"),
                 !busy && props.busy ? h("div", {className:"dsh-tavern-status-empty"}, "请等待本轮游玩和后台结算完成后再迁移。") : null

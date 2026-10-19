@@ -975,6 +975,7 @@
 					!managing && menuSession === item.sessionId ? h("div", { className: "dsh-tavern-side-row-menu" },
 						h("button", { disabled: busy, onClick: function () { renameConversation(item, title); } }, "重命名"),
                         isPlayMode(item.mode || "story") ? h("button", { disabled: busy, onClick: () => rescueConversation(item) }, "存档救援") : null,
+                        isPlayMode(item.mode || "story") ? h("button", { disabled: busy, title: "存档打不开或迁移失败时，导出会话结构发给开发者；不含剧情正文", onClick: () => { setMenuSession(null); downloadSessionDiagnostics({ chatId: item.chatId }).catch(err => setError("导出诊断文件失败：" + String(err.message || err))); } }, "导出诊断文件") : null,
 						h("button", { className: "danger", disabled: busy, onClick: function () { deleteConversation(item, title); } }, "删除")
 					) : null
 				);
