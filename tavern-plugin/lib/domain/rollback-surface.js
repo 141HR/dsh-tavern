@@ -2,7 +2,7 @@ import { storyEventTurn } from './session-upgrade-references.js'
 import { isCompactionCheckpoint } from './compaction-checkpoint.js'
 import { inputAttachments } from './player-input-content.js'
 import { isRescuedHistoryMessage } from './chat-history-rescue.js'
-import { replaceSessionSurface } from './session-surface-mutations.js'
+import { createSessionSurfaceMutator, replaceSessionSurface } from './session-surface-mutations.js'
 import { restoredSurfaceSeqs } from './surface-restoration.js'
 import { sessionEvents, surfaceReplacementRange } from './session-events.js'
 import { createSurfaceOwnership, planSurfaceRecovery, planSurfaceRange, SurfaceRecoveryError, OWNED } from './surface-recovery.js'
@@ -118,6 +118,10 @@ export function regenerationAttemptTurns(input) {
 export function supersededRegenerationTurns({ events = [], nodes = [] } = {}) {
   const visible = new Set(nodes.map(Number))
   const turns = new Set()
+  // The bodies of the replacements that still own the page. The transcript draws
+  // append-origin events only, so these tell us which rows are the ones left to
+  // show this round.
+  const bodies = new Set()
   for (const event of events) {
     if (event?.type !== 'assistant/message' || event.surfaceOp?.op !== 'replace') continue
     // Only the replacement that is still the current node speaks for the page;
@@ -126,6 +130,8 @@ export function supersededRegenerationTurns({ events = [], nodes = [] } = {}) {
     // Only a regeneration writes a body for round N into a later turn; a seed or
     // repair rewrite carries no story turn and leaves the opening alone.
     if (!(Number(event.data?.message?.source?.tavernStoryTurn) > 0)) continue
+    const body = contentText(event.data?.message)
+    if (body !== '') bodies.add(body)
     for (const seq of event.sourceEventSeqs || []) {
       const original = eventAt(events, seq)
       if (!original || original.type !== 'assistant/message') continue
@@ -136,6 +142,23 @@ export function supersededRegenerationTurns({ events = [], nodes = [] } = {}) {
       // A row for the turn that now carries the replacement stays as it is.
       if (Number.isSafeInteger(turn) && turn > 0 && turn !== Number(event.data?.turn)) turns.add(turn)
     }
+  }
+  if (turns.size === 0 || bodies.size === 0) return [...turns].sort((left, right) => left - right)
+  // A round whose body only ever existed as a fold copy has that copy inside the
+  // turn we are about to hide. Hiding it as well erases the only row the
+  // transcript can draw, and the replacement itself stays model-only: the page
+  // then shows the player's input with no reply at all. Keep such a turn unless
+  // another drawable copy survives somewhere outside the hidden set.
+  const drawable = new Set()
+  for (const event of events) {
+    if (event?.type !== 'assistant/message' || event.surfaceOp !== 'append') continue
+    if (!bodies.has(contentText(event.data?.message))) continue
+    const turn = Number(event.data?.turn)
+    if (Number.isSafeInteger(turn) && turn > 0) drawable.add(turn)
+  }
+  if (![...drawable].some(turn => !turns.has(turn))) {
+    const keep = [...drawable].find(turn => turns.has(turn))
+    if (keep !== undefined) turns.delete(keep)
   }
   return [...turns].sort((left, right) => left - right)
 }
@@ -482,10 +505,65 @@ export function regenerationProjection(replacement, data, operationId) {
   }
 }
 
-/** Idempotent: each replacement reuses its id and sources, so a retry after a crash writes nothing twice. */
+/**
+ * Idempotent: each replacement reuses its id and sources, so a retry after a crash writes nothing twice.
+ *
+ * The transcript draws append-origin events only; a replacement stays model-only.
+ * A round whose body exists only as a replacement (it was submitted through a tool
+ * call, so it never streamed an answer of its own) therefore renders as nothing
+ * after regenerating. Give it a transcript copy, then shadow the range including
+ * that copy — the same shape the fold writes for a live submission.
+ */
 export function applyRegenerationProjection(session, projection) {
-  replaceSessionSurface(session, 'assistant/message', projection.data, projection.range)
-  for (const cleanup of projection.cleanups || []) replaceSessionSurface(session, 'user/message', cleanup.data, cleanup.range)
+  const events = sessionEvents(session)
+  const blocks = Array.isArray(projection.data?.message?.content) ? projection.data.message.content : []
+  const body = blocks.filter(block => block?.type === 'text').map(block => block.text).join('')
+  // Judge by the shape the range ends on, never by the message source: a
+  // projection inherits the source of the reply it replaces, so a source check
+  // silently skips the copy for every ordinary round.
+  const endEvent = events.find(event => Number(event?.seq) === Number(projection.range?.end))
+  const needsTranscriptCopy = body !== '' && endEvent?.type === 'assistant/message' && endEvent.surfaceOp !== 'append'
+  // Only a copy written AFTER the range may be reused. A fold copy inside the
+  // range is the old turn's row: it stays model-only once that turn is hidden as
+  // superseded, so reusing it leaves the round blank. Rewriting it as the
+  // replacement's tail keeps the retry idempotent without that trap.
+  const shown = needsTranscriptCopy
+    ? events.find(event => event?.type === 'assistant/message' && event.surfaceOp === 'append' &&
+        Number(event.seq) > Number(projection.range?.end) &&
+        (event.data?.message?.content || []).some(block => block?.type === 'text' && block.text === body))
+    : undefined
+  const nodes = Array.isArray(session?.surface?.nodes) ? session.surface.nodes.map(Number) : []
+  const replaceCleanups = () => {
+    for (const cleanup of projection.cleanups || []) replaceSessionSurface(session, 'user/message', cleanup.data, cleanup.range)
+  }
+  if (!needsTranscriptCopy) {
+    replaceSessionSurface(session, 'assistant/message', projection.data, projection.range)
+    replaceCleanups()
+    return
+  }
+  // Retry after a crash: the copy is on the surface already, and the old range
+  // may already be shadowed. Nothing left to write then.
+  const copySeq = shown ? Number(shown.seq) : -1
+  const from = nodes.indexOf(Number(projection.range?.start))
+  if (from < 0) {
+    if (copySeq < 0) replaceSessionSurface(session, 'assistant/message', projection.data, projection.range)
+    replaceCleanups()
+    return
+  }
+  const surface = createSessionSurfaceMutator(session)
+  surface.editStep(() => {
+    const shownSeq = copySeq >= 0
+      ? copySeq
+      : Number((entry => (typeof entry === 'number' ? entry : entry.seq))(surface.append('assistant/message', projection.data, { surfaceOp: 'append' })))
+    const to = session.surface.nodes.map(Number).indexOf(shownSeq)
+    if (to < from) return
+    surface.replace('assistant/message', projection.data, {
+      start: projection.range.start,
+      end: shownSeq,
+      sourceEventSeqs: session.surface.nodes.slice(from, to + 1).map(Number),
+    })
+  })
+  replaceCleanups()
 }
 
 /** Turns cut off without ending (the server stopped mid-reply) whose nodes the model still sees. */
