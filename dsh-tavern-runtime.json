@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "1a276bf2c0e1a1365502f3fcad6a84422047e228",
-  "releaseSequence": 764,
+  "revision": "604bc46cb70fe225104a0eba6d69315c7abc3d59",
+  "releaseSequence": 765,
   "version": "3.0.0",
   "files": [
     {
@@ -1541,8 +1541,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/runtime-preset-lifecycle.js",
-      "sha256": "689c2d02fbb08528bad5dcba2a0434d89a28514faffa7fdfee39821911ecbc42",
-      "size": 7037
+      "sha256": "4ad8671e75bacaa03902e743fed575fdec3d9442517f55ae1e400735a01491bf",
+      "size": 7936
     },
     {
       "path": "tavern-plugin/lib/domain/runtime-presets.js",
