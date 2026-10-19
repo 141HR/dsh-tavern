@@ -6329,6 +6329,17 @@ function bindTavernFontZoom(node, win) {
 			let nextId = 1;
 			const pending = Object.create(null);
             let contextReady = null;
+			const waitingEvents = new Set();
+			function deliverEvent(data) {
+				if (!contextReady) { onEvent(data); return; }
+				const eventId = String(data.eventId || "");
+				waitingEvents.add(eventId);
+				contextReady.then(function () { waitingEvents.delete(eventId); onEvent(data); }, function (error) {
+					waitingEvents.delete(eventId);
+					// Without a usable context the handlers must not run; say so instead of going silent.
+					post({ type: "dsh-tavern-helper-event-complete", eventId: eventId, error: "上下文同步失败：" + String(error && error.message || error), errorCode: "TAVERN_HELPER_CONTEXT_FAILED", args: copy(data.args || []) });
+				});
+			}
 			function post(message) { parent.postMessage(Object.assign({}, message, { token: token }), "*"); }
 			function request(method, args) {
 				// A card may replace its document; DOM listeners must be restored before RPC.
@@ -6344,7 +6355,15 @@ function bindTavernFontZoom(node, win) {
 				const data = event && event.data;
 				if (event.source !== parent || !data || data.token !== token) return;
 				if (data.type === "dsh-tavern-helper-context") { const ready = Promise.resolve(onContext(data.contextDelta ? {contextDelta:data.contextDelta} : { context: data.context || {} })); contextReady = ready; ready.then(function () { if (contextReady === ready) contextReady = null; }, function (error) { console.error(error); }); return; }
-				if (data.type === "dsh-tavern-helper-event" || data.type === "dsh-tavern-helper-event-ack" || data.type === "dsh-tavern-helper-event-query") { if (contextReady) contextReady.then(function () { onEvent(data); }, function (error) { console.error(error); }); else onEvent(data); return; }
+				// Probes and receipt acks only read event bookkeeping, so a slow context sync must
+				// not make a live sandbox look lost; only the event itself waits for its context.
+				if (data.type === "dsh-tavern-helper-event-ack") { onEvent(data); return; }
+				if (data.type === "dsh-tavern-helper-event-query") {
+					if (waitingEvents.has(String(data.eventId || ""))) post({ type: "dsh-tavern-helper-event-state", eventId: String(data.eventId || ""), phase: "queued" });
+					else onEvent(data);
+					return;
+				}
+				if (data.type === "dsh-tavern-helper-event") { deliverEvent(data); return; }
 				if (data.type !== "dsh-tavern-helper-response") return;
 				const task = pending[data.requestId];
 				if (!task) return;
@@ -8829,6 +8848,10 @@ function bindTavernFontZoom(node, win) {
                     const timer = hostWindow.setTimeout(function check() {
                         const pending = pendingEvents.get(eventId);
                         if (!pending) return;
+                        // A suspended page sends no probes, so its silence says nothing about
+                        // the sandbox: discount the stall and probe before judging.
+                        const stalledMs = now() - pending.probeDueAt - probeIntervalMs;
+                        if (stalledMs > 0) pending.contactAt = Math.min(now(), pending.contactAt + stalledMs + probeIntervalMs);
                         // A responsive sandbox may execute indefinitely. Probe the same
                         // identity: a lost completion replays its receipt, never its handler.
                         if (now() - pending.contactAt >= eventTimeoutMs) {
@@ -8845,9 +8868,10 @@ function bindTavernFontZoom(node, win) {
                             return;
                         }
                         post(record, { type: "dsh-tavern-helper-event-query", eventId: eventId });
+                        pending.probeDueAt = now() + probeIntervalMs;
                         pending.timer = hostWindow.setTimeout(check, probeIntervalMs);
                     }, probeIntervalMs);
-                    pendingEvents.set(eventId, { record: record, resolve: resolve, reject: reject, timer: timer, envelope: envelope, contactAt: startedAt, name: String(name), activeScriptId: "", diagnostics: diagnostics });
+                    pendingEvents.set(eventId, { record: record, resolve: resolve, reject: reject, timer: timer, envelope: envelope, contactAt: startedAt, probeDueAt: startedAt + probeIntervalMs, probeIntervalMs: probeIntervalMs, name: String(name), activeScriptId: "", diagnostics: diagnostics });
                     post(record, envelope);
 				});
 			}
@@ -9389,7 +9413,8 @@ function bindTavernFontZoom(node, win) {
 					if (!record || !record.scripts.has(String(scriptId))) return Promise.reject(new Error("人物卡脚本尚未运行"));
 					return emitToRecord(record, buttonEvent(scriptId, name), [], record.context);
 				},
-                eventResponsive: function (eventId) { const pending = pendingEvents.get(eventId); return Boolean(pending && now() - pending.contactAt < eventTimeoutMs); },
+                // An overdue probe means the page itself stalled; the watchdog re-probes before judging.
+                eventResponsive: function (eventId) { const pending = pendingEvents.get(eventId); return Boolean(pending && (now() - pending.contactAt < eventTimeoutMs || now() - pending.probeDueAt > pending.probeIntervalMs)); },
 				dispose: function () { hostWindow.removeEventListener("message", receive); clear(); releaseHostStylesheetBridge(); },
 				inspect: function () {
 					const record = records.get("shared");
