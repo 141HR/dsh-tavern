@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "c1fa396b4049c01dfa22c59eca32e9db625e1645",
-  "releaseSequence": 735,
+  "revision": "65db7a211b358ca930d1f00f49d1b08ef351aafd",
+  "releaseSequence": 736,
   "version": "3.0.0",
   "files": [
     {
@@ -91,8 +91,8 @@
     },
     {
       "path": "bin/eval-compaction-memory.mjs",
-      "sha256": "fee8be5e6d95b945304255dddb540f4ab58a670b3efb0ed3f4cb03b77792301a",
-      "size": 6786
+      "sha256": "0bef546edeefc18c858570051af99cd85c38efb514af83d61f44acd4d8958d96",
+      "size": 8070
     },
     {
       "path": "bin/import-user-home.mjs",
@@ -2266,8 +2266,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "4918dfb207d985d73e008633001a5aba5cd56abc946ab1a7033774f6ca6af214",
-      "size": 368575
+      "sha256": "57492d0e03c087ebeec13d4e22d96f311094702e214d487deab2632a5e9f9832",
+      "size": 369914
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
