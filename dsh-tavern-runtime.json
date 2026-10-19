@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "f27eb4945ffce83bd13ec3882e08a31b40b16d4e",
-  "releaseSequence": 766,
+  "revision": "977ce6f8b0bdf2809ecd3927d94a706b6b5d0b21",
+  "releaseSequence": 767,
   "version": "3.0.0",
   "files": [
     {
@@ -26,8 +26,8 @@
     },
     {
       "path": "bin/build-plugin-package.mjs",
-      "sha256": "9478c55da7f2277979b8868915029a64b30aa113ff4997bd5c05ac9d76f025ea",
-      "size": 2046
+      "sha256": "d83d2b976542d650003bd3d1e0ff3cd15eba742fd9e7ec57242b36c2ff563331",
+      "size": 2496
     },
     {
       "path": "bin/build-tavern-client.mjs",
@@ -151,8 +151,8 @@
     },
     {
       "path": "bin/plugin-package-guard.mjs",
-      "sha256": "edb73c53069645e24ace862d042de28c6a0ff2c5aff1bf9c9165811855b4d066",
-      "size": 634
+      "sha256": "9c1560bfc1eebdc8bc4ef78c1c99e6dffc605bba998de23c917170cca6e03aa2",
+      "size": 1002
     },
     {
       "path": "bin/portable-fs.mjs",
