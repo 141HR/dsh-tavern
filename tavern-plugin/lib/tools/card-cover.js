@@ -16,6 +16,9 @@ function localPath(value, label) {
   return path.normalize(expanded)
 }
 
+// IHDR always comes first: width and height sit at bytes 16–23.
+function pngSize(png) { return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) } }
+
 export function registerCardCoverTools({ chatForSession, exportCardPng, fileResources, presentCardText, str, tools }) {
   async function cardPathFor(args, exec) {
     const chat = await chatForSession(exec?.agent?.session?.id || '')
@@ -35,9 +38,9 @@ export function registerCardCoverTools({ chatForSession, exportCardPng, fileReso
     },
     output: {
       schema: { type: 'object', additionalProperties: false, properties: {
-        path: { type: 'string', required: true }, image: { type: 'string', required: true }, bytes: { type: 'integer', required: true }
+        path: { type: 'string', required: true }, image: { type: 'string', required: true }, width: { type: 'integer', required: true }, height: { type: 'integer', required: true }, bytes: { type: 'integer', required: true }
       } },
-      render: (_args, value) => [{ type: 'text', text: '已为 ' + value.path + ' 配好封面（' + value.image + '，PNG ' + value.bytes + ' 字节）。' }]
+      render: (_args, value) => [{ type: 'text', text: '已为 ' + value.path + ' 配好封面：' + value.image + ' → PNG ' + value.width + '×' + value.height + '，' + value.bytes + ' 字节；卡数据已嵌入，无需再核对。' }]
     },
     isConcurrencySafe: () => false,
     async execute(args, exec) {
@@ -47,7 +50,7 @@ export function registerCardCoverTools({ chatForSession, exportCardPng, fileReso
       if (data.length > MAX_COVER_BYTES) throw new Error('图片超过 30 MB，请换一张小一点的图')
       const png = await coverImageAsPng(data)
       await fileResources.setCardCover(cardPath, png, async () => (await presentCardText(cardPath)).text)
-      return { path: cardPath, image, bytes: png.length }
+      return { path: cardPath, image, ...pngSize(png), bytes: png.length }
     }
   }))
 
@@ -60,9 +63,9 @@ export function registerCardCoverTools({ chatForSession, exportCardPng, fileReso
     },
     output: {
       schema: { type: 'object', additionalProperties: false, properties: {
-        path: { type: 'string', required: true }, output: { type: 'string', required: true }, bytes: { type: 'integer', required: true }
+        path: { type: 'string', required: true }, output: { type: 'string', required: true }, name: { type: 'string', required: true }, width: { type: 'integer', required: true }, height: { type: 'integer', required: true }, bytes: { type: 'integer', required: true }
       } },
-      render: (_args, value) => [{ type: 'text', text: '已导出 PNG 人物卡：' + value.output + '（' + value.bytes + ' 字节）。' }]
+      render: (_args, value) => [{ type: 'text', text: '已导出 PNG 人物卡「' + value.name + '」：' + value.output + '（' + value.width + '×' + value.height + '，' + value.bytes + ' 字节，内嵌 chara 与 ccv3 卡数据，可直接导入 SillyTavern）；目录不存在时已自动创建，无需再核对。' }]
     },
     isConcurrencySafe: () => false,
     async execute(args, exec) {
@@ -72,7 +75,7 @@ export function registerCardCoverTools({ chatForSession, exportCardPng, fileReso
       const file = await exportCardPng(cardPath)
       await mkdir(path.dirname(output), { recursive: true })
       await writeFile(output, file.bytes, { flag: 'wx' }).catch(error => { throw new Error(error?.code === 'EEXIST' ? '文件已存在，请换一个名字: ' + output : '写入失败: ' + (error?.message || error)) })
-      return { path: cardPath, output, bytes: file.bytes.length }
+      return { path: cardPath, output, name: file.name, ...pngSize(file.bytes), bytes: file.bytes.length }
     }
   }))
 }

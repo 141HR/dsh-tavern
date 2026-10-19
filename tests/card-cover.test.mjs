@@ -113,7 +113,7 @@ test('工作台工具：配封面、导出 PNG，只在卡片模式、拒绝相�
     chatForSession: async () => ({ mode, cardPath: 'cards/阿珂.json' }),
     fileResources: store,
     presentCardText: async () => ({ text }),
-    exportCardPng: async cardPath => ({ bytes: pngWithTextChunks(await store.readCardImage(cardPath), [pngCardTextChunk('ccv3', text)]) }),
+    exportCardPng: async cardPath => ({ name: '阿珂', bytes: pngWithTextChunks(await store.readCardImage(cardPath), [pngCardTextChunk('ccv3', text)]) }),
     str: value => String(value ?? '')
   })
   const exec = { agent: { session: { id: 's' } } }

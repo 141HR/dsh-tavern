@@ -9,11 +9,13 @@ import { checkMvuCard, looksLikeMvuCard } from '../../tavern-plugin/lib/domain/m
 // Measures what one real card-workbench edit costs: steps and provider usage.
 // TAVERN_E2E_CARD_EDIT_SOURCE names a local card file to copy (never committed).
 export async function setupRealCardEdit({ root, profile, data, runtimeHome }) {
-  const settings = parse(await readFile(join(runtimeHome, 'settings.yaml'), 'utf8'))
-  const base = settings['agent-default-model']
+  // DSH 0.1.x kept the model in settings.yaml; 0.2.x keeps it in the profile's cordis.patch.yml.
+  const settings = await readFile(join(runtimeHome, 'settings.yaml'), 'utf8').then(parse, () => ({}))
+  const patch = settings['agent-default-model'] ? [] : await readFile(join(runtimeHome, 'profiles/tavern/cordis.patch.yml'), 'utf8').then(parse, () => [])
+  const base = settings['agent-default-model'] || (Array.isArray(patch) ? patch.find(item => item?.id === 'agent-default-model')?.config : undefined)
   assert.ok(base?.provider && base?.model, '需要已配置的真实模型')
   const selection = { ...base, ...(process.env.TAVERN_E2E_CARD_EDIT_MODEL ? { model: process.env.TAVERN_E2E_CARD_EDIT_MODEL } : {}), reasoningEffort: process.env.TAVERN_E2E_CARD_EDIT_EFFORT || base.reasoningEffort || 'high' }
-  await writeFile(join(root, 'settings.yaml'), stringify({ 'agent-default-model': selection, 'llm-pi-ai': settings['llm-pi-ai'] }), { mode: 0o600 })
+  if (settings['llm-pi-ai']) await writeFile(join(root, 'settings.yaml'), stringify({ 'agent-default-model': selection, 'llm-pi-ai': settings['llm-pi-ai'] }), { mode: 0o600 })
   await copyFile(join(runtimeHome, '.credentials.yaml'), join(root, '.credentials.yaml'))
   await writeFile(join(profile, 'cordis.patch.yml'), stringify([{ id: 'agent-default-model', config: selection }]))
   await writeFile(join(data, 'tavern-settings.json'), JSON.stringify({ defaultForegroundModel: selection, defaultBackgroundModel: selection,
