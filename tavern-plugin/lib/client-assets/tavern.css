@@ -3125,3 +3125,40 @@ html[data-dsh-text-layout] :is(.dsh-tavern-assistant, .dsh-tavern-user-bubble, .
 .dsh-tavern-text-layout-field input[type="range"] { width: 100%; accent-color: var(--dsh-tavern-accent); }
 .dsh-tavern-text-layout-value { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; text-align: right; }
 .dsh-tavern-text-layout-preview { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--dsw-alias-bg-layer-1, rgba(127, 127, 127, .08)); color: var(--dsw-alias-label-primary); }
+
+/* 手机顶栏：快捷入口最多 3 个，其余进 ⋮。留给它们的宽度由 JS 读下面这个变量折算
+   槽位（每格 42px = 40px 按钮 + 2px 间距）：
+   196 = 左右内边距 40 + 4、三处间距 4×3、角落按钮 40 + 外边距 8、标题下限 16、
+   宿主右侧动作组（子智能体触发器 + 全屏）80。 */
+@media (max-width: 1023px), (pointer: coarse) {
+  body.dsh-tavern-shell-active header:has([class*="_headerUtilities"]) [class*="_titleRow"] {
+    --dsh-tavern-header-fixed: 196px;
+    /* 宿主角落按钮浮在这个位置；上游给的是固定 44px，这里同样留出一格。 */
+    padding-right: 44px;
+  }
+  /* 宿主自己的「N 个子智能体」触发器 + 全屏是不可缩的：390px 下它要 131px，
+     而标题区只分到 110px，多出的 21px 直接压到快捷入口上（实测重叠 27px，
+     全屏按钮点不到）。允许它收缩，文字用省略号。 */
+  body.dsh-tavern-shell-active header:has([class*="_headerUtilities"]) [class*="_headerActions"] {
+    flex: 0 1 auto; min-width: 40px; gap: 0;
+  }
+  body.dsh-tavern-shell-active header:has([class*="_headerUtilities"]) [class*="_headerActions"] > :not(.dsh-tavern-play-fullscreen) {
+    min-width: 40px; overflow: hidden;
+  }
+  body.dsh-tavern-shell-active header:has([class*="_headerUtilities"]) [class*="_headerActions"] > :not(.dsh-tavern-play-fullscreen) span {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  body.dsh-tavern-shell-active header:has([class*="_headerUtilities"]) [class*="_crumbs"] {
+    flex: 1 1 auto; min-width: 0; overflow: hidden;
+  }
+}
+/* 手机竖屏：宿主的触发器实测 91px，占掉整整两格按钮的位置（430px 以下放不下
+   3 个图标 + ⋮）。藏掉它，把位置让给快捷入口；固定开销随之降到 156px。 */
+@media (max-width: 429px) {
+  body.dsh-tavern-shell-active header:has([class*="_headerUtilities"]) [class*="_headerActions"] > :not(.dsh-tavern-play-fullscreen) {
+    display: none !important;
+  }
+  body.dsh-tavern-shell-active header:has([class*="_headerUtilities"]) [class*="_titleRow"] {
+    --dsh-tavern-header-fixed: 156px;
+  }
+}
