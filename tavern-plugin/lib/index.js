@@ -177,7 +177,7 @@ import { POSTURE_SUBMIT_TOOL, POSTURE_SUBMIT_TOOL_NAME, lastSubmittedPosture, no
 import { createCastPresentation } from './domain/cast-presentation.js'
 import { createCastAssets } from './domain/cast-assets.js'
 import { createSpeech } from './domain/speech.js'
-import { buildCharx, cardImport, cardImportFromCard } from './domain/card-assets.js'
+import { buildCharx, cardImport, cardImportFromCard, pngCardTextChunk, pngWithTextChunks } from './domain/card-assets.js'
 import { createAssetPacks } from './domain/asset-packs.js'
 import { readCardArchive } from './domain/card-archive.js'
 import { openZipFile } from './domain/zip-file.js'
@@ -1283,6 +1283,22 @@ export async function apply(ctx) {
     }
     const name = str(document?.data?.name || cardPreparation.project(workspace).name || '人物卡')
     return { name, bytes: buildCharx({ document, cover: image ? stripPngTextChunks(image) : null, manifest, characterName: name, readFile: file => files.get(file) }) }
+  }
+  async function presentCardText(cardPath) {
+    const workspace = await readCardWorkspace(cardPath)
+    if (workspace === undefined) throw Object.assign(new Error('人物卡不存在: ' + cardPath), { code: 'TAVERN_NOT_FOUND' })
+    const document = cardPreparation.present({ card: workspace, as: 'sillytavern-v3', characterBook: await worldBooks.characterBookForCard(cardPath) })
+    return { document, text: JSON.stringify(document) }
+  }
+  // A standard card PNG: the cover's pixels carrying the current working card, as `chara`
+  // (what older tools read) and `ccv3` (what SillyTavern reads first).
+  async function exportCardPng(input) {
+    const cardPath = normalizeResourcePath(input, 'card')
+    const { document, text } = await presentCardText(cardPath)
+    const image = await fileResources.readCardImage(cardPath).catch(() => undefined)
+    if (!image) throw Object.assign(new Error('人物卡还没有封面，请先配封面'), { code: 'TAVERN_NOT_FOUND' })
+    const name = str(document?.data?.name || '人物卡')
+    return { name, bytes: pngWithTextChunks(image, [pngCardTextChunk('chara', text), pngCardTextChunk('ccv3', text)]) }
   }
   const cardSummaries = createCardSummaryCache({
     absolute: cardPath => fileResources.absolute(cardPath),
@@ -5137,6 +5153,11 @@ export async function apply(ctx) {
       case 'ensureOpening': return { view: await ensureNativeOpening(args && args.sessionId) }
       case 'getChoices': return { candidates: await candidateGenerator.find({ sessionId: args && args.sessionId, messageId: args && args.messageId }) }
       case 'startChoices': return await candidateTasks.startLegacy(args)
+      case 'setCardCover': {
+        const cardPath = normalizeResourcePath(args && args.path, 'card')
+        await fileResources.setCardCover(cardPath, Buffer.from(str(args && args.data), 'base64'), async () => (await presentCardText(cardPath)).text)
+        return { ok: true }
+      }
       case 'exportCard': {
         const cardPath = args && args.path
         const workspace = await readCardWorkspace(cardPath)
@@ -5272,6 +5293,7 @@ export async function apply(ctx) {
     castAssets,
     speech,
     exportCardCharx,
+    exportCardPng,
     assetPacks,
     uploads,
     exposeHandler: handle => { tavernHttpHandle = handle },
