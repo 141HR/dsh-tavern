@@ -1689,14 +1689,10 @@
                     const gap = parseFloat(style.columnGap || style.gap) || 0;
                     const moreWidth = sample.offsetWidth + gap;
                     sample.remove();
-                    // The trailing divider takes width the buttons cannot use: its
-                    // margins plus the one gap before it. Hidden (mobile) costs nothing.
-                    const divider = node.querySelector(".dsh-tavern-header-divider");
-                    const dividerStyle = divider && divider.offsetWidth ? window.getComputedStyle(divider) : null;
-                    const dividerWidth = dividerStyle ? divider.offsetWidth + (parseFloat(dividerStyle.marginLeft) || 0) + (parseFloat(dividerStyle.marginRight) || 0) + gap : 0;
-                    // ⋯ is always shown, so its width is never available to the buttons.
-                    const available = Math.max(0, tavernHeaderAvailableWidth(node) - dividerWidth - moreWidth);
-                    const next = tavernHeaderFold(visible, id => widths.current.get(id) || 0, available, { gap: gap, fixed: TAVERN_HEADER_NOT_FOLDED, moreWidth: 0 });
+                    // ⋯ appears only once something folds, so its width is reserved
+                    // only then; the default bar looks exactly as it did before.
+                    const available = tavernHeaderAvailableWidth(node);
+                    const next = tavernHeaderFold(visible, id => widths.current.get(id) || 0, available, { gap: gap, fixed: TAVERN_HEADER_NOT_FOLDED, moreWidth: moreWidth });
                     setFolded(current => current.length === next.length && current.every((id, index) => id === next[index]) ? current : next);
                 }
                 measure();
@@ -1750,14 +1746,13 @@
             const foldedEntries = folded.map(id => ({ id: id, label: titleOf(id) })).filter(entry => entry.id !== "header:export");
             return h("div", { ref: host, className: "dsh-tavern-header-items" + (display === "icon" ? " is-icon" : "") },
                 visible.map(item),
-                h("div", { className: "dsh-tavern-more-actions dsh-tavern-header-more" },
+                foldedEntries.length ? h("div", { className: "dsh-tavern-more-actions dsh-tavern-header-more" },
                     h("button", { type: "button", className: "dsh-tavern-btn dsh-tavern-header-more-button", "data-tavern-header-trigger": "more", "aria-label": "更多快捷入口", "aria-haspopup": "menu", "aria-expanded": Boolean(more), title: "更多快捷入口", onClick: function () { setContext(null); setMore(more ? null : { x: null, y: null }); } },
                         h("svg", { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.4, strokeLinecap: "round", "aria-hidden": "true" }, h("path", { d: "M5 12h.01M12 12h.01M19 12h.01" }))),
                     more ? h("div", { className: "dsh-tavern-more-menu dsh-tavern-header-popup", role: "menu", "aria-label": "更多快捷入口" },
                         foldedEntries.map(entry => h("button", { key: entry.id, type: "button", role: "menuitem", onClick: function () { setMore(null); activate(entry.id); } }, tavernStartIcon(entry.id, entries.get(entry.id), 15), entry.label)),
-                        foldedEntries.length ? h("div", { className: "dsh-tavern-header-menu-sep", role: "separator" }) : null,
-                        tavernHeaderMenuButton(h, "顶栏设置…", TAVERN_HEADER_GEAR_PATH, false, function () { setMore(null); setDialog(true); })) : null),
-                visible.length ? h("span", { className: "dsh-tavern-header-divider", "aria-hidden": "true" }) : null,
+                        h("div", { className: "dsh-tavern-header-menu-sep", role: "separator" }),
+                        tavernHeaderMenuButton(h, "顶栏设置…", TAVERN_HEADER_GEAR_PATH, false, function () { setMore(null); setDialog(true); })) : null) : null,
                 context ? h("div", { className: "dsh-tavern-more-menu dsh-tavern-header-popup dsh-tavern-header-context", role: "menu", style: { position: "fixed", left: Math.min(context.x, (window.innerWidth || 1024) - 190) + "px", top: Math.min(context.y, (window.innerHeight || 768) - 190) + "px", right: "auto", bottom: "auto" } },
                     tavernHeaderMenuButton(h, "左移", "M15 6l-6 6 6 6", items.indexOf(context.id) <= 0, function () { setContext(null); move(context.id, -1); }),
                     tavernHeaderMenuButton(h, "右移", "M9 6l6 6-6 6", items.indexOf(context.id) >= items.length - 1, function () { setContext(null); move(context.id, 1); }),
