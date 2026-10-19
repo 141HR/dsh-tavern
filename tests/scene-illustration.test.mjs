@@ -526,3 +526,27 @@ test('每轮自动生图：默认关闭；打开后结算完的新一轮自动�
   await fx.service.configure({ auto: false })
   assert.equal((await fx.service.settings()).auto, false)
 })
+
+test('generation handed to the plugin: old pictures stay readable, nothing is planned or charged and redraw controls go away', async t => {
+  let agents = 0, calls = 0
+  const fx = await fixture(t, {
+    runAgent: async input => { agents++; await submitPlanCall(input, { arguments: { plan: planFixture() } }); return {} },
+    generate: async () => { calls++; return { data: png, mediaType: 'image/png' } }
+  })
+  await fx.service.configure({ auto: true })
+  const key = sceneTarget(fx.chat(), 2).key
+  await fx.service.start('parent', 2, key)
+  await until(async () => (await fx.service.status('parent', 2)).status === 'succeeded')
+  const paid = { agents, calls }
+
+  const off = createSceneIllustrations({ ...fx.deps, disabled: true })
+  t.after(() => off.dispose())
+  const state = await off.status('parent', 2)
+  assert.equal(state.versions.length, 1, 'the old picture is still shown')
+  assert.equal(state.enabled, false, 'redraw, retry and add controls are hidden')
+  assert.equal(state.auto, false)
+  assert.equal(await off.autoGenerate('parent'), null)
+  await assert.rejects(off.start('parent', 2, key, { kind: 'replan' }), error => error.code === 'scene-images-delegated')
+  await assert.rejects(off.testGenerate(), error => error.code === 'scene-images-delegated')
+  assert.deepEqual({ agents, calls }, paid, 'no planning model run and no paid image request')
+})
