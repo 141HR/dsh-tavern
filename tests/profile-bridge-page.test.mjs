@@ -7,9 +7,12 @@ import { JSDOM } from 'jsdom'
 const source = await readFile(new URL('../tavern-plugin/packages/dsh-profile-bridge/client.js', import.meta.url), 'utf8')
 
 async function mount(status, calls = []) {
+  const inTavern = status.activeIsLink === true && status.linkTargetName === 'tavern'
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/' })
   globalThis.window = dom.window
   globalThis.document = dom.window.document
+  // The Tavern client sets this flag on pages where it loaded.
+  if (inTavern) dom.window.__dshTavernLoaded = true
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.window.navigator })
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
   const React = (await import('react')).default

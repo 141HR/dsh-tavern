@@ -19,7 +19,6 @@ window.__ModuleLoader__.load({
     const zh = {
       sectionTavern: '切回原版 DSH',
       sectionOriginal: '进入 DSH 酒馆',
-      sectionOther: '原版 DSH / DSH 酒馆',
       explain: 'DSH 酒馆和原版 DSH 是同一个应用里的两套环境，切换时应用会重启一次，对话和设置都会保留。',
       toOriginal: '切到原版 DSH 并重启',
       toTavern: '切到 DSH 酒馆并重启',
@@ -41,7 +40,6 @@ window.__ModuleLoader__.load({
     const en = {
       sectionTavern: 'Back to original DSH',
       sectionOriginal: 'Open DSH Tavern',
-      sectionOther: 'Original DSH / DSH Tavern',
       explain: 'DSH Tavern and the original DSH are two setups of the same app. Switching restarts the app once; conversations and settings are kept.',
       toOriginal: 'Switch to original DSH and restart',
       toTavern: 'Switch to DSH Tavern and restart',
@@ -102,8 +100,8 @@ window.__ModuleLoader__.load({
       return status.linkTargetName === 'tavern' ? 'tavern' : 'other'
     }
 
-    /** Last status, read once at startup so the settings menu can name this page by side. */
-    let knownSide = 'other'
+    /** The menu names this page by side at once: the Tavern client marks a page that loaded it. */
+    const inTavern = () => window.__dshTavernLoaded === true
 
     /**
      * One settings page with one action: from the tavern setup, back to the original DSH;
@@ -122,7 +120,7 @@ window.__ModuleLoader__.load({
         let alive = true
         call('status', {}).then((result) => {
           if (!alive) return
-          if (result?.ok === true) { setStatus(result.value); knownSide = sideOf(result.value) }
+          if (result?.ok === true) setStatus(result.value)
           else setFailure(describeFailure(result?.error))
         }, (error) => { if (alive) setFailure(describeFailure({ message: error?.message ?? String(error) })) })
         return () => { alive = false }
@@ -164,7 +162,7 @@ window.__ModuleLoader__.load({
         }
       }
 
-      const title = side === 'tavern' ? t('sectionTavern') : side === 'original' ? t('sectionOriginal') : t('sectionOther')
+      const title = t(inTavern() ? 'sectionTavern' : 'sectionOriginal')
       const isDesktop = status?.appKind === 'desktop'
       return h('section', { className: 'pb' },
         h('style', null, CSS),
@@ -207,13 +205,11 @@ window.__ModuleLoader__.load({
         const t = ctx.locale.bind(NS)
         const rpcCall = (endpoint, payload) => ctx.connection.rpc.call(CHANNEL, endpoint, payload)
         ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'profile-bridge: locale dictionaries')
-        // Name the page by side before the settings menu first renders it.
-        rpcCall('status', {}).then((result) => { if (result?.ok === true) knownSide = sideOf(result.value) }, () => {})
         ctx.slots.inject('settings.section', () => ctx.slots.register({
           name: 'settings.section',
           id: 'profile-bridge',
           order: 60,
-          label: () => t(knownSide === 'tavern' ? 'sectionTavern' : knownSide === 'original' ? 'sectionOriginal' : 'sectionOther'),
+          label: () => t(inTavern() ? 'sectionTavern' : 'sectionOriginal'),
           inject: () => ({ rpcCall, t }),
         }, ProfileBridgeSettings))
       },
