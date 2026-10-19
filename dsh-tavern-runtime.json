@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "649e8517e88efe7819cc4d5c03ead8a3eb37896c",
-  "releaseSequence": 718,
+  "revision": "58e4169f0c7524da240f494785d568a7e17fa7b5",
+  "releaseSequence": 719,
   "version": "3.0.0",
   "files": [
     {
@@ -1931,8 +1931,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/tavern-conversation-registry.js",
-      "sha256": "0b45e8f68d125f0d1ac39f657b8dd092d02a29974abdd3b154151c8a5d385bed",
-      "size": 10962
+      "sha256": "1c32dcfa04b0f4473a93cf3d67162336f0f6afa360b92137f088fb2e29b63f82",
+      "size": 12385
     },
     {
       "path": "tavern-plugin/lib/domain/tavern-data.js",
@@ -2246,8 +2246,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "6e4e82d05f8a4667aec4be22edc9989e551116bde2f11c354264a23de25f78af",
-      "size": 367524
+      "sha256": "463894e1f5decd48a9d231ce027b2082f09260021657975fd434601624682718",
+      "size": 368078
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
