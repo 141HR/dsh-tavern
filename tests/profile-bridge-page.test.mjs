@@ -43,9 +43,9 @@ async function mount(status, calls = []) {
 
 const tavernProfile = { name: 'tavern', bundles: ['dsh-tavern-plugin', 'dsh-profile-bridge'], hasNodeModules: true }
 
-test('在酒馆里叫「切回原版 DSH」，按钮切回原版', async () => {
+test('在酒馆里叫「切回原版」，按钮切回原版', async () => {
   const page = await mount({ appKind: 'desktop', activeIsLink: true, linkTargetName: 'tavern', backups: ['desktop.fresh-1'], profiles: [tavernProfile] })
-  assert.equal(page.label(), '切回原版 DSH')
+  assert.equal(page.label(), '切回原版')
   assert.match(page.text(), /同一个应用里的两套环境/)
   assert.equal(page.button().textContent, '切到原版 DSH 并重启')
   await page.act(async () => { page.button().click() })
@@ -54,9 +54,9 @@ test('在酒馆里叫「切回原版 DSH」，按钮切回原版', async () => {
   page.dispose()
 })
 
-test('在原版 DSH 里叫「进入 DSH 酒馆」，按钮切到酒馆；没装好酒馆时说明原因', async () => {
+test('在原版 DSH 里叫「进入酒馆」，按钮切到酒馆；没装好酒馆时说明原因', async () => {
   const page = await mount({ appKind: 'desktop', activeIsLink: false, backups: [], profiles: [tavernProfile] })
-  assert.equal(page.label(), '进入 DSH 酒馆')
+  assert.equal(page.label(), '进入酒馆')
   assert.equal(page.button().textContent, '切到 DSH 酒馆并重启')
   await page.act(async () => { page.button().click() })
   assert.deepEqual(page.calls.at(-1), ['link', { target: 'tavern' }])
