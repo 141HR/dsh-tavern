@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "b553fc2f28248b58b7acddcd19126038aecd296b",
-  "releaseSequence": 730,
+  "revision": "bad3dd92244a15ced446d70c6f62c1fa3f8afffa",
+  "releaseSequence": 731,
   "version": "3.0.0",
   "files": [
     {
@@ -123,6 +123,11 @@
       "path": "bin/migrate-conversation-storage.mjs",
       "sha256": "1c8babe3833d1f5f03c8c2808691845eeeddaf433b216a184419425d5d1a063a",
       "size": 1645
+    },
+    {
+      "path": "bin/novel-to-chat.mjs",
+      "sha256": "5f94792fadb79b4d9552695e03307b8fa6474fd0f17a3d6c5853b3a687636740",
+      "size": 2958
     },
     {
       "path": "bin/official-desktop-runtime.cjs",
