@@ -123,7 +123,9 @@ function installFrameHostComposer(doc, ownsFrame, submit, report, fill, read) {
     controls.setAttribute('aria-hidden', 'true');
     controls.setAttribute('style', 'position:fixed;left:-10000px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;');
     const area = doc.createElement('textarea'), button = doc.createElement('button');
-    area.id = 'send_textarea'; area.tabIndex = -1; button.id = 'send_but'; button.type = 'button';
+    // Card scripts focus() this field programmatically; on phones that would pop
+    // the soft keyboard for an invisible box, so ask for no virtual keyboard.
+    area.id = 'send_textarea'; area.tabIndex = -1; area.setAttribute('inputmode', 'none'); button.id = 'send_but'; button.type = 'button';
     controls.append(area, button); doc.body.append(controls);
     state = { controls, area, owners: new Set(), lastOwner: null };
     tavernHostComposers.set(doc, state);

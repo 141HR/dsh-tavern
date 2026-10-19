@@ -21,6 +21,7 @@ test('trusted host composer reads the draft on focus and fills on input', async 
     const controls = area.parentElement
     assert.equal(controls.hasAttribute('hidden'), false)
     assert.match(controls.getAttribute('style'), /left:-10000px/)
+    assert.equal(area.getAttribute('inputmode'), 'none', '屏幕外输入框被聚焦时不弹出手机键盘')
     area.focus()
     assert.equal(area.value, '已有内容')
     // Native regex sequence: focus, read, append, fire input.
