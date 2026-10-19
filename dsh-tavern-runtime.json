@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "604bc46cb70fe225104a0eba6d69315c7abc3d59",
-  "releaseSequence": 765,
+  "revision": "f27eb4945ffce83bd13ec3882e08a31b40b16d4e",
+  "releaseSequence": 766,
   "version": "3.0.0",
   "files": [
     {
@@ -816,8 +816,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/compaction-checkpoint.js",
-      "sha256": "b1792c7f01e85de092305143ca4d723f3dc9e61778cd12049c5ba59ba8c1d499",
-      "size": 894
+      "sha256": "0538c6ba750530f779f972395c57b4e385503c508bf79b70d6a465090c49ba5b",
+      "size": 1224
     },
     {
       "path": "tavern-plugin/lib/domain/compaction-failure.js",
@@ -1816,8 +1816,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/session-upgrade.js",
-      "sha256": "3bdc061030a807b5d235667e00f07f6fdc8128118168297ce77a227c1572f9a5",
-      "size": 33984
+      "sha256": "d3d25ab70c1fb51de011b77729bee2e32c786da8af5dac83ffdf5428a47a02cd",
+      "size": 36979
     },
     {
       "path": "tavern-plugin/lib/domain/session-variable-directory.js",
