@@ -19761,6 +19761,7 @@ function bindTavernFontZoom(node, win) {
                 h("div", {className:"dsh-tavern-status-empty"}, "统一迁移本局的会话日志与剧情存储，保留正文、变量、分支和历史版本。旧文件保留原样；迁移后的新进度写入新版存档。"),
                 busy ? h("div", {role:"status"}, stage + " 大存档可能需要较长时间，暂时不要关闭或重启酒馆。") : null,
                 error || state?.phase === "failed" ? h("div", {className:"dsh-card-error",role:"alert"}, error || state.error) : null,
+                state?.sessions?.warning && state.phase !== "failed" ? h("div", {className:"dsh-tavern-status-empty",role:"note"}, state.sessions.warning) : null,
                 state?.phase === "failed" && !state.sessions?.ready ? h("div", {className:"dsh-tavern-status-empty"}, "这局的旧会话日志暂时无法升级，原档已保留。请点「导出诊断文件」，把文件发给开发者（不含剧情正文）；修复发布后更新酒馆即可自动升级。想先接着玩，可以在左侧对话菜单「⋯」里用「存档救援」把剧情转到新对话。") : null,
                 state?.phase === "failed" && !state.sessions?.ready ? h("button", {type:"button",className:"dsh-tavern-btn",onClick:() => downloadSessionDiagnostics({}, props.sessionId).catch(err => setError("导出诊断文件失败：" + String(err.message || err)))}, "导出诊断文件") : null,
                 !state ? h("button", {className:"dsh-tavern-btn",onClick:()=>setRefresh(value=>value+1)}, "重新检查存档迁移") :

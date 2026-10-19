@@ -34,7 +34,7 @@ import { withPluginWorldbookEntries } from './domain/plugin-worldbook.js'
 import { createTemplateWindowReader, templateStateFields } from './domain/template-window-reader.js'
 import { createSessionResourceAccess } from './domain/session-resource-access.js'
 import { worldBookDisplayName } from './domain/worldbook-resource.js'
-import { createSaveUpgrade, prepareSaveUpgrade, saveSessionIds, unreadySaveSessions } from './domain/save-upgrade.js'
+import { createSaveUpgrade, detachSaveSessions, prepareSaveUpgrade, saveSessionIds, unreadySaveSessions } from './domain/save-upgrade.js'
 import { storedSessionVersion } from './domain/session-upgrade.js'
 import { exportSessionDiagnostics } from './domain/session-diagnostics.js'
 import { createTaskStateReader, taskStateFields } from './domain/task-state-reader.js'
@@ -4391,10 +4391,14 @@ export async function apply(ctx) {
       })
       // A log the upgrader refused fails the same way on every restart; only a skipped one waits for it.
       const refused = failed.filter(id => preparedSaveSessions.get(id)?.error)
-      return !failed.length ? { ready: true, version: 4 } : { ready: false, error: refused.length
-        ? '会话日志无法升级，原档保留：' + refused.map(id => id + '（' + preparedSaveSessions.get(id).error + '）').join('、')
-        : '会话日志未完成升级，请重启酒馆后重试。原档保留：' + failed.join('、') }
+      const reasons = ids => ids.map(id => id + '（' + preparedSaveSessions.get(id).error + '）').join('、')
+      if (!failed.length) return { ready: true, version: 4 }
+      if (refused.length !== failed.length) return { ready: false, error: '会话日志未完成升级，请重启酒馆后重试。原档保留：' + failed.join('、') }
+      if (refused.includes(chat.sessionId)) return { ready: false, error: '会话日志无法升级，原档保留：' + reasons(refused) }
+      return { ready: false, detachable: refused, error: '会话日志无法升级，原档保留：' + reasons(refused),
+        warning: '本局有 ' + refused.length + ' 个后台或回退快照会话的旧日志无法升级，迁移时会跳过它们：剧情正文和变量不受影响；后台代理会换新会话，从当前剧情继续；上一次回退将不能撤销。原档保留。' }
     },
+    detachSessions: (chatId, ids) => updateChat(chatId, chat => detachSaveSessions(chat, ids), { source: 'save-upgrade.detach-sessions' }),
     assertIdle: chat => {
       if (chat.mode === 'card' || backgroundTasks.activity(chat).busy || chat.regenInProgress || agentRegistry.get(chat.sessionId)?.phase?.kind === 'running') {
         throw new Error('请等待本轮游玩和后台结算完成后再升级')
