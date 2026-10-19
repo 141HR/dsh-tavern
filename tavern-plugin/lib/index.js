@@ -3264,7 +3264,9 @@ export async function apply(ctx) {
       rounds,
       budget: Number.isFinite(window) && window > 0 ? Math.floor(window * RETAINED_ROUNDS_WINDOW_SHARE) : Infinity,
       // An unknown window still merges old volumes eventually rather than letting them grow without end.
-      volumeBudget: Number.isFinite(window) && window > 0 ? Math.floor(window * STORY_VOLUMES_WINDOW_SHARE) : 30000,
+      // DSH_TAVERN_STORY_VOLUME_BUDGET (tokens) overrides it, to test the merge on a large-window model.
+      volumeBudget: Number(process.env.DSH_TAVERN_STORY_VOLUME_BUDGET) > 0 ? Number(process.env.DSH_TAVERN_STORY_VOLUME_BUDGET)
+        : Number.isFinite(window) && window > 0 ? Math.floor(window * STORY_VOLUMES_WINDOW_SHARE) : 30000,
       estimate: text => meter?.estimateMessage ? meter.estimateMessage({ role: 'user', content: [{ type: 'text', text }] }) : Math.ceil(text.length / 4)
     }
   }
