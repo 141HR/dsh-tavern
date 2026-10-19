@@ -314,7 +314,11 @@ export async function startService() {
     ['--profile', PROFILE, '--host', CLI_HOST, '--port', String(CLI_PORT), '--no-open'],
     runtimeHost,
   )
-  if (process.platform === 'win32') {
+  // A pinned desktop DSH (DSH_DESKTOP_DSH_BOOTSTRAP) is already the Electron executable plus
+  // `--expose-internals <bootstrap>`; adding the entry again shifts every argument and the
+  // CLI reports `--profile <name> is required` (#254).
+  const pinned = invocation.args[0] === '--expose-internals'
+  if (process.platform === 'win32' && !pinned) {
     // 0.2.0-rc.2 适配：桌面 0.2.0 的 dsh 是「Electron 可执行文件 + app.asar 内 CLI」的 shim，
     // 纯 Node 既定位不到 @deepseek-ai/dsh npm 包（resolveDshCliEntry 会抛「无法定位当前 DSH CLI 包」），
     // 也读不了 asar 内文件；必须改用 Electron + ELECTRON_RUN_AS_NODE=1（即 shim 自身的形态）。
