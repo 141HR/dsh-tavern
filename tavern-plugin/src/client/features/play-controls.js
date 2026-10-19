@@ -541,8 +541,8 @@
 			return value;
 		}
 
-		async function submitBodyRegeneration(sessionId, panel, guidance, rewrite) {
-			const res = await rpc("regenBody", { guidance: String(guidance || "").trim(), rewrite: rewrite === true }, sessionId);
+		async function submitBodyRegeneration(sessionId, panel, guidance) {
+			const res = await rpc("regenBody", { guidance: String(guidance || "").trim() }, sessionId);
 			applyBodyRegenerationResult({ liveTavernView: liveTavernView, historyProjection: historyProjection, sessionId: sessionId, view: res.view, tail: panel.tail });
 			setCandidatePanel(null);
 		}
@@ -1527,8 +1527,6 @@
 							return h("button", { key: text, type: "button", className: "dsh-tavern-regen-example", onClick: function () { addExample(text); } }, text);
 						})),
 						h("button", { type: "button", className: "dsh-tavern-regen-cancel", onClick: props.onCancel }, "取消"),
-						// The secondary action only makes sense with guidance, so it stays out of sight until there is some.
-						props.secondaryLabel && props.value.trim() ? h("button", { type: "button", className: "dsh-tavern-regen-submit dsh-tavern-regen-secondary", title: props.secondaryTitle || "", onClick: props.onSecondary }, props.secondaryLabel) : null,
 						h("button", { type: "button", className: "dsh-tavern-question-primary dsh-tavern-regen-submit", onClick: props.onSubmit }, props.submitLabel)
 					)
 				);
@@ -1552,12 +1550,12 @@
 			React.useEffect(function () { if (opened) setGuidance(regenGuidance.get(props.sessionId) || ""); }, [opened, props.sessionId]);
 			const h = React.createElement;
 			if (!isPlayMode(sessionMode) || running || !panel || panel.sessionId !== props.sessionId) return null;
-			async function generate(rewrite) {
+			async function generate() {
 				const guide = guidance.trim();
 				if (guide) regenGuidance.set(props.sessionId, guide); else regenGuidance.delete(props.sessionId);
-				setRegenPanel(Object.assign({}, panel, { phase: "loading", error: "", rewrite: rewrite === true && guide !== "" }));
+				setRegenPanel(Object.assign({}, panel, { phase: "loading", error: "", rewrite: guide !== "" }));
 				try {
-					await submitBodyRegeneration(props.sessionId, panel, guide, rewrite === true && guide !== "");
+					await submitBodyRegeneration(props.sessionId, panel, guide);
 					setRegenPanel(null);
 				} catch (err) {
 					tavernErrorHub.report("正文重新生成", err);
@@ -1566,7 +1564,7 @@
 			}
 			return h(RegenGuideForm, {
 				title: "重新生成正文",
-				hint: "生成后直接替换当前正文",
+				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改",
 				loading: panel.phase === "loading" ? (panel.rewrite ? "正在按意见改写正文…" : "正在重新生成正文…") : "",
 				error: panel.error,
 				value: guidance,
@@ -1574,10 +1572,7 @@
 				placeholder: "指导意见（可选）",
 				examples: ["写得更长", "侧重心理描写", "加快节奏"],
 				submitLabel: "生成并替换正文",
-				onSubmit: function () { void generate(false); },
-				secondaryLabel: "按意见改写",
-				secondaryTitle: "保留当前正文，让模型在它的基础上按意见改写",
-				onSecondary: function () { void generate(true); },
+				onSubmit: generate,
 				onCancel: function () { setRegenPanel(null); }
 			});
 		}
