@@ -2701,12 +2701,15 @@ export async function apply(ctx) {
         appendSessionEvent(session, 'turn/start', { turn })
         appendSessionEvent(session, 'step/start', { turn, step: 1 })
         appendSessionEvent(session, 'user/message', { id: `tavern-appended:${turn}:user`, role: 'user', content: [{ type: 'text', text: user }], source: { kind: 'user' } }, { surfaceOp: 'append' })
+        const input = sessionEvents(session).at(-1).seq
         appendSessionEvent(session, 'assistant/message', { turn, step: 1, message: { id: `tavern-appended:${turn}:body`, role: 'assistant', content: [{ type: 'text', text: body }],
           source: { kind: 'model', provider: 'dsh-tavern', model: 'appended-rounds' } } }, { surfaceOp: 'append' })
+        // The anchor ties the saved round to its native events, so reconcile does not rewrite it.
+        const nativeAnchor = { turn, input, reply: sessionEvents(session).at(-1).seq }
         appendSessionEvent(session, 'step/end', { turn, step: 1 })
         appendSessionEvent(session, 'turn/end', { turn, reason: { kind: 'completed' } })
         messages.push({ role: 'user', text: user, ts: now }, { role: 'assistant', turn, text: body, sourceText: body, projectionText: body, sessionText: body,
-          displayText: body, displayMode: 'markdown', ts: now, native: true, swipeId: 0, swipes: [body] })
+          displayText: body, displayMode: 'markdown', ts: now, native: true, swipeId: 0, swipes: [body], nativeAnchor })
       }
       await sessionStore.flush(session)
       await updateChat(chat.id, current => { current.messages = [...(current.messages || []), ...messages]; return current }, { source: 'test.append-rounds' })
