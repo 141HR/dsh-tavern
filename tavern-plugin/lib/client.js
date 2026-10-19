@@ -13225,7 +13225,11 @@ function bindTavernFontZoom(node, win) {
 		// Third-party plugins: use the public tavernUi API (docs/plugin-api.md), never patch this file; its structure changes freely.
 		function renderTavernAssistantBlocks(input) {
 			const h = React.createElement;
-			const blocks = Array.isArray(input.blocks) ? input.blocks : [];
+			// The answer step is drawn twice by DSH: its thinking in the process panel ("reasoning"),
+			// the reply below it ("response"). Each seat shows only its own blocks, as DSH's own view does.
+			const blocks = (Array.isArray(input.blocks) ? input.blocks : []).filter(function (block) {
+				return !block || input.groupPart !== "response" || block.kind !== "reasoning";
+			});
 			const translate = typeof input.t === "function" ? input.t : function (key, values) {
 				if (key === "copy") return "复制";
 				if (key === "copied") return "已复制";
@@ -13907,6 +13911,14 @@ function bindTavernFontZoom(node, win) {
 			}
 
 			// Third-party plugins: use the public tavernUi API (docs/plugin-api.md), never patch this file; its structure changes freely.
+			function TavernReasoningSeat(props) {
+				const blocks = (Array.isArray(props.blocks) ? props.blocks : []).filter(function (block) { return block && block.kind === "reasoning"; });
+				if (!blocks.length) return null;
+				return React.createElement("div", { className: "dsh-tavern-assistant" }, blocks.map(function (block, index) {
+					const live = props.streaming && index === blocks.length - 1;
+					return React.createElement("details", { key: index, className: "dsh-tavern-assistant-reasoning", open: live }, React.createElement("summary", null, live ? "思考中…" : "思考过程"), React.createElement("pre", null, String(block.text || "")));
+				}));
+			}
 			function TavernAssistantNodeView(props) {
 				const data = props.node.data;
                 const historyNode = React.useRef(null);
@@ -13978,6 +13990,7 @@ function bindTavernFontZoom(node, win) {
 				const pluginText = playView ? createTavernPluginTextContext({ items: pluginMedia.items, extras: sceneAnchors, sessionId: props.sessionId, turn: storyTurn, streaming: data.status === "running" }) : null;
                 const rendered = sessionTransitioning ? [React.createElement("div", { key: "switching", className: "dsh-tavern-session-switching", role: "status" }, "正在完成游戏初始化…")] : waitingForHistory ? [React.createElement("div", {key:"history",role:"status"}, "正在读取历史内容…")] : renderTavernAssistantBlocks({
 					blocks: data.blocks,
+					groupPart: props.groupPart,
 					streaming: data.status === "running",
 					interrupted: data.status === "interrupted",
 					projection: projection,
@@ -14095,6 +14108,9 @@ function bindTavernFontZoom(node, win) {
 					}, function (props) {
 						// Hide only our model-facing seed; keep it in Session history and requests.
 						if (props.node.data.finalNode && /^tavern-seed-trajectory:v1:.+:2$/.test(String(props.node.data.finalNode.messageId || ""))) return null;
+						// The process panel's copy of the answer step holds only its thinking; the story,
+						// pictures and receipts belong to the reply seat. Otherwise the body shows twice.
+						if (props.groupPart === "reasoning") return React.createElement(TavernReasoningSeat, { blocks: props.node.data.blocks, streaming: props.node.data.status === "running" });
 						return React.createElement(TavernAssistantNodeView, Object.assign({}, props, { executeSlash: executeSlash }));
 					}); });
 				}, "dsh-tavern: inline assistant renderer");
