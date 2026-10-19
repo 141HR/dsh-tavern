@@ -116,6 +116,10 @@ function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernD
                 h(ContextCompactionSettings),
                 // Most players never need this; it lives at the bottom of 高级, folded.
                 h(HeaderItemsSettings)),
+            group("交流", "",
+                h("p", { className: "dsh-tavern-gs-notice" }, "遇到问题或想交流玩法，欢迎加入 ",
+                    h("a", { href: "https://discord.gg/hYAEjKnpra", target: "_blank", rel: "noopener noreferrer" }, "Discord 交流群"),
+                    "。本项目没有官方的 QQ 群、微信群。")),
             state.error ? React.createElement("div", { className: "dsh-tavern-settings-error", role: "alert" }, "保存失败：" + state.error) : null
         );
     }
