@@ -1638,10 +1638,16 @@
             const h = React.createElement;
             const catalog = useTavernHeaderCatalog();
             const header = useTavernHeaderItems();
-            const display = header.display === "icon" ? "icon" : "icon-text";
+            // 手机/触屏顶栏只有一行：强制纯图标，并把快捷入口限制在上限内。
+            // 存回设置时用用户自己选的形态，别把手机上的强制图标写进配置。
+            const mobile = useTavernMobileHeader();
+            const configuredDisplay = header.display === "icon" ? "icon" : "icon-text";
+            const display = mobile ? "icon" : configuredDisplay;
             const items = header.items;
             const owner = props.sessions.subagentAddress(props.sessionId)?.parentSessionId || props.sessionId;
             const [folded, setFolded] = React.useState([]);
+            // 手机上最多保留几个快捷入口（按标题行宽实测，见下方 effect）。
+            const [mobileLimit, setMobileLimit] = React.useState(TAVERN_HEADER_MOBILE_LIMIT);
             const [context, setContext] = React.useState(null);
             const [more, setMore] = React.useState(null);
             const [dialog, setDialog] = React.useState(false);
@@ -1667,14 +1673,22 @@
                 if (index < 0 || target < 0 || target >= items.length) return;
                 const next = items.slice();
                 [next[index], next[target]] = [next[target], next[index]];
-                saveHeader({ display: display, items: next });
+                saveHeader({ display: configuredDisplay, items: next });
             }
             function remove(id) {
-                saveHeader({ display: display, items: items.filter(value => value !== id) });
+                saveHeader({ display: configuredDisplay, items: items.filter(value => value !== id) });
             }
             // Natural widths are cached: a folded button is display:none, so it
             // cannot be measured again until the display mode changes.
             React.useLayoutEffect(function () {
+                // 手机上不量按钮宽度：容器会被 flex 压窄，量出来的「可用宽度」
+                // 反而恒为够用，于是从不折叠。这里按固定上限折，其余全进 ⋮。
+                if (mobile) {
+                    const next = tavernHeaderMobileFold(visible, mobileLimit);
+                    setFolded(current => current.length === next.length && current.every((id, index) => id === next[index]) ? current : next);
+                    return undefined;
+                }
+                setMobileLimit(TAVERN_HEADER_MOBILE_LIMIT);
                 const node = host.current;
                 if (!node) return undefined;
                 let frame = 0;
@@ -1705,7 +1719,39 @@
                 const row = node.closest("[class*=\"_titleRow\"]");
                 if (row) observer.observe(row);
                 return function () { observer.disconnect(); cancelAnimationFrame(frame); };
-            }, [visible.join("|"), display, catalog]);
+            }, [visible.join("|"), display, catalog, mobile, mobileLimit]);
+            // 手机上按标题行宽算槽位：行宽减掉宿主自己的固定开销（见
+            // tavernHeaderMobileChrome），剩下的按每格 42px 折算。行宽与当前保留
+            // 数量无关，所以不会「收一个 → 标题变宽 → 又想放回」来回跳。
+            React.useLayoutEffect(function () {
+                if (!mobile) return undefined;
+                let frame = window.requestAnimationFrame(function () {
+                    const node = host.current;
+                    if (!node) return;
+                    const row = node.closest("[class*=\"_titleRow\"]");
+                    const width = row ? row.clientWidth - tavernHeaderMobileChrome(row) : node.clientWidth;
+                    const capacity = tavernHeaderMobileCapacity(visible.length, width, { limit: TAVERN_HEADER_MOBILE_LIMIT });
+                    if (capacity !== mobileLimit) setMobileLimit(capacity);
+                });
+                return function () { window.cancelAnimationFrame(frame); };
+            }, [mobile, mobileLimit, folded.join("|"), visible.join("|")]);
+            React.useEffect(function () {
+                if (!mobile) return undefined;
+                let timer = 0;
+                function onResize() {
+                    window.clearTimeout(timer);
+                    // 旋屏后回到上限重算，不该一直停在横屏时收窄的结果。
+                    setMobileLimit(TAVERN_HEADER_MOBILE_LIMIT);
+                    timer = window.setTimeout(function () { setMobileLimit(TAVERN_HEADER_MOBILE_LIMIT); }, 0);
+                }
+                window.addEventListener("resize", onResize);
+                window.addEventListener("orientationchange", onResize);
+                return function () {
+                    window.clearTimeout(timer);
+                    window.removeEventListener("resize", onResize);
+                    window.removeEventListener("orientationchange", onResize);
+                };
+            }, [mobile]);
             React.useEffect(function () {
                 if (!context && !more) return undefined;
                 function close(event) {
@@ -1749,11 +1795,16 @@
                 }, content);
             }
             const foldedEntries = folded.map(id => ({ id: id, label: titleOf(id) })).filter(entry => entry.id !== "header:export");
-            return h("div", { ref: host, className: "dsh-tavern-header-items" + (display === "icon" ? " is-icon" : "") },
+            return h("div", {
+                ref: host,
+                className: "dsh-tavern-header-items" + (display === "icon" ? " is-icon" : ""),
+                // 手机上实测的保留上限；夹具与线上排查都读它。
+                "data-tavern-header-limit": mobile ? mobileLimit : ""
+            },
                 visible.map(item),
                 foldedEntries.length ? h("div", { className: "dsh-tavern-more-actions dsh-tavern-header-more" },
                     h("button", { type: "button", className: "dsh-tavern-btn dsh-tavern-header-more-button", "data-tavern-header-trigger": "more", "aria-label": "更多快捷入口", "aria-haspopup": "menu", "aria-expanded": Boolean(more), title: "更多快捷入口", onClick: function () { setContext(null); setMore(more ? null : { x: null, y: null }); } },
-                        h("svg", { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.4, strokeLinecap: "round", "aria-hidden": "true" }, h("path", { d: "M5 12h.01M12 12h.01M19 12h.01" }))),
+                        h("svg", { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.4, strokeLinecap: "round", "aria-hidden": "true" }, h("path", { d: mobile ? "M12 5h.01M12 12h.01M12 19h.01" : "M5 12h.01M12 12h.01M19 12h.01" }))),
                     more ? h("div", { className: "dsh-tavern-more-menu dsh-tavern-header-popup", role: "menu", "aria-label": "更多快捷入口" },
                         foldedEntries.map(entry => h("button", { key: entry.id, type: "button", role: "menuitem", onClick: function () { setMore(null); activate(entry.id, host.current); } }, tavernStartIcon(entry.id, entries.get(entry.id), 15), entry.label)),
                         h("div", { className: "dsh-tavern-header-menu-sep", role: "separator" }),
