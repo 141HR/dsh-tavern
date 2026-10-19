@@ -2,6 +2,7 @@
 // Queue a directory switch for when Desktop exits, then ask it to quit and reopen it.
 import { basename } from 'node:path'
 import { scheduleSwitch } from './lib/helper.mjs'
+import { createTavernShortcut } from './lib/shortcut.mjs'
 import { detectAppExe, fail, resolvePaths, statusPayload, validateTarget } from './lib/state.mjs'
 
 /** Shared RPC channel owned by this plugin; the browser half calls it by name. */
@@ -55,6 +56,7 @@ async function handleCall(endpoint, payload) {
     if (endpoint === 'status') return { ok: true, value: statusPayload(resolvePaths()) }
     if (endpoint === 'link') return { ok: true, value: runSwitch('link', resolvePaths(), payload) }
     if (endpoint === 'unlink') return { ok: true, value: runSwitch('unlink', resolvePaths(), payload) }
+    if (endpoint === 'shortcut') return { ok: true, value: createTavernShortcut({ paths: resolvePaths() }) }
     fail('not-found', `Unknown endpoint ${JSON.stringify(endpoint)}.`)
   } catch (error) {
     return {

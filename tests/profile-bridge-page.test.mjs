@@ -17,6 +17,7 @@ async function mount(status, calls = []) {
   const { act } = await import('react')
   const rpc = async (_channel, endpoint, payload) => {
     calls.push([endpoint, payload])
+    if (endpoint === 'shortcut') return { ok: true, value: { path: '/Users/me/Desktop/DSH 酒馆.app', existed: false } }
     return endpoint === 'status' ? { ok: true, value: status } : { ok: true, value: { closesApp: true } }
   }
   let module
@@ -34,7 +35,7 @@ async function mount(status, calls = []) {
   const root = createRoot(dom.window.document.getElementById('root'))
   await act(async () => { root.render(React.createElement(page, registered.inject())) })
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
-  return { dom, act, label: () => registered.label(), text: () => dom.window.document.body.textContent, button: () => dom.window.document.querySelector('.pb-btn'), calls, dispose: () => root.unmount() }
+  return { dom, act, label: () => registered.label(), text: () => dom.window.document.body.textContent, button: () => dom.window.document.querySelector('.pb-bar .pb-btn'), calls, dispose: () => root.unmount() }
 }
 
 const tavernProfile = { name: 'tavern', bundles: ['dsh-tavern-plugin', 'dsh-profile-bridge'], hasNodeModules: true }
@@ -68,5 +69,15 @@ test('原版备份丢了时不给按钮，并说明原因', async () => {
   const page = await mount({ appKind: 'desktop', activeIsLink: true, linkTargetName: 'tavern', backups: [], profiles: [tavernProfile] })
   assert.equal(page.button(), null)
   assert.match(page.text(), /找不到原版 DSH 的备份/)
+  page.dispose()
+})
+
+test('「添加桌面快捷方式」只在点按钮时创建，并显示放在哪', async () => {
+  const page = await mount({ appKind: 'desktop', activeIsLink: false, backups: [], profiles: [tavernProfile] })
+  assert.ok(!page.calls.some(([endpoint]) => endpoint === 'shortcut'), '打开页面不自动创建')
+  const button = [...page.dom.window.document.querySelectorAll('button')].find(item => item.textContent === '添加桌面快捷方式')
+  assert.ok(button)
+  await page.act(async () => { button.click() })
+  assert.deepEqual(page.calls.at(-1), ['shortcut', {}])
   page.dispose()
 })

@@ -31,6 +31,10 @@ window.__ModuleLoader__.load({
       cliHint: '当前不是桌面版。命令行用户直接用 dsh --profile <名称> 选择即可。',
       failure: '操作失败',
       more: '说明与日志',
+      shortcut: '添加桌面快捷方式',
+      shortcutHint: '桌面上会多一个「DSH 酒馆」，点开它就在独立窗口里打开酒馆，不用切换、不用重启；原版 DSH 照常用 DeepSeek Harness 打开。',
+      shortcutDone: '已添加到桌面：',
+      shortcutExists: '桌面上已经有了：',
       logEmpty: '（还没有日志）',
       why: '桌面版固定读取 profiles/desktop。进入 DSH 酒馆时，会把它链接到 profiles/tavern（Windows 用 junction，macOS/Linux 用符号链接）；原版配置先备份为 desktop.fresh-*，切回原版时恢复。切换需要桌面版先退出：重启走正常退出流程，有任务时会先请你确认，不会强制结束进程。',
     }
@@ -49,6 +53,10 @@ window.__ModuleLoader__.load({
       cliHint: 'This is not the Desktop app. Command-line users can pick one with dsh --profile <name>.',
       failure: 'Failed',
       more: 'Details and log',
+      shortcut: 'Add desktop shortcut',
+      shortcutHint: 'Adds "DSH 酒馆" to your desktop. It opens the Tavern in its own window, no switch or restart; the original DSH keeps opening from DeepSeek Harness.',
+      shortcutDone: 'Added to the desktop: ',
+      shortcutExists: 'Already on the desktop: ',
       logEmpty: '(no log yet)',
       why: 'Desktop always reads profiles/desktop. Opening DSH Tavern links it to profiles/tavern (a junction on Windows, a symlink elsewhere); the original is first backed up as desktop.fresh-* and restored when you switch back. Desktop has to exit first: restarting is a normal quit that asks for confirmation when tasks are running, never a forced kill.',
     }
@@ -66,6 +74,11 @@ window.__ModuleLoader__.load({
 .pb-btn { appearance: none; font: inherit; font-size: 13px; flex: none; color: #fff; background: var(--pb-accent); border: 0; border-radius: 8px; padding: 6px 16px; cursor: pointer; }
 .pb-btn:hover:not(:disabled) { background: #3d5bf0; }
 .pb-btn:disabled { opacity: 0.5; cursor: default; }
+.pb-shortcut { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-radius: 10px; border: 1px solid var(--pb-line); }
+.pb-shortcut .pb-sub { margin: 0; }
+.pb-done { margin: 4px 0 0; font-size: 12px; word-break: break-all; }
+.pb-btn-quiet { color: inherit; background: var(--pb-fill); border: 1px solid var(--pb-line); }
+.pb-btn-quiet:hover:not(:disabled) { background: var(--pb-accent-soft); }
 .pb-error { margin: 0; padding: 10px 12px; border-radius: 10px; color: #e5484d; background: rgba(229,72,77,0.08); }
 .pb-fold summary { list-style: none; cursor: pointer; opacity: 0.55; font-size: 12px; user-select: none; }
 .pb-fold summary::-webkit-details-marker { display: none; }
@@ -122,6 +135,21 @@ window.__ModuleLoader__.load({
         : (status?.backups ?? []).length > 0 ? null : t('noOriginal')
       const target = side === 'original' ? 'tavern' : null
 
+      const [shortcut, setShortcut] = React.useState(null)
+      async function addShortcut() {
+        setBusy(true)
+        setFailure(null)
+        try {
+          const result = await call('shortcut', {})
+          if (result?.ok === true) setShortcut(result.value)
+          else setFailure(describeFailure(result?.error))
+        } catch (error) {
+          setFailure(describeFailure({ message: error?.message ?? String(error) }))
+        } finally {
+          setBusy(false)
+        }
+      }
+
       async function apply() {
         setBusy(true)
         setFailure(null)
@@ -153,6 +181,12 @@ window.__ModuleLoader__.load({
             busy ? t('restarting') : target ? t('toTavern') : t('toOriginal')),
         ),
         failure !== null ? h('p', { className: 'pb-error' }, `${t('failure')}: ${failure}`) : null,
+        !isDesktop ? null : h('div', { className: 'pb-shortcut' },
+          h('div', { className: 'pb-bar-text' },
+            h('p', { className: 'pb-sub' }, t('shortcutHint')),
+            shortcut ? h('p', { className: 'pb-done' }, (shortcut.existed ? t('shortcutExists') : t('shortcutDone')) + shortcut.path) : null),
+          h('button', { type: 'button', className: 'pb-btn pb-btn-quiet', disabled: busy, onClick: () => void addShortcut() }, t('shortcut')),
+        ),
         h('details', { className: 'pb-fold' },
           h('summary', null, t('more')),
           h('p', null, t('why')),
