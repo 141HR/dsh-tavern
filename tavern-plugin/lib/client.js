@@ -13200,6 +13200,11 @@ function bindTavernFontZoom(node, win) {
 					const markdown = options.plugin ? options.plugin.render(String(part.text || ""), index, renderMarkdown) : renderMarkdown(String(part.text || ""), index);
 					return options.scriptLayer && !options.streaming ? h(TavernScriptLayerPart, { key: index, layer: options.scriptLayer, partIndex: index, text: String(part.text || "") }, markdown) : markdown;
 				}
+				// Rounds past the render depth keep their prose; the card's HTML waits for one click.
+				if (typeof options.deferHtml === "function") {
+					if (parts.findIndex(function (item) { return item.kind === "html"; }) !== index) return null;
+					return h("button", { key: index, type: "button", className: "dsh-tavern-btn dsh-tavern-render-round", title: "超出渲染深度的轮次只显示文字；点击后渲染本轮的卡片界面", onClick: options.deferHtml }, "渲染此轮");
+				}
 				// Plugin markers inside card HTML cannot be split out; show them after that part.
 				const pluginHtml = options.plugin && !options.openingPreview ? options.plugin.renderHtmlMarkers(String(part.content !== undefined ? part.content : part.html || "")) : null;
 				const content = pluginHtml ? pluginHtml.html : String(part.content !== undefined ? part.content : part.html || "");
@@ -13247,7 +13252,7 @@ function bindTavernFontZoom(node, win) {
 				if (block.kind === "text") {
 					if (input.projection && projected) continue;
 					const projection = input.projection;
-					if (projection) rendered.push(h(React.Fragment, { key: index }, renderTavernProjection(projection, { streaming: input.streaming, codeLabels: codeLabels, mentions: input.mentions, sessionId: input.sessionId, turn: input.turn, frameSizing: input.frameSizing, helperContext: input.helperContext, helperContextReader: input.helperContextReader, trustedCardMode: input.trustedCardMode, eagerFrame: input.eagerFrame, frameOwner: input.frameOwner, executeSlash: input.executeSlash, scriptLayer: input.scriptLayer , plugin: input.plugin, cast: input.cast })));
+					if (projection) rendered.push(h(React.Fragment, { key: index }, renderTavernProjection(projection, { streaming: input.streaming, codeLabels: codeLabels, mentions: input.mentions, sessionId: input.sessionId, turn: input.turn, frameSizing: input.frameSizing, helperContext: input.helperContext, helperContextReader: input.helperContextReader, trustedCardMode: input.trustedCardMode, eagerFrame: input.eagerFrame, frameOwner: input.frameOwner, executeSlash: input.executeSlash, scriptLayer: input.scriptLayer , plugin: input.plugin, cast: input.cast, deferHtml: input.deferHtml })));
 					else if (input.htmlSketches) rendered.push(h(React.Fragment, { key: index }, splitTavernHtmlSketches(block.text).map(function (part, partIndex) {
 						return part.kind === "sketch" ? h(TavernHtmlSketch, { key: partIndex, html: part.html }) : h(TavernColoredMarkdown, { key: partIndex, text: part.text, streaming: input.streaming, labels: { code: codeLabels, footnotes: "脚注" }, codeLabels: codeLabels, fileMentions: input.mentions });
 					})));
@@ -13273,7 +13278,7 @@ function bindTavernFontZoom(node, win) {
 				if (block.kind !== "tool-call") rendered.push(h(DshUi.JsonBlock, { key: index, label: translate("message.unknownBlock"), payload: block.block || block, truncatedLabel: function (total) { return translate("json.truncated", { total: total }); } }));
 			}
 			if (input.projection && !projected) {
-				rendered.push(h(React.Fragment, { key: "projection" }, renderTavernProjection(input.projection, { streaming: false, codeLabels: codeLabels, mentions: input.mentions, sessionId: input.sessionId, turn: input.turn, frameSizing: input.frameSizing, helperContext: input.helperContext, helperContextReader: input.helperContextReader, trustedCardMode: input.trustedCardMode, eagerFrame: input.eagerFrame, frameOwner: input.frameOwner, executeSlash: input.executeSlash , plugin: input.plugin, cast: input.cast })));
+				rendered.push(h(React.Fragment, { key: "projection" }, renderTavernProjection(input.projection, { streaming: false, codeLabels: codeLabels, mentions: input.mentions, sessionId: input.sessionId, turn: input.turn, frameSizing: input.frameSizing, helperContext: input.helperContext, helperContextReader: input.helperContextReader, trustedCardMode: input.trustedCardMode, eagerFrame: input.eagerFrame, frameOwner: input.frameOwner, executeSlash: input.executeSlash , plugin: input.plugin, cast: input.cast, deferHtml: input.deferHtml })));
 			}
 			if (input.interrupted) rendered.push(h("span", { key: "stopped", className: "dsh-tavern-assistant-stopped" }, translate("message.stopped")));
 			return rendered;
@@ -13938,6 +13943,11 @@ function bindTavernFontZoom(node, win) {
 				const ownsTurn = !tail || !tail.closing || !data.finalNode || tail.closing.finalNode.seq === data.finalNode.seq;
 					const projection = settled && ownsTurn ? tavernProjectionForTurn(liveState.view, storyTurn) : null;
 					const latestProjectionTurn = tavernLatestProjectionTurn(liveState.view);
+				// Render depth: only the latest rounds run a card's HTML interface (heavy status bars).
+				const displayPrefs = React.useSyncExternalStore(displayPreferences.subscribe, displayPreferences.snapshot, displayPreferences.snapshot);
+				const [renderRound, setRenderRound] = React.useState(false);
+				const renderDepth = displayPrefs && Number.isSafeInteger(displayPrefs.renderDepth) ? displayPrefs.renderDepth : 3;
+				const deferHtml = !renderRound && renderDepth > 0 && storyTurn > 0 && latestProjectionTurn - storyTurn >= renderDepth ? function () { setRenderRound(true); } : null;
                 React.useEffect(function () {
                     if(!historyNode.current || !currentView?.historyWindow || !ownsTurn || projection || storyTurn<=0 || storyTurn>=tavernLatestProjectionTurn(currentView))return;
                     const observer = new IntersectionObserver(entries=>{
@@ -13991,6 +14001,7 @@ function bindTavernFontZoom(node, win) {
                 const rendered = sessionTransitioning ? [React.createElement("div", { key: "switching", className: "dsh-tavern-session-switching", role: "status" }, "正在完成游戏初始化…")] : waitingForHistory ? [React.createElement("div", {key:"history",role:"status"}, "正在读取历史内容…")] : renderTavernAssistantBlocks({
 					blocks: data.blocks,
 					groupPart: props.groupPart,
+					deferHtml: deferHtml,
 					streaming: data.status === "running",
 					interrupted: data.status === "interrupted",
 					projection: projection,
@@ -16542,7 +16553,8 @@ function bindTavernFontZoom(node, win) {
             const listeners = new Set();
             const key = "dsh-tavern:display-preferences-changed";
             function apply(settings) {
-                value = { hideContextAndReasoning: settings.hideContextAndReasoning === true };
+                value = { hideContextAndReasoning: settings.hideContextAndReasoning === true,
+                    renderDepth: Number.isSafeInteger(settings.renderDepth) ? settings.renderDepth : 3 };
                 document.documentElement.classList.toggle("dsh-tavern-hide-process", value.hideContextAndReasoning);
                 listeners.forEach(listener => listener());
             }
@@ -16589,6 +16601,13 @@ function bindTavernFontZoom(node, win) {
             return h("section", { className: "dsh-tavern-settings-group dsh-tavern-display-preferences" },
                 row("隐藏上下文注入和思考过程", "隐藏对话中的上下文注入、已思考和思考过程。仅影响显示，正文、模型请求和存档内容不变。",
                     preferences?.hideContextAndReasoning === true, value => ({ hideContextAndReasoning: value })),
+                h("label", { className: "dsh-tavern-settings-row dsh-tavern-background-task" },
+                    h("div", { className: "dsh-tavern-settings-copy" }, h("strong", { className: "dsh-tavern-settings-title" }, "渲染深度"),
+                        h("p", { className: "dsh-tavern-settings-desc" }, "只有最近几轮渲染人物卡的 HTML 界面（状态栏、美化面板等），更早的轮次只显示文字，可点「渲染此轮」单独打开。重美化的卡渲染太多轮会很卡。")),
+                    h("select", { "aria-label": "渲染深度", value: String(preferences?.renderDepth ?? 3), disabled: preferences === null || busy,
+                        onChange: event => save({ renderDepth: Number(event.target.value) }) },
+                        [1, 2, 3, 5, 10, 20].map(depth => h("option", { key: depth, value: String(depth) }, "最近 " + depth + " 轮")),
+                        h("option", { value: "0" }, "不限"))),
                 notice ? h("p", { className: "dsh-tavern-settings-desc", role: "status" }, notice) : null);
         }
 

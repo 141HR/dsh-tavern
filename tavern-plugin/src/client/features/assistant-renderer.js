@@ -637,6 +637,11 @@
 				const ownsTurn = !tail || !tail.closing || !data.finalNode || tail.closing.finalNode.seq === data.finalNode.seq;
 					const projection = settled && ownsTurn ? tavernProjectionForTurn(liveState.view, storyTurn) : null;
 					const latestProjectionTurn = tavernLatestProjectionTurn(liveState.view);
+				// Render depth: only the latest rounds run a card's HTML interface (heavy status bars).
+				const displayPrefs = React.useSyncExternalStore(displayPreferences.subscribe, displayPreferences.snapshot, displayPreferences.snapshot);
+				const [renderRound, setRenderRound] = React.useState(false);
+				const renderDepth = displayPrefs && Number.isSafeInteger(displayPrefs.renderDepth) ? displayPrefs.renderDepth : 3;
+				const deferHtml = !renderRound && renderDepth > 0 && storyTurn > 0 && latestProjectionTurn - storyTurn >= renderDepth ? function () { setRenderRound(true); } : null;
                 React.useEffect(function () {
                     if(!historyNode.current || !currentView?.historyWindow || !ownsTurn || projection || storyTurn<=0 || storyTurn>=tavernLatestProjectionTurn(currentView))return;
                     const observer = new IntersectionObserver(entries=>{
@@ -690,6 +695,7 @@
                 const rendered = sessionTransitioning ? [React.createElement("div", { key: "switching", className: "dsh-tavern-session-switching", role: "status" }, "正在完成游戏初始化…")] : waitingForHistory ? [React.createElement("div", {key:"history",role:"status"}, "正在读取历史内容…")] : renderTavernAssistantBlocks({
 					blocks: data.blocks,
 					groupPart: props.groupPart,
+					deferHtml: deferHtml,
 					streaming: data.status === "running",
 					interrupted: data.status === "interrupted",
 					projection: projection,
