@@ -2,6 +2,8 @@
 // Measure what a game's context compaction kept, without playing it:
 //   node bin/eval-compaction-memory.mjs --chat 吞噬星空 --quiz 测验.json [--home ~/.dsh-tavern] [--compact]
 //   node bin/eval-compaction-memory.mjs --import 聊天记录.jsonl --card 吞噬星空 --compact --quiz 测验.json
+// --ask then puts every quiz question to the game's model as a player input, one turn each,
+// and scores its reply by the same keywords, noting each history recall it made.
 // --import first imports a SillyTavern chat file (see novel-to-chat.mjs) as a new game under
 // the named card, through the running CLI Tavern; the evaluation then uses that game.
 // Reads the game's own session log: every compaction checkpoint, the volumes of its
@@ -121,4 +123,35 @@ if (quizFile) {
     console.log(`  ${String(item.id).padStart(2)}. 第 ${item.turn} 轮  ${where === '摘要' ? '摘要 · ' + volume.text.split('\n')[0] : where}${missing}  —— ${item.question}`)
   }
   console.log(`\n合计 ${quiz.length} 题：` + Object.entries(counts).map(([key, value]) => `${key} ${value}`).join('，'))
+}
+
+if (args.includes('--ask') && quizFile) {
+  const quiz = json(quizFile)
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+  const has = (text, item) => item.keywords.every(group => group.some(word => text.includes(word)))
+  let right = 0, recalled = 0
+  console.log('\n模型作答（每题一轮，可使用历史检索）：')
+  for (const item of quiz) {
+    const start = sessionLog(sessionId).events.length
+    await rpc('sendPlayerInput', { sessionId, text: `（场外提问，不要续写剧情）请直接简短回答：${item.question}？答完另起一行说明你是从上下文里记得的，还是用历史检索查了原文。` })
+    let turn
+    for (let waited = 0; !turn; waited += 3000) {
+      if (waited > 600000) throw new Error('等待模型回答超时')
+      await sleep(3000)
+      const all = sessionLog(sessionId).events
+      const end = all.findIndex((event, index) => index >= start && event.type === 'turn/end')
+      if (end >= 0) turn = all.slice(start, end + 1)
+    }
+    // Score the reply only, not the model's reasoning.
+    const answer = turn.filter(event => event.type === 'assistant/message').flatMap(event => event.data.message.content || [])
+      .filter(block => block?.type === 'text').map(block => block.text).join('\n').trim()
+    const recalls = turn.filter(event => event.type === 'tool/call' && event.data?.name === 'tavern_recall_history')
+      .map(event => { try { const a = JSON.parse(event.data.arguments); return a.query ? '「' + a.query + '」' : '第 ' + a.turn + ' 轮' } catch { return '?' } })
+    const ok = has(answer, item)
+    right += ok ? 1 : 0
+    recalled += recalls.length ? 1 : 0
+    console.log(`  ${String(item.id).padStart(2)}. ${ok ? '答对' : '答错'}  ${recalls.length ? '检索 ' + recalls.join('、') : '未检索'}  —— ${item.question}`)
+    console.log('      ' + answer.replace(/\s+/g, ' ').slice(0, 160))
+  }
+  console.log(`\n作答 ${quiz.length} 题：答对 ${right}，用了历史检索 ${recalled} 题`)
 }

@@ -4909,7 +4909,7 @@ export async function apply(ctx) {
         const send = /^\/send\s+([\s\S]+)\|\s*\/trigger\s*$/.exec(text)
         if (send || /^\/trigger\s*$/.test(text)) {
           await ctx.get('sessionController').prompt({ sessionId: args.sessionId, requestId: randomUUID(),
-            content: send ? [{ type: 'text', text: send[1].trim() }] : [], mode: 'followup' })
+            content: send ? [{ type: 'text', text: send[1].trim() }] : [], mode: 'followup' }, new AbortController().signal)
           return { pipe: '' }
         }
         if (/^\/setinput(?:\s|$)/.test(text)) throw new Error('服务端模板不能操作网页输入框，请使用 /send … | /trigger')
@@ -4957,6 +4957,14 @@ export async function apply(ctx) {
 	  case 'releaseTavernHelperRuntime': return { released: tavernScriptHostAdapter.releaseRuntime(args && args.sessionId, args && args.runtimeId) }
       case 'previewChatImport': return await chatHistoryImporter.preview(args || {})
       case 'importChatHistoryText': return await importChatHistoryText(args || {})
+      // For tools: send a player input as the page does; the turn runs like any other.
+      case 'sendPlayerInput': {
+        const sessionId = str(args?.sessionId), text = str(args?.text).trim()
+        if (!sessionId || !text) throw new Error('缺少会话或输入内容')
+        const requestId = randomUUID()
+        await ctx.get('sessionController').prompt({ sessionId, requestId, content: [{ type: 'text', text }], mode: 'followup' }, new AbortController().signal)
+        return { requestId }
+      }
       case 'rescueChatHistory': return await chatHistoryImporter.rescue(args || {})
       case 'importChatHistory': return await chatHistoryImporter.import(args || {})
       case 'startChat': {
