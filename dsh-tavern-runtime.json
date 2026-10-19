@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "3d94ab6ab61b58a87ccf60d47e70ba594c7316b2",
-  "releaseSequence": 763,
+  "revision": "1a276bf2c0e1a1365502f3fcad6a84422047e228",
+  "releaseSequence": 764,
   "version": "3.0.0",
   "files": [
     {
@@ -971,8 +971,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/foreground-orchestration-strategies.js",
-      "sha256": "6b402e6a4833208dca46fffa5e4ac1ad6b8ba235039139f299cd36d7c0a0efbe",
-      "size": 27651
+      "sha256": "9f1f2f4b3f3c5c3eb58e511277a954e9879048fb7196a2345c7a22493457eec8",
+      "size": 30086
     },
     {
       "path": "tavern-plugin/lib/domain/foreground-variable-changes.js",
