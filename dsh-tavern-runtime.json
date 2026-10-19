@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "bad3dd92244a15ced446d70c6f62c1fa3f8afffa",
-  "releaseSequence": 731,
+  "revision": "e039c2e6af4013ca378e42dfaa2e2f6c02f67e6f",
+  "releaseSequence": 732,
   "version": "3.0.0",
   "files": [
     {
@@ -126,8 +126,8 @@
     },
     {
       "path": "bin/novel-to-chat.mjs",
-      "sha256": "5f94792fadb79b4d9552695e03307b8fa6474fd0f17a3d6c5853b3a687636740",
-      "size": 2958
+      "sha256": "c901acbfc31a303e6aa40a75b039ae4c1b3c496f83ffab7c457295ebb762a956",
+      "size": 3791
     },
     {
       "path": "bin/official-desktop-runtime.cjs",
