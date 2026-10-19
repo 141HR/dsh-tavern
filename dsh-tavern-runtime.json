@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "ffabf9659033a47ba210b2d6f436fd2e526f5b79",
-  "releaseSequence": 727,
+  "revision": "0eb28243d5ddaff97e134ef5e8fb5df3eaa8280a",
+  "releaseSequence": 728,
   "version": "3.0.0",
   "files": [
     {
@@ -801,8 +801,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/compaction-request.js",
-      "sha256": "442d267bd7d3bcc59bade2ce1128a287a34c64ef36db1065788b6bb573b3be05",
-      "size": 3716
+      "sha256": "255bfd00b22661386591230cc8ff13244e8a9b1c312730a0f7c7467d1e925883",
+      "size": 4583
     },
     {
       "path": "tavern-plugin/lib/domain/compatibility-request.js",
@@ -1881,8 +1881,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/story-compaction.js",
-      "sha256": "d875b5a8e0e46a46a228a5c478cce1fc363f37bd92ea0a819feea70d6d5294fd",
-      "size": 6841
+      "sha256": "7efbc649b7690a4c682bc72867c99777a9209ac7b6d7a32df910ef47beeb7793",
+      "size": 11108
     },
     {
       "path": "tavern-plugin/lib/domain/story-ledger.js",
@@ -2236,8 +2236,8 @@
     },
     {
       "path": "tavern-plugin/lib/hooks/model-stream.js",
-      "sha256": "8af766c4d49ee27e2dfb9ee7fe4b21d850ddcb606d450fd8cf6c22424dd5875f",
-      "size": 8718
+      "sha256": "90157017d6745dd980caab854c9503f444f812e8fb77570a0a47ee9034b77e21",
+      "size": 9331
     },
     {
       "path": "tavern-plugin/lib/hooks/request.js",
@@ -2256,8 +2256,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "74d8b812d18d7fa36efa9e136cff74e01ddf00b2ab37d4a400509acc662e4ce8",
-      "size": 368324
+      "sha256": "4918dfb207d985d73e008633001a5aba5cd56abc946ab1a7033774f6ca6af214",
+      "size": 368575
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -4761,8 +4761,8 @@
     },
     {
       "path": "tavern-plugin/prompts/story-compaction.md",
-      "sha256": "3c0c85a5a49f22e99a1d2a5364399b4ced0ab6363698c39b3a4569471823693a",
-      "size": 2613
+      "sha256": "bc88b7badf4e370060e0c4a8d4e62e4516656bb7e85565b72a2c12b42010bf42",
+      "size": 2604
     },
     {
       "path": "tavern-plugin/prompts/story.md",
