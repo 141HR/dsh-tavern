@@ -113,3 +113,13 @@ test('空间不足时从尾部收起页面，酒馆状态和导出永不收起',
   assert.deepEqual(Array.from(fold(['a', 'b', 'c'], id => (id === 'c' ? 100 : 100), 250, { gap: 2, moreWidth: 34, fixed: ['c'] })), ['b'])
   assert.deepEqual(Array.from(fold(['dsh-tavern:status', 'dsh-tavern:cards', 'dsh-tavern:worldbooks', 'header:export'], () => 100, 260, { gap: 2, moreWidth: 34, fixed: ['dsh-tavern:status', 'header:export'] })), ['dsh-tavern:cards', 'dsh-tavern:worldbooks'])
 })
+
+test('会话模式不依赖左侧栏：顶栏自己拉一次会话列表，未知会话仍不显示酒馆按钮', () => {
+  assert.match(client, /function useTavernSessionMode\(sessionId\)[\s\S]*?ensureTavernSessionModes\(\)/)
+  const ensure = client.match(/function ensureTavernSessionModes\(\) \{[\s\S]*?\n\t\t\}/)[0]
+  assert.match(ensure, /tavernSessionModeRequest \|\| tavernSessionModes\.loaded/)
+  assert.match(ensure, /rpc\("listSessions"\)/)
+  // 显示条件保持严格：没确认是酒馆会话就不画。
+  assert.match(client, /if \(!mode\) return null;/)
+  assert.match(client, /if \(!isPlayMode\(mode\)\) return null;/)
+})
