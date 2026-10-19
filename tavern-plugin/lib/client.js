@@ -2681,6 +2681,13 @@ window.__ModuleLoader__.load({
 				// binding 没跟上（新建会话的 scope 尚未 retain）。前者刷新页面也没用，
 				// 必须让用户去删掉这条历史记录，否则只能反复重试同一次超时。
 				const missing = !options.summary(sessionId);
+				// The host also leaves out a save whose old log it could not upgrade. That reason
+				// matters more than "deleted": deleting the history would throw the save away.
+				if (missing && typeof options.explainMissing === "function") {
+					let reason = "";
+					try { reason = await options.explainMissing(sessionId); } catch (_error) {}
+					if (reason) throw new Error(reason);
+				}
 				throw new Error(missing
 					? "DSH 会话 " + sessionId + " 已不在宿主列表中（可能已被删除），请删除这条历史记录后重试；若刚更新过请先刷新页面。"
 					: "DSH Session 列表同步超时，请刷新页面后重试：" + sessionId);
@@ -14715,7 +14722,14 @@ function bindTavernFontZoom(node, win) {
                 playPrewarmRef.current = createConversationPrewarmModule({ resolveWorkspace: playWorkspaceResolverRef.current });
             }
 			if (sessionListRecoveryRef.current === null) {
-				sessionListRecoveryRef.current = createSessionListRecoveryModule(sessionListAdapters(props.sessions));
+				sessionListRecoveryRef.current = createSessionListRecoveryModule(Object.assign(sessionListAdapters(props.sessions), {
+					explainMissing: async function (sessionId) {
+						const state = await rpc("getSaveUpgrade", {}, sessionId);
+						if (!state || state.sessions?.ready) return "";
+						return "这局存档的旧会话日志无法升级到新版，原档已保留。" + (state.sessions?.error || state.error || "")
+							+ "\n可在左侧对话菜单「⋯」里点「导出诊断文件」发给开发者（不含剧情正文），或用「存档救援」把剧情转到新对话继续玩。请不要删除这条记录。";
+					}
+				}));
 			}
 			const currentSummary = current ? summaries[current] : null;
 			const readyTavernSession = current && summaries[current] && summaries[current].blank === false && history.some(function (entry) { return entry.sessionId === current && isPlayMode(entry.mode); }) ? current : "";

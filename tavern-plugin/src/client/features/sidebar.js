@@ -171,7 +171,14 @@
                 playPrewarmRef.current = createConversationPrewarmModule({ resolveWorkspace: playWorkspaceResolverRef.current });
             }
 			if (sessionListRecoveryRef.current === null) {
-				sessionListRecoveryRef.current = createSessionListRecoveryModule(sessionListAdapters(props.sessions));
+				sessionListRecoveryRef.current = createSessionListRecoveryModule(Object.assign(sessionListAdapters(props.sessions), {
+					explainMissing: async function (sessionId) {
+						const state = await rpc("getSaveUpgrade", {}, sessionId);
+						if (!state || state.sessions?.ready) return "";
+						return "这局存档的旧会话日志无法升级到新版，原档已保留。" + (state.sessions?.error || state.error || "")
+							+ "\n可在左侧对话菜单「⋯」里点「导出诊断文件」发给开发者（不含剧情正文），或用「存档救援」把剧情转到新对话继续玩。请不要删除这条记录。";
+					}
+				}));
 			}
 			const currentSummary = current ? summaries[current] : null;
 			const readyTavernSession = current && summaries[current] && summaries[current].blank === false && history.some(function (entry) { return entry.sessionId === current && isPlayMode(entry.mode); }) ? current : "";
