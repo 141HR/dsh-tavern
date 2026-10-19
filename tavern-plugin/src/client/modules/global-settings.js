@@ -92,6 +92,9 @@ function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernD
                 ...children);
         }
         return h("div", { className: "dsh-tavern-settings-section dsh-tavern-global-settings" },
+            h("p", { className: "dsh-tavern-gs-notice" }, "遇到问题或想交流玩法，欢迎加入 ",
+                h("a", { href: "https://discord.gg/hYAEjKnpra", target: "_blank", rel: "noopener noreferrer" }, "Discord 交流群"),
+                "。本项目没有官方的 QQ 群、微信群。"),
             group("默认模型", "用于新游戏和新的卡片工作台对话，已有对话保持当前配置。建议使用 High 推理强度；Max 容易过度思考、增加等待。",
             h("div", { className: "dsh-tavern-gs-card" },
             React.createElement(TavernDefaultModelSetting, { label: "默认前台模型", title: "前台模型", description: "写正文、扮演角色，直接决定剧情质量", fallback: "使用 DSH 默认模型", selection: state.defaultForegroundModel, catalog: state.modelCatalog, disabled: state.loading || state.busy, onChange: selection => saveDefault("defaultForegroundModel", selection) }),
@@ -116,10 +119,6 @@ function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernD
                 h(ContextCompactionSettings),
                 // Most players never need this; it lives at the bottom of 高级, folded.
                 h(HeaderItemsSettings)),
-            group("交流", "",
-                h("p", { className: "dsh-tavern-gs-notice" }, "遇到问题或想交流玩法，欢迎加入 ",
-                    h("a", { href: "https://discord.gg/hYAEjKnpra", target: "_blank", rel: "noopener noreferrer" }, "Discord 交流群"),
-                    "。本项目没有官方的 QQ 群、微信群。")),
             state.error ? React.createElement("div", { className: "dsh-tavern-settings-error", role: "alert" }, "保存失败：" + state.error) : null
         );
     }
