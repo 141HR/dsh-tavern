@@ -3077,3 +3077,28 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
 .dsh-tavern-preset-hub-export label small { margin-left: auto; color: var(--dsw-alias-label-tertiary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dsh-tavern-preset-hub-export input { width: 15px; height: 15px; margin: 0; accent-color: var(--dsh-tavern-accent); }
 .dsh-tavern-preset-hub-export-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+/* 世界书快捷面板：顶栏世界书按钮弹出，只换书、开关条目。 */
+@keyframes dsh-tavern-wbsw-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.dsh-tavern-wbsw-shell { position: fixed; z-index: 3000; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-alias-bg-layer-2, var(--dsw-specific-sidebar-fill)); box-shadow: 0 10px 30px color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent); color: var(--dsw-alias-label-primary); font-family: var(--dsh-tavern-font-sans); font-size: 13px; line-height: 1.45; animation: dsh-tavern-wbsw-in 160ms cubic-bezier(0.23, 1, 0.32, 1); }
+@media (prefers-reduced-motion: reduce) { .dsh-tavern-wbsw-shell { animation: none; } }
+.dsh-tavern-wbsw-head, .dsh-tavern-wbsw-footer { display: flex; flex: none; align-items: center; gap: 6px; padding: 6px 8px; }
+.dsh-tavern-wbsw-head { border-bottom: 1px solid var(--dsw-alias-border-l2); }
+.dsh-tavern-wbsw-footer { border-top: 1px solid var(--dsw-alias-border-l2); }
+.dsh-tavern-wbsw-select, .dsh-tavern-wbsw-search { flex: 1; min-width: 0; height: 28px; padding: 0 6px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; outline: none; background: var(--dsw-specific-input-major); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; }
+.dsh-tavern-wbsw-select:focus-visible, .dsh-tavern-wbsw-search:focus { border-color: var(--dsh-tavern-accent-border); }
+.dsh-tavern-wbsw-search::placeholder { color: var(--dsw-alias-label-tertiary); }
+.dsh-tavern-wbsw-btn { flex: none; height: 28px; padding: 0 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; background: transparent; color: var(--dsw-alias-label-primary); cursor: pointer; font: inherit; font-size: 12px; }
+.dsh-tavern-wbsw-btn:hover { border-color: var(--dsh-tavern-accent-border); color: var(--dsh-tavern-accent); }
+.dsh-tavern-wbsw-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px; }
+.dsh-tavern-wbsw-row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 6px; border-radius: 6px; cursor: pointer; transition: background .14s ease, opacity .14s ease; }
+.dsh-tavern-wbsw-row:hover { background: color-mix(in srgb, var(--dsh-tavern-accent) 10%, transparent); }
+.dsh-tavern-wbsw-row.is-disabled { opacity: .5; }
+.dsh-tavern-wbsw-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-tavern-wbsw-switch { position: relative; display: inline-flex; flex: none; width: 30px; height: 17px; cursor: pointer; }
+.dsh-tavern-wbsw-switch input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.dsh-tavern-wbsw-track { position: relative; display: block; width: 100%; height: 100%; border-radius: 999px; background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 38%, transparent); transition: background .16s ease; }
+.dsh-tavern-wbsw-knob { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .28); transition: transform .16s ease; }
+.dsh-tavern-wbsw-switch input:checked + .dsh-tavern-wbsw-track { background: var(--dsh-tavern-accent); }
+.dsh-tavern-wbsw-switch input:checked + .dsh-tavern-wbsw-track .dsh-tavern-wbsw-knob { transform: translateX(13px); }
+.dsh-tavern-wbsw-empty { padding: 20px 12px; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 1.6; text-align: center; }
+.dsh-tavern-wbsw-error { margin: 4px; padding: 7px 9px; border-radius: 6px; background: color-mix(in srgb, #c45f5f 12%, transparent); color: #b34646; font-size: 12px; line-height: 1.5; }
