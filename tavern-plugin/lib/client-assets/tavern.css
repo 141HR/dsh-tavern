@@ -3114,3 +3114,14 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
 .dsh-tavern-wbsw-switch input:checked + .dsh-tavern-wbsw-track .dsh-tavern-wbsw-knob { transform: translateX(13px); }
 .dsh-tavern-wbsw-empty { padding: 20px 12px; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 1.6; text-align: center; }
 .dsh-tavern-wbsw-error { margin: 4px; padding: 7px 9px; border-radius: 6px; background: color-mix(in srgb, #c45f5f 12%, transparent); color: #b34646; font-size: 12px; line-height: 1.5; }
+/* 外观 → 正文排版：只在调过行距或字距时接管酒馆正文；DSH 的 markdown 用 font 简写定行高，需逐层压过。 */
+html[data-dsh-text-layout] :is(.dsh-tavern-assistant, .dsh-tavern-user-bubble, .dsh-tavern-stage-textbox) { line-height: var(--dsh-tavern-line-height, calc(24px + var(--dsh-content-font-delta, 0px))) !important; letter-spacing: var(--dsh-tavern-letter-spacing, normal) !important; }
+html[data-dsh-text-layout] :is(.dsh-tavern-assistant, .dsh-tavern-user-bubble, .dsh-tavern-stage-textbox) :is([class*="_markdown_"], [class*="_markdown_"] :not(pre, code, pre *)) { line-height: inherit !important; letter-spacing: inherit !important; }
+.dsh-tavern-text-layout { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; }
+.dsh-tavern-text-layout-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dsh-tavern-text-layout-head strong { font-size: 14px; }
+.dsh-tavern-text-layout-field { display: grid; grid-template-columns: 84px minmax(0, 1fr) 64px; align-items: center; gap: 10px; font-size: 13px; }
+.dsh-tavern-text-layout-label small { margin-left: 4px; color: var(--dsw-alias-label-tertiary); font-size: 11px; }
+.dsh-tavern-text-layout-field input[type="range"] { width: 100%; accent-color: var(--dsh-tavern-accent); }
+.dsh-tavern-text-layout-value { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; text-align: right; }
+.dsh-tavern-text-layout-preview { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--dsw-alias-bg-layer-1, rgba(127, 127, 127, .08)); color: var(--dsw-alias-label-primary); }
