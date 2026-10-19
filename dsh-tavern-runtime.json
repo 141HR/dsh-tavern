@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "eb1faa5ca63428d62395c0f7dd82abdc5e04fa73",
-  "releaseSequence": 762,
+  "revision": "3d94ab6ab61b58a87ccf60d47e70ba594c7316b2",
+  "releaseSequence": 763,
   "version": "3.0.0",
   "files": [
     {
@@ -496,8 +496,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "6fd8ead2858015015b769732739e36972e37bb479488d3b07c58696e9aa5cdc3",
-      "size": 1976686
+      "sha256": "6670ae37023bce143483a66e8f7aab0c4405c4005054ef73f24432909918554e",
+      "size": 1977049
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -511,8 +511,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/agent-lookup.js",
-      "sha256": "e326deef776f25de478368d976a7f92d145ced6f75f5ee95cb595b87e5e69b95",
-      "size": 481
+      "sha256": "78d30318343145f99b2dd048c068ee65905b8d0e23f49cde0f88a896d234f6d5",
+      "size": 961
     },
     {
       "path": "tavern-plugin/lib/domain/agent-readiness.js",
@@ -806,8 +806,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/chat-session-state.js",
-      "sha256": "95d1903dec43be928a5975d58dde9f8fe239b249d0850137a4bce3bd87eec3e5",
-      "size": 18464
+      "sha256": "1d4eb3aacb40de043a5ba896d494fb2ac04e28f53b62c6e14ede519e8878c496",
+      "size": 19840
     },
     {
       "path": "tavern-plugin/lib/domain/chat-snapshot-worker.js",
@@ -1521,8 +1521,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/rollback-surface.js",
-      "sha256": "16478f87c10ade8b3c474f01aba13ccaa3a4e9779cc2cf914f89b6a15fa0f9aa",
-      "size": 40432
+      "sha256": "adafa80fcfea8951efda57fcfb89682f31c1963c3cd0e115118177e38f1924c3",
+      "size": 41938
     },
     {
       "path": "tavern-plugin/lib/domain/round-anchor.js",
@@ -4971,8 +4971,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/turn-history.js",
-      "sha256": "d4db12daacc93155b759b1753f55aa53a9a20213d3b9104eba0cf20314fafd7d",
-      "size": 20612
+      "sha256": "fdcc0d3d0dc518b2fde3c1c9b65fc68ff1ab200f7597bb030f8fc306a4759b8e",
+      "size": 20975
     },
     {
       "path": "tavern-plugin/src/client/features/user-profile.js",
