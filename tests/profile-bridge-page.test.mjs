@@ -6,8 +6,8 @@ import { JSDOM } from 'jsdom'
 
 const source = await readFile(new URL('../tavern-plugin/packages/dsh-profile-bridge/client.js', import.meta.url), 'utf8')
 
-async function mount(status, calls = []) {
-  const inTavern = status.activeIsLink === true && status.linkTargetName === 'tavern'
+async function mount(status, calls = [], options = {}) {
+  const inTavern = options.inTavern ?? (status.activeIsLink === true && status.linkTargetName === 'tavern')
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/' })
   globalThis.window = dom.window
   globalThis.document = dom.window.document
@@ -82,5 +82,16 @@ test('「添加桌面快捷方式」只在点按钮时创建，并显示放在�
   assert.ok(button)
   await page.act(async () => { button.click() })
   assert.deepEqual(page.calls.at(-1), ['shortcut', {}])
+  page.dispose()
+})
+
+test('快捷方式打开的独立酒馆窗口：不给切换按钮，只说明原版 DSH 直接打开', async () => {
+  // 桌面版此时是原版（没有链接），这一页却是酒馆：以页面为准，不能给出「切到 DSH 酒馆」。
+  const status = { appKind: 'desktop', desktopApp: false, activeIsLink: false, backups: [], profiles: [tavernProfile] }
+  const page = await mount(status, [], { inTavern: true })
+  assert.equal(page.label(), '原版DSH')
+  assert.equal(page.button(), null)
+  assert.doesNotMatch(page.text(), /切到 DSH 酒馆/)
+  assert.match(page.text(), /独立窗口/)
   page.dispose()
 })

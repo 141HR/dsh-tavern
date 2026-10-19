@@ -24,6 +24,7 @@ window.__ModuleLoader__.load({
       toTavern: '切到 DSH 酒馆并重启',
       noTavern: '还没有装好 DSH 酒馆，装好后这里就能切过去。',
       noOriginal: '找不到原版 DSH 的备份，暂时切不回去。请看下面的「说明与日志」。',
+      standalone: '这是 DSH 酒馆的独立窗口。原版 DSH 直接打开 DeepSeek Harness 即可，不用切换。',
       restarting: '正在重启…',
       quitHint: '请从托盘退出桌面版，切换完成后会自动重新打开（两分钟内有效）。',
       loading: '读取中…',
@@ -45,6 +46,7 @@ window.__ModuleLoader__.load({
       toTavern: 'Switch to DSH Tavern and restart',
       noTavern: 'DSH Tavern is not installed yet; once it is, you can switch from here.',
       noOriginal: 'The original DSH backup is missing, so switching back is not possible right now. See "Details and log" below.',
+      standalone: 'This is the standalone DSH Tavern window. Open the original DSH from DeepSeek Harness directly; no switch needed.',
       restarting: 'Restarting…',
       quitHint: 'Quit Desktop from the tray; it reopens by itself after the switch (valid for two minutes).',
       loading: 'Loading…',
@@ -93,13 +95,6 @@ window.__ModuleLoader__.load({
       return typeof error.message === 'string' ? error.message : String(error)
     }
 
-    /** Which side this app is on, from the status payload: the tavern setup, the original, or something else. */
-    function sideOf(status) {
-      if (!status || status.appKind !== 'desktop') return 'other'
-      if (status.activeIsLink !== true) return 'original'
-      return status.linkTargetName === 'tavern' ? 'tavern' : 'other'
-    }
-
     /** The menu names this page by side at once: the Tavern client marks a page that loaded it. */
     const inTavern = () => window.__dshTavernLoaded === true
 
@@ -126,7 +121,9 @@ window.__ModuleLoader__.load({
         return () => { alive = false }
       }, [call])
 
-      const side = sideOf(status)
+      // Which side this page is on comes from the page itself, the same as the menu name.
+      const side = inTavern() ? 'tavern' : 'original'
+      const standalone = status?.desktopApp === false
       const tavernReady = (status?.profiles ?? []).some((profile) => profile.name === 'tavern' && (profile.bundles ?? []).includes('dsh-profile-bridge') && profile.hasNodeModules)
       // Back to the original needs its backup; into the tavern needs a tavern setup that can come back.
       const blocked = side === 'original' ? (tavernReady ? null : t('noTavern'))
@@ -168,9 +165,9 @@ window.__ModuleLoader__.load({
         h('style', null, CSS),
         h('header', { className: 'pb-head' },
           h('h2', { className: 'pb-title' }, title),
-          h('p', { className: 'pb-sub' }, status === null ? t('loading') : isDesktop ? t('explain') : t('cliHint')),
+          h('p', { className: 'pb-sub' }, status === null ? t('loading') : !isDesktop ? t('cliHint') : standalone ? t('standalone') : t('explain')),
         ),
-        !isDesktop ? null : blocked ? h('p', { className: 'pb-error' }, blocked) : h('div', { className: 'pb-bar' },
+        !isDesktop || standalone ? null : blocked ? h('p', { className: 'pb-error' }, blocked) : h('div', { className: 'pb-bar' },
           h('span', { className: 'pb-bar-text' },
             applied === null ? '' : applied.closesApp ? t('restarting') : t('quitHint'),
             ...(applied?.warnings ?? []).map((warning) => h('span', { key: warning, style: { display: 'block', opacity: 0.75 } }, `• ${warning}`)),
@@ -179,7 +176,7 @@ window.__ModuleLoader__.load({
             busy ? t('restarting') : target ? t('toTavern') : t('toOriginal')),
         ),
         failure !== null ? h('p', { className: 'pb-error' }, `${t('failure')}: ${failure}`) : null,
-        !isDesktop ? null : h('div', { className: 'pb-shortcut' },
+        !isDesktop || standalone ? null : h('div', { className: 'pb-shortcut' },
           h('div', { className: 'pb-bar-text' },
             h('p', { className: 'pb-sub' }, t('shortcutHint')),
             shortcut ? h('p', { className: 'pb-done' }, (shortcut.existed ? t('shortcutExists') : t('shortcutDone')) + shortcut.path) : null),
