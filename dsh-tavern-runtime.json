@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "fdbb8da212d0fed84abadd598269fff014aeb8ca",
-  "releaseSequence": 720,
+  "revision": "fe843c7954b8d0fec4bd575bee54486fe69ad310",
+  "releaseSequence": 721,
   "version": "3.0.0",
   "files": [
     {
@@ -476,8 +476,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "2e4e78475f86d0593942aafba567eac0f472205663939c87113034783a4f19bb",
-      "size": 1864969
+      "sha256": "9fe4abdd4a52ecefc47c46925826022bd4593e0c507e01db41989619d7fb3af2",
+      "size": 1865582
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -4801,8 +4801,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/assistant-renderer.js",
-      "sha256": "eb78a573289acc72c037b8aaeca99ca4c23f1d4c27f64c73167db6c1e5d99d26",
-      "size": 63732
+      "sha256": "fcfa0c25ea38e89adc9a8329cbf53c6148186b503d265ed84f382bdef92fbe0e",
+      "size": 63962
     },
     {
       "path": "tavern-plugin/src/client/features/card-library.js",
@@ -4821,8 +4821,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/cast-presentation.js",
-      "sha256": "2e94438fb60390975cbbced2115cb8ec11b8cd2ebc26263836d4037d1a4f5e43",
-      "size": 9183
+      "sha256": "190a5f508467aa19dec1d49013c08703eb115a5f1754491b481bfcde9a5f512d",
+      "size": 9566
     },
     {
       "path": "tavern-plugin/src/client/features/cast-stage.js",
