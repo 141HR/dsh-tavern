@@ -26,6 +26,14 @@ export async function setupRealCardEdit({ root, profile, data, runtimeHome }) {
   return selection
 }
 
+// DSH 0.1.x put usage on the message; 0.2.x keeps it as the last `usage` chunk of the message stream.
+function usageOf(event) {
+  if (event.data?.usage) return event.data.usage
+  const stream = Array.isArray(event.data?.stream) ? event.data.stream : []
+  for (let index = stream.length - 1; index >= 0; index -= 1) if (stream[index]?.type === 'chunk' && stream[index].chunk?.type === 'usage') return stream[index].chunk.usage
+  return undefined
+}
+
 export async function realCardEditChecks({ page, step, root, data, output, report }) {
   const task = process.env.TAVERN_E2E_CARD_EDIT_TASK || '把世界书「⚙️货币规则」里的物价锚点改一下：普通住宿一天改成约 2 基准，其他不变。'
   const store = createChatJournalStore({ dataRoot: data })
@@ -35,7 +43,7 @@ export async function realCardEditChecks({ page, step, root, data, output, repor
   }
   async function events(sessionId) {
     const dir = join(root, 'profile-data/tavern/sessions')
-    for (const file of await readdir(dir, { recursive: true })) if (file.endsWith('session.v3.jsonl.zstd')) {
+    for (const file of await readdir(dir, { recursive: true })) if (/session\.v[34]\.jsonl\.zstd$/.test(file)) {
       const parsed = parseSessionLog(await readFile(join(dir, file)))
       if (parsed.header.id === sessionId) return parsed.events
     }
@@ -58,12 +66,16 @@ export async function realCardEditChecks({ page, step, root, data, output, repor
     const mvuTail = mvuMode ? JSON.parse(mvuSource.match(/"(先用 tavern_copy_card 建一份副本[^"]*)"/)[0]) : ''
     const first = mvuMode ? '/card-to-mvu\n\n【目标人物卡】\n@"cards/edit-target.json"\n\n' + mvuTail : null
     const started = Date.now()
+    // Turns that finished before the first task (e.g. the workbench opening) are not part of the measurement.
+    const firstTurn = Math.max(0, ...(await events(chat.sessionId)).filter(event => event.type === 'turn/end').map(event => Number(event.data?.turn) || 0)) + 1
     let list = []
     for (const [index, item] of tasks.entries()) {
+      // The workbench session may already hold finished turns (e.g. its opening); count only new ones.
+      const baseline = (await events(chat.sessionId)).filter(event => event.type === 'turn/end').length
       await composer.fill(index === 0 ? (first ?? editPrompt.replace('/edit-card', '/edit-card\n\n目标卡：@"cards/edit-target.json"') + '\n\n' + item) : item)
       await composer.press('Enter')
       let tick = Date.now()
-      const ended = () => list.filter(event => event.type === 'turn/end').length > index
+      const ended = () => list.filter(event => event.type === 'turn/end').length > baseline
       while (Date.now() - started < 900000 * tasks.length) {
         list = await events(chat.sessionId)
         if (ended()) break
@@ -73,10 +85,11 @@ export async function realCardEditChecks({ page, step, root, data, output, repor
       assert.ok(ended(), '真实模型未在时限内完成第 ' + (index + 1) + ' 轮改卡')
       await composer.waitFor()
     }
-    const steps = list.filter(event => event.type === 'assistant/message' && event.data?.usage).map(event => ({ turn: event.data.turn, step: event.data.step, ...event.data.usage }))
+    const measured = list.filter(event => !(Number(event.data?.turn) < firstTurn))
+    const steps = measured.filter(event => event.type === 'assistant/message' && usageOf(event)).map(event => ({ turn: event.data.turn, step: event.data.step, ...usageOf(event) }))
     const sum = (key, rows = steps) => rows.reduce((total, row) => total + (Number(row[key]) || 0), 0)
-    const tools = list.filter(event => event.type === 'tool/call').map(event => event.data.name)
-    const calls = list.filter(event => event.type === 'tool/call').map(event => ({ turn: event.data.turn, name: event.data.name, arguments: String(event.data.arguments || '').slice(0, 600) }))
+    const tools = measured.filter(event => event.type === 'tool/call').map(event => event.data.name)
+    const calls = measured.filter(event => event.type === 'tool/call').map(event => ({ turn: event.data.turn, name: event.data.name, arguments: String(event.data.arguments || '').slice(0, 600) }))
     const finalText = list.filter(event => event.type === 'assistant/message').at(-1)?.data?.message?.content?.filter(item => item.type === 'text').map(item => item.text).join('\n')
     const turns = [...new Set(steps.map(row => row.turn))].map(turn => {
       const rows = steps.filter(row => row.turn === turn)
