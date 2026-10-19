@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "32019c309a6fb5b790a34b2abc9384427c630de7",
-  "releaseSequence": 746,
+  "revision": "74e06d2ea64d8928202d181f23013f7eee8e07b0",
+  "releaseSequence": 748,
   "version": "3.0.0",
   "files": [
     {
@@ -441,8 +441,8 @@
     },
     {
       "path": "tavern-plugin/cordis.patch.yml",
-      "sha256": "868289c668ac3b3512e8e945e3ca659858a9d7e330477a1f584a8bc9864ddd34",
-      "size": 8183
+      "sha256": "676f5838918d55ddffc97bf682ecd48c6cad4d57d619179e3b2cca1181322afd",
+      "size": 8205
     },
     {
       "path": "tavern-plugin/lib/agent-compaction.js",
@@ -491,8 +491,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "e4c4138f76154c47982929ad23abc5d857b9f938bb77ce2e0d9ee1ae14a189c0",
-      "size": 1915550
+      "sha256": "e93599527ef9c0bb9b1d46062ba88717deb3aa414f3ac074d3226e9ef9a99bf4",
+      "size": 1916352
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -5206,8 +5206,8 @@
     },
     {
       "path": "tavern-plugin/src/client/runtime/host-artifacts.js",
-      "sha256": "11258230947b7fbf8aca4c11f5554622ad65bdfc606774357b3ac3d69a24e74a",
-      "size": 31937
+      "sha256": "24bfddef05a10db0e09c1f06c51a2a1562a44caca1b9f63ef40d680e82b67cff",
+      "size": 32739
     },
     {
       "path": "tavern-plugin/src/client/runtime/message-frame-lifecycle.js",
