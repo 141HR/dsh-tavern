@@ -16191,12 +16191,13 @@ function bindTavernFontZoom(node, win) {
 					openConversationSettingsTab: async function (sessionId) {
 						if (narrowLayout()) return closeNarrowSidebar();
 						if (tavernSettingsTabsShownFor === sessionId) return;
-						// The setting is off: do not claim the session, so turning it on later still opens the tabs.
-						if (!await tavernAutoOpenStatus.read()) return;
+						// Claim before awaiting the setting, so a second call during the read cannot open twice.
+						tavernSettingsTabsShownFor = sessionId;
+						// The setting is off: release the claim, so turning it on later still opens the tabs.
+						if (!await tavernAutoOpenStatus.read()) { if (tavernSettingsTabsShownFor === sessionId) tavernSettingsTabsShownFor = ""; return; }
 						// The column already shows one of these pages (it was never closed, or the sidebar remounted):
 						// opening again expands the column and focuses the page, pulling it over the story for nothing.
-						if (tavernRightColumnShowing(ctx, ["dsh-tavern:conversation-settings", "dsh-tavern:status"])) { tavernSettingsTabsShownFor = sessionId; return; }
-						tavernSettingsTabsShownFor = sessionId;
+						if (tavernRightColumnShowing(ctx, ["dsh-tavern:conversation-settings", "dsh-tavern:status"])) return;
 						const opened = await openTavernSidebarTab(ctx, { type: "dsh-tavern:conversation-settings" }, { sessionId: sessionId }) && await openTavernSidebarTab(ctx, { type: "dsh-tavern:status" }, { sessionId: sessionId });
 						// Not opened (the player already moved on, or the host refused): try again next time this game is entered.
 						if (!opened) { if (tavernSettingsTabsShownFor === sessionId) tavernSettingsTabsShownFor = ""; return; }
