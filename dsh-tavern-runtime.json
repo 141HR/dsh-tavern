@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "c3869999e87fe8b8c08ccb9e1d2145cf5e29bc1f",
-  "releaseSequence": 717,
+  "revision": "649e8517e88efe7819cc4d5c03ead8a3eb37896c",
+  "releaseSequence": 718,
   "version": "3.0.0",
   "files": [
     {
@@ -476,8 +476,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "e49ab04be8fd49b37915d0868c236a7a0dcadbaf692d07f51fd51107b281bfec",
-      "size": 1864806
+      "sha256": "2e4e78475f86d0593942aafba567eac0f472205663939c87113034783a4f19bb",
+      "size": 1864969
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -1521,8 +1521,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/save-upgrade.js",
-      "sha256": "b3d5579e7d047e4be56b31db9b6017292be6817027ea93d1c185b24097382835",
-      "size": 3645
+      "sha256": "7341f1951b863ac6301b32148a01268055f664a3c12046669599bf56b3456314",
+      "size": 5490
     },
     {
       "path": "tavern-plugin/lib/domain/scene-character-designs.js",
@@ -2246,8 +2246,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "6fd081f07c48066c494cda261f99580d4e04b4f7d0b7e90c2b7bc44cd3323866",
-      "size": 366830
+      "sha256": "6e4e82d05f8a4667aec4be22edc9989e551116bde2f11c354264a23de25f78af",
+      "size": 367524
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -4841,8 +4841,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/play-controls.js",
-      "sha256": "5ea7465b524498216c1bded20c66448d6efd03064ab0b02c751d4ae937ac8786",
-      "size": 125813
+      "sha256": "8b41c4d4e2bf062f920107270a75dcf59e6775f763afdb0e3f62ef5041acf4c5",
+      "size": 125976
     },
     {
       "path": "tavern-plugin/src/client/features/plugin-extensions.js",
