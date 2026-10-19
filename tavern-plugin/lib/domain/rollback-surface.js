@@ -220,6 +220,23 @@ export function rolledBackSurfaceTurns(events) {
   return [...turns].sort((left, right) => left - right)
 }
 
+// Finished turns that a regeneration input opened, read from the log. The save
+// records the same turn by number, but a log the turn repair renumbered leaves
+// that number pointing at the neighbouring turn; the input itself cannot drift.
+export function regenerationInputTurns(events) {
+  const turns = new Set()
+  let open = null, opened = null
+  for (const event of Array.isArray(events) ? events : []) {
+    if (event?.type === 'turn/start') { open = Number(event.data?.turn); opened = false }
+    else if (event?.type === 'turn/end') {
+      if (opened && Number.isSafeInteger(open) && open > 0) turns.add(open)
+      open = null
+    } else if (open !== null && event?.type === 'user/message' && event.surfaceOp === 'append' &&
+      isProducerSource(event.data?.source, 'dsh-tavern-regen')) opened = true
+  }
+  return [...turns].sort((left, right) => left - right)
+}
+
 export function foregroundSuppressedTurns(chat, events) {
   return Array.from(new Set((Array.isArray(chat?.suppressedDshTurns) ? chat.suppressedDshTurns : [])
     .concat(abortedRegenerationTurns({ events }), rolledBackSurfaceTurns(events))

@@ -2,7 +2,7 @@ import { createImmutableTurnFields } from './freeze-json.js'
 import { createMvuReceiptIndex } from './mvu-receipt-index.js'
 import { copyJsonTree } from './copy-json-tree.js'
 import { copyLazyHistoryHeader } from './lazy-history-read.js'
-import { rollbackAvailability, hasRollbackMessages, failedTurnReplayAvailability, foregroundSuppressedTurns, supersededRegenerationErrorTurns, supersededRegenerationTurns, projectedReplyTurns } from './rollback-surface.js'
+import { rollbackAvailability, hasRollbackMessages, failedTurnReplayAvailability, foregroundSuppressedTurns, supersededRegenerationErrorTurns, supersededRegenerationTurns, projectedReplyTurns, regenerationInputTurns } from './rollback-surface.js'
 import { isRescuedHistoryMessage } from './chat-history-rescue.js'
 import { canUndoRollback } from './surface-restoration.js'
 import { failedErrorTurnStates } from './failed-error-visibility.js'
@@ -116,6 +116,19 @@ export function createSessionStateView({ activity: activityOf, evidence: evidenc
     }
     return [...turns].sort((left, right) => left - right)
   }
+  // The mapping feeds the cache key below, so it runs on every read: remember it per
+  // immutable log and surface, or a variable-only revision rescans the whole history.
+  const projectedCache = new WeakMap()
+  function projectedOf(events, nodes, generation) {
+    if (!Array.isArray(nodes) || !Array.isArray(events)) return new Map()
+    const frozen = Object.isFrozen(events) && Number.isSafeInteger(generation)
+    const stamp = frozen ? JSON.stringify([nodes.length, nodes[0], nodes.at(-1), generation]) : null
+    const known = frozen ? projectedCache.get(events) : undefined
+    if (known && known.stamp === stamp) return known.value
+    const value = projectedReplyTurns({ events, nodes })
+    if (frozen) projectedCache.set(events, { stamp, value })
+    return value
+  }
   function rollbackViewFields(chat, evidence = evidenceOf(chat.sessionId), changes) {
     const session = evidence.session, events = evidence.events
     const nodes = session?.surface?.nodes
@@ -125,7 +138,7 @@ export function createSessionStateView({ activity: activityOf, evidence: evidenc
     // body — two replies for one round, and a reload cannot help because both
     // numbers are in the log. The projection event knows where the body really
     // is (it carries the story turn), so the log wins over the header here.
-    const projected = Array.isArray(nodes) && Array.isArray(events) ? projectedReplyTurns({ events, nodes }) : new Map()
+    const projected = projectedOf(events, nodes, session?.surface?.replaceGeneration)
     const savedMappings = normalizedMappings(chat, changes)
     // Reuse the shared object whenever the log agrees with the header: building a
     // fresh map on every read would defeat the shared-mapping cache.
@@ -162,10 +175,17 @@ export function createSessionStateView({ activity: activityOf, evidence: evidenc
     // the new one until these turns are hidden. Read from the log, not from a
     // transient marker: a reload must hide them too.
     const supersededTurns = Array.isArray(nodes) ? supersededRegenerationTurns({ events: evidence.events || [], nodes }) : []
+    // Regeneration attempts, found by their input rather than by the number the save
+    // stored (a renumbering turn repair shifts that number onto the next turn). One
+    // still settling stays visible until its body is mapped: hiding it earlier would
+    // blank the round between generation and commit.
+    const shownTurns = new Set(Object.values(mappings || {}).map(Number))
+    const attemptTurns = regenerationInputTurns(evidence.events || [])
+      .filter(turn => shownTurns.has(turn) || chat.regenInProgress !== true)
     const result = {
       hiddenDshErrorTurns: chat.hiddenDshErrorTurns || [],
-      suppressedDshTurns: foregroundSuppressedTurns(chat, evidence.events || [])
-        .filter(turn => !replacingTurns.includes(turn)),
+      suppressedDshTurns: [...new Set([...foregroundSuppressedTurns(chat, evidence.events || []), ...attemptTurns])]
+        .filter(turn => !replacingTurns.includes(turn)).sort((left, right) => left - right),
       replacingDshTurns: replacingTurns,
       supersededDshTurns: supersededTurns,
       regeneratedDshTurns: mappings,

@@ -108,3 +108,28 @@ test('普通回合重新生成后，映射指向生成期那一轮的可画回�
   assert.equal(view.regeneratedDshTurns[3], 5)
   assert.deepEqual(view.suppressedDshTurns, [5], '生成期那一轮仍是作废回合：客户端只收掉它的输入，回复留着')
 })
+
+// 回合修复把跳号的日志重新编号后，存档里记的「作废第 5 轮」指向了新正文所在的编辑回合。
+// 生成期那一轮要按它的重新生成输入从日志里认出来，回合号怎么变都找得到（#283）。
+test('生成期回合按重新生成输入从日志认出，不依赖存档里可能错位的回合号', () => {
+  const model = { kind: 'model', provider: 'p', model: 'm' }
+  const events = [
+    { seq: 0, type: 'turn/start', data: { turn: 3 } },
+    { seq: 1, type: 'user/message', surfaceOp: 'append', data: { role: 'user', source: { kind: 'user' } } },
+    { seq: 2, type: 'assistant/message', surfaceOp: 'append', data: { turn: 3, step: 1, message: { source: model, content: [{ type: 'text', text: '旧正文' }] } } },
+    { seq: 3, type: 'turn/end', data: { turn: 3 } },
+    { seq: 4, type: 'turn/start', data: { turn: 4 } },
+    { seq: 5, type: 'user/message', surfaceOp: 'append', data: { role: 'user', source: { kind: 'plugin:dsh-tavern-regen' } } },
+    { seq: 6, type: 'assistant/message', surfaceOp: 'append', data: { turn: 4, step: 1, message: { source: model, content: [{ type: 'text', text: '新正文' }] } } },
+    { seq: 7, type: 'turn/end', data: { turn: 4 } },
+    { seq: 8, type: 'turn/start', data: { turn: 5 } },
+    { seq: 9, type: 'assistant/message', surfaceOp: { op: 'replace', startSeq: 2, endSeq: 6 }, sourceEventSeqs: [2, 5, 6],
+      data: { turn: 5, step: 1, message: { source: { ...model, tavernStoryTurn: 3 }, content: [{ type: 'text', text: '新正文' }] } } },
+    { seq: 10, type: 'turn/end', data: { turn: 5 } }
+  ]
+  const session = { id: 's', events, surface: { nodes: [1, 9] } }
+  // 存档里记的是重新编号前的「5」。
+  const view = fields.rollback({ id: 'c', sessionId: 's', mode: 'story', messages: [], suppressedDshTurns: [5] }, { session, events })
+  assert.equal(view.regeneratedDshTurns[3], 4, '正文画在生成期那一轮')
+  assert.ok(view.suppressedDshTurns.includes(4), '生成期那一轮被认出：客户端只收掉它的「收到执行请求」，回复留着')
+})
