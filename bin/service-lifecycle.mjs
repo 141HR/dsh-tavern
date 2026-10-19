@@ -155,10 +155,11 @@ function inspectRecordedProcess(record) {
 }
 
 async function serviceState() {
-  const port = CLI_PORT
   const record = readPidRecord()
   const identity = record ? inspectRecordedProcess(record) : 'gone'
   const pidAlive = identity === 'owned'
+  // A running service keeps the port it started on, which may be a fallback (see startService).
+  const port = pidAlive && Number.isSafeInteger(record.port) ? record.port : CLI_PORT
   const portOpen = await isPortOpen(port)
   const ready = portOpen && await isServiceReady(port)
   if (record && !pidAlive && (identity !== 'unknown' || !portOpen)) {
@@ -298,7 +299,15 @@ export async function startService() {
     return { ...state, webUrl, runtimeGeneration: state.record.pid }
   }
   if (state.portOpen) {
-    throw new Error(`端口 ${state.port} 已被其他进程占用，拒绝启动。`)
+    // The default port is often taken by another app (the DeepSeek Harness desktop app serves
+    // on 3081). Without an explicit DSH_TAVERN_PORT, move to the next free port.
+    if (String(process.env.DSH_TAVERN_PORT ?? '').trim() !== '') throw new Error(`端口 ${state.port} 已被其他进程占用，拒绝启动。请换一个 DSH_TAVERN_PORT。`)
+    let free = null
+    for (let port = state.port + 1; port <= Math.min(65535, state.port + 20) && free === null; port++) if (!(await isPortOpen(port))) free = port
+    if (free === null) throw new Error(`端口 ${state.port} 及之后 20 个端口都被占用，拒绝启动。可用 DSH_TAVERN_PORT 指定端口。`)
+    console.log(`端口 ${state.port} 已被其他程序占用（比如 DeepSeek Harness 桌面版），改用端口 ${free}。`)
+    state.port = free
+    state.portOpen = false
   }
 
   const prefixRepairs = await migrateSessionPrefixEvents({
@@ -311,7 +320,7 @@ export async function startService() {
   const dsh = findDshCommand(runtimeHost)
   const invocation = resolveDshInvocation(
     dsh,
-    ['--profile', PROFILE, '--host', CLI_HOST, '--port', String(CLI_PORT), '--no-open'],
+    ['--profile', PROFILE, '--host', CLI_HOST, '--port', String(state.port), '--no-open'],
     runtimeHost,
   )
   // A pinned desktop DSH (DSH_DESKTOP_DSH_BOOTSTRAP) is already the Electron executable plus
