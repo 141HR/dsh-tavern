@@ -1074,6 +1074,12 @@ export async function apply(ctx) {
     }
   })
   async function readSessionMap() { return await conversationRegistry.links() }
+  try {
+    const stored = await profileData.list('chats')
+    const chatIds = [...new Set(stored.map(entry => entry.directory ? entry.name : (entry.name.match(/^(chat-[^.]+)\.json$/) || [])[1]).filter(name => /^chat-[^.]+$/.test(name || '')))]
+    const recovered = await conversationRegistry.recoverUnlisted(chatIds)
+    if (recovered.length) console.warn('dsh-tavern: 找回 ' + recovered.length + ' 局未登记的存档：' + recovered.join('、'))
+  } catch (error) { console.warn('dsh-tavern: 核对存档登记失败', error?.message || error) }
   const sessionChats = createSessionChatReader({
     registry: conversationRegistry,
     needsAdoption: chat => groupOfMode(chat.mode) === 'play'
