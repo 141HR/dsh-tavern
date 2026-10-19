@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// Turn a novel (.txt) into a SillyTavern chat file, to build a long, repeatable save for
+// Turn a novel (.txt or .epub) into a SillyTavern chat file, to build a long, repeatable save for
 // testing context compaction and memory: 酒馆 → 导入聊天记录 → choose this file.
 //   node bin/novel-to-chat.mjs <novel.txt> [--chars 2000] [--rounds 120] [--player 继续] [--name 小说] > novel-chat.jsonl
 // Each round is the player line followed by the next stretch of the novel. Chapters are kept
 // whole when they fit; longer ones are split at paragraph breaks. GBK/GB18030 text is decoded.
 import { readFileSync } from 'node:fs'
+import { extractEpubText } from '../tavern-plugin/lib/domain/epub-text.js'
 
 const args = process.argv.slice(2)
 const option = (name, fallback) => { const at = args.indexOf('--' + name); return at >= 0 ? args.splice(at, 2)[1] : fallback }
@@ -14,22 +15,31 @@ const player = option('player', '继续')
 const name = option('name', '小说')
 const file = args[0]
 if (!file || !(chars >= 200)) {
-  console.error('用法：node bin/novel-to-chat.mjs <小说.txt> [--chars 每轮字数，默认 2000] [--rounds 最多轮数] [--player 玩家每轮的话，默认「继续」] [--name 角色名] > 聊天记录.jsonl')
+  console.error('用法：node bin/novel-to-chat.mjs <小说.txt 或 .epub> [--chars 每轮字数，默认 2000] [--rounds 最多轮数] [--player 玩家每轮的话，默认「继续」] [--name 角色名] > 聊天记录.jsonl')
   process.exit(1)
 }
 
 const bytes = readFileSync(file)
 let text
-try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes) } catch { text = new TextDecoder('gb18030').decode(bytes) }
+if (/\.epub$/i.test(file)) text = extractEpubText(bytes)
+else try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes) } catch { text = new TextDecoder('gb18030').decode(bytes) }
 text = text.replace(/^﻿/, '').replace(/\r\n?/g, '\n')
 
 // Paragraphs, with chapter headings starting a new stretch.
 const heading = /^\s*(第[零〇一二两三四五六七八九十百千万0-9]+[章回节卷集部]|chapter\s+\d+)/i
-const paragraphs = text.split(/\n+/).map(line => line.trim()).filter(Boolean)
+let paragraphs = text.split(/\n+/).map(line => line.trim()).filter(Boolean)
+// Front matter (制作说明, 目录…) comes before the first chapter; start the story there.
+// A 卷/集 heading right before it (with its title) belongs to the story too.
+const firstChapter = paragraphs.findIndex(line => /^第[零〇一二两三四五六七八九十百千万0-9]+[章回节]/.test(line))
+if (firstChapter > 0) {
+  const volume = paragraphs.slice(Math.max(0, firstChapter - 2), firstChapter).findIndex(line => heading.test(line))
+  paragraphs = paragraphs.slice(volume < 0 ? firstChapter : Math.max(0, firstChapter - 2) + volume)
+}
 const stretches = []
 let current = ''
 for (const paragraph of paragraphs) {
-  const breaks = current && (heading.test(paragraph) || current.length + paragraph.length + 2 > chars)
+  // A heading starts a new stretch, unless the stretch so far is only headings (卷名 + 章名).
+  const breaks = current && ((heading.test(paragraph) && current.length > 200) || current.length + paragraph.length + 2 > chars)
   if (breaks) { stretches.push(current); current = '' }
   current = current ? current + '\n\n' + paragraph : paragraph
   // A single paragraph longer than the limit is cut at sentence ends.
