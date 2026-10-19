@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "e039c2e6af4013ca378e42dfaa2e2f6c02f67e6f",
-  "releaseSequence": 732,
+  "revision": "4e849274d6ebf2ecc94e995cc0a9927d2d9a73b0",
+  "releaseSequence": 733,
   "version": "3.0.0",
   "files": [
     {
@@ -88,6 +88,11 @@
       "path": "bin/dsh-tavern.mjs",
       "sha256": "d9c57e11339ec76f8d7eb643b8fc0a87997053e2fa3493cd56dabbe01516b0a5",
       "size": 5014
+    },
+    {
+      "path": "bin/eval-compaction-memory.mjs",
+      "sha256": "fee8be5e6d95b945304255dddb540f4ab58a670b3efb0ed3f4cb03b77792301a",
+      "size": 6786
     },
     {
       "path": "bin/import-user-home.mjs",
