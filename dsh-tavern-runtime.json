@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "fe843c7954b8d0fec4bd575bee54486fe69ad310",
-  "releaseSequence": 721,
+  "revision": "f618e56f8974632341559f3144ce9f41cb080ba7",
+  "releaseSequence": 722,
   "version": "3.0.0",
   "files": [
     {
@@ -71,8 +71,8 @@
     },
     {
       "path": "bin/dsh-compatibility.mjs",
-      "sha256": "e7ec9301807350485e699129f2a00a743d9c57e0f9b67ac4c6c37091f6e0aa97",
-      "size": 4082
+      "sha256": "ce34ae851d6f0d798977f6012c791a68fa9f5581179c85e93183e171168a8d0b",
+      "size": 4987
     },
     {
       "path": "bin/dsh-tavern",
