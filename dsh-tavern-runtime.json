@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "0eb28243d5ddaff97e134ef5e8fb5df3eaa8280a",
-  "releaseSequence": 728,
+  "revision": "e8145dd0e82a13a865e19a0febedb6be7f011595",
+  "releaseSequence": 729,
   "version": "3.0.0",
   "files": [
     {
@@ -4761,8 +4761,8 @@
     },
     {
       "path": "tavern-plugin/prompts/story-compaction.md",
-      "sha256": "bc88b7badf4e370060e0c4a8d4e62e4516656bb7e85565b72a2c12b42010bf42",
-      "size": 2604
+      "sha256": "791ccaa954818e98d6192c4e5cf21b7b8db6df4df97537600ef73214959312ca",
+      "size": 2727
     },
     {
       "path": "tavern-plugin/prompts/story.md",
