@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "38689b55d8051bb4a2540bbe003241ac5faedd03",
-  "releaseSequence": 726,
+  "revision": "ffabf9659033a47ba210b2d6f436fd2e526f5b79",
+  "releaseSequence": 727,
   "version": "3.0.0",
   "files": [
     {
@@ -476,8 +476,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "46383c32bb376b01f0be08e93204a78df64fab2770f6ab8465350c8a6c4fea75",
-      "size": 1869533
+      "sha256": "48abc89cb6739fda2c22e4afe6e00574bf8a3cb4c336b054c4f45ab4f8bb874d",
+      "size": 1871769
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -2031,8 +2031,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/tavern-settings.js",
-      "sha256": "db58215560a4e556b42d25e66cd93acb1c0ca58bfd3767871f963964bde4b1c0",
-      "size": 15501
+      "sha256": "ee3b83f1034faa4665244d25cf1ad042ef7d92f64361629e733422d6e5de0a4a",
+      "size": 16067
     },
     {
       "path": "tavern-plugin/lib/domain/tavern-skill-provider.js",
@@ -2256,8 +2256,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "9923be4864e4c0ced1c76a6d84328aa1e20e8e78f534544f349f45deedaf113b",
-      "size": 368289
+      "sha256": "74d8b812d18d7fa36efa9e136cff74e01ddf00b2ab37d4a400509acc662e4ce8",
+      "size": 368324
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -4811,8 +4811,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/assistant-renderer.js",
-      "sha256": "ef389edbbb5d3eb595106084e737ab6515f907f220bab339568b6222c67f9ab2",
-      "size": 65932
+      "sha256": "616007a03f72c4a0b8fc75e32049007a343af524c7cb9a8ce0cc01a77949b7aa",
+      "size": 66547
     },
     {
       "path": "tavern-plugin/src/client/features/card-library.js",
@@ -4891,8 +4891,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/settings.js",
-      "sha256": "6cfff7b1ad7540ae72b483c06c9d64f06f3980d72bc3fff8976665d404497c29",
-      "size": 21113
+      "sha256": "209013b979d03601e792eb17f7baf3cb0e9e0680c3d7d228d3f76d8b650943d6",
+      "size": 22185
     },
     {
       "path": "tavern-plugin/src/client/features/sidebar.js",
@@ -5246,8 +5246,8 @@
     },
     {
       "path": "tavern-plugin/src/client/ui/message-frame.js",
-      "sha256": "e060d49bf587adf683da07cdaf653c27bf182b42c332b45222f8f76223ba86ad",
-      "size": 37374
+      "sha256": "0279302b78cdfce777c123b3a236af52955879c7bb69ee6b445fb47e79f7c046",
+      "size": 37923
     },
     {
       "path": "tavern-plugin/src/client/ui/visible-refresh.js",
