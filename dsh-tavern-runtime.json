@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "4e849274d6ebf2ecc94e995cc0a9927d2d9a73b0",
-  "releaseSequence": 733,
+  "revision": "6cc3b3bf9002d1fde034d1f16f4279078bb9859a",
+  "releaseSequence": 734,
   "version": "3.0.0",
   "files": [
     {
@@ -1891,8 +1891,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/story-compaction.js",
-      "sha256": "7efbc649b7690a4c682bc72867c99777a9209ac7b6d7a32df910ef47beeb7793",
-      "size": 11108
+      "sha256": "e6f45f0c40d6490f48e91fdc6ebe483db27eed6b9f5f050fcbb779d413eac01d",
+      "size": 11365
     },
     {
       "path": "tavern-plugin/lib/domain/story-ledger.js",
