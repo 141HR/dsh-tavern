@@ -95,7 +95,7 @@ import { resolveAgentCompaction } from './agent-compaction.js'
 import { compactForegroundIfNeeded } from './domain/foreground-compaction.js'
 import { compactBackgroundIfNeeded, measureBackgroundBudget } from './domain/background-compaction.js'
 import { createAutoCompaction, installCompactionPolicy } from './domain/auto-compaction.js'
-import { RETAINED_ROUNDS_WINDOW_SHARE, storyHistoryFullyRetained } from './domain/story-compaction.js'
+import { RETAINED_ROUNDS_WINDOW_SHARE, STORY_VOLUMES_WINDOW_SHARE, storyHistoryFullyRetained } from './domain/story-compaction.js'
 import { createPerformanceDiagnostics } from './domain/performance-diagnostics.js'
 import { createBackgroundSuppressionReader } from './domain/background-surface.js'
 import { ensureCardWorkspaceMessage } from './domain/card-workspace-message.js'
@@ -3208,6 +3208,8 @@ export async function apply(ctx) {
     return {
       rounds,
       budget: Number.isFinite(window) && window > 0 ? Math.floor(window * RETAINED_ROUNDS_WINDOW_SHARE) : Infinity,
+      // An unknown window still merges old volumes eventually rather than letting them grow without end.
+      volumeBudget: Number.isFinite(window) && window > 0 ? Math.floor(window * STORY_VOLUMES_WINDOW_SHARE) : 30000,
       estimate: text => meter?.estimateMessage ? meter.estimateMessage({ role: 'user', content: [{ type: 'text', text }] }) : Math.ceil(text.length / 4)
     }
   }
