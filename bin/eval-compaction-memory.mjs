@@ -2,6 +2,9 @@
 // Measure what a game's context compaction kept, without playing it:
 //   node bin/eval-compaction-memory.mjs --chat 吞噬星空 --quiz 测验.json [--home ~/.dsh-tavern] [--compact]
 //   node bin/eval-compaction-memory.mjs --import 聊天记录.jsonl --card 吞噬星空 --compact --quiz 测验.json
+// --grow 聊天记录.jsonl --rounds 61-120 appends those rounds of the file to the game first, as if
+// played (no model), so a long run can be compacted again and again: import 60, compact, grow to
+// 120, compact, grow to 180, compact…
 // --ask then puts every quiz question to the game's model as a player input, one turn each,
 // and scores its reply by the same keywords, noting each history recall it made.
 // --import first imports a SillyTavern chat file (see novel-to-chat.mjs) as a new game under
@@ -67,6 +70,21 @@ if (!chat) throw new Error(`在 ${home} 里找不到名字含「${query}」的�
 const sessionId = Object.entries(json(path.join(tavern, 'data', 'sessions.json'))).find(([, id]) => id === chat.id)?.[0]
 if (!sessionId) throw new Error('找不到这局对话的会话')
 console.log(`对话：${chat.title || chat.cardName}（${chat.id}），会话 ${sessionId}`)
+
+const growFile = option('grow')
+if (growFile) {
+  const [from, to] = String(option('rounds') || '').split('-').map(Number)
+  if (!(from >= 1 && to >= from)) throw new Error('--grow 需要 --rounds 起-止，例如 --rounds 61-120')
+  const rows = readFileSync(growFile, 'utf8').split('\n').filter(Boolean).slice(1).map(line => JSON.parse(line))
+  const rounds = []
+  rows.forEach((row, index) => { if (!row.is_user) rounds.push({ user: rows[index - 1]?.is_user ? rows[index - 1].mes : '继续', assistant: row.mes }) })
+  const wanted = rounds.slice(from - 1, to)
+  if (wanted.length < to - from + 1) throw new Error(`文件只有 ${rounds.length} 轮`)
+  for (let index = 0; index < wanted.length; index += 20) {
+    const result = await rpc('appendStoryRounds', { sessionId, rounds: wanted.slice(index, index + 20) })
+    console.log(`已追加第 ${from + index}–${from + index + result.appended - 1} 轮（游戏内到第 ${result.lastTurn} 轮）`)
+  }
+}
 
 if (args.includes('--compact')) {
   console.log('正在压缩上下文（会调用模型，可能需要几分钟）……')
