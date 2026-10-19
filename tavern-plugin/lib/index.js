@@ -2971,7 +2971,10 @@ export async function apply(ctx) {
     characterDesign: characterDesignDocuments
   })
   ctx.effect(() => () => backgroundAgentRunner.dispose(), 'dsh-tavern: dispose resident background agents')
-  const sceneIllustrations = sceneImageCapability.enabled ? createSceneIllustrations({
+  // 委派/停用时不再置 null：实例要留着读旧存档的插图状态（sceneImageStatus / 历史图 / 大图），
+  // 生成由 deps.disabled 在 scene-illustration.js 的 generateVia 处硬拦截。
+  const sceneIllustrations = createSceneIllustrations({
+    disabled: !sceneImageCapability.enabled,
     prompt: runtimePrompt,
     onDiagnostic: imageHostDiagnostic,
     readLegacyConfiguration: legacyImageConfigurationReader(ctx.get('settings')?.documentPath),
@@ -2996,7 +2999,7 @@ export async function apply(ctx) {
     credentials: () => ctx.get('credentials'), attachments: () => ctx.get('attachments'),
     runAgent: input => backgroundAgentRunner.run(input),
     onStorageError: () => console.error('dsh-tavern: 生图状态保存失败，请检查数据目录权限')
-  }) : null
+  })
   if (sceneIllustrations !== null) ctx.effect(() => () => sceneIllustrations.dispose(), 'dsh-tavern: dispose scene image agents')
   // Public extension service for third-party DSH plugins (docs/plugin-api.md).
   const pluginMedia = createPluginMedia({ store: profileData })

@@ -141,6 +141,16 @@ export function createSceneIllustrations(deps) {
   imageHosts.set(ownerId, path => jobs.has(path) || starts.has(path))
   imageAborters.set(ownerId, (path, requestId) => { const job = jobs.get(path); if (job?.requestId === requestId) job.controller.abort() })
   const imageModule = deps.imageModule || createImageGenerationModule({ ...deps, generateImpl: deps.generate })
+  // 被外部插件接管（或本版未开放）时，实例仍然创建 —— 旧存档的插图状态要能读出来，
+  // 但任何生成、重画、连接测试都必须在这里被拦住，避免绕过前端隐藏的入口重复计费。
+  const generateVia = payload => {
+    if (deps.disabled) {
+      const error = new Error('剧情生图已由外部插件接管，Tavern 不再生成新图片')
+      error.code = 'scene-images-delegated'
+      throw error
+    }
+    return imageModule.generate(payload)
+  }
   const setup = createModuleSceneImageSettings({ ...deps, imageModule })
   const { config, settings, configure, capture } = setup
   const connection = { test: setup.testConnection, models: setup.listModels }
@@ -510,7 +520,7 @@ export function createSceneIllustrations(deps) {
         await writeJob(path, record)
         controller.signal.throwIfAborted()
         attempted = true
-        try { return await imageModule.generate({ ...active, apiKey: input.apiKey, prompt, plan, referenceImages: reference.images, providerTask: record.providerTask,
+        try { return await generateVia({ ...active, apiKey: input.apiKey, prompt, plan, referenceImages: reference.images, providerTask: record.providerTask,
           async onProviderRequest(event) {
             if ((record.providerRequests || []).length >= 100) record.diagnostics.droppedProviderEvents = (record.diagnostics.droppedProviderEvents || 0) + 1
             record.providerRequests = [...(record.providerRequests || []), event].slice(-100)
@@ -722,7 +732,7 @@ export function createSceneIllustrations(deps) {
     const startedAt = Date.now()
     try {
       const generated = await imageQueue.run({ requestId: 'test-' + randomUUID(), signal: controller.signal }, () =>
-        imageModule.generate({ ...active, apiKey, prompt: composeSceneImagePrompt(plan), plan, referenceImages: [], signal: controller.signal, maxBytes: deps.attachments()?.imageLimits?.maxImageBytes }))
+        generateVia({ ...active, apiKey, prompt: composeSceneImagePrompt(plan), plan, referenceImages: [], signal: controller.signal, maxBytes: deps.attachments()?.imageLimits?.maxImageBytes }))
       const image = generated.data ? generated : await deps.attachments()?.readImage(generated.attachment)
       if (!image?.data) throw new Error('生图服务没有返回图片')
       return { mediaType: image.mediaType || 'image/png', data: Buffer.from(image.data).toString('base64'), model: generated.metadata?.model || active.model || '', durationMs: Date.now() - startedAt }
