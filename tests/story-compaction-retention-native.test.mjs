@@ -71,3 +71,20 @@ test('real DSH: a second story compaction carries the first volume verbatim befo
   assert.ok(order.every(index => index >= 0), text)
   assert.deepEqual([...order].sort((a, b) => a - b), order, 'note, old volume, new volume, then the kept rounds')
 })
+
+test('real DSH: the summarizer receives the story prompt, not DSH\'s own directive', native, async t => {
+  const { createStoryCompactionRequest } = await import('../tavern-plugin/lib/domain/story-compaction.js')
+  const h = await createInitializationNative(process.env.DSH_BOOT_MODULE, { contextWindow: 32768 })
+  t.after(() => h.dispose())
+  const { BasicCompactionEngine } = await import(new URL('../../dsh-compaction-basic/lib/index.js', pathToFileURL(process.env.DSH_BOOT_MODULE)))
+  const agent = h.target.agent
+  for (let i = 1; i <= 3; i++) { agent.followup({ id: 'round-' + i, role: 'user', content: [{ type: 'text', text: `第${i}轮行动。` + '旧事。'.repeat(200) }], source: { kind: 'human' } }); await agent.whenIdle() }
+  installCompactionRequestProjection(h.ctx, async id => id === agent.session.id, async request => ({ request: createStoryCompactionRequest(request, '剧情压缩提示词') }))
+  const instructions = []
+  h.ctx.on('llm/stream', (request, next) => {
+    if (request.purpose === 'compaction') instructions.push(request.messages.at(-1).content.map(block => block.text).join(''))
+    return next()
+  })
+  await new BasicCompactionEngine(h.ctx, { auto: false, maxTokens: 4096 }).compactNow(agent, new AbortController().signal)
+  assert.deepEqual(instructions, ['剧情压缩提示词'])
+})
