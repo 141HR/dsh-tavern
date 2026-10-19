@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "feb2cd81cf6fe02b9a771531e9442cd1a1b35317",
-  "releaseSequence": 751,
+  "revision": "2b3376499c88f888612fe6b5560d75763a64a0b6",
+  "releaseSequence": 752,
   "version": "3.0.0",
   "files": [
     {
@@ -486,13 +486,13 @@
     },
     {
       "path": "tavern-plugin/lib/client-assets/tavern.css",
-      "sha256": "a6ca6b5fa727144fe1d88f896ac9d0b251c6765a9cbed102f5e4634904012ee2",
-      "size": 293379
+      "sha256": "df0ab40a45846978cb316a5b3a0f0f661364427e0f2e96ea0e5899c33c35e18e",
+      "size": 297189
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "36af05f373f7e4abc153e972b5d8a723537c8dd2e983983f162c07bc61811764",
-      "size": 1918433
+      "sha256": "b105880b3db9eba187474d680ef58ae2c20d659e31b2f23c1ad1a87ed35d89aa",
+      "size": 1934515
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -4866,8 +4866,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/play-controls.js",
-      "sha256": "de3a6ae78771840eed582a0779452864b4b3ca32f1650f6bb6fa567ed3b89282",
-      "size": 141354
+      "sha256": "557979682e3e4977efa2a1d6892f1dd9c07451f5a850190908dd21d27b91a2cf",
+      "size": 141617
     },
     {
       "path": "tavern-plugin/src/client/features/plugin-extensions.js",
@@ -4945,6 +4945,11 @@
       "size": 40068
     },
     {
+      "path": "tavern-plugin/src/client/features/worldbook-switcher.js",
+      "sha256": "bbaf192339493c4299930c88bae7c6a55aef4583c17bfd2a0174792812c6af99",
+      "size": 11630
+    },
+    {
       "path": "tavern-plugin/src/client/full-template-executor.js",
       "sha256": "18836185530e3cc440906d9c2fda1d66050a47f8a5cdbe2ee64fb49ad036e137",
       "size": 8958
@@ -4996,8 +5001,8 @@
     },
     {
       "path": "tavern-plugin/src/client/main.js",
-      "sha256": "2a0c3dd9cdffb619f6095769e7a89e47b0f0c59471accf98dbf3a1f7a69fffc5",
-      "size": 65372
+      "sha256": "37fecd404998f3d0ec419392b4a539fa938ea099c26e2f86f4151d19d029c026",
+      "size": 65769
     },
     {
       "path": "tavern-plugin/src/client/modules/assistant-visibility.js",
