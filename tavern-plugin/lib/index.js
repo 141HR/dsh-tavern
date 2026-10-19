@@ -5192,6 +5192,11 @@ export async function apply(ctx) {
         await fileResources.setCardCover(cardPath, png, async () => (await presentCardText(cardPath)).text)
         return { path: cardPath, bytes: png.length }
       }
+      // Same bytes as tavern_export_card_png, handed to the page for a download.
+      case 'exportCardPng': {
+        const file = await exportCardPng(args && args.path)
+        return { name: file.name, imageB64: file.bytes.toString('base64') }
+      }
       case 'editLedger': { await ledgerEditor(args || {}); return { view: await sessionView(args.sessionId) } }
       case 'updateGuideLibrary': return { item: await guideLibrary.update(args) }
       case 'deleteGuideLibrary': { await guideLibrary.remove(args); return { ok: true } }

@@ -297,47 +297,17 @@
 					notifyTavernDataChanged(["cards", "sessions"], "cards");
 				} catch (err) { setError(String(err && err.message || err)); } finally { setBusy(false); }
 			}
-			// PNG/JPG/WebP → PNG bytes. PNG passes through untouched; the other two are
-			// redrawn at their own size. The card data rides in tEXt chunks, never pixels.
-			function imageFileAsPng(file) {
-				if (file.type === "image/png" || /\.png$/i.test(String(file.name || ""))) {
-					return file.arrayBuffer().then(function (buffer) { return new Uint8Array(buffer); });
-				}
-				return new Promise(function (resolve, reject) {
-					const url = URL.createObjectURL(file);
-					const image = new Image();
-					image.onload = function () {
-						URL.revokeObjectURL(url);
-						try {
-							const canvas = document.createElement("canvas");
-							canvas.width = image.naturalWidth || image.width;
-							canvas.height = image.naturalHeight || image.height;
-							if (!canvas.width || !canvas.height) throw new Error("图片尺寸无效，请换一张");
-							const context = canvas.getContext("2d");
-							if (!context) throw new Error("浏览器无法处理这张图片");
-							context.drawImage(image, 0, 0);
-							canvas.toBlob(function (blob) {
-								if (!blob) { reject(new Error("图片转换失败，请换一张")); return; }
-								blob.arrayBuffer().then(function (buffer) { resolve(new Uint8Array(buffer)); }, reject);
-							}, "image/png");
-						} catch (error) { reject(error); }
-					};
-					image.onerror = function () { URL.revokeObjectURL(url); reject(new Error("图片读取失败，请换一张")); };
-					image.src = url;
-				});
-			}
 			async function exportPng(file) {
 				if (!cardPath || pngBusy) return;
 				setPngBusy(true); setError("");
 				try {
 					if (!file) throw new Error("请选择一张图片");
 					if (file.size > 30 * 1024 * 1024) throw new Error("图片超过 30 MB，请换一张小一点的");
-					const cover = await imageFileAsPng(file);
-					if (cover.length > 30 * 1024 * 1024) throw new Error("转换后的图片超过 30 MB，请换一张小一点的");
-					// Build the PNG before touching the card: a bad image must not change the cover.
-					const exported = await call("exportCard", { path: cardPath });
-					const bytes = cardPngWithCard(cover, JSON.stringify(exported.document));
-					await call("setCardCover", { path: cardPath, imageB64: bytesToBase64(cover) });
+					// The host converts JPG/WebP and writes the card chunks, the same path as the card workbench tools.
+					await call("setCardCover", { path: cardPath, imageB64: bytesToBase64(new Uint8Array(await file.arrayBuffer())) });
+					const exported = await call("exportCardPng", { path: cardPath });
+					const binary = atob(exported.imageB64), bytes = new Uint8Array(binary.length);
+					for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
 					const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
 					const link = document.createElement("a");
 					link.href = url;
