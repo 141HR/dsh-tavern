@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "e21ec80776dc329dc9971ff264997e0782d92cdc",
-  "releaseSequence": 745,
+  "revision": "32019c309a6fb5b790a34b2abc9384427c630de7",
+  "releaseSequence": 746,
   "version": "3.0.0",
   "files": [
     {
@@ -1781,8 +1781,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/session-surface-mutations.js",
-      "sha256": "4d78885fbfff149613b36a9023b36db3d5ab3b13873462c320afdce2a66e6904",
-      "size": 10174
+      "sha256": "29d293d05275e5cd3ec5760f28a306f0fdeff9ba4d2f5e3adff36683d467fefe",
+      "size": 10531
     },
     {
       "path": "tavern-plugin/lib/domain/session-turn-input.js",
