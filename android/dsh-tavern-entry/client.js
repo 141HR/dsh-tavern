@@ -228,7 +228,13 @@ window.__ModuleLoader__.load({
 					return react.createElement("div", null,
 						frame ? react.createElement("div", {
 						  className: "dsh-tavern-embed", ref: frameRoot,
-						  role: "dialog", "aria-modal": "true", "aria-label": "酒馆工作台"
+						  // 不要声明 aria-modal：dsh-web-mobile 在
+						  // `@media (max-width:1023px) and (pointer:coarse)` 里给
+						  // `[aria-modal="true"]:not(:has(> :first-child > :last-child > button))`
+						  // 加了 `max-width: calc(100vw - 32px)`，那是给宿主内容弹窗留左右
+						  // 边距的；这一层是全屏外壳，带上该属性就被截成 100vw-32px，右侧
+						  // 恒定露出 32px 遮罩缺口。DSHA 的返回键按 `[role="dialog"]` 判定。
+						  role: "dialog", "aria-label": "酒馆工作台"
 						},
 						  react.createElement("iframe", { title: "酒馆工作台", src: frame, referrerPolicy: "no-referrer", allow: "clipboard-read; clipboard-write; fullscreen", allowFullScreen: true })
 						) : null,

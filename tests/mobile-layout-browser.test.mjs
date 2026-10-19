@@ -303,13 +303,36 @@ test('移动端实际样式：顶栏、键盘、候选、面板、编辑器与�
     }, entry)
     assert.equal(observed.mounted, true, '入口按钮能打开内嵌窗口')
     assert.equal(observed.role, 'dialog', '外壳是模态对话框，DSHA 的返回键据此判定本次返回已处理')
-    assert.equal(observed.modal, 'true', '外壳声明 aria-modal')
+    assert.equal(observed.modal, null, '外壳不声明 aria-modal（会命中宿主弹窗限宽规则）')
     assert.equal(observed.controls, 0, '窗口内没有任何可见控件')
     assert.equal(observed.frameTop, 0, 'iframe 顶到屏幕边缘（没有工具栏占位）')
     assert.ok(Math.abs(observed.frameHeight - observed.viewport) <= 1, 'iframe 占满可视高度')
     assert.equal(observed.openAfterBack, false, '历史回退（原生返回）关闭窗口')
     assert.equal(observed.reopened, true, '关闭后能再次打开')
     assert.equal(observed.openAfterEscape, false, '宿主派发的 Escape 关闭窗口')
+  })
+
+  // 回归：dsh-web-mobile（DSHA 随包烘焙的宿主 UI 层）在触屏手机档给「没有底部按钮的
+  // aria-modal 元素」留左右 16px 边距，那是给宿主自己的内容弹窗用的。全屏外壳一旦带上
+  // aria-modal，就被这条规则截成 100vw-32px，右侧恒定露出 32px 遮罩缺口。
+  await t.test('Android 内嵌外壳不被宿主弹窗限宽规则截断', async () => {
+    // 规则原文取自 dsh-web-mobile@2.4.1 lib/client.js；这里只复现尺寸契约。
+    const hostRule = `@media (max-width: 1023px) and (pointer: coarse) {
+      [aria-modal="true"]:not(:has(> :first-child > :last-child > button)) { max-width: calc(100vw - 32px); }
+    }`
+    // hasTouch 让 (pointer: coarse) 命中，等同手机。
+    const phone = await browser.newPage({ viewport: { width: 360, height: 800 }, hasTouch: true })
+    try {
+      await phone.setContent(`<!doctype html><style>body{margin:0}${hostRule}
+        .shell { position: fixed; inset: 0; background: #14110d; }</style>
+        <div class="shell" id="with-modal" role="dialog" aria-modal="true"><iframe></iframe></div>
+        <div class="shell" id="role-only" role="dialog"><iframe></iframe></div>`)
+      const width = selector => phone.locator(selector).evaluate(el => Math.round(el.getBoundingClientRect().width))
+      assert.equal(await width('#with-modal'), 360 - 32, '带 aria-modal 会被限宽规则截掉 32px（缺口来源）')
+      assert.equal(await width('#role-only'), 360, '只声明 role 的外壳铺满视口')
+    } finally {
+      await phone.close()
+    }
   })
 
   await t.test('Android 内嵌外壳传递键盘后的可用高度给 iframe，关闭时释放监听', async () => {
