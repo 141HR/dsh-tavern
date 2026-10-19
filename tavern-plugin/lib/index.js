@@ -132,6 +132,7 @@ import { createTavernPluginApi } from './plugin-api.js'
 import { createSceneWorldbooks, sceneWorldbookBinding } from './domain/scene-worldbook.js'
 import { createSceneImageDiagnostics, createSceneImageHostLogger, recordSceneImageInteraction } from './domain/scene-image-diagnostics.js'
 import { TAVERN_RELEASE_CAPABILITIES } from './domain/release-capabilities.js'
+import { resolveSceneImageDelegate } from './domain/scene-image-delegate.js'
 import { createSessionStablePrefixStorage, ensureSessionStablePrefix, readSessionStablePrefix } from './domain/session-stable-prefix.js'
 import { waitForWritableSession } from './domain/agent-readiness.js'
 import { createCardDeletion } from './domain/card-deletion.js'
@@ -342,6 +343,27 @@ export async function apply(ctx) {
   })
   const sourceRoot = fileURLToPath(new URL('../../', import.meta.url))
   const dataRoot = resolveTavernDataRoot()
+  // 剧情生图接管控件：外部插件就位时不再实例化原生生成器（保留 packages/dsh-image-gen 供旧存档与回滚）。
+  // 判定只看 pluginsDir/dsh-tavern-image/package.json 的契约字段，不联网、不执行插件代码。
+  const sceneImageDelegate = resolveSceneImageDelegate({
+    pluginsDir: userPluginPaths(dataRoot).plugins,
+    enabled: TAVERN_RELEASE_CAPABILITIES.sceneImages,
+  })
+  const sceneImageCapability = {
+    enabled: TAVERN_RELEASE_CAPABILITIES.sceneImages && !sceneImageDelegate.delegated,
+    delegatedTo: sceneImageDelegate.delegated ? sceneImageDelegate.plugin : null,
+    pluginVersion: sceneImageDelegate.version,
+    reason: sceneImageDelegate.reason,
+  }
+  // 投影给前端的形态：sceneImages 保持布尔（向后兼容），新增三个字段让 UI 能区分
+  // 「被插件接管」与「发行版未开放」——这两种情况原生生成器都是 null，但对用户要说不同的话。
+  const releaseCapabilitiesView = Object.freeze({
+    ...TAVERN_RELEASE_CAPABILITIES,
+    sceneImages: sceneImageCapability.enabled,
+    sceneImagesDelegatedTo: sceneImageCapability.delegatedTo,
+    sceneImagesPluginVersion: sceneImageCapability.pluginVersion,
+    sceneImagesReason: sceneImageCapability.reason,
+  })
   // Folders in <data>/plugins become profile patch entries, so both plugin halves load without editing Tavern.
   try { await syncUserPlugins({ dataRoot }) } catch (error) { console.warn('dsh-tavern: 同步用户插件失败', error?.message || error) }
   ctx.effect(() => watchUserPlugins({ dataRoot }))
@@ -387,10 +409,10 @@ export async function apply(ctx) {
   const guideLibrary = createGuideLibrary({ store: profileData })
   const regexLibrary = createRegexLibrary({ store: profileData })
   const userPreferenceProfile = createUserPreferenceProfile({ store: profileData })
-  const sceneWorldbooks = TAVERN_RELEASE_CAPABILITIES.sceneImages ? createSceneWorldbooks({ store: profileData }) : null
+  const sceneWorldbooks = sceneImageCapability.enabled ? createSceneWorldbooks({ store: profileData }) : null
   const sceneWorldbookArchive = sceneWorldbooks || createSceneWorldbooks({ store: profileData })
   const imageHostDiagnostic = createSceneImageHostLogger(ctx.logger)
-  const sceneDiagnostics = TAVERN_RELEASE_CAPABILITIES.sceneImages ? createSceneImageDiagnostics(profileData, { onDiagnostic: imageHostDiagnostic }) : null
+  const sceneDiagnostics = sceneImageCapability.enabled ? createSceneImageDiagnostics(profileData, { onDiagnostic: imageHostDiagnostic }) : null
   async function captureSceneWorldbook(chat, card, preparedBook, turn) {
     if (sceneWorldbooks === null) return null
     try {
@@ -2307,7 +2329,7 @@ export async function apply(ctx) {
       tavernRemoteAssetPins: Array.isArray(cardExtensions.remoteAssetPins) ? cardExtensions.remoteAssetPins : [],
       tavernHelperWorldbook: helperWorldbook,
       tavernRuntimePolicy: { trustedCardMode: runtimeSettings.trustedCardMode, frameSizing: cardExtensions.frameSizing },
-      releaseCapabilities: TAVERN_RELEASE_CAPABILITIES,
+      releaseCapabilities: releaseCapabilitiesView,
       presentationWarnings: (Array.isArray(chat.presentationWarnings) ? chat.presentationWarnings : []).concat(
         chat.importHistory?.rescue ? [rescueHistoryNotice(chat.importHistory.rescue)] : [],
         chat.importHistory?.contextPreparation?.status === 'trimmed'
@@ -2945,7 +2967,7 @@ export async function apply(ctx) {
     characterDesign: characterDesignDocuments
   })
   ctx.effect(() => () => backgroundAgentRunner.dispose(), 'dsh-tavern: dispose resident background agents')
-  const sceneIllustrations = TAVERN_RELEASE_CAPABILITIES.sceneImages ? createSceneIllustrations({
+  const sceneIllustrations = sceneImageCapability.enabled ? createSceneIllustrations({
     prompt: runtimePrompt,
     onDiagnostic: imageHostDiagnostic,
     readLegacyConfiguration: legacyImageConfigurationReader(ctx.get('settings')?.documentPath),
@@ -3275,7 +3297,17 @@ export async function apply(ctx) {
     return { key, items: items.map(item => publicPluginMedia(item)) }
   }
   function enabledSceneIllustrations() {
-    if (sceneIllustrations === null) throw new Error('当前版本未开放场景生图')
+    if (sceneIllustrations === null) {
+      // 原生生成器为 null 有两种原因：发行版未开放，或已被外部插件接管。后者必须说清楚，
+      // 否则用户/前端会把「已接管」误读成「这个版本没有生图能力」。
+      const delegated = Boolean(sceneImageCapability.delegatedTo)
+      const error = new Error(delegated
+        ? '剧情生图已由插件 ' + sceneImageCapability.delegatedTo + ' 接管'
+        : '当前版本未开放场景生图')
+      error.code = delegated ? 'scene-images-delegated' : 'scene-images-unavailable'
+      if (delegated) error.delegatedTo = sceneImageCapability.delegatedTo
+      throw error
+    }
     return sceneIllustrations
   }
   const backgroundTasks = createBackgroundTaskCoordinator({
@@ -4790,7 +4822,7 @@ export async function apply(ctx) {
       case 'getBackgroundModelReasoning': return { reasoning: await readBackgroundModelReasoning(llm, args) }
       case 'getDisplayPreferences': { const settings = await readTavernSettings(); return { hideContextAndReasoning: settings.hideContextAndReasoning, renderDepth: settings.renderDepth, headerItems: settings.headerItems } }
       case 'getCandidatePreferences': return { candidateDismissMode: (await readTavernSettings()).candidateDismissMode }
-      case 'getTavernSettings': return { settings: await readTavernSettings(), modelCatalog: await tavernModelCatalog(), releaseCapabilities: TAVERN_RELEASE_CAPABILITIES }
+      case 'getTavernSettings': return { settings: await readTavernSettings(), modelCatalog: await tavernModelCatalog(), releaseCapabilities: releaseCapabilitiesView }
       case 'getSceneImageSettings': {
         const settings = await enabledSceneIllustrations().settings(args?.provider)
         if (args?.conversation === true) {
