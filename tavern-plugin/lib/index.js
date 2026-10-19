@@ -5122,7 +5122,8 @@ export async function apply(ctx) {
       }
       case 'regenBody': {
         await reconcileStory(args && args.sessionId)
-        const view = await regenBody(args && args.chatId, args && args.guidance, args && args.sessionId)
+        // rewrite: revise the current body with the guidance; omitted is a fresh sample.
+        const view = await regenBody(args && args.chatId, args && args.guidance, args && args.sessionId, { rewrite: args && args.rewrite === true })
         notifyPluginTimeline(args && args.sessionId, 'regenerate')
         return { view }
       }

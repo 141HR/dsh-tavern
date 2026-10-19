@@ -17,6 +17,21 @@ function str(value) {
   return typeof value === 'string' ? value : (value === undefined || value === null ? '' : String(value))
 }
 
+/**
+ * The input of a regeneration attempt. The provider never sees the replaced body
+ * (the request projection drops it), so a plain regeneration is a fresh sample of
+ * the round. A rewrite hands that body back inside the input as the draft to
+ * revise, because only then can "写得更长" mean "this one, longer".
+ */
+export function regenerationInputText(userText, guidance, rewriteBody) {
+  const input = str(userText).trim(), guide = str(guidance).trim(), draft = str(rewriteBody).trim()
+  if (draft !== '' && guide !== '') return input + '\n\n【当前正文】\n' + draft + '\n\n【改写要求】\n在当前正文基础上改写本轮正文：' + guide
+  return input + (guide !== '' ? '\n\n【本轮补充要求】\n' + guide : '')
+}
+
+// What the model saw of a stored reply (same precedence as the body editor).
+function replyTextOf(message) { return str(message && (message.projectionText ?? message.sourceText ?? message.text)) }
+
 export function selectRegenerationTarget(chat, session, observe) {
   const nodes = (session.surface !== undefined && Array.isArray(session.surface.nodes)) ? session.surface.nodes : []
   const eventStart = sessionEvents(session).length
@@ -95,7 +110,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     }
   }
 
-  async function regenerate(chatId, guidance, sessionId) {
+  async function regenerate(chatId, guidance, sessionId, options = {}) {
     if (sessionPatch && !sessionPatch.replacementAllowed()) throw new Error(sessionPatch.blockReason())
     // Identity only; each regeneration path reads the story it changes.
     const chat = str(chatId) === '' ? await (chats.stateForSession || chatForSession)(sessionId) : await (chats.readState || readChat)(chatId)
@@ -106,7 +121,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     if (pendingReplays.has(chat.id)) throw new Error('正在重放失败回合，请等待完成')
     if (pendingRegenerations.has(chat.id) || pendingRollbacks.has(chat.id)) throw new Error('正文正在重新生成，请等待完成')
     pendingRegenerations.add(chat.id)
-    try { return await regenRecent(chat.id, guidance, sessionId) ?? await regenBody(chat.id, guidance, sessionId) }
+    try { return await regenRecent(chat.id, guidance, sessionId, options) ?? await regenBody(chat.id, guidance, sessionId, options) }
     finally { pendingRegenerations.delete(chat.id) }
   }
 
@@ -133,7 +148,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     if (beforeChat === undefined) throw new Error('找不到剧情 checkpoint 对应的历史 Chat revision: ' + target.beforeRevision)
     return Object.assign({}, intent, { beforeChat })
   }
-  async function regenBody(chatId, guidance, sessionId) {
+  async function regenBody(chatId, guidance, sessionId, options = {}) {
     if (sessionPatch && !sessionPatch.replacementAllowed()) throw new Error(sessionPatch.blockReason())
     let chat = str(chatId) === '' ? await chatForSession(sessionId) : await readChat(chatId)
     if (chat === undefined) throw new Error('聊天不存在: ' + chatId)
@@ -233,7 +248,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     }, { source: 'rollback.regen' })
     const rolledMessageCount = (chat.messages || []).length
     const guide = str(guidance).trim()
-    const syntheticText = originalUserText + (guide !== '' ? '\n\n【本轮补充要求】\n' + guide : '')
+    const syntheticText = regenerationInputText(originalUserText, guide, options.rewrite === true ? replyTextOf(msgs0[oldAssistantIndex]) : '')
     releaseOpeningTurn(agent.session, agent)
     const beforeLastTurn = agent.phase !== undefined && agent.phase !== null && Number.isFinite(Number(agent.phase.lastTurn)) ? Number(agent.phase.lastTurn) : 0
     let committedChat, body, syntheticTurn
@@ -334,7 +349,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
   // original revision returns to its original value around the new round, as
   // replaceLastRound would build it. Undefined (before any visible effect) leaves
   // legacy checkpoints and unreadable revisions to the complete path.
-  async function regenRecent(chatId, guidance, sessionId) {
+  async function regenRecent(chatId, guidance, sessionId, options = {}) {
     if (sessionPatch && !sessionPatch.replacementAllowed()) throw new Error(sessionPatch.blockReason())
     if (![chats.readRecent, chats.patch, chats.changedSince, chats.rowsAt].every(fn => typeof fn === 'function')) return undefined
     let chat = await chats.readRecent(chatId)
@@ -424,7 +439,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
       await regenerationRecovery.abort({ chatId: chat.id, originalChat, session, eventStart, operationId })
     }
     const guide = str(guidance).trim()
-    const syntheticText = originalUserText + (guide !== '' ? '\n\n【本轮补充要求】\n' + guide : '')
+    const syntheticText = regenerationInputText(originalUserText, guide, options.rewrite === true ? replyTextOf(msgs0[oldAssistantIndex]) : '')
     releaseOpeningTurn(agent.session, agent)
     const beforeLastTurn = agent.phase !== undefined && agent.phase !== null && Number.isFinite(Number(agent.phase.lastTurn)) ? Number(agent.phase.lastTurn) : 0
     let committedChat, body, syntheticTurn
