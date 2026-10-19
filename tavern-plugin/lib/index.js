@@ -179,7 +179,6 @@ import { createCastPresentation } from './domain/cast-presentation.js'
 import { createCastAssets } from './domain/cast-assets.js'
 import { createSpeech } from './domain/speech.js'
 import { buildCharx, cardImport, cardImportFromCard, pngCardTextChunk, pngWithTextChunks } from './domain/card-assets.js'
-import { coverImageAsPng } from './domain/card-cover-image.js'
 import { createAssetPacks } from './domain/asset-packs.js'
 import { readCardArchive } from './domain/card-archive.js'
 import { openZipFile } from './domain/zip-file.js'
@@ -1301,6 +1300,18 @@ export async function apply(ctx) {
     if (!image) throw Object.assign(new Error('人物卡还没有封面，请先用 tavern_set_card_cover 配封面'), { code: 'TAVERN_NOT_FOUND' })
     const name = str(document?.data?.name || '人物卡')
     return { name, bytes: pngWithTextChunks(image, [pngCardTextChunk('chara', text), pngCardTextChunk('ccv3', text)]) }
+  }
+  // One export, format chosen by content: character material only travels in CHARX,
+  // a cover makes the standard PNG card, and a bare card stays SillyTavern JSON.
+  async function exportCardFile(input) {
+    const cardPath = normalizeResourcePath(input, 'card')
+    const manifest = await castAssets.read(cardPath)
+    const hasMaterial = manifest.characters.some(character => character.avatar || Object.values(character.sprites || {}).some(Boolean))
+      || (manifest.backgrounds || []).some(item => item.file) || (manifest.extras || []).some(item => item.file)
+    if (hasMaterial) return { ...await exportCardCharx(cardPath), extension: 'charx', contentType: 'application/zip' }
+    if (await fileResources.hasCardImage(cardPath)) return { ...await exportCardPng(cardPath), extension: 'png', contentType: 'image/png' }
+    const { document } = await presentCardText(cardPath)
+    return { name: str(document?.data?.name || '人物卡'), bytes: Buffer.from(JSON.stringify(document, null, 2)), extension: 'json', contentType: 'application/json; charset=utf-8' }
   }
   const cardSummaries = createCardSummaryCache({
     absolute: cardPath => fileResources.absolute(cardPath),
@@ -5181,22 +5192,6 @@ export async function apply(ctx) {
         const characterBook = await worldBooks.characterBookForCard(cardPath)
         return { document: cardPreparation.present({ card: workspace, as: 'sillytavern-v3', characterBook }) }
       }
-      case 'setCardCover': {
-        const cardPath = normalizeResourcePath(args && args.path, 'card')
-        const encoded = String(args && args.imageB64 || '')
-        if (!encoded) throw new Error('缺少封面图片')
-        const image = Buffer.from(encoded, 'base64')
-        if (image.length === 0) throw new Error('封面图片为空')
-        if (image.length > 30 * 1024 * 1024) throw new Error('封面图片超过 30 MB，请换一张小一点的')
-        const png = await coverImageAsPng(image)
-        await fileResources.setCardCover(cardPath, png, async () => (await presentCardText(cardPath)).text)
-        return { path: cardPath, bytes: png.length }
-      }
-      // Same bytes as tavern_export_card_png, handed to the page for a download.
-      case 'exportCardPng': {
-        const file = await exportCardPng(args && args.path)
-        return { name: file.name, imageB64: file.bytes.toString('base64') }
-      }
       case 'editLedger': { await ledgerEditor(args || {}); return { view: await sessionView(args.sessionId) } }
       case 'updateGuideLibrary': return { item: await guideLibrary.update(args) }
       case 'deleteGuideLibrary': { await guideLibrary.remove(args); return { ok: true } }
@@ -5324,7 +5319,7 @@ export async function apply(ctx) {
     ctx,
     castAssets,
     speech,
-    exportCardCharx,
+    exportCardFile,
     assetPacks,
     uploads,
     exposeHandler: handle => { tavernHttpHandle = handle },
