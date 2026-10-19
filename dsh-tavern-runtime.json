@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "ba2d5d128a77a1b9185ebbe22904778c93672236",
-  "releaseSequence": 757,
+  "revision": "7bebc1298629bcd44bb101b4614787b0c16df659",
+  "releaseSequence": 758,
   "version": "3.0.0",
   "files": [
     {
@@ -1306,8 +1306,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/opening-preparation.js",
-      "sha256": "dbd6684970f085dfdd190003eadaf8d1d52f5edf5ffb72ef8d989103a7255f59",
-      "size": 14121
+      "sha256": "0e976ba4a34e56eb90dabea2e4b475a965bcf7e25d42aa1e09804864adde523e",
+      "size": 14323
     },
     {
       "path": "tavern-plugin/lib/domain/opening-transport.js",
