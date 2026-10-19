@@ -1779,7 +1779,7 @@ export async function apply(ctx) {
         try {
           handle = await ctx.get('agents').create({ sessionId, seed: events, inheritedEventCount: events.length,
             meta: { cwd, isSeeded: true, agentPreset: str(save.session.header?.agentPreset) || 'tavern' },
-            agentOptions: { provider: selection.provider, model: selection.model } })
+            agentOptions: { provider: selection.provider, model: selection.model }, setup: tavernPresetSetup(str(save.session.header?.agentPreset) || 'tavern') })
         } catch (error) { throw new Error('存档包已损坏：模型会话记录无法恢复（' + str(error?.message || error).slice(0, 200) + '）') }
         created = true
         await sessionStore.flush(handle.agent.session)
@@ -2658,6 +2658,14 @@ export async function apply(ctx) {
       flush: session => sessionStore.flush(session)
     }
   })
+  // Agents Tavern creates or resumes itself get the Tavern preset's plugins (the compaction
+  // engine among them), as DSH's session controller mounts them for the page's sessions.
+  function tavernPresetSetup(presetId = 'tavern') {
+    return async agentCtx => {
+      const presets = ctx.get('agentPresets')
+      if (presets) await presets.mount(agentCtx, (await presets.resolve(presetId)).id)
+    }
+  }
   // The same import as 「导入聊天记录」, for tools: the page creates the new Session through the
   // host, here the server creates it (as importGameSave does) and imports into it.
   async function importChatHistoryText(args) {
@@ -2667,7 +2675,7 @@ export async function apply(ctx) {
     const sessionId = 'session-' + randomUUID(), cwd = path.join(dataRoot, 'resources')
     const selection = agentDefaultModel?.currentSelection?.() || {}
     const handle = await ctx.get('agents').create({ sessionId, meta: { cwd, agentPreset: 'tavern' },
-      agentOptions: { provider: selection.provider, model: selection.model } })
+      agentOptions: { provider: selection.provider, model: selection.model }, setup: tavernPresetSetup() })
     try {
       const workspace = await ctx.get('workspaceRegistry')?.resolveByPath(cwd)
       if (workspace) await workspace.attachSession(sessionId)
@@ -3242,7 +3250,8 @@ export async function apply(ctx) {
   async function withCompactionSession(id, work) {
     const live = agentRegistry.get(id)
     if (live) return work(live)
-    const handle = await agentRegistry.resume({ resumeSessionId: id })
+    // The compaction engine comes from the preset: mount it as DSH's session controller does.
+    const handle = await agentRegistry.resume({ resumeSessionId: id, setup: tavernPresetSetup() })
     try { return await work(handle.agent) } finally { await handle.dispose() }
   }
   async function retireOldForegroundFrames(agent, keepTurn) {
