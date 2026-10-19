@@ -10,15 +10,23 @@ import { readFileSync } from 'node:fs'
  * `packages/dsh-image-gen/`，也不会碰到任何已落盘的插图数据。
  *
  * 约定（只认这两样，不认仓库地址与作者）：
- *   1. 插件目录名固定为 `dsh-tavern-image`
+ *   1. 插件落在两处之一都算：`data/plugins/dsh-tavern-image`（Tavern 自己维护的插件目录），
+ *      或 profile 的 `node_modules/dsh-tavern-comfy`（用户用 pnpm link / 安装得到的依赖）
  *   2. 它的 package.json 里写着 `dsh.tavern.sceneImages === 'delegate'`
+ *
+ * 两处都认的原因：profile 侧已安装同名包时，Tavern 的 user-plugins 会主动跳过 plugins/ 下的副本
+ * （避免同一个包有两个来源破坏浏览器模块组合）。既然插件通常先以依赖形式装进 profile，
+ * 判定就必须认这一侧，否则要接管就得先摘依赖 —— 那会让插件在重启后彻底不加载。
  *
  * 本模块刻意写成同步 + 依赖注入：调用点（lib/index.js:390 附近）是模块顶层的同步常量初始化，
  * 而测试需要能在不碰真实磁盘的情况下覆盖各种目录状态，所以读盘函数可替换。
  */
 
-/** 接管的插件目录名。改这里等于改变契约，需要同步更新插件自己的 package.json。 */
+/** 接管的插件目录名（Tavern 的 data/plugins 下）。改这里等于改变契约。 */
 export const SCENE_IMAGE_DELEGATE_FOLDER = 'dsh-tavern-image'
+
+/** profile 侧的包名。这是插件真正的 npm 包名，与目录名不同，两者都写在插件自己的 package.json 里。 */
+export const SCENE_IMAGE_DELEGATE_PACKAGE = 'dsh-tavern-comfy'
 
 /** 契约字段取值；只接受字符串 'delegate'（大小写与空白宽松处理）。 */
 function contractOf(pkg) {
@@ -61,20 +69,35 @@ function defaultReadPackage(dir) {
  * @returns {{ delegated: boolean, plugin: string|null, version: string|null, reason: string }}
  *   reason: 'disabled-by-release' | 'plugin-missing' | 'not-a-plugin' | 'contract-missing' | 'delegated'
  */
-export function resolveSceneImageDelegate({ pluginsDir, enabled = true, readPackage = defaultReadPackage } = {}) {
+export function resolveSceneImageDelegate({
+  pluginsDir,
+  profileDir,
+  enabled = true,
+  readPackage = defaultReadPackage,
+} = {}) {
   const none = (reason, plugin = null, version = null) => ({ delegated: false, plugin, version, reason })
   if (!enabled) return none('disabled-by-release')
-  if (!pluginsDir) return none('plugin-missing')
 
-  const pkg = readPackage(path.join(pluginsDir, SCENE_IMAGE_DELEGATE_FOLDER))
-  if (!pkg || typeof pkg !== 'object') return none('plugin-missing')
+  // 候选按「Tavern 自己维护的插件目录」优先，其次 profile 的 node_modules。
+  // 每一处都要过同一套校验：有宿主入口、契约写成 delegate。
+  const candidates = [
+    pluginsDir ? path.join(pluginsDir, SCENE_IMAGE_DELEGATE_FOLDER) : null,
+    profileDir ? path.join(profileDir, 'node_modules', SCENE_IMAGE_DELEGATE_PACKAGE) : null,
+  ].filter(Boolean)
+  if (!candidates.length) return none('plugin-missing')
 
-  // 有 package.json 但没有宿主入口 → 不是一个能被 Tavern 加载的插件，不能让它接管
-  if (!hostEntry(pkg)) return none('not-a-plugin', SCENE_IMAGE_DELEGATE_FOLDER, versionOf(pkg))
-
-  if (contractOf(pkg) !== 'delegate') {
-    return none('contract-missing', SCENE_IMAGE_DELEGATE_FOLDER, versionOf(pkg))
+  let sawPackageJson = false
+  let sawPluginWithoutEntry = null
+  for (const dir of candidates) {
+    const pkg = readPackage(dir)
+    if (!pkg || typeof pkg !== 'object') continue
+    sawPackageJson = true
+    const version = versionOf(pkg)
+    if (!hostEntry(pkg)) { sawPluginWithoutEntry = version; continue }
+    if (contractOf(pkg) !== 'delegate') continue
+    return { delegated: true, plugin: SCENE_IMAGE_DELEGATE_FOLDER, version, reason: 'delegated' }
   }
-
-  return { delegated: true, plugin: SCENE_IMAGE_DELEGATE_FOLDER, version: versionOf(pkg), reason: 'delegated' }
+  if (!sawPackageJson) return none('plugin-missing')
+  if (sawPluginWithoutEntry !== null) return none('not-a-plugin', SCENE_IMAGE_DELEGATE_FOLDER, sawPluginWithoutEntry)
+  return none('contract-missing', SCENE_IMAGE_DELEGATE_FOLDER, null)
 }

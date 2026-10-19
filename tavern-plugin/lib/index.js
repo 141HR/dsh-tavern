@@ -345,8 +345,12 @@ export async function apply(ctx) {
   const dataRoot = resolveTavernDataRoot()
   // 剧情生图接管控件：外部插件就位时不再实例化原生生成器（保留 packages/dsh-image-gen 供旧存档与回滚）。
   // 判定只看 pluginsDir/dsh-tavern-image/package.json 的契约字段，不联网、不执行插件代码。
+  // 插件既可能装在 Tavern 的插件目录，也可能以依赖形式装在 profile 里（用户用 link 开发时就是后者），
+  // 两处都查，避免"要接管就得先摘依赖、摘了又可能不加载"的死结。
+  const sceneImagePaths = userPluginPaths(dataRoot)
   const sceneImageDelegate = resolveSceneImageDelegate({
-    pluginsDir: userPluginPaths(dataRoot).plugins,
+    pluginsDir: sceneImagePaths.plugins,
+    profileDir: sceneImagePaths.profile,
     enabled: TAVERN_RELEASE_CAPABILITIES.sceneImages,
   })
   const sceneImageCapability = {
