@@ -24,7 +24,8 @@ window.__ModuleLoader__.load({
       toTavern: '切到 DSH 酒馆并重启',
       noTavern: '还没有装好 DSH 酒馆，装好后这里就能切过去。',
       noOriginal: '找不到原版 DSH 的备份，暂时切不回去。请看下面的「说明与日志」。',
-      standalone: '这是 DSH 酒馆的独立窗口。原版 DSH 直接打开 DeepSeek Harness 即可，不用切换。',
+      standalone: '这是 DSH 酒馆的独立窗口，原版 DSH 就是 DeepSeek Harness 本身，不用切换、不用重启。',
+      openOriginal: '打开原版 DSH',
       restarting: '正在重启…',
       quitHint: '请从托盘退出桌面版，切换完成后会自动重新打开（两分钟内有效）。',
       loading: '读取中…',
@@ -46,7 +47,8 @@ window.__ModuleLoader__.load({
       toTavern: 'Switch to DSH Tavern and restart',
       noTavern: 'DSH Tavern is not installed yet; once it is, you can switch from here.',
       noOriginal: 'The original DSH backup is missing, so switching back is not possible right now. See "Details and log" below.',
-      standalone: 'This is the standalone DSH Tavern window. Open the original DSH from DeepSeek Harness directly; no switch needed.',
+      standalone: 'This is the standalone DSH Tavern window. The original DSH is DeepSeek Harness itself; no switch or restart needed.',
+      openOriginal: 'Open original DSH',
       restarting: 'Restarting…',
       quitHint: 'Quit Desktop from the tray; it reopens by itself after the switch (valid for two minutes).',
       loading: 'Loading…',
@@ -145,6 +147,16 @@ window.__ModuleLoader__.load({
         }
       }
 
+      async function openOriginal() {
+        setFailure(null)
+        try {
+          const result = await call('openOriginal', {})
+          if (result?.ok !== true) setFailure(describeFailure(result?.error))
+        } catch (error) {
+          setFailure(describeFailure({ message: error?.message ?? String(error) }))
+        }
+      }
+
       async function apply() {
         setBusy(true)
         setFailure(null)
@@ -167,7 +179,10 @@ window.__ModuleLoader__.load({
           h('h2', { className: 'pb-title' }, title),
           h('p', { className: 'pb-sub' }, status === null ? t('loading') : !isDesktop ? t('cliHint') : standalone ? t('standalone') : t('explain')),
         ),
-        !isDesktop || standalone ? null : blocked ? h('p', { className: 'pb-error' }, blocked) : h('div', { className: 'pb-bar' },
+        !isDesktop ? null : standalone ? h('div', { className: 'pb-bar' },
+          h('span', { className: 'pb-bar-text' }),
+          h('button', { type: 'button', className: 'pb-btn', disabled: busy, onClick: () => void openOriginal() }, t('openOriginal')),
+        ) : blocked ? h('p', { className: 'pb-error' }, blocked) : h('div', { className: 'pb-bar' },
           h('span', { className: 'pb-bar-text' },
             applied === null ? '' : applied.closesApp ? t('restarting') : t('quitHint'),
             ...(applied?.warnings ?? []).map((warning) => h('span', { key: warning, style: { display: 'block', opacity: 0.75 } }, `• ${warning}`)),

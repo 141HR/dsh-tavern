@@ -1,7 +1,7 @@
 // Based on 2NF/dsh-profile-bridge (MIT); Tavern compatibility fork.
 // Queue a directory switch for when Desktop exits, then ask it to quit and reopen it.
 import { basename } from 'node:path'
-import { scheduleSwitch } from './lib/helper.mjs'
+import { relaunchApp, scheduleSwitch } from './lib/helper.mjs'
 import { createTavernShortcut } from './lib/shortcut.mjs'
 import { detectAppExe, fail, resolvePaths, statusPayload, validateTarget } from './lib/state.mjs'
 
@@ -45,6 +45,14 @@ function runSwitch(mode, paths, payload) {
   return { ...result, mode, target: target?.name, warnings: target?.warnings ?? [], closesApp, reopensApp: true }
 }
 
+/** From the standalone DSH 酒馆 window: bring up (or start) the Desktop app, which runs the original DSH. */
+function openOriginal() {
+  const exe = detectAppExe()
+  if (!exe) fail('no-app', '找不到 DeepSeek Harness，请手动打开它。')
+  relaunchApp(exe)
+  return { opened: true }
+}
+
 /**
  * Route one decoded endpoint call.
  * @param {string} endpoint - endpoint name on this channel.
@@ -57,6 +65,7 @@ async function handleCall(endpoint, payload) {
     if (endpoint === 'link') return { ok: true, value: runSwitch('link', resolvePaths(), payload) }
     if (endpoint === 'unlink') return { ok: true, value: runSwitch('unlink', resolvePaths(), payload) }
     if (endpoint === 'shortcut') return { ok: true, value: createTavernShortcut({ paths: resolvePaths() }) }
+    if (endpoint === 'openOriginal') return { ok: true, value: openOriginal() }
     fail('not-found', `Unknown endpoint ${JSON.stringify(endpoint)}.`)
   } catch (error) {
     return {

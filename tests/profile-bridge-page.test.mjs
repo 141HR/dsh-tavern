@@ -90,8 +90,11 @@ test('快捷方式打开的独立酒馆窗口：不给切换按钮，只说明�
   const status = { appKind: 'desktop', desktopApp: false, activeIsLink: false, backups: [], profiles: [tavernProfile] }
   const page = await mount(status, [], { inTavern: true })
   assert.equal(page.label(), '原版DSH')
-  assert.equal(page.button(), null)
   assert.doesNotMatch(page.text(), /切到 DSH 酒馆/)
   assert.match(page.text(), /独立窗口/)
+  const open = [...page.dom.window.document.querySelectorAll('button')].find(item => item.textContent === '打开原版 DSH')
+  assert.ok(open, '给一个直接打开原版 DSH 的按钮')
+  await page.act(async () => { open.click() })
+  assert.deepEqual(page.calls.at(-1), ['openOriginal', {}])
   page.dispose()
 })
