@@ -248,3 +248,27 @@ test('历史正文走工具调用：开关打开时请求里的旧正文变成�
   assert.equal(on.messages[3].toolCallId, on.messages[2].content[0].id, 'DSH 0.2 的回执是对应这次调用的 tool 消息')
   assert.equal(on.messages[4].content[0].text, '第二次', '本轮玩家输入保持原样')
 })
+
+test('Anthropic：去掉本轮输入之前各轮回复的签名思考块，本轮工具循环里的保留', async () => {
+  const { projectAnthropicPriorThinking } = await import('../tavern-plugin/lib/domain/foreground-orchestration-strategies.js')
+  const replay = blocks => ({ response: { kind: 'pi-ai', version: 2, api: 'anthropic-messages', provider: 'opencode', model: 'claude-opus-5-5' }, blocks })
+  const model = blocks => ({ kind: 'model', provider: 'opencode', model: 'claude-opus-5-5', replayState: replay(blocks) })
+  const messages = [
+    { role: 'user', content: [{ type: 'text', text: '第一轮' }], source: { kind: 'user' } },
+    { role: 'assistant', content: [{ type: 'reasoning', text: '' }, { type: 'text', text: '第一轮正文' }],
+      source: model([{ type: 'reasoning', thinkingSignature: 'sig-1' }, { type: 'text' }]) },
+    { role: 'assistant', content: [{ type: 'reasoning', text: '只有思考' }], source: model([{ type: 'reasoning', thinkingSignature: 'sig-2' }]) },
+    { role: 'user', content: [{ type: 'text', text: '第二轮' }], source: { kind: 'user' } },
+    { role: 'assistant', content: [{ type: 'reasoning', text: '' }, { type: 'tool-call', id: 't1', name: 'x', arguments: '{}' }],
+      source: model([{ type: 'reasoning', thinkingSignature: 'sig-3' }, { type: 'tool-call' }]) }
+  ]
+  const projected = projectAnthropicPriorThinking(messages)
+  assert.equal(projected.length, 4, '只有思考的旧回复整条去掉')
+  assert.deepEqual(projected[1].content, [{ type: 'text', text: '第一轮正文' }])
+  assert.deepEqual(projected[1].source.replayState.blocks, [{ type: 'text' }], '回传记录与内容保持对齐')
+  assert.equal(projected[3], messages[4], '本轮工具循环里的思考原样保留')
+  // 其他协议不动。
+  const deepseek = messages.map(message => message.role === 'assistant'
+    ? { ...message, source: { ...message.source, replayState: { ...message.source.replayState, response: { ...message.source.replayState.response, api: 'openai-completions' } } } } : message)
+  assert.equal(projectAnthropicPriorThinking(deepseek), deepseek)
+})
