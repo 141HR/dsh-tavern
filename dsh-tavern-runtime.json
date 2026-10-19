@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "46ec8949d606f5a3384d5a1a7e67601dbb969d62",
-  "releaseSequence": 755,
+  "revision": "1a07bf9c6a1b5ca960210fe75777e734f97a0aa0",
+  "releaseSequence": 756,
   "version": "3.0.0",
   "files": [
     {
@@ -2001,8 +2001,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/tavern-helper-worldbook.js",
-      "sha256": "c5aa728715bc94358fa3de19d76c5332f9d6a9af0a84f86e33bb669e4dfbd9a9",
-      "size": 8367
+      "sha256": "d9c54b2d709134efda7ee514b0b91b94ef115e62fe5d551e224b92dc1960e5f0",
+      "size": 8635
     },
     {
       "path": "tavern-plugin/lib/domain/tavern-host-script-projection.js",
