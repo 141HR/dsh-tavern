@@ -351,7 +351,11 @@ export async function apply(ctx) {
   const sceneImageDelegate = resolveSceneImageDelegate({
     pluginsDir: sceneImagePaths.plugins,
     profileDir: sceneImagePaths.profile,
-    enabled: TAVERN_RELEASE_CAPABILITIES.sceneImages,
+    // 总是检测插件：sceneImages 现在恒为 false（原版生图已停用），若这里跟着 false 传下去，
+    // 委派判定会短路成 disabled-by-release，前端就拿不到「由哪个插件接管」这个信息。
+    // 真正的开关在 sceneImageCapability.enabled（= sceneImages && !delegated），不受这里影响。
+    enabled: true,
+
   })
   const sceneImageCapability = {
     enabled: TAVERN_RELEASE_CAPABILITIES.sceneImages && !sceneImageDelegate.delegated,
