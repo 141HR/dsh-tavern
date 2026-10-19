@@ -12134,6 +12134,7 @@ function bindTavernFontZoom(node, win) {
 			return {
 				subscribe: subscribe, load: load,
 				version: function (sessionId) { return entries.get(sessionId) ? entries.get(sessionId).version : 0; },
+				generation: function (sessionId) { return entries.get(sessionId) ? entries.get(sessionId).generation : 0; },
 				characters: function (sessionId) { const entry = entries.get(sessionId); return entry ? entry.characters : []; },
 				lines: function (sessionId, turn) { const entry = entries.get(sessionId); return entry && entry.turns.get(turn) || null; }
 			};
@@ -12142,9 +12143,11 @@ function bindTavernFontZoom(node, win) {
 		function useTavernCast(sessionId, turn, enabled) {
 			const active = Boolean(enabled && sessionId && turn > 0);
 			const subscribe = React.useCallback(function (listener) { return active ? tavernCastStore.subscribe(sessionId, listener) : function () {}; }, [sessionId, active]);
-			const version = React.useSyncExternalStore(subscribe, function () { return active ? tavernCastStore.version(sessionId) : 0; });
-			React.useEffect(function () { if (active) tavernCastStore.load(sessionId, turn); }, [sessionId, turn, active, version]);
-			const lines = active ? tavernCastStore.lines(sessionId, turn) : null;
+			// Subscribe to this floor's lines only: another floor's lines arriving (one request per
+			// newly mounted floor) must not re-render every floor of a long game (#249).
+			const lines = React.useSyncExternalStore(subscribe, function () { return active ? tavernCastStore.lines(sessionId, turn) : null; });
+			const generation = React.useSyncExternalStore(subscribe, function () { return active ? tavernCastStore.generation(sessionId) : 0; });
+			React.useEffect(function () { if (active && lines === null) tavernCastStore.load(sessionId, turn); }, [sessionId, turn, active, lines, generation]);
 			return lines && lines.length ? lines : null;
 		}
 
@@ -13946,8 +13949,12 @@ function bindTavernFontZoom(node, win) {
 				const pluginMedia = useTavernPluginMedia(props.sessionId, storyTurn, playView && settled);
 				const castLines = useTavernCast(props.sessionId, storyTurn, playView && settled);
 				const castCard = liveState.view && liveState.view.card;
-				const cast = castLines ? { sessionId: props.sessionId, lines: castLines, characters: tavernCastStore.characters(props.sessionId), characterName: castCard && castCard.name || "",
-					characterImageUrl: castCard && castCard.path ? "/api/dsh-tavern/card-image?path=" + encodeURIComponent(castCard.path) : "" } : null;
+				const castCharacters = castLines ? tavernCastStore.characters(props.sessionId) : null;
+				const castName = castCard && castCard.name || "", castPath = castCard && castCard.path || "";
+				const cast = React.useMemo(function () {
+					return castLines ? { sessionId: props.sessionId, lines: castLines, characters: castCharacters, characterName: castName,
+						characterImageUrl: castPath ? "/api/dsh-tavern/card-image?path=" + encodeURIComponent(castPath) : "" } : null;
+				}, [props.sessionId, castLines, castCharacters, castName, castPath]);
 				const sceneImagesEnabled = Boolean(liveState.view && liveState.view.releaseCapabilities && liveState.view.releaseCapabilities.sceneImages);
 				const sceneShown = sceneImagesEnabled && settled && playView;
 				const sceneRecord = useSceneImageRecord(sceneShown ? props.sessionId : null, storyTurn);

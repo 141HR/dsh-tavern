@@ -652,8 +652,12 @@
 				const pluginMedia = useTavernPluginMedia(props.sessionId, storyTurn, playView && settled);
 				const castLines = useTavernCast(props.sessionId, storyTurn, playView && settled);
 				const castCard = liveState.view && liveState.view.card;
-				const cast = castLines ? { sessionId: props.sessionId, lines: castLines, characters: tavernCastStore.characters(props.sessionId), characterName: castCard && castCard.name || "",
-					characterImageUrl: castCard && castCard.path ? "/api/dsh-tavern/card-image?path=" + encodeURIComponent(castCard.path) : "" } : null;
+				const castCharacters = castLines ? tavernCastStore.characters(props.sessionId) : null;
+				const castName = castCard && castCard.name || "", castPath = castCard && castCard.path || "";
+				const cast = React.useMemo(function () {
+					return castLines ? { sessionId: props.sessionId, lines: castLines, characters: castCharacters, characterName: castName,
+						characterImageUrl: castPath ? "/api/dsh-tavern/card-image?path=" + encodeURIComponent(castPath) : "" } : null;
+				}, [props.sessionId, castLines, castCharacters, castName, castPath]);
 				const sceneImagesEnabled = Boolean(liveState.view && liveState.view.releaseCapabilities && liveState.view.releaseCapabilities.sceneImages);
 				const sceneShown = sceneImagesEnabled && settled && playView;
 				const sceneRecord = useSceneImageRecord(sceneShown ? props.sessionId : null, storyTurn);
