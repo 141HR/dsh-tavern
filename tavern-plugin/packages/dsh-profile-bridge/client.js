@@ -17,48 +17,40 @@ window.__ModuleLoader__.load({
     const NS = 'profileBridge'
 
     const zh = {
-      section: 'Profile 切换',
-      title: 'Profile 切换',
-      subtitle: '选择桌面版使用哪套配置。',
-      original: '原版 DSH',
-      originalHint: '桌面版自带的配置',
-      tavern: 'DSH Tavern',
-      tavernHint: '装好了酒馆插件的配置',
-      pending: '重启后生效',
-      restartHint: '重启桌面版后生效。',
-      restart: '立即重启',
+      sectionTavern: '切回原版 DSH',
+      sectionOriginal: '进入 DSH 酒馆',
+      sectionOther: '原版 DSH / DSH 酒馆',
+      explain: 'DSH 酒馆和原版 DSH 是同一个应用里的两套环境，切换时应用会重启一次，对话和设置都会保留。',
+      toOriginal: '切到原版 DSH 并重启',
+      toTavern: '切到 DSH 酒馆并重启',
+      noTavern: '还没有装好 DSH 酒馆，装好后这里就能切过去。',
+      noOriginal: '找不到原版 DSH 的备份，暂时切不回去。请看下面的「说明与日志」。',
       restarting: '正在重启…',
       quitHint: '请从托盘退出桌面版，切换完成后会自动重新打开（两分钟内有效）。',
-      confirm: '确定',
       loading: '读取中…',
-      noModules: '缺少 node_modules，插件尚未安装',
       cliHint: '当前不是桌面版。命令行用户直接用 dsh --profile <名称> 选择即可。',
       failure: '操作失败',
       more: '说明与日志',
       logEmpty: '（还没有日志）',
-      why: '桌面版固定读取 profiles/desktop。选择其他配置时，会把它链接到所选配置（Windows 用 junction，macOS/Linux 用符号链接）；原版配置先备份，随时可以选回。更换需要桌面版先退出：重启走正常退出流程，有任务时会先请你确认，不会强制结束进程。',
+      why: '桌面版固定读取 profiles/desktop。进入 DSH 酒馆时，会把它链接到 profiles/tavern（Windows 用 junction，macOS/Linux 用符号链接）；原版配置先备份为 desktop.fresh-*，切回原版时恢复。切换需要桌面版先退出：重启走正常退出流程，有任务时会先请你确认，不会强制结束进程。',
     }
     const en = {
-      section: 'Profile switch',
-      title: 'Profile switch',
-      subtitle: 'Choose which setup the Desktop app uses.',
-      original: 'Original DSH',
-      originalHint: 'The setup Desktop ships with',
-      tavern: 'DSH Tavern',
-      tavernHint: 'The setup with the Tavern plugins installed',
-      pending: 'After restart',
-      restartHint: 'Takes effect after Desktop restarts.',
-      restart: 'Restart now',
+      sectionTavern: 'Back to original DSH',
+      sectionOriginal: 'Open DSH Tavern',
+      sectionOther: 'Original DSH / DSH Tavern',
+      explain: 'DSH Tavern and the original DSH are two setups of the same app. Switching restarts the app once; conversations and settings are kept.',
+      toOriginal: 'Switch to original DSH and restart',
+      toTavern: 'Switch to DSH Tavern and restart',
+      noTavern: 'DSH Tavern is not installed yet; once it is, you can switch from here.',
+      noOriginal: 'The original DSH backup is missing, so switching back is not possible right now. See "Details and log" below.',
       restarting: 'Restarting…',
       quitHint: 'Quit Desktop from the tray; it reopens by itself after the switch (valid for two minutes).',
-      confirm: 'OK',
       loading: 'Loading…',
-      noModules: 'node_modules missing; plugins are not installed yet',
       cliHint: 'This is not the Desktop app. Command-line users can pick one with dsh --profile <name>.',
       failure: 'Failed',
       more: 'Details and log',
       logEmpty: '(no log yet)',
-      why: 'Desktop always reads profiles/desktop. Choosing another setup links it there (a junction on Windows, a symlink elsewhere); the original is backed up first and you can choose it again any time. Desktop has to exit first: restarting is a normal quit that asks for confirmation when tasks are running, never a forced kill.',
+      why: 'Desktop always reads profiles/desktop. Opening DSH Tavern links it to profiles/tavern (a junction on Windows, a symlink elsewhere); the original is first backed up as desktop.fresh-* and restored when you switch back. Desktop has to exit first: restarting is a normal quit that asks for confirmation when tasks are running, never a forced kill.',
     }
 
     /** Scoped stylesheet; class names are prefixed so they never leak into the host. */
@@ -69,20 +61,6 @@ window.__ModuleLoader__.load({
 .pb-head { display: grid; gap: 2px; }
 .pb-title { margin: 0; font-size: 16px; font-weight: 600; }
 .pb-sub { margin: 0; opacity: 0.6; }
-.pb-list { display: grid; gap: 10px; }
-.pb-option { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; border: 1px solid var(--pb-line); border-radius: 12px; cursor: pointer; transition: border-color .15s, background .15s; }
-.pb-option:hover:not(:disabled) { border-color: rgba(127,127,127,0.5); }
-.pb-option:focus-visible { outline: 2px solid var(--pb-accent); outline-offset: 2px; }
-.pb-option:disabled { cursor: default; }
-.pb-option.is-on { border-color: var(--pb-accent); background: var(--pb-accent-soft); }
-.pb-dot { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid rgba(127,127,127,0.55); display: grid; place-items: center; }
-.pb-option.is-on .pb-dot { border-color: var(--pb-accent); }
-.pb-option.is-on .pb-dot::after { content: ''; width: 9px; height: 9px; border-radius: 50%; background: var(--pb-accent); }
-.pb-info { flex: 1; min-width: 0; display: grid; }
-.pb-name { font-size: 14px; font-weight: 500; }
-.pb-hint { font-size: 12px; opacity: 0.55; }
-.pb-bad { color: #e5484d; opacity: 1; }
-.pb-tag { flex: none; font-size: 12px; color: var(--pb-accent); }
 .pb-bar { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-radius: 10px; background: var(--pb-accent-soft); }
 .pb-bar-text { flex: 1; min-width: 0; }
 .pb-btn { appearance: none; font: inherit; font-size: 13px; flex: none; color: #fff; background: var(--pb-accent); border: 0; border-radius: 8px; padding: 6px 16px; cursor: pointer; }
@@ -104,126 +82,77 @@ window.__ModuleLoader__.load({
       return typeof error.message === 'string' ? error.message : String(error)
     }
 
-    /** Key of the option for Desktop's own (unlinked) profile. */
-    const ORIGINAL = ''
+    /** Which side this app is on, from the status payload: the tavern setup, the original, or something else. */
+    function sideOf(status) {
+      if (!status || status.appKind !== 'desktop') return 'other'
+      if (status.activeIsLink !== true) return 'original'
+      return status.linkTargetName === 'tavern' ? 'tavern' : 'other'
+    }
+
+    /** Last status, read once at startup so the settings menu can name this page by side. */
+    let knownSide = 'other'
 
     /**
-     * One settings page: the setups Desktop can run as a single-choice list. The
-     * one in use is selected; picking another offers a restart, which queues the
-     * link (or, for Desktop's own profile, the revert) and quits and reopens the app.
+     * One settings page with one action: from the tavern setup, back to the original DSH;
+     * from the original, into DSH Tavern. Either way the app quits and reopens once.
      * @param {{ t: Function, rpcCall: Function }} props - injected faces from the registration.
      */
     function ProfileBridgeSettings(props) {
       const t = props.t
       const call = props.rpcCall
       const [status, setStatus] = React.useState(null)
-      const [loading, setLoading] = React.useState(true)
       const [failure, setFailure] = React.useState(null)
-      // The option the user picked (not yet applied), and the receipt once the switch is queued.
-      const [picked, setPicked] = React.useState(null)
       const [applied, setApplied] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
 
-      const load = React.useCallback(async () => {
-        setLoading(true)
-        try {
-          const result = await call('status', {})
-          if (result?.ok === true) setStatus(result.value)
+      React.useEffect(() => {
+        let alive = true
+        call('status', {}).then((result) => {
+          if (!alive) return
+          if (result?.ok === true) { setStatus(result.value); knownSide = sideOf(result.value) }
           else setFailure(describeFailure(result?.error))
-        } catch (error) {
-          setFailure(describeFailure({ code: 'transport', message: error?.message ?? String(error) }))
-        } finally {
-          setLoading(false)
-        }
+        }, (error) => { if (alive) setFailure(describeFailure({ message: error?.message ?? String(error) })) })
+        return () => { alive = false }
       }, [call])
 
-      React.useEffect(() => {
-        void load()
-      }, [load])
+      const side = sideOf(status)
+      const tavernReady = (status?.profiles ?? []).some((profile) => profile.name === 'tavern' && (profile.bundles ?? []).includes('dsh-profile-bridge') && profile.hasNodeModules)
+      // Back to the original needs its backup; into the tavern needs a tavern setup that can come back.
+      const blocked = side === 'original' ? (tavernReady ? null : t('noTavern'))
+        : (status?.backups ?? []).length > 0 ? null : t('noOriginal')
+      const target = side === 'original' ? 'tavern' : null
 
-      const apply = React.useCallback(async () => {
-        if (picked === null) return
+      async function apply() {
         setBusy(true)
         setFailure(null)
         try {
-          const result = picked === ORIGINAL
-            ? await call('unlink', {})
-            : await call('link', { target: picked })
+          const result = target ? await call('link', { target }) : await call('unlink', {})
           if (result?.ok === true) setApplied(result.value ?? {})
           else setFailure(describeFailure(result?.error))
         } catch (error) {
-          setFailure(describeFailure({ code: 'transport', message: error?.message ?? String(error) }))
+          setFailure(describeFailure({ message: error?.message ?? String(error) }))
         } finally {
           setBusy(false)
         }
-      }, [call, picked])
+      }
 
+      const title = side === 'tavern' ? t('sectionTavern') : side === 'original' ? t('sectionOriginal') : t('sectionOther')
       const isDesktop = status?.appKind === 'desktop'
-      const linked = status?.activeIsLink === true
-      const currentKey = linked ? status?.linkTargetName : ORIGINAL
-      const chosenKey = picked !== null ? picked : currentKey
-      const canQuit = status?.platform !== 'win32'
-      // Desktop's own profile can only be chosen again while its backup still exists.
-      const canRevert = !linked || (status?.backups ?? []).length > 0
-      const options = status === null ? [] : [
-        ...(canRevert ? [{ key: ORIGINAL, label: t('original'), hint: t('originalHint') }] : []),
-        ...(status.profiles ?? [])
-          // Only profiles that also carry this page: from any other the app has no way back.
-          .filter((profile) => profile.name !== status.activeName && (profile.bundles ?? []).includes('dsh-profile-bridge'))
-          .map((profile) => ({
-            key: profile.name,
-            label: profile.name === 'tavern' ? t('tavern') : profile.name,
-            hint: profile.name === 'tavern' ? t('tavernHint') : profile.dir,
-            bad: profile.hasNodeModules ? null : t('noModules'),
-          })),
-      ]
-
       return h('section', { className: 'pb' },
         h('style', null, CSS),
         h('header', { className: 'pb-head' },
-          h('h2', { className: 'pb-title' }, t('title')),
-          h('p', { className: 'pb-sub' }, isDesktop || status === null ? t('subtitle') : t('cliHint')),
+          h('h2', { className: 'pb-title' }, title),
+          h('p', { className: 'pb-sub' }, status === null ? t('loading') : isDesktop ? t('explain') : t('cliHint')),
         ),
-
-        status === null
-          ? h('p', { className: 'pb-sub' }, loading ? t('loading') : '')
-          : !isDesktop ? null : h('div', { className: 'pb-list', role: 'radiogroup', 'aria-label': t('title') },
-              options.map((option) => {
-                const on = option.key === chosenKey
-                return h('button', {
-                  key: option.key || '(original)',
-                  type: 'button',
-                  role: 'radio',
-                  'aria-checked': on,
-                  className: on ? 'pb-option is-on' : 'pb-option',
-                  disabled: busy || applied !== null,
-                  onClick: () => setPicked(option.key === currentKey ? null : option.key),
-                },
-                  h('span', { className: 'pb-dot' }),
-                  h('span', { className: 'pb-info' },
-                    h('span', { className: 'pb-name' }, option.label),
-                    h('span', { className: option.bad ? 'pb-hint pb-bad' : 'pb-hint' }, option.bad ?? option.hint),
-                  ),
-                  on && picked !== null ? h('span', { className: 'pb-tag' }, t('pending')) : null,
-                )
-              }),
-            ),
-
-        picked === null ? null : h('div', { className: 'pb-bar' },
+        !isDesktop ? null : blocked ? h('p', { className: 'pb-error' }, blocked) : h('div', { className: 'pb-bar' },
           h('span', { className: 'pb-bar-text' },
-            applied === null ? t('restartHint') : applied.closesApp ? t('restarting') : t('quitHint'),
+            applied === null ? '' : applied.closesApp ? t('restarting') : t('quitHint'),
             ...(applied?.warnings ?? []).map((warning) => h('span', { key: warning, style: { display: 'block', opacity: 0.75 } }, `• ${warning}`)),
           ),
-          applied !== null ? null : h('button', {
-            type: 'button',
-            className: 'pb-btn',
-            disabled: busy,
-            onClick: () => void apply(),
-          }, busy ? t('restarting') : canQuit ? t('restart') : t('confirm')),
+          applied !== null ? null : h('button', { type: 'button', className: 'pb-btn', disabled: busy, onClick: () => void apply() },
+            busy ? t('restarting') : target ? t('toTavern') : t('toOriginal')),
         ),
-
         failure !== null ? h('p', { className: 'pb-error' }, `${t('failure')}: ${failure}`) : null,
-
         h('details', { className: 'pb-fold' },
           h('summary', null, t('more')),
           h('p', null, t('why')),
@@ -244,11 +173,13 @@ window.__ModuleLoader__.load({
         const t = ctx.locale.bind(NS)
         const rpcCall = (endpoint, payload) => ctx.connection.rpc.call(CHANNEL, endpoint, payload)
         ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'profile-bridge: locale dictionaries')
+        // Name the page by side before the settings menu first renders it.
+        rpcCall('status', {}).then((result) => { if (result?.ok === true) knownSide = sideOf(result.value) }, () => {})
         ctx.slots.inject('settings.section', () => ctx.slots.register({
           name: 'settings.section',
           id: 'profile-bridge',
           order: 60,
-          label: () => t('section'),
+          label: () => t(knownSide === 'tavern' ? 'sectionTavern' : knownSide === 'original' ? 'sectionOriginal' : 'sectionOther'),
           inject: () => ({ rpcCall, t }),
         }, ProfileBridgeSettings))
       },
