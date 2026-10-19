@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "823e936f2947e02f2031e146376f0544cd5b6aa2",
-  "releaseSequence": 742,
+  "revision": "9ef26981472001b35a1bd4a859a61778be56aae4",
+  "releaseSequence": 743,
   "version": "3.0.0",
   "files": [
     {
@@ -481,13 +481,13 @@
     },
     {
       "path": "tavern-plugin/lib/client-assets/tavern.css",
-      "sha256": "2f6f7f1dbc58ee5c3581c7db9f7bb1d31fb21a26361105f82b48849ea754c2b0",
-      "size": 293242
+      "sha256": "8e695e8ee44420ca1793159041a2684fe064fd8e4f23aa38a08425df215b4de5",
+      "size": 293557
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "069314b3360c436286c6fc3e190f1a0e2508ebeefca3b4be591d8ab8ea620215",
-      "size": 1915754
+      "sha256": "46858dfc45dfb1c0415d9809a5cb37ab8ccaca0d11b3e18313e006d678526974",
+      "size": 1916803
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -1511,8 +1511,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/round-history.js",
-      "sha256": "d3d9b2e3a13c1aa5a981df7e5af7f27072edf5c581261013d68448233f4f5785",
-      "size": 77430
+      "sha256": "2e78dc9a9bc60a4e04ebb87f64e5f40a8813b96238c041bff03ac97d4c9587ac",
+      "size": 78509
     },
     {
       "path": "tavern-plugin/lib/domain/runtime-content-projection.js",
@@ -2266,8 +2266,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "3e9a7b2a07ece7aef538c19a1bbb03874d2a958a22f7bb454b33fcdf9d556a99",
-      "size": 370748
+      "sha256": "350174a8f6b782b345d1022da3ed1aacfbff0e8b722519909341345da73bb0b9",
+      "size": 370882
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -4861,8 +4861,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/play-controls.js",
-      "sha256": "b2315a2f9796d1ec92da9f35feda44aea1715d4ded39df84aae2c765e14b1995",
-      "size": 141236
+      "sha256": "e923cbd2bb7c3f1f7cf5aebdfc5c450040c147b4d9351e5dae90ced308fdd924",
+      "size": 141968
     },
     {
       "path": "tavern-plugin/src/client/features/plugin-extensions.js",
