@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "6cc3b3bf9002d1fde034d1f16f4279078bb9859a",
-  "releaseSequence": 734,
+  "revision": "c1fa396b4049c01dfa22c59eca32e9db625e1645",
+  "releaseSequence": 735,
   "version": "3.0.0",
   "files": [
     {
@@ -2246,8 +2246,8 @@
     },
     {
       "path": "tavern-plugin/lib/hooks/model-stream.js",
-      "sha256": "90157017d6745dd980caab854c9503f444f812e8fb77570a0a47ee9034b77e21",
-      "size": 9331
+      "sha256": "75db3e8c8a3b7ec8efa9f547db79ffef797620428c0ef3404c1c2b825fafd3cf",
+      "size": 9337
     },
     {
       "path": "tavern-plugin/lib/hooks/request.js",
