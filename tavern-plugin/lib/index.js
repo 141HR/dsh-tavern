@@ -2690,7 +2690,7 @@ export async function apply(ctx) {
     const rounds = Array.isArray(args?.rounds) ? args.rounds.filter(round => str(round?.assistant).trim()) : []
     const chat = await chatForSession(sessionId)
     if (!chat || !rounds.length) throw new Error('缺少对话或要追加的轮次')
-    return await withCompactionSession(sessionId, async agent => {
+    const appended = await withCompactionSession(sessionId, async agent => {
       if (agent.phase?.kind === 'running') throw new Error('这一局正在生成，请稍后再追加')
       const session = agent.session, now = Date.now()
       let turn = Math.max(0, ...sessionEvents(session).filter(event => event.type === 'turn/start').map(event => event.data.turn))
@@ -2712,9 +2712,12 @@ export async function apply(ctx) {
           displayText: body, displayMode: 'markdown', ts: now, native: true, swipeId: 0, swipes: [body], nativeAnchor })
       }
       await sessionStore.flush(session)
-      await updateChat(chat.id, current => { current.messages = [...(current.messages || []), ...messages]; return current }, { source: 'test.append-rounds' })
-      return { appended: rounds.length, lastTurn: turn }
+      return { messages, lastTurn: turn }
     })
+    // Write the save only after the native rounds are flushed and released, so the reconcile
+    // that follows a save write reads them instead of a stale Session.
+    await updateChat(chat.id, current => { current.messages = [...(current.messages || []), ...appended.messages]; return current }, { source: 'test.append-rounds' })
+    return { appended: rounds.length, lastTurn: appended.lastTurn }
   }
   async function prepareConversationFork(sourceChatId, sourceSessionId, requestedTurn) {
     const source = str(sourceChatId) === '' ? await chatForSession(str(sourceSessionId)) : await readChat(str(sourceChatId))
