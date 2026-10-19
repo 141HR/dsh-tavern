@@ -75,3 +75,65 @@ test('导出 PNG：封面像素 + 当前卡，重新读回一致', () => {
   assert.deepEqual(stripPngTextChunks(exported), png('cover'))
   assert.deepEqual(cardOf(exported), JSON.parse(text))
 })
+
+async function encodedImages() {
+  const { readFile: read } = await import('node:fs/promises')
+  const { createRequire } = await import('node:module')
+  const require = createRequire(import.meta.url)
+  const wasm = async file => WebAssembly.compile(await read(require.resolve(file)))
+  const [jpeg, webp] = await Promise.all([import('@jsquash/jpeg/encode.js'), import('@jsquash/webp/encode.js')])
+  await jpeg.init(await wasm('@jsquash/jpeg/codec/enc/mozjpeg_enc.wasm'))
+  await webp.init(await wasm('@jsquash/webp/codec/enc/webp_enc.wasm'))
+  const pixels = { width: 4, height: 3, data: new Uint8ClampedArray(4 * 3 * 4).fill(200), colorSpace: 'srgb' }
+  return { jpeg: Buffer.from(await jpeg.default(pixels)), webp: Buffer.from(await webp.default(pixels)) }
+}
+
+test('封面图片：PNG 原样通过，JPG/WebP 转成同尺寸 PNG，其他格式拒绝', async () => {
+  const { coverImageAsPng } = await import('../tavern-plugin/lib/domain/card-cover-image.js')
+  const keep = png('keep')
+  assert.equal(await coverImageAsPng(keep), keep)
+  const { jpeg, webp } = await encodedImages()
+  for (const source of [jpeg, webp]) {
+    const converted = await coverImageAsPng(source)
+    assert.equal(converted.readUInt32BE(0), 0x89504e47)
+    assert.equal(converted.readUInt32BE(16), 4, '宽度不变')
+    assert.equal(converted.readUInt32BE(20), 3, '高度不变')
+  }
+  await assert.rejects(coverImageAsPng(Buffer.from('GIF89a......')), /PNG、JPG、WebP/)
+})
+
+test('工作台工具：配封面、导出 PNG，只在卡片模式、拒绝相对路径与覆盖', { skip: !process.env.DSH_BOOT_MODULE }, async t => {
+  const { registerCardCoverTools } = await import('../tavern-plugin/lib/tools/card-cover.js')
+  const { store, root } = await setup(t)
+  const tools = new Map()
+  let mode = 'card'
+  const text = JSON.stringify({ spec: 'chara_card_v3', data: { name: '阿珂', description: '当前' } })
+  registerCardCoverTools({
+    tools: { register(value) { tools.set(value.name, value) } },
+    chatForSession: async () => ({ mode, cardPath: 'cards/阿珂.json' }),
+    fileResources: store,
+    presentCardText: async () => ({ text }),
+    exportCardPng: async cardPath => ({ bytes: pngWithTextChunks(await store.readCardImage(cardPath), [pngCardTextChunk('ccv3', text)]) }),
+    str: value => String(value ?? '')
+  })
+  const exec = { agent: { session: { id: 's' } } }
+  const { jpeg } = await encodedImages()
+  const image = path.join(root, 'cover.jpg')
+  await writeFile(image, jpeg)
+
+  await assert.rejects(tools.get('tavern_set_card_cover').execute({ image: 'cover.jpg' }, exec), /完整路径/)
+  const set = await tools.get('tavern_set_card_cover').execute({ image }, exec)
+  assert.equal(set.path, 'cards/阿珂.json')
+  assert.equal(await store.hasCardImage('cards/阿珂.json'), true)
+  assert.equal(cardOf(await store.readCardImage('cards/阿珂.json')).data.name, '阿珂')
+
+  const output = path.join(root, 'out', '阿珂.png')
+  const exported = await tools.get('tavern_export_card_png').execute({ output }, exec)
+  assert.equal(exported.output, output)
+  assert.deepEqual(cardOf(await readFile(output)), JSON.parse(text))
+  await assert.rejects(tools.get('tavern_export_card_png').execute({ output }, exec), /已存在/)
+  await assert.rejects(tools.get('tavern_export_card_png').execute({ output: path.join(root, 'x.jpg') }, exec), /\.png/)
+
+  mode = 'story'
+  await assert.rejects(tools.get('tavern_set_card_cover').execute({ image }, exec), /卡片工作台/)
+})

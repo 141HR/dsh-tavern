@@ -1,15 +1,9 @@
-		// 换过封面的卡带上版本号，让已挂载的缩略图重新取图。
-		const tavernCardCoverRevisions = new Map();
-		function tavernCardImageUrl(path) {
-			const revision = tavernCardCoverRevisions.get(path);
-			return "/api/dsh-tavern/card-image?path=" + encodeURIComponent(path) + (revision ? "&v=" + revision : "");
-		}
 		// Module scope keeps row identity stable; a nested component type would remount every thumbnail per parent render.
 		function TavernCardListContent(props) {
 			const card = props.card;
 			const image = card && card.hasImage ? React.createElement("img", {
 				className: "dsh-tavern-card-thumb",
-				src: tavernCardImageUrl(card.path),
+				src: "/api/dsh-tavern/card-image?path=" + encodeURIComponent(card.path),
 				alt: "",
 				loading: "lazy",
 				onError: function (event) { event.currentTarget.hidden = true; }

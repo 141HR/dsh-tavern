@@ -29,7 +29,6 @@ export function registerTavernHttpRoutes({
   castAssets,
   speech,
   exportCardCharx,
-  exportCardPng,
   assetPacks,
   uploads,
   exposeHandler,
@@ -238,16 +237,6 @@ export function registerTavernHttpRoutes({
             const name = file.name.replace(/[\\/:*?"<>|\r\n]/g, '_') + '.charx'
             res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': file.bytes.byteLength, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
               'Content-Disposition': "attachment; filename=\"card.charx\"; filename*=UTF-8''" + encodeURIComponent(name) })
-            res.end(file.bytes)
-            return
-          }
-          if (req.method === 'GET' && pathname === '/api/dsh-tavern/card-png') {
-            let file
-            try { file = await exportCardPng(new URL(req.url, 'http://x').searchParams.get('path')) }
-            catch (error) { res.writeHead(error?.code === 'TAVERN_NOT_FOUND' || /路径|不存在/.test(String(error?.message)) ? 404 : 500, { 'Content-Type': 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff' }); res.end(String(error?.message || error)); return }
-            const name = file.name.replace(/[\\/:*?"<>|\r\n]/g, '_') + '.png'
-            res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': file.bytes.byteLength, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
-              'Content-Disposition': "attachment; filename=\"card.png\"; filename*=UTF-8''" + encodeURIComponent(name) })
             res.end(file.bytes)
             return
           }

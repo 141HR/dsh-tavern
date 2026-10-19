@@ -17,6 +17,7 @@ import { registerGameplayTools } from './tools/gameplay.js'
 import { registerUserProfileTools } from './tools/user-profile.js'
 import { registerSkillTools } from './tools/skills.js'
 import { registerCardReadingTools } from './tools/card-reading.js'
+import { registerCardCoverTools } from './tools/card-cover.js'
 import { createCardValidationCheck } from './tools/card-validation-check.js'
 import { createSkillGatedTools } from './domain/skill-gated-tools.js'
 import { registerPlayChatTool } from './tools/play-chat.js'
@@ -1296,7 +1297,7 @@ export async function apply(ctx) {
     const cardPath = normalizeResourcePath(input, 'card')
     const { document, text } = await presentCardText(cardPath)
     const image = await fileResources.readCardImage(cardPath).catch(() => undefined)
-    if (!image) throw Object.assign(new Error('人物卡还没有封面，请先配封面'), { code: 'TAVERN_NOT_FOUND' })
+    if (!image) throw Object.assign(new Error('人物卡还没有封面，请先用 tavern_set_card_cover 配封面'), { code: 'TAVERN_NOT_FOUND' })
     const name = str(document?.data?.name || '人物卡')
     return { name, bytes: pngWithTextChunks(image, [pngCardTextChunk('chara', text), pngCardTextChunk('ccv3', text)]) }
   }
@@ -5153,11 +5154,6 @@ export async function apply(ctx) {
       case 'ensureOpening': return { view: await ensureNativeOpening(args && args.sessionId) }
       case 'getChoices': return { candidates: await candidateGenerator.find({ sessionId: args && args.sessionId, messageId: args && args.messageId }) }
       case 'startChoices': return await candidateTasks.startLegacy(args)
-      case 'setCardCover': {
-        const cardPath = normalizeResourcePath(args && args.path, 'card')
-        await fileResources.setCardCover(cardPath, Buffer.from(str(args && args.data), 'base64'), async () => (await presentCardText(cardPath)).text)
-        return { ok: true }
-      }
       case 'exportCard': {
         const cardPath = args && args.path
         const workspace = await readCardWorkspace(cardPath)
@@ -5293,7 +5289,6 @@ export async function apply(ctx) {
     castAssets,
     speech,
     exportCardCharx,
-    exportCardPng,
     assetPacks,
     uploads,
     exposeHandler: handle => { tavernHttpHandle = handle },
@@ -5548,7 +5543,7 @@ export async function apply(ctx) {
   }
 
   const skillGatedTools = createSkillGatedTools()
-  const controlledToolNames = new Set([STORY_SUBMIT_TOOL_NAME, 'tavern_read_variables', ...CARD_MEMORY_TOOLS, 'bash', 'pwsh', ...dshFileToolNames, 'skill', 'tavern_read_skill_reference', 'web_search', 'tavern_save_skill', ...cordisToolNames, 'tavern_user_profile_read', 'tavern_user_profile_save', 'tavern_user_profile_confirm', 'tavern_read_card', 'tavern_read_card_raw', 'tavern_search_card', 'tavern_replace_card_text', 'tavern_mvu_overview', 'tavern_apply_mvu', 'tavern_read_play_chat', 'tavern_read_script', 'tavern_recall_history', 'worldbook_search', 'tavern_read_worldbook', 'tavern_update_worldbook', 'tavern_read_preset', 'tavern_update_preset', 'tavern_read_regex_library', 'tavern_copy_card', 'tavern_update_card', 'tavern_restore_card', 'tavern_validate_card', 'tavern_test_response'])
+  const controlledToolNames = new Set([STORY_SUBMIT_TOOL_NAME, 'tavern_read_variables', ...CARD_MEMORY_TOOLS, 'bash', 'pwsh', ...dshFileToolNames, 'skill', 'tavern_read_skill_reference', 'web_search', 'tavern_save_skill', ...cordisToolNames, 'tavern_user_profile_read', 'tavern_user_profile_save', 'tavern_user_profile_confirm', 'tavern_read_card', 'tavern_read_card_raw', 'tavern_search_card', 'tavern_replace_card_text', 'tavern_mvu_overview', 'tavern_apply_mvu', 'tavern_read_play_chat', 'tavern_read_script', 'tavern_recall_history', 'worldbook_search', 'tavern_read_worldbook', 'tavern_update_worldbook', 'tavern_read_preset', 'tavern_update_preset', 'tavern_read_regex_library', 'tavern_copy_card', 'tavern_set_card_cover', 'tavern_export_card_png', 'tavern_update_card', 'tavern_restore_card', 'tavern_validate_card', 'tavern_test_response'])
   const foregroundStrategies = createForegroundOrchestrationStrategies({
     compatibility: {
       beforeTurn: async function (input) {
@@ -5725,6 +5720,8 @@ export async function apply(ctx) {
       str,
       tools,
     })
+
+    registerCardCoverTools({ chatForSession, exportCardPng, fileResources, presentCardText, str, tools })
 
     registerPlayChatTool({
       chatForSession,

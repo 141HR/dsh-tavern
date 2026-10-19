@@ -11,7 +11,6 @@
 			const organization = useCardOrganization(cards, busy, refreshCards, error => setError(error), cardBatch);
 			const [error, setError] = usePersistentError("人物卡库");
 			const importInput = React.useRef(null);
-			const coverInput = React.useRef(null);
 			const [importStatus, setImportStatus] = React.useState("");
 			const importing = React.useRef(false);
 			const cardRequest = React.useRef(0);
@@ -142,36 +141,6 @@
 					link.href = url; link.download = (card.name || "人物卡") + ".json"; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
 				} catch (err) { setError(String(err && err.message || err)); }
 			}
-			// 封面：浏览器里统一转成 PNG（长边超过 2048 缩小），服务端把卡数据写进图片，原件变成带封面的 PNG 卡。
-			async function chooseCover(event) {
-				const file = event.target.files && event.target.files[0];
-				event.target.value = "";
-				if (!card || !file) return;
-				const path = card.path;
-				setBusy(true);
-				try {
-					if (!/^image\//.test(file.type)) throw new Error("请选择图片文件");
-					const bitmap = await createImageBitmap(file);
-					const scale = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
-					const canvas = document.createElement("canvas");
-					canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-					canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-					if (bitmap.close) bitmap.close();
-					const data = canvas.toDataURL("image/png").replace(/^data:[^,]*,/, "");
-					await rpc("setCardCover", { path: path, data: data });
-					tavernCardCoverRevisions.set(path, Date.now());
-					await refreshCards();
-					notifyTavernDataChanged(["cards"], "cards");
-				} catch (err) { setError("封面设置失败：" + String(err && err.message || err)); }
-				finally { setBusy(false); }
-			}
-			function exportCardPng() {
-				if (!card) return;
-				const link = document.createElement("a");
-				link.href = "/api/dsh-tavern/card-png?path=" + encodeURIComponent(card.path);
-				link.download = (card.name || "人物卡") + ".png";
-				document.body.appendChild(link); link.click(); link.remove();
-			}
 			function exportCardCharx() {
 				if (!card) return;
 				const link = document.createElement("a");
@@ -182,7 +151,7 @@
 			const h = React.createElement;
 			if (selectedPath) {
 				if (!card) return h("div", { className: "dsh-tavern-library dsh-tavern-card-library" }, h("div", { className: "dsh-tavern-status-head" }, h("button", { className: "dsh-tavern-btn", onClick: clearCard }, "← 返回人物卡库")), loading ? h("div", { className: "dsh-tavern-empty" }, "正在读取人物卡…") : error ? h("div", { className: "dsh-tavern-dock-error" }, error, h("button", { className: "dsh-tavern-btn", onClick: function () { loadCard(selectedPath); } }, "重新读取")) : h("div", { className: "dsh-tavern-empty" }, "人物卡读取失败", h("button", { className: "dsh-tavern-btn", onClick: function () { loadCard(selectedPath); } }, "重新读取")));
-				return h(React.Fragment, null, h("input", { ref: coverInput, type: "file", accept: "image/png,image/jpeg,image/webp,image/gif", style: { display: "none" }, onChange: chooseCover }), h(TavernCardStageBox, { path: selectedPath }), h(TavernCardPluginsBox, { path: selectedPath }), h(CardFieldsPanel, { view: { card: card }, library: true, organizationSettings: organization.detailSettings(cards.find(item => item.path === selectedPath)), busy: busy, onBack: clearCard, onAttach: sessionMode === "card" ? function () { props.appendMention(card.path, card.name); } : null, onOpenWorldBook: props.openWorldBook, onRename: renameCard, onExport: exportCardFile, onExportCharx: exportCardCharx, onSetCover: function () { if (coverInput.current) coverInput.current.click(); }, onExportPng: exportCardPng, hasCover: Boolean((cards.find(item => item.path === selectedPath) || {}).hasImage), onDelete: deleteCardFile, onSaved: function (saved) { setCard(Object.assign({}, saved, { path: selectedPath })); refreshCards(); } }));
+				return h(React.Fragment, null, h(TavernCardStageBox, { path: selectedPath }), h(TavernCardPluginsBox, { path: selectedPath }), h(CardFieldsPanel, { view: { card: card }, library: true, organizationSettings: organization.detailSettings(cards.find(item => item.path === selectedPath)), busy: busy, onBack: clearCard, onAttach: sessionMode === "card" ? function () { props.appendMention(card.path, card.name); } : null, onOpenWorldBook: props.openWorldBook, onRename: renameCard, onExport: exportCardFile, onExportCharx: exportCardCharx, onDelete: deleteCardFile, onSaved: function (saved) { setCard(Object.assign({}, saved, { path: selectedPath })); refreshCards(); } }));
 			}
 			const visible = organization.visible;
 			// "@" quotes a card into the card workspace conversation; only there does it mean anything.
@@ -532,7 +501,7 @@
 					props.onBack ? h("button", { className: "dsh-tavern-btn", onClick: props.onBack }, "← 返回") : null,
 					h("div", { className: props.library ? "dsh-tavern-status-title" : "dsh-tavern-status-role" }, props.view.card.name),
 					h("div", { className: "dsh-tavern-question-sub" }, props.view.card.path ? props.view.card.path.split("/").pop() : ""),
-					props.library ? h("div", { className: "dsh-tavern-library-head-actions" }, props.onAttach ? h("button", { className: "dsh-tavern-btn", onClick: props.onAttach }, "在对话中引用") : null, h("button", { className: "dsh-tavern-btn", onClick: props.onRename }, "重命名"), props.onSetCover ? h("button", { className: "dsh-tavern-btn", disabled: props.busy, onClick: props.onSetCover, title: "选一张图片作为封面，人物卡会变成带封面的 PNG 卡" }, props.hasCover ? "更换封面" : "配封面") : null, h("button", { className: "dsh-tavern-btn", onClick: props.onExport, title: "SillyTavern 人物卡 JSON" }, "导出 JSON"), props.onExportPng ? h("button", { className: "dsh-tavern-btn", disabled: !props.hasCover, onClick: props.onExportPng, title: props.hasCover ? "带封面的 SillyTavern PNG 人物卡" : "先配封面才能导出 PNG" }, "导出 PNG") : null, props.onExportCharx ? h("button", { className: "dsh-tavern-btn", onClick: props.onExportCharx, title: "Character Card V3，带头像、立绘、背景等角色素材" }, "导出 CHARX") : null, h("button", { className: "dsh-tavern-btn danger", onClick: props.onDelete }, "删除")) : null
+					props.library ? h("div", { className: "dsh-tavern-library-head-actions" }, props.onAttach ? h("button", { className: "dsh-tavern-btn", onClick: props.onAttach }, "在对话中引用") : null, h("button", { className: "dsh-tavern-btn", onClick: props.onRename }, "重命名"), h("button", { className: "dsh-tavern-btn", onClick: props.onExport, title: "SillyTavern 人物卡 JSON" }, "导出 JSON"), props.onExportCharx ? h("button", { className: "dsh-tavern-btn", onClick: props.onExportCharx, title: "Character Card V3，带头像、立绘、背景等角色素材" }, "导出 CHARX") : null, h("button", { className: "dsh-tavern-btn danger", onClick: props.onDelete }, "删除")) : null
 				),
 				props.organizationSettings,
 				scriptHero,
