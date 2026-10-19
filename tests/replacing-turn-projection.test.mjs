@@ -78,7 +78,8 @@ test('唯一可画的正文落在被替换回合里时，不隐藏那一回合',
   const view = fields.rollback({ id: 'c', sessionId: 's', mode: 'story', messages: [] },
     { session: foldOnlySession, events: foldOnlyEvents })
   assert.deepEqual(view.supersededDshTurns, [4], '只藏真正没有可画正文的旧回合')
-  assert.equal(view.regeneratedDshTurns[4], 7)
+  // 正文画在保留下来的第 6 轮：映射指向它，生成期回合即使整轮作废也只收掉输入。
+  assert.equal(view.regeneratedDshTurns[4], 6)
 })
 
 test('最终投影自己带 append 副本时，旧回合照常隐藏', () => {
@@ -89,4 +90,21 @@ test('最终投影自己带 append 副本时，旧回合照常隐藏', () => {
   const session = { id: 's', events, surface: { nodes: [0, 1, 4, 5] } }
   const view = fields.rollback({ id: 'c', sessionId: 's', mode: 'story', messages: [] }, { session, events })
   assert.deepEqual(view.supersededDshTurns, [4, 6], '新副本可画，旧回合都可以收掉')
+})
+
+// 普通回合（没走工具调用）：重新生成那一轮自己流式写下的回复就是唯一能画的正文，
+// 投影只是替换，落在另一个编辑回合里，对话页画不出来（#283）。
+test('普通回合重新生成后，映射指向生成期那一轮的可画回复', () => {
+  const events = [
+    { seq: 0, type: 'user/message', data: { role: 'user', source: { kind: 'user' } } },
+    { seq: 1, type: 'assistant/message', surfaceOp: 'append', data: { turn: 3, message: { source: { kind: 'model', provider: 'p', model: 'm' }, content: [{ type: 'text', text: '旧正文' }] } } },
+    { seq: 2, type: 'user/message', surfaceOp: 'append', data: { role: 'user', source: { kind: 'plugin:dsh-tavern-regen' } } },
+    { seq: 3, type: 'assistant/message', surfaceOp: 'append', data: { turn: 5, message: { source: { kind: 'model', provider: 'p', model: 'm' }, content: [{ type: 'text', text: '新正文' }] } } },
+    { seq: 4, type: 'assistant/message', surfaceOp: { op: 'replace', startSeq: 1, endSeq: 3 }, sourceEventSeqs: [1, 2, 3],
+      data: { turn: 6, message: { source: { kind: 'model', provider: 'p', model: 'm', tavernStoryTurn: 3 }, content: [{ type: 'text', text: '新正文' }] } } }
+  ]
+  const session = { id: 's', events, surface: { nodes: [0, 4] } }
+  const view = fields.rollback({ id: 'c', sessionId: 's', mode: 'story', messages: [], suppressedDshTurns: [5] }, { session, events })
+  assert.equal(view.regeneratedDshTurns[3], 5)
+  assert.deepEqual(view.suppressedDshTurns, [5], '生成期那一轮仍是作废回合：客户端只收掉它的输入，回复留着')
 })

@@ -167,13 +167,20 @@ export function supersededRegenerationTurns({ events = [], nodes = [] } = {}) {
 // edit turn, not the synthetic generation turn the chat recorded first.
 export function projectedReplyTurns({ events = [], nodes = [] } = {}) {
   const visible = new Set(nodes.map(Number))
+  const bySeq = new Map(events.filter(event => Number.isSafeInteger(event?.seq)).map(event => [event.seq, event]))
   const turns = new Map()
   for (const event of events) {
     if (event?.type !== 'assistant/message' || event.surfaceOp?.op !== 'replace') continue
     if (visible.size && !visible.has(Number(event.seq))) continue
     const story = Number(event.data?.message?.source?.tavernStoryTurn)
     if (!Number.isSafeInteger(story) || story < 1) continue
-    turns.set(story, Number(event.data?.turn))
+    // The transcript draws append events only, so the round shows where the
+    // replaced range ends on one: the attempt's own reply for an ordinary round,
+    // the transcript copy for a tool-submitted one. The replacement's own turn
+    // holds nothing the page can draw.
+    const end = bySeq.get(surfaceReplacementRange(event.surfaceOp).end)
+    const drawn = end?.type === 'assistant/message' && end.surfaceOp === 'append' ? Number(end.data?.turn) : NaN
+    turns.set(story, Number.isSafeInteger(drawn) && drawn > 0 ? drawn : Number(event.data?.turn))
   }
   return turns
 }

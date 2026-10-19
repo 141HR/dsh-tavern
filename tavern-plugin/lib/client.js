@@ -20103,15 +20103,21 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 			}
 			return rows;
 		}
-		// Rows up to, but not including, the turn's user input.
+		// What opened a turn: the player's message, or the host's 「收到执行请求」 card
+		// for a turn a plugin message woke (a regeneration attempt is one).
+		function isTurnInputRow(row) {
+			const kind = row.getAttribute("data-chat-flow-kind");
+			return kind === "user" || kind === "turn-trigger";
+		}
+		// Rows up to, but not including, the turn's input.
 		function turnReplyRowsBefore(tail, owner) {
 			const rows = turnRowsBefore(tail, owner);
-			const user = rows.findIndex(function (row) { return row.getAttribute("data-chat-flow-kind") === "user"; });
+			const user = rows.findIndex(isTurnInputRow);
 			return user === -1 ? rows : rows.slice(0, user);
 		}
 		function hideUserForTurnTail(tail) {
 			if (!tail) return;
-			const user = turnRowsBefore(tail, tailTurnOf(tail)).find(function (row) { return row.getAttribute("data-chat-flow-kind") === "user"; });
+			const user = turnRowsBefore(tail, tailTurnOf(tail)).find(isTurnInputRow);
 			if (user) hideRow(user);
 		}
 		function applyHiddenRegenUserTurns(sessionId) {
@@ -20262,7 +20268,9 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
                     if (!kind) continue;
                     // 正在被替换的那一楼只藏回复，玩家的输入永远留着。
                     if (replacing.has(turn) && kind === "user") continue;
-                    if (suppressed.has(turn) && (!replacements.has(turn) || kind === "user")) hideRow(row);
+                    // A void turn that now carries the round's body keeps its reply and
+                    // drops only what opened it (the player's input or the trigger card).
+                    if (suppressed.has(turn) && (!replacements.has(turn) || isTurnInputRow(row))) hideRow(row);
                     // mappings 的键是剧情轮次，宿主行上是原生轮次；用键去匹配这里的
                     // turn 只会在两个编号碰巧相等时误藏，真正的替换由 superseded 负责。
                 }
