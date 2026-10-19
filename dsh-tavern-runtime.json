@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "879b77f285ea83e0fe70a7624df58b22cca251bf",
-  "releaseSequence": 749,
+  "revision": "b79debabb3dc206c820aa0f537737862a341cadb",
+  "releaseSequence": 750,
   "version": "3.0.0",
   "files": [
     {
@@ -491,8 +491,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "8aa653eac22c94627956d6b1014c6e48c68dd6d3ac3ae84384bcabbde41dcdde",
-      "size": 1916624
+      "sha256": "db92d20e043525c0cd79a61348465e1fe64a43ad8ede606577e3ac77c9844dc9",
+      "size": 1916667
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -5206,8 +5206,8 @@
     },
     {
       "path": "tavern-plugin/src/client/runtime/host-artifacts.js",
-      "sha256": "24bfddef05a10db0e09c1f06c51a2a1562a44caca1b9f63ef40d680e82b67cff",
-      "size": 32739
+      "sha256": "78115fa10702692cf053677abce23d0f657cee548fb78b41043f460dc9eed0cc",
+      "size": 32782
     },
     {
       "path": "tavern-plugin/src/client/runtime/message-frame-lifecycle.js",
