@@ -43,7 +43,7 @@ function launch(command, args) {
 
 export async function openTavernWindow() {
   if (RUNTIME_HOST !== 'desktop') throw new Error('「DSH 酒馆」快捷方式只用于桌面版；命令行版请用 dsh-tavern open。')
-  if (desktopUsesTavern()) throw new Error('桌面版现在就是 DSH 酒馆，直接打开 DeepSeek Harness 即可。想让原版 DSH 和酒馆分成两个窗口，先在桌面版设置里点「原版」。')
+  if (desktopUsesTavern()) throw new Error('桌面版现在就是 DSH 酒馆，直接打开 DeepSeek Harness 即可。想让原版 DSH 和酒馆分成两个窗口，先在桌面版设置里点「原版DSH」。')
   const state = await startService()
   if (!state?.webUrl) throw new Error('酒馆已启动，但还没拿到访问地址，请稍后再点一次快捷方式。')
   const browser = appWindowBrowser()

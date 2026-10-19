@@ -17,8 +17,8 @@ window.__ModuleLoader__.load({
     const NS = 'profileBridge'
 
     const zh = {
-      sectionTavern: '原版',
-      sectionOriginal: '酒馆',
+      sectionTavern: '原版DSH',
+      sectionOriginal: 'DSH酒馆',
       explain: 'DSH 酒馆和原版 DSH 是同一个应用里的两套环境，切换时应用会重启一次，对话和设置都会保留。',
       toOriginal: '切到原版 DSH 并重启',
       toTavern: '切到 DSH 酒馆并重启',
@@ -38,8 +38,8 @@ window.__ModuleLoader__.load({
       why: '桌面版固定读取 profiles/desktop。进入 DSH 酒馆时，会把它链接到 profiles/tavern（Windows 用 junction，macOS/Linux 用符号链接）；原版配置先备份为 desktop.fresh-*，切回原版时恢复。切换需要桌面版先退出：重启走正常退出流程，有任务时会先请你确认，不会强制结束进程。',
     }
     const en = {
-      sectionTavern: 'Original',
-      sectionOriginal: 'Tavern',
+      sectionTavern: 'Original DSH',
+      sectionOriginal: 'DSH Tavern',
       explain: 'DSH Tavern and the original DSH are two setups of the same app. Switching restarts the app once; conversations and settings are kept.',
       toOriginal: 'Switch to original DSH and restart',
       toTavern: 'Switch to DSH Tavern and restart',
