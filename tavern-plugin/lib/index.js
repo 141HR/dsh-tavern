@@ -2658,6 +2658,23 @@ export async function apply(ctx) {
       flush: session => sessionStore.flush(session)
     }
   })
+  // The same import as 「导入聊天记录」, for tools: the page creates the new Session through the
+  // host, here the server creates it (as importGameSave does) and imports into it.
+  async function importChatHistoryText(args) {
+    if (typeof args?.text !== 'string' || !args.text.trim()) throw new Error('缺少聊天记录内容')
+    const cardPath = str(args.cardPath)
+    if (!await readCard(cardPath).catch(() => undefined)) throw new Error('找不到人物卡：' + cardPath)
+    const sessionId = 'session-' + randomUUID(), cwd = path.join(dataRoot, 'resources')
+    const selection = agentDefaultModel?.currentSelection?.() || {}
+    const handle = await ctx.get('agents').create({ sessionId, meta: { cwd, agentPreset: 'tavern' },
+      agentOptions: { provider: selection.provider, model: selection.model } })
+    try {
+      const workspace = await ctx.get('workspaceRegistry')?.resolveByPath(cwd)
+      if (workspace) await workspace.attachSession(sessionId)
+      return await chatHistoryImporter.import({ operationId: randomUUID(), sessionId, cardPath, text: args.text,
+        fileName: str(args.fileName) || 'import.jsonl', ...(args.userName ? { userName: str(args.userName) } : {}) })
+    } finally { await handle.dispose() }
+  }
   async function prepareConversationFork(sourceChatId, sourceSessionId, requestedTurn) {
     const source = str(sourceChatId) === '' ? await chatForSession(str(sourceSessionId)) : await readChat(str(sourceChatId))
     if (!source) throw new Error('找不到要分叉的源对话')
@@ -4928,6 +4945,7 @@ export async function apply(ctx) {
 	  case 'completeTavernHelperEvent': return { completed: tavernScriptHostAdapter.completeEvent(args && args.sessionId, args && args.eventId, args && args.args, args && args.runtimeId, args && args.leaseToken, args && args.error, sanitizeRuntimeDiagnostics(args && args.diagnostics)) }
 	  case 'releaseTavernHelperRuntime': return { released: tavernScriptHostAdapter.releaseRuntime(args && args.sessionId, args && args.runtimeId) }
       case 'previewChatImport': return await chatHistoryImporter.preview(args || {})
+      case 'importChatHistoryText': return await importChatHistoryText(args || {})
       case 'rescueChatHistory': return await chatHistoryImporter.rescue(args || {})
       case 'importChatHistory': return await chatHistoryImporter.import(args || {})
       case 'startChat': {

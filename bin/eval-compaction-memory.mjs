@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // Measure what a game's context compaction kept, without playing it:
 //   node bin/eval-compaction-memory.mjs --chat 吞噬星空 --quiz 测验.json [--home ~/.dsh-tavern] [--compact]
+//   node bin/eval-compaction-memory.mjs --import 聊天记录.jsonl --card 吞噬星空 --compact --quiz 测验.json
+// --import first imports a SillyTavern chat file (see novel-to-chat.mjs) as a new game under
+// the named card, through the running CLI Tavern; the evaluation then uses that game.
 // Reads the game's own session log: every compaction checkpoint, the volumes of its
 // summary (and whether earlier volumes survived later compactions word for word), and for
 // each quiz question whether its answer is still in the model's context — in a summary
@@ -18,13 +21,42 @@ import { storySummaryVolumes } from '../tavern-plugin/lib/domain/story-compactio
 const args = process.argv.slice(2)
 const option = name => { const at = args.indexOf('--' + name); return at >= 0 ? args[at + 1] : undefined }
 const home = path.resolve((option('home') || process.env.DSH_HOME || path.join(os.homedir(), '.dsh')).replace(/^~(?=$|\/)/, os.homedir()))
-const query = option('chat'), quizFile = option('quiz')
-if (!query) {
-  console.error('用法：node bin/eval-compaction-memory.mjs --chat <对话标题或卡名> [--quiz 测验.json] [--home DSH 主目录，默认 ~/.dsh] [--compact]')
+let query = option('chat')
+const quizFile = option('quiz'), importFile = option('import'), cardName = option('card')
+if (!query && !(importFile && cardName)) {
+  console.error('用法：node bin/eval-compaction-memory.mjs (--chat <对话标题或卡名> | --import 聊天记录.jsonl --card <人物卡名>) [--quiz 测验.json] [--home DSH 主目录，默认 ~/.dsh] [--compact]')
   process.exit(1)
 }
 const tavern = path.join(home, 'profile-data', 'tavern')
 const json = file => JSON.parse(readFileSync(file, 'utf8'))
+
+// Calls the running CLI Tavern on this machine, as the page does.
+function rpc(method, payload) {
+  const { port } = json(path.join(home, 'logs', 'tavern.pid.json'))
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload)
+    const req = request({ host: '127.0.0.1', port, method: 'POST', path: '/api/dsh-tavern/' + method, headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } }, res => {
+      let text = ''
+      res.on('data', chunk => { text += chunk }).on('end', () => {
+        let value
+        try { value = JSON.parse(text) } catch { return reject(new Error(method + ' 返回：' + text.slice(0, 300))) }
+        value.ok === false ? reject(new Error(method + ' 失败：' + (value.error || text.slice(0, 300)))) : resolve(value)
+      })
+    })
+    req.on('error', reject)
+    req.end(body)
+  })
+}
+
+if (importFile) {
+  const card = (await rpc('listCards', {})).cards.find(item => item.name === cardName || item.path === cardName)
+  if (!card) throw new Error('找不到人物卡：' + cardName)
+  console.log(`正在导入 ${path.basename(importFile)}（人物卡 ${card.name}）……`)
+  const imported = await rpc('importChatHistoryText', { cardPath: card.path, text: readFileSync(importFile, 'utf8'), fileName: path.basename(importFile) })
+  const linked = json(path.join(tavern, 'data', 'sessions.json'))[imported.sessionId]
+  if (!linked) throw new Error('导入完成但找不到新对话：' + imported.sessionId)
+  query = linked
+}
 
 const chat = (json(path.join(tavern, 'data', 'index.json')).chats || [])
   .filter(row => [row.title, row.cardName, row.id].some(value => String(value || '').includes(query)))
@@ -35,19 +67,9 @@ if (!sessionId) throw new Error('找不到这局对话的会话')
 console.log(`对话：${chat.title || chat.cardName}（${chat.id}），会话 ${sessionId}`)
 
 if (args.includes('--compact')) {
-  const { port } = json(path.join(home, 'logs', 'tavern.pid.json'))
-  console.log(`正在通过 127.0.0.1:${port} 压缩上下文（会调用模型，可能需要几分钟）……`)
-  const result = await new Promise((resolve, reject) => {
-    const body = JSON.stringify({ sessionId })
-    const req = request({ host: '127.0.0.1', port, method: 'POST', path: '/api/dsh-tavern/runCompaction', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } }, res => {
-      let text = ''
-      res.on('data', chunk => { text += chunk }).on('end', () => { try { resolve(JSON.parse(text)) } catch { reject(new Error('压缩接口返回：' + text.slice(0, 300))) } })
-    })
-    req.on('error', reject)
-    req.end(body)
-  })
-  const operation = result.result
-  if (!result.ok || !operation) throw new Error('压缩失败：' + (result.error || JSON.stringify(result).slice(0, 300)))
+  console.log('正在压缩上下文（会调用模型，可能需要几分钟）……')
+  const operation = (await rpc('runCompaction', { sessionId })).result
+  if (!operation) throw new Error('当前对话不支持剧情压缩')
   console.log(`压缩${operation.status === 'completed' ? '完成' : '未完成'}。前台：${operation.foreground?.message}；后台：${operation.background?.message || '无'}`)
 }
 
