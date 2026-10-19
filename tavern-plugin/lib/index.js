@@ -5562,7 +5562,8 @@ export async function apply(ctx) {
       projectMessages: compatibilityMessages
     },
     nativePlay: {
-      historyToolCall: async () => (await readTavernSettings()).storyHistoryToolCall,
+      // History is replayed as calls of the same submission tool, so it follows that switch.
+      historyToolCall: async () => (await readTavernSettings()).storyToolCall,
       systemAppend: () => runtimePrompt('system-append'),
       stagedRequests: runtimePresetSnapshots,
       modeFor: async function (sessionId) { return await turnOrchestrator.modeFor(sessionId) },
