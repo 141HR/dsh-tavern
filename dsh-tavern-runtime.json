@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "6c2a73dc882ff6010e2b3166186f7b09104d4bea",
-  "releaseSequence": 789,
+  "revision": "d3213dec60716bf60ecaaefc82b5ae8fc88e5d96",
+  "releaseSequence": 790,
   "version": "3.0.1",
   "files": [
     {
@@ -1366,8 +1366,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/mvu-background-settlement.js",
-      "sha256": "3816584da44bd4395628da2e5f62b302b3f8d76db430bce752d16319e42a6934",
-      "size": 38033
+      "sha256": "6c5f11503bf39373d7cad39c2fa62c102b5d907606892b5039384f7dbc78e127",
+      "size": 37972
     },
     {
       "path": "tavern-plugin/lib/domain/mvu-card-apply.js",
@@ -2196,8 +2196,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/tavern-script-host-adapter.js",
-      "sha256": "58398e73406b37239d2f2dd957ce4617f7e416f930a056efb12023bf9d8afde6",
-      "size": 62925
+      "sha256": "a1023fc08afdcce945f8c49065839024326a4ec1d21f9a8ae6649c27d5ea357a",
+      "size": 62889
     },
     {
       "path": "tavern-plugin/lib/domain/tavern-script-prompts.js",
@@ -2436,8 +2436,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "06932c2c15da602c7aab1558971cb649a85df228f4e2c006fb81ff9f7a49abc3",
-      "size": 385479
+      "sha256": "d03ea662adb48d34833de50a17137b4383388a9e80baa58f7dfdaa715fe387f1",
+      "size": 385436
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
