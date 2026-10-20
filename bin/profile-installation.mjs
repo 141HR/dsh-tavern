@@ -303,12 +303,11 @@ async function installProfileOwned(host, { attemptId, runInstall, runDsh }) {
     for (const dependency of hostDependencies) console.log(`复用当前 DSH 依赖：${dependency.name} ${dependency.version}`)
 
     // 首装内置固定版本的剧情生图插件：只读发行包里随附的副本，全程不联网、不拉 latest。
-    // 已装版本不低于内置版本时跳过（不覆盖、不降级）；复制是逐文件覆盖，用户自己的配置与数据不动。
+    // 目标插件目录只要已存在就跳过（包括旧版和残缺目录）；插件更新由用户自行操作。
     // 失败不阻断 Tavern 安装 —— 插件装不上只是少了接管方，Tavern 本身照常可用。
     try {
       const bundledPlugin = installBundledSceneImagePlugin({ sourceRoot: SOURCE_ROOT, dataRoot, profileDir: PROFILE_DIR })
       if (bundledPlugin.action === 'installed') console.log(`已内置剧情生图插件 ${bundledPlugin.version}：${bundledPlugin.target}`)
-      else if (bundledPlugin.action === 'upgraded') console.log(`已内置剧情生图插件升级到 ${bundledPlugin.version}（保留原有数据）：${bundledPlugin.target}`)
       else console.log(`内置剧情生图插件：${bundledPlugin.reason || bundledPlugin.action}`)
     } catch (error) {
       console.warn('[Tavern 插件] 内置剧情生图插件安装失败（不影响 Tavern 使用）：' + (error?.message || error))

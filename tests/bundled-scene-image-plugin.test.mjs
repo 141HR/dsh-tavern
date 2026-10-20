@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, mkdtempSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, mkdtempSync, symlinkSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import test from 'node:test'
 import {
   BUNDLED_SCENE_IMAGE_FOLDER,
@@ -27,7 +28,7 @@ function makeSource(t, version = '2.8.0') {
   writeFileSync(path.join(dir, 'cordis.patch.yml'), '[]\n')
   writeFileSync(path.join(dir, 'lib', 'index.js'), 'export const bundled = true\n')
   writeFileSync(path.join(dir, 'client.js'), '// client\n')
-  writeFileSync(path.join(dir, 'BUNDLED-VERSION.json'), JSON.stringify({ version }))
+  writeFileSync(path.join(dir, 'BUNDLED-VERSION.json'), JSON.stringify({ name: 'dsh-tavern-comfy', version }))
   return { root, dir }
 }
 
@@ -86,7 +87,7 @@ test('重复安装同版本：跳过，不重写文件', t => {
   assert.match(readFileSync(marker, 'utf8'), /handwritten/)
 })
 
-test('已装更高版本：不降级', t => {
+test('已存在的较新插件目录：完整保留', t => {
   const source = makeSource(t, '2.8.0')
   const data = makeData(t)
   const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
@@ -98,7 +99,7 @@ test('已装更高版本：不降级', t => {
   assert.equal(JSON.parse(readFileSync(path.join(target, 'package.json'), 'utf8')).version, '9.0.0')
 })
 
-test('已装更低版本：就地升级，但用户数据一个都不动', t => {
+test('已存在的旧版插件目录：不升级、不覆盖用户数据', t => {
   const source = makeSource(t, '2.8.0')
   const data = makeData(t)
   const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
@@ -114,8 +115,8 @@ test('已装更低版本：就地升级，但用户数据一个都不动', t => 
   for (const [name, body] of Object.entries(userFiles)) writeFileSync(path.join(target, name), body)
 
   const r = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet })
-  assert.equal(r.action, 'upgraded')
-  assert.equal(JSON.parse(readFileSync(path.join(target, 'package.json'), 'utf8')).version, '2.8.0')
+  assert.equal(r.action, 'skipped')
+  assert.equal(JSON.parse(readFileSync(path.join(target, 'package.json'), 'utf8')).version, '2.7.0')
   for (const [name, body] of Object.entries(userFiles)) {
     assert.equal(readFileSync(path.join(target, name), 'utf8'), body, 'user data changed: ' + name)
   }
@@ -135,10 +136,101 @@ test('profile 已装同名包：跳过，避免同一包两个来源', t => {
   assert.equal(existsSync(path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)), false)
 })
 
-test('readBundledSceneImage 回报版本与契约；缺契约不阻止读取（由安装器校验）', t => {
+test('readBundledSceneImage 校验版本标记、包名和委派契约', t => {
   const source = makeSource(t, '2.8.3')
   const info = readBundledSceneImage(source.root)
   assert.equal(info.ok, true)
   assert.equal(info.version, '2.8.3')
   assert.equal(info.contract, 'delegate')
+  writeFileSync(path.join(source.dir, 'BUNDLED-VERSION.json'), JSON.stringify({ name: 'dsh-tavern-comfy', version: '9.0.0' }))
+  assert.equal(readBundledSceneImage(source.root).ok, false)
+  writeFileSync(path.join(source.dir, 'BUNDLED-VERSION.json'), JSON.stringify({ name: 'wrong-name', version: '2.8.3' }))
+  assert.equal(readBundledSceneImage(source.root).ok, false)
+  writeFileSync(path.join(source.dir, 'BUNDLED-VERSION.json'), JSON.stringify({ name: 'dsh-tavern-comfy', version: '2.8.3' }))
+  writeFileSync(path.join(source.dir, 'package.json'), JSON.stringify({ name: 'dsh-tavern-comfy', version: '2.8.3', main: './lib/index.js' }))
+  assert.equal(readBundledSceneImage(source.root).ok, false)
+})
+
+test('已存在残缺目录或符号链接：跳过且不触碰目标', t => {
+  const source = makeSource(t)
+  const data = makeData(t)
+  const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
+  mkdirSync(target)
+  writeFileSync(path.join(target, 'keep.txt'), 'user data')
+  assert.equal(installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet }).action, 'skipped')
+  assert.equal(readFileSync(path.join(target, 'keep.txt'), 'utf8'), 'user data')
+
+  const other = makeData(t)
+  const linkedTarget = path.join(other, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
+  const outside = path.join(other, 'outside')
+  mkdirSync(outside)
+  writeFileSync(path.join(outside, 'keep.txt'), 'linked data')
+  symlinkSync(outside, linkedTarget, process.platform === 'win32' ? 'junction' : 'dir')
+  assert.equal(installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: other, logger: quiet }).action, 'skipped')
+  assert.equal(readFileSync(path.join(outside, 'keep.txt'), 'utf8'), 'linked data')
+})
+
+test('已存在版本未知的插件目录：不尝试修复或覆盖', t => {
+  const source = makeSource(t)
+  const data = makeData(t)
+  const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
+  mkdirSync(target)
+  writeFileSync(path.join(target, 'package.json'), '{ invalid json')
+  writeFileSync(path.join(target, 'config.json'), '{"apiKey":"keep"}')
+  const r = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet })
+  assert.equal(r.action, 'skipped')
+  assert.equal(readFileSync(path.join(target, 'package.json'), 'utf8'), '{ invalid json')
+  assert.equal(readFileSync(path.join(target, 'config.json'), 'utf8'), '{"apiKey":"keep"}')
+})
+
+test('复制遇到内置符号链接失败时清理临时目录且目标仍不存在', t => {
+  const source = makeSource(t)
+  const linkedDirectory = path.join(source.root, 'linked-source')
+  mkdirSync(linkedDirectory)
+  symlinkSync(linkedDirectory, path.join(source.dir, 'linked-directory'), process.platform === 'win32' ? 'junction' : 'dir')
+  const data = makeData(t)
+  assert.throws(() => installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet }), /符号链接/)
+  assert.equal(existsSync(path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)), false)
+  assert.deepEqual(readdirSync(path.join(data, 'plugins')), [])
+})
+
+test('真实发行副本：完整安装、入口可加载且默认不创建私有配置', async t => {
+  const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+  const bundled = path.join(sourceRoot, 'tavern-plugin', 'packages', 'dsh-tavern-image-bundled')
+  const marker = JSON.parse(readFileSync(path.join(bundled, 'BUNDLED-VERSION.json'), 'utf8'))
+  const info = readBundledSceneImage(sourceRoot)
+  assert.equal(info.ok, true, info.reason)
+  assert.equal(info.packageName, marker.name)
+  assert.equal(info.version, marker.version)
+
+  const data = makeData(t)
+  const result = installBundledSceneImagePlugin({ sourceRoot, dataRoot: data, logger: quiet })
+  assert.equal(result.action, 'installed')
+  assert.equal(result.version, marker.version)
+  const installed = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
+  const pkg = JSON.parse(readFileSync(path.join(installed, 'package.json'), 'utf8'))
+  assert.equal(pkg.name, marker.name)
+  assert.equal(pkg.version, marker.version)
+  assert.equal(pkg.dsh.tavern.sceneImages, 'delegate')
+  assert.equal(existsSync(path.join(installed, 'config.json')), false)
+  assert.equal(existsSync(path.join(installed, 'BUNDLED-VERSION.json')), false)
+
+  function countInstalledFiles(directory) {
+    return readdirSync(directory, { withFileTypes: true }).reduce((count, entry) => {
+      if (entry.name === 'node_modules') return count
+      const entryPath = path.join(directory, entry.name)
+      return count + (entry.isDirectory() ? countInstalledFiles(entryPath) : 1)
+    }, 0)
+  }
+  assert.equal(result.files, countInstalledFiles(installed))
+  const entry = await import(pathToFileURL(path.join(installed, 'lib', 'index.js')).href)
+  assert.equal(entry.name, 'dsh-tavern-image')
+  assert.equal(typeof entry.apply, 'function')
+
+  const configPath = path.join(installed, 'config.json')
+  const userConfig = '{"imageChannels":[],"private":"preserve-me"}\n'
+  writeFileSync(configPath, userConfig)
+  const repeated = installBundledSceneImagePlugin({ sourceRoot, dataRoot: data, logger: quiet })
+  assert.equal(repeated.action, 'skipped')
+  assert.equal(readFileSync(configPath, 'utf8'), userConfig)
 })
