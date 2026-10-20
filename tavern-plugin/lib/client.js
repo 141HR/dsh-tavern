@@ -13561,7 +13561,11 @@ function bindTavernFontZoom(node, win) {
 		function TavernScriptLayerPart(props) {
 			const native = React.useRef(null), layer = React.useRef(null);
 			React.useLayoutEffect(function () {
-				return mountTavernScriptLayer({ native: native.current, layer: layer.current, sessionId: props.layer.sessionId, messageId: props.layer.messageId });
+				const unmount = mountTavernScriptLayer({ native: native.current, layer: layer.current, sessionId: props.layer.sessionId, messageId: props.layer.messageId });
+				// Once a card script takes the layer over, the native prose (and its quote colors) is hidden;
+				// the layer is a copy of plain DOM and needs its own (#305). A hidden layer yields no ranges.
+				const colors = installTavernTextColors(layer.current, {}, findTavernQuoteRanges);
+				return function () { colors.dispose(); unmount(); };
 			}, [props.layer.sessionId, props.layer.messageId, props.partIndex, props.text]);
 			// Visibility is toggled by the layer itself; React never sets `hidden` here.
 			return React.createElement("div", { className: "dsh-tavern-script-part" },
