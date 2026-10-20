@@ -955,10 +955,12 @@ function asarRead(archive, relative, contents) {
     return data.toString('utf8');
   } catch { return null; } finally { fs.closeSync(fd); }
 }
-// Split a path at the archive that contains it; null when it is not inside one.
+// Split a path at the archive that contains it; null when it is not inside one. A directory named
+// *.asar is not told apart here: exists() finds its files directly, and asarRead fails on it.
+// (A trailing-separator check does not work: on Windows "app.asar\\" exists for the file too.)
 function inAsar(file) {
   const match = /^(.*?\.asar)[\\/](.+)$/.exec(file);
-  return match && !fs.existsSync(match[1] + path.sep) ? { archive: match[1], relative: match[2] } : null;
+  return match ? { archive: match[1], relative: match[2] } : null;
 }
 // A file the runner can load: on disk, or inside app.asar (readable under Electron only).
 function exists(file) {

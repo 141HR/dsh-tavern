@@ -133,3 +133,22 @@ test('DSH NEXT 2.0.19：宿主在 app.asar 里，安装代码与 dsh 用 Electro
   const pnpm = await readFile(path.join(root, 'home/tools/official-desktop/bin/pnpm.cmd'), 'utf8')
   assert.match(pnpm, /%DSH_DESKTOP_PNPM_RUNNER%/)
 })
+
+test('DSH NEXT 2.0.19 Windows 发行版：没有 resources/app，Node 在 bin 下；Windows 上 "app.asar\\" 对文件也存在', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-next-win-'))
+  t.after(() => rm(root, {recursive: true, force: true}))
+  const executable = path.join(root, 'DSH NEXT.exe')
+  const resources = path.join(root, 'resources')
+  await mkdir(resources, {recursive: true})
+  await writeFile(path.join(resources, 'app.asar'), asar({'package.json': JSON.stringify({name: 'dsh-desktop-next'}), 'lib/desktop-cli.js': ''}))
+  const deps = path.join(resources, 'runtime', 'x64', 'primary-runtime', 'dependencies')
+  await mkdir(path.join(deps, 'node', 'bin'), {recursive: true}); await writeFile(path.join(deps, 'node', 'bin', 'node.exe'), '')
+  await mkdir(path.join(deps, 'pnpm', 'bin'), {recursive: true}); await writeFile(path.join(deps, 'pnpm', 'bin', 'pnpm.mjs'), '')
+  // Windows path handling ignores a trailing separator, so the archive file also "exists" as "app.asar\".
+  const fs = (await import('node:fs')).default, existsSync = fs.existsSync
+  fs.existsSync = file => existsSync(String(file).replace(/[\\/]+$/, ''))
+  t.after(() => { fs.existsSync = existsSync })
+  const env = runtime.prepare({executable, home: path.join(root, 'home'), platform: 'win32', env: {Path: 'p'}})
+  assert.equal(env.DSH_DESKTOP_DSH_BOOTSTRAP, path.join(resources, 'app.asar', 'lib', 'desktop-cli.js'))
+  assert.equal(env.DSH_DESKTOP_PNPM_RUNNER, path.join(deps, 'node', 'bin', 'node.exe'))
+})
