@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
+import { resolve as resolvePath } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import { createPluginMedia, pluginMediaRange, pluginMediaSession, slicePluginMediaStream, pluginFileMediaType } from '../tavern-plugin/lib/domain/plugin-media.js'
@@ -1092,7 +1093,7 @@ test('skillSource：插件登记自己的 Skill 目录，卸载时撤销；卡�
   } })
   await h.root.plugin({ name: 'card-own', inject: ['tavern'], apply(ctx) { ctx.tavern.skillSource({ dir: '/plugins/own/skills' }) } })
   await tick()
-  assert.deepEqual(roots, [{ owner: 'director', dir: '/plugins/director/skills', role: 'background' }])
+  assert.deepEqual(roots, [{ owner: 'director', dir: resolvePath('/plugins/director/skills'), role: 'background' }])
   await fiber.dispose()
   assert.deepEqual(roots, [])
 })
