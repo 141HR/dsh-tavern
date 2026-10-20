@@ -327,6 +327,6 @@ export const extraPages = [{ id: "local-settings", title: "本局设置", group:
   { id: 'dshcard-guide', title: 'DSH 人物卡制作', group: 'dshcard', intro: '把人物卡、素材、卡内插件和推荐预设装进一个 .dshcard 文件：格式、示例卡和打包调试。', content: developerDoc('dshcard-guide.md') },
   { id: 'dshcard-tutorial', title: 'DSH 人物卡开发实例：大肥鱼', group: 'dshcard', intro: '以大肥鱼样板卡为例，按动手顺序讲：卡片结构、各部分作用、卡内插件怎么挂到舞台、打包导入和调试。', content: developerDoc('dshcard-tutorial.md') },
   { id: 'plugin-recipes', title: '插件开发：常见用法', group: 'plugins', intro: '按要做的插件找写法：配图、记忆、读变量、后台推演、接管结算。', content: developerDoc('plugin-recipes.md') },
-  { id: 'plugin-publishing', title: '插件开发：发布与一键安装', group: 'plugins', intro: '怎样发布，别人才能在设置里粘贴地址一键安装：仓库结构、依赖、版本与 README 写法。', content: developerDoc('plugin-publishing.md') },
+  { id: 'plugin-publishing', title: '插件开发：发布与一键安装', group: 'plugins', intro: '把插件放到 GitHub 上，别人就能在设置里粘贴地址一键安装。这里讲仓库怎么放、发布前查什么、怎么发新版本。', content: developerDoc('plugin-publishing.md') },
   { id: 'plugin-api', title: '插件开发：接口参考', group: 'plugins', intro: '第三方插件可用的 Tavern 接口，逐个说明。', content: developerDoc('plugin-api.md') }
 ]
