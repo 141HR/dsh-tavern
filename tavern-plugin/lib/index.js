@@ -2940,6 +2940,8 @@ export async function apply(ctx) {
         .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 世界书预筛失败，下一轮按关键词与预算注入:', str(error?.message || error)) })
       if ((chat.mode || 'story') !== 'story' || chat.backgroundTasks?.styleReference !== true) return
       signal.throwIfAborted()
+      // Switched on for a game whose session is not loaded yet (e.g. just imported): load it first.
+      if (!agentRegistry.get(chat.sessionId)?.session) await agentRegistry.resume({ resumeSessionId: chat.sessionId })
       await styleReferenceRecall({ chat: await storyContext({ chatId }), signal })
         .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 文风参考失败，下一轮不带参考:', str(error?.message || error)) })
     }
