@@ -160,9 +160,10 @@ export function createConversationInitialization(options) {
     chat.macroState = macroState
     // Card-bound card sessions, including the edit task, keep the card Agent persona
     // and receive the foreground card + constant-worldbook snapshot, frozen at start.
+    // Play sessions keep no world book copy: they read the library, so an edit to
+    // the book or the card takes effect in games that are already running.
     // Sessions created by the retired edit experiment keep their cardEditContext.
     if (chatMode === 'card' && card !== null) chat.cardReferenceContext = { version: 1 }
-    if (preparation && groupOfMode(chatMode) === 'play') chat.openingWorldbookSnapshot = structuredClone(preparation.worldbookSnapshot)
     // The sidebar setting is the sole opt-in; opening previews and legacy clients cannot override it.
     const selectedProfile = options.userPreferenceProfile
       ? await options.userPreferenceProfile.read()
@@ -191,7 +192,13 @@ export function createConversationInitialization(options) {
         status: 'pending'
       }
     } : { enabled: false }
-    await trace.stage('snapshot', () => snapshots.prepare(chat, card))
+    // The opening draft already projected this book; rebuilding the prefix from
+    // that projection avoids a second read and inspect of the same document.
+    // New games keep no copy: they follow the library, so an edit takes effect.
+    const preparedBook = preparation && groupOfMode(chatMode) === 'play'
+      ? (preparation.worldbook || null)
+      : undefined
+    await trace.stage('snapshot', () => snapshots.prepare(chat, card, preparedBook))
     chat.openingText = greeting
     chat.presentationWarnings = openingProjection.warnings
     if (chat.mode === 'script') {
@@ -250,7 +257,7 @@ export function createConversationInitialization(options) {
     if (openingTarget && defaultModel) await trace.stage('selectModel', () => native.selectModel(openingTarget, defaultModel))
     await trace.stage('publish', () => chats.publish(chat))
     if (hasSession) await trace.stage('nativeAppend', () => appendNativeOpening(sessionId, chat, card, openingTarget))
-    return await trace.stage('present', () => present(chat, card))
+    return await trace.stage('present', () => present(chat, card, preparedBook === undefined ? undefined : { worldBook: preparedBook, freshSnapshot: true }))
   }
 
 

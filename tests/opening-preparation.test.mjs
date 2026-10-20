@@ -99,7 +99,10 @@ test('普通开场白只取草稿 id，需要时才生成整份展示投影', as
   assert.equal(presented.worldbook.entries[0].content, '世界书正文')
   const resolved = service.resolve(begun.id, 'card', '')
   assert.equal(resolved.openingId, presented.openingId)
-  assert.equal(resolved.worldbookSnapshot.document.entries[0].content, '世界书正文')
+  // No per-game copy: the start path gets the projection and copies nothing.
+  assert.equal(resolved.worldbookSnapshot, undefined)
+  assert.equal(resolved.worldbook.document.entries[0].content, '世界书正文')
+  assert.equal(resolved.worldbook.view.entries[0].content, '世界书正文')
   const created = await service.create('card')
   assert.equal(created.worldbook.entries[0].content, presented.worldbook.entries[0].content)
   await assert.rejects(() => service.begin('missing'), /人物卡不存在/)

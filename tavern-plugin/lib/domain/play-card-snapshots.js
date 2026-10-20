@@ -61,11 +61,18 @@ export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeCh
   }
 
   // A new chat is not published yet; preparation must not create a partial save.
-  async function prepare(chat, card) {
+  // `preparedBook` is the opening draft's own projection: the start path just
+  // read and inspected that document, so it must not be resolved a second time.
+  async function prepare(chat, card, preparedBook) {
     if (!usesFixedContext(chat)) return ''
-    const patch = await build(chat, preferenceOnly(chat) ? null : card === undefined ? await readCard(chat) : card)
+    const patch = await build(chat, preferenceOnly(chat) ? null : card === undefined ? await readCard(chat) : card, false, preparedBook)
     Object.assign(chat, patch)
     return patch.cardContextSnapshot
+  }
+
+  /** A game that follows the library has no world book to update or synchronize. */
+  function libraryBoundStatus(chat, card) {
+    return { ...cardStatusBase(chat, card), available: false, worldbookChanged: false, worldbookSyncRequired: false, digest: '' }
   }
 
   /** The stored snapshot when ensure() would neither rebuild nor rewrite it. */
@@ -281,5 +288,5 @@ export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeCh
     }
   }
 
-  return Object.freeze({ prepare, ensure, settled, constantContext, updateStatus, autoSync, replacement, preferenceReplacement })
+  return Object.freeze({ prepare, ensure, settled, constantContext, updateStatus, libraryBoundStatus, autoSync, replacement, preferenceReplacement })
 }

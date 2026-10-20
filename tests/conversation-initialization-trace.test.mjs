@@ -7,13 +7,13 @@ const card = { name: '测试角色', first_mes: '开始的第一句正文', alte
 const requestId = '00000000-0000-0000-0000-000000000001'
 
 function build(trace) {
-  const published = []
+  const published = [], prepared = []
   const initialization = createConversationInitialization({
     id: prefix => prefix + '-1',
     cards: { read: async () => card, script: async () => undefined, extensions: async () => ({ regexScripts: [] }), startDefaults: async () => null },
     chats: { resolve: async () => undefined, publish: async chat => { published.push(chat) }, write: async chat => chat },
     timeline: { apply: ({ chat }) => ({ chat }) },
-    snapshots: { prepare: async () => '', ensure: async () => '' },
+    snapshots: { prepare: async (chat, card, book) => { prepared.push(book); return '' }, ensure: async () => '' },
     presets: { fullSnapshot: async () => ({ presetPath: 'play', regexScripts: [] }), claimPreparedFullSnapshot: async () => undefined },
     settings: async () => ({ defaultPlaySettings: {} }),
     emptyCardWorkspace: () => ({}),
@@ -22,7 +22,7 @@ function build(trace) {
     present: async () => ({ presented: true }),
     trace
   })
-  return { initialization, published }
+  return { initialization, published, prepared }
 }
 
 test('新开局的分段计时覆盖每个耗时步骤且不记录正文', async () => {
@@ -42,4 +42,23 @@ test('新开局的分段计时覆盖每个耗时步骤且不记录正文', async
 test('缺少计时器时开局照常工作', async () => {
   const { initialization } = build(undefined)
   assert.equal((await initialization.start({ cardPath: 'card.json', sessionId: '', mode: 'story' })).presented, true)
+})
+
+test('新开局不把世界书复制进对话，直接使用开局草稿的投影', async () => {
+  const trace = createRequestPerformance()
+  const { initialization, published, prepared } = build(trace)
+  const worldbook = { source: { kind: 'standalone', path: 'worldbooks/书.json' }, document: { entries: {} }, view: { entries: [] } }
+  const preparation = { openingId: 'primary', openingMessages: {}, openingVariables: {}, variables: {}, messageVariables: {}, worldbook }
+  await trace.run('startChat', requestId, () => initialization.start({ cardPath: 'card.json', sessionId: '', mode: 'story', preparation }))
+  assert.equal(published.length, 1)
+  assert.equal(published[0].openingWorldbookSnapshot, undefined)
+  assert.equal(published[0].worldbookLibraryDigest, undefined)
+  assert.equal(prepared[0], worldbook)
+})
+
+test('没有绑定世界书时不会退回读库', async () => {
+  const trace = createRequestPerformance()
+  const { initialization, prepared } = build(trace)
+  await trace.run('startChat', requestId, () => initialization.start({ cardPath: 'card.json', sessionId: '', mode: 'story', preparation: { openingId: 'primary', worldbook: null } }))
+  assert.equal(prepared[0], null)
 })

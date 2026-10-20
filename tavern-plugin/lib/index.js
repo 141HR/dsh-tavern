@@ -2181,14 +2181,19 @@ export async function apply(ctx) {
   // lets a library edit enter this game without the explicit reload button.
   async function cardUpdateStatus(chat, context = {}) {
     try {
-      const card = await readCard(chat.cardPath)
+      // A snapshot taken in this request, or a game that keeps no copy at all,
+      // cannot have a world book update to offer: the game already follows it.
+      if (context.fresh === true || chat.openingWorldbookSnapshot?.version !== 1) return playCardSnapshots.libraryBoundStatus(chat, context.card)
+      const card = context.card ?? await readCard(chat.cardPath)
       const synced = context.busy === true ? null
         : await playCardSnapshots.autoSync(chat, card, { settings: context.settings })
       // One library read now serves both the automatic refresh and the badge.
       return await playCardSnapshots.updateStatus(chat, card, synced?.observed)
     } catch (error) { return {available:true,error:String(error.message || error)} }
   }
-  const liveCardUpdate = createLiveCardUpdate({readGlobals:readPromptTemplateGlobalVariables})
+  const liveCardUpdate = createLiveCardUpdate({readGlobals:readPromptTemplateGlobalVariables,
+    // Games without their own copy still preview against the book they play with.
+    readWorldBook: (chat, card) => worldBooks.bound(chat.cardPath, card, chat)})
   ctx.effect(() => () => liveCardUpdate.dispose())
   const inputFieldsProjection = createInputFieldsProjection()
   const incrementalReplyView = createIncrementalReplyView({ readChanges: (id, revision) => chatPersistence.readChangedSlice(id, revision, 'settlement') })
@@ -2245,7 +2250,7 @@ export async function apply(ctx) {
     const forkTurnsByMessageId = forkTurnsForChat(chat)
     const {inputSources,inputTemplateDisplays}=inputFieldsProjection.project(persistedProjection ? chat : {...chat,_storageRevision:undefined}, options.inputChanges)
     const cardUpdate = ['story', 'script'].includes(chat.mode || 'story') && chat.requestMode !== 'sillytavern'
-      ? await cardUpdateStatus(chat, { busy: activity.busy || ['pending', 'running', 'waiting-runtime'].includes(chat.settleStatus)
+      ? await cardUpdateStatus(chat, { card, fresh: options.freshSnapshot === true, busy: activity.busy || ['pending', 'running', 'waiting-runtime'].includes(chat.settleStatus)
         || agentRegistry.get(chat.sessionId)?.phase?.kind === 'running', settings: runtimeSettings })
       : { available: false }
     const helperEnabled = hasTavernScriptRuntime(chat, cardExtensions.helperScripts)
@@ -2261,6 +2266,10 @@ export async function apply(ctx) {
           helperWorldbook = document === null ? null : {
             name: worldBookDisplayName(document), resourceAccess: sessionResources.issue(chat.id, resourceRevision, 'worldbook')
           }
+        } else if (options.worldBook !== undefined) {
+          // The start path already holds this projection; re-resolving the same
+          // document here would copy and inspect it again for nothing.
+          helperWorldbook = options.worldBook === null ? null : projectTavernHelperWorldbook(options.worldBook.view)
         } else {
           const record = await worldBooks.bound(chat.cardPath, card, chat)
           if (record !== null) helperWorldbook = projectTavernHelperWorldbook(record.view)
@@ -2409,10 +2418,14 @@ export async function apply(ctx) {
   async function startChat(cardPath, sessionId, mode, openingId, userName, requestMode, preparationId, cardTask) {
     // Plain greetings have no interactive preview draft, but need the same
     // game-local worldbook snapshot as scripted openings.
-    if (!preparationId && groupOfMode(mode || 'story') === 'play') {
+    const ownsDraft = !preparationId
+    if (ownsDraft && groupOfMode(mode || 'story') === 'play') {
       preparationId = (await requestPerformance.stage('openingDraft', () => openingPreparation.begin(cardPath, { userName }))).id
     }
-    const preparation = preparationId ? openingPreparation.resolve(preparationId, cardPath, openingId) : undefined
+    let preparation
+    try { preparation = preparationId ? openingPreparation.resolve(preparationId, cardPath, openingId) : undefined }
+    // The draft keeps the whole resolved book; a plain start never reads it again.
+    finally { if (ownsDraft && preparationId) openingPreparation.release(preparationId) }
     if (preparation?.sourceSessionId) {
       const source = await chatForSession(preparation.sourceSessionId)
       if (!source || !sessionOpeningDescriptor(source, await readChatCard(source)) || Number(source.tavernHelperLifecycleRevision || 0) !== preparation.sourceLifecycleRevision) throw new Error('原对话已变化，请重新选择开场')
@@ -2655,8 +2668,8 @@ export async function apply(ctx) {
         await sessionStore.flush(target.session)
       }
     },
-    present: async function (chat, card) {
-      const result = await view(chat, card)
+    present: async function (chat, card, options) {
+      const result = await view(chat, card, false, options)
       if (chat.mode === 'card') result.workspace = workspaceViewOf(chat)
       return result
     }

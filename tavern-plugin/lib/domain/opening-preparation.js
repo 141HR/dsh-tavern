@@ -1,5 +1,4 @@
 import { parseOpeningCommand } from './opening-command.js'
-import { worldbookContentDigest } from './worldbook-version.js'
 import { projectFullPromptTemplateState, applyFullPromptTemplateState } from './full-prompt-template-state.js'
 import { projectTavernHelperScripts } from './tavern-helper-scripts.js'
 import { mutateScriptPrompts } from './tavern-script-prompts.js'
@@ -50,9 +49,10 @@ export function createOpeningPreparation({ readCard, worldBooks, generate, gener
     if (!card) throw new Error('人物卡不存在')
     const record = await trace.stage('prepWorldbook', () => worldBooks.bound(cardPath, card, settings.sourceChat))
     const draft = { id: randomUUID(), cardPath, openings: cardOpeningChoices(card),
-      document: record ? copy(record.view.raw) : null, source: record ? copy(record.source) : null, touchedAt: now() }
-    draft.libraryDigest = settings.sourceChat?.worldbookLibraryDigest ?? settings.sourceChat?.openingWorldbookSnapshot?.libraryDigest
-      ?? (settings.sourceChat?.openingWorldbookSnapshot ? undefined : worldbookContentDigest(record))
+      // inspect() already owns an independent copy of the document, and every
+      // edit path clones before writing, so the draft can use it directly.
+      document: record ? record.view.raw : null, source: record ? copy(record.source) : null,
+      worldBookView: record ? record.view : null, touchedAt: now() }
     draft.sourceSessionId = settings.sourceChat?.sessionId || ''
     draft.presetSnapshot = settings.sourceChat ? copy(settings.sourceChat.runtimePresetSnapshot || null) : undefined
     draft.sourceLifecycleRevision = Number(settings.sourceChat?.tavernHelperLifecycleRevision) || 0
@@ -189,7 +189,9 @@ export function createOpeningPreparation({ readCard, worldBooks, generate, gener
         throw new Error('世界书已被其他操作修改，请重新读取后重试')
       }
       const operations = replaceTavernHelperWorldbookOperations(view, entries)
-      draft.document = updateWorldBookDocument(draft.document, { operations }).document
+      const updated = updateWorldBookDocument(draft.document, { operations })
+      draft.document = updated.document
+      draft.worldBookView = updated.view
       return present(draft)
     },
     resolve(id, cardPath, openingId) {
@@ -200,7 +202,13 @@ export function createOpeningPreparation({ readCard, worldBooks, generate, gener
       const selected = openingId || draft.openings[0]?.id || ''
       const selectedIndex = draft.openings.findIndex(opening => opening.id === selected)
       if (selectedIndex < 0 && selected !== '') throw new Error('人物卡开场白不存在')
-      return copy({ startCommand: draft.startCommand?.openingId === selected ? draft.startCommand : undefined, openingMessages: Object.fromEntries(draft.openings.map((opening,index)=>[opening.id,draft.chat.messages[0]?.swipes?.[index] ?? opening.text])), openingVariables: Object.fromEntries(draft.openings.map((opening, index) => [opening.id, draft.chat.messages[0]?.variables?.[index] || {}])), variables: draft.chat.variables || {}, messageVariables: draft.chat.messages[0]?.variables?.[selectedIndex] || {}, openingId: selected, sourceSessionId: draft.sourceSessionId, sourceLifecycleRevision: draft.sourceLifecycleRevision, worldbookSnapshot: { version: 1, libraryDigest: draft.libraryDigest, source: draft.source, document: draft.document } })
+      // Nothing is cloned here: the start path clones the variables it installs
+      // and takes ownership of the document, so copying the whole world book a
+      // second and third time only duplicated a multi-megabyte read.
+      return { startCommand: draft.startCommand?.openingId === selected ? draft.startCommand : undefined, openingMessages: Object.fromEntries(draft.openings.map((opening,index)=>[opening.id,draft.chat.messages[0]?.swipes?.[index] ?? opening.text])), openingVariables: Object.fromEntries(draft.openings.map((opening, index) => [opening.id, draft.chat.messages[0]?.variables?.[index] || {}])), variables: draft.chat.variables || {}, messageVariables: draft.chat.messages[0]?.variables?.[selectedIndex] || {}, openingId: selected, sourceSessionId: draft.sourceSessionId, sourceLifecycleRevision: draft.sourceLifecycleRevision,
+        // The projection this game starts from. Nothing is copied into the chat:
+        // the game follows the library, so a later edit takes effect.
+        worldbook: draft.worldBookView ? { source: draft.source, document: draft.document, view: draft.worldBookView } : null }
     }
   }
 }
