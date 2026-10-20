@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "4a8d572e7ba36ec99365dd295450278c817c168e",
-  "releaseSequence": 787,
+  "revision": "aa1a196c3b5b8b7024faeafb96e2b7efa0858af6",
+  "releaseSequence": 788,
   "version": "3.0.1",
   "files": [
     {
@@ -616,13 +616,13 @@
     },
     {
       "path": "tavern-plugin/lib/client-assets/tavern.css",
-      "sha256": "0fa111de4e89f850337ecd6786ae7cab3a8fa550432240e17330aca6ed4bf068",
-      "size": 306715
+      "sha256": "41bcef9b348d3f0278554ffdaf6078270b5f0a01d42ca63935115fdab5cd0761",
+      "size": 307525
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "1dd8e3d19167517bb888301bd624cc23799af775af1dd7a2c44464f4cf3c30e7",
-      "size": 1992331
+      "sha256": "15ffb404cec2aec518400b51bbe4009f2b8e8b62912141494f68485fb61f426a",
+      "size": 1997051
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -2271,13 +2271,13 @@
     },
     {
       "path": "tavern-plugin/lib/domain/user-plugin-install.js",
-      "sha256": "7f7f675ea78eb36d74f3a98dbc70172fb70d56f2828483bce49edf2e038c9f52",
-      "size": 11656
+      "sha256": "35689517fc4231a8c03943fa8516ec760d1e3150a9613e854db7117c2d0c3fa1",
+      "size": 19566
     },
     {
       "path": "tavern-plugin/lib/domain/user-plugins.js",
-      "sha256": "55e8febe008a146e5686fd39d139a1eb99a875f91358a1c55d6fa4cdddd5a652",
-      "size": 11509
+      "sha256": "0fd78522d34624a2df44db9b00ef52846271fa6d06ce47dcf7d405fe5b75cac7",
+      "size": 12228
     },
     {
       "path": "tavern-plugin/lib/domain/user-preference-profile.js",
@@ -2421,8 +2421,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "2289db17ea34900b6d3ef42f38db9e588b8300f64de922edec47b5f8ae18cff2",
-      "size": 381606
+      "sha256": "6a35359ffc944fec55b813244cee549f0333720fbe016e54ae5d34f45b476e17",
+      "size": 381914
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -5081,8 +5081,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/settings.js",
-      "sha256": "60a2d31c03d478318509f7fc07144050a55dbd808073e2dd9f249ec36d1c702e",
-      "size": 40680
+      "sha256": "1fd8fff6ee736d52f1a1e44e0f8b0c974d9f1c8a4e13767ee3b561e7aaa1bccb",
+      "size": 44336
     },
     {
       "path": "tavern-plugin/src/client/features/sidebar.js",
