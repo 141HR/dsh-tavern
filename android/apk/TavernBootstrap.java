@@ -26,13 +26,14 @@ public final class TavernBootstrap {
     private static final String OFFLINE_ASSET = "tavern-offline.bin";
     /** 容器内落地名；内容仍是 gzip 压缩的 tar（aapt 会把 .tar.gz 静默解成 .tar，故用 .bin）。 */
     private static final String OFFLINE_FILE = "tavern-offline.tar";
-    /** 内置快照的提交、版本与构建时间；原生层据此决定升级时是否替换源码。 */
+    /** 内置快照的提交、版本与构建时间；原生层据此判断这个 APK 是否已经装过。 */
     private static final String META_ASSET = "tavern-offline-meta.json";
+    /** 安装器成功结束时写的回执，里面带 verifiedAt。 */
+    private static final String RECEIPT_FILE = "root/.dsh/logs/tavern-installation.json";
     private static final String PREFS = "tavern-apk";
-    /** 上次启动时看到的已装源码提交：与当前一致才说明用户没在应用内更新过。 */
-    private static final String PREF_SOURCE_REVISION = "sourceRevision";
-    /** 上次尝试过的 APK 内置快照：失败也不自动重试，避免每次启动都重跑安装。 */
-    private static final String PREF_BUNDLE_REVISION = "bundleRevision";
+    /** 失败重试次数：避免存储坏掉时每次启动都重跑几分钟的安装；换 APK 后重置。 */
+    private static final String PREF_UPGRADE_ATTEMPTS = "upgradeAttempts";
+    private static final String PREF_UPGRADE_REVISION = "upgradeRevision";
 
     public static void ensure(Context context, ProotBootstrap boot,
                               BooleanSupplier cancelled, Consumer<String> status) throws Exception {
@@ -40,28 +41,31 @@ public final class TavernBootstrap {
         File marker = new File(root, "root/.dsh/tavern-apk-installed");
         File profile = new File(root, "root/.dsh/profiles/tavern/package.json");
         File source = new File(root, "root/.dsh/apps/dsh-tavern/bin/dsh-tavern.mjs");
-        boolean installed = marker.isFile() && profile.isFile() && source.isFile();
         JSONObject bundle = readBundle(context);
         String bundleRevision = bundle == null ? "" : bundle.optString("revision", "");
         SharedPreferences prefs = context.getSharedPreferences(PREFS, 0);
-        if (installed) {
-            if (!shouldApplyBundle(root, prefs, bundle)) return;
-            status.accept("升级：正在用应用内置的新版酒馆离线更新，无需联网。请保持应用打开……");
+        if (marker.isFile() && profile.isFile() && source.isFile()) {
+            // 已装过：以“安装回执是否晚于本 APK 的构建时间”为准。没有回执、或回执来自
+            // 本 APK 构建之前，说明这个 APK 的离线安装没跑完（升级、或上次启动被系统杀掉），
+            // 下一次启动必须重装一遍，而不是停在半配置的 profile 上、显示成基础 DSH 界面。
+            if (bundle == null || bundleRevision.isEmpty()) return;
+            if (installedSinceBuild(root, bundle)) return;
+            int attempts = bundleRevision.equals(prefs.getString(PREF_UPGRADE_REVISION, ""))
+                    ? prefs.getInt(PREF_UPGRADE_ATTEMPTS, 0) : 0;
+            if (attempts >= 2) return;
+            prefs.edit()
+                    .putString(PREF_UPGRADE_REVISION, bundleRevision)
+                    .putInt(PREF_UPGRADE_ATTEMPTS, attempts + 1)
+                    .apply();
+            status.accept(attempts > 0
+                    ? "升级：正在继续上次未完成的离线安装，无需联网。请保持应用打开……"
+                    : "升级：正在用应用内置的新版酒馆离线更新，无需联网。请保持应用打开……");
             if (applyBundle(context, boot, root, bundle, cancelled, status)) {
-                // 安装器可能因内置包不完整回退成联网更新，因此以实际落盘的提交为准。
-                String current = readInstalledRevision(root);
-                prefs.edit()
-                        .putString(PREF_SOURCE_REVISION, current.isEmpty() ? bundleRevision : current)
-                        .putString(PREF_BUNDLE_REVISION, bundleRevision)
-                        .apply();
+                prefs.edit().putInt(PREF_UPGRADE_ATTEMPTS, 0).apply();
                 return;
             }
-            // setup.sh 已回滚源码；升级失败不能让应用打不开，继续用旧版本并记录，避免反复重跑。
+            // setup.sh 会把源码回滚；不要让应用打不开，下次启动再补装（最多两次）。
             status.accept("内置快照升级未完成，继续使用原版本；详情见 .dsh/logs/tavern-install.log");
-            prefs.edit()
-                    .putString(PREF_SOURCE_REVISION, readInstalledRevision(root))
-                    .putString(PREF_BUNDLE_REVISION, bundleRevision)
-                    .apply();
             return;
         }
         status.accept("首次安装：正在解包内置依赖（无需联网），请保持应用打开……");
@@ -75,51 +79,22 @@ public final class TavernBootstrap {
         if (exit != 0) throw new java.io.IOException("酒馆安装失败，可检查网络后点击启动重试；日志：.dsh/logs/tavern-install.log");
         if (!profile.isFile() || !source.isFile()) throw new java.io.IOException("酒馆安装结果不完整，请重试");
         Compat.write(marker, "1\n".getBytes(StandardCharsets.UTF_8));
-        if (!bundleRevision.isEmpty()) {
-            String current = readInstalledRevision(root);
-            prefs.edit()
-                    .putString(PREF_SOURCE_REVISION, current.isEmpty() ? bundleRevision : current)
-                    .putString(PREF_BUNDLE_REVISION, bundleRevision)
-                    .apply();
-        }
     }
 
-    /**
-     * 升级时是否用 APK 内置快照离线替换已装源码。两个条件必须同时成立：
-     * 1) 已装源码的安装时间早于本 APK 的构建时间、且版本不高于内置版本——否则源码可能
-     *    比内置快照新（例如先下载了 APK，随后又在应用内更新过），替换就是降级；
-     * 2) 源码自上次启动以来没变过（lastSeen 与当前提交一致）——应用内刚更新过时，
-     *    即使时间判断有偏差也不动它，等下一次 APK 升级再处理。
-     * 其余情况都跳过，保留用户应用内更新到的版本。
-     */
-    private static boolean shouldApplyBundle(File root, SharedPreferences prefs, JSONObject bundle) {
-        String bundled = bundle == null ? "" : bundle.optString("revision", "");
-        String installed = readInstalledRevision(root);
-        String lastSeen = prefs.getString(PREF_SOURCE_REVISION, "");
-        String lastBundle = prefs.getString(PREF_BUNDLE_REVISION, "");
-        if (bundled.isEmpty() || installed.isEmpty()) { rememberSource(prefs, installed); return false; }
-        if (installed.equalsIgnoreCase(bundled)) { rememberSource(prefs, installed); return false; }
-        if (bundled.equalsIgnoreCase(lastBundle)) { rememberSource(prefs, installed); return false; }
-        if (!installedBeforeBuild(root, bundle)) { rememberSource(prefs, installed); return false; }
-        if (!lastSeen.isEmpty() && !lastSeen.equalsIgnoreCase(installed)) {
-            rememberSource(prefs, installed);
-            return false;
-        }
-        return true;
-    }
-
-    private static void rememberSource(SharedPreferences prefs, String revision) {
-        if (revision != null && !revision.isEmpty()) prefs.edit().putString(PREF_SOURCE_REVISION, revision).apply();
-    }
-
-    private static boolean installedBeforeBuild(File root, JSONObject bundle) {
+    /** 安装回执晚于本 APK 的构建时间，说明这个 APK 的源码/依赖已经完整装过。 */
+    private static boolean installedSinceBuild(File root, JSONObject bundle) {
         long builtAt = parseInstant(bundle.optString("builtAt", ""));
-        long installedAt = installedAt(root);
-        if (builtAt <= 0 || installedAt <= 0 || installedAt >= builtAt) return false;
-        String installedVersion = readInstalledVersion(root);
-        String bundleVersion = bundle.optString("version", "");
-        if (installedVersion.isEmpty() || bundleVersion.isEmpty()) return true;
-        return compareVersions(installedVersion, bundleVersion) <= 0;
+        return builtAt > 0 && receiptVerifiedAt(root) >= builtAt;
+    }
+
+    private static long receiptVerifiedAt(File root) {
+        JSONObject receipt = readJson(new File(root, RECEIPT_FILE));
+        if (receipt == null) return 0;
+        try {
+            return receipt.optLong("verifiedAt", 0);
+        } catch (Exception error) {
+            return 0;
+        }
     }
 
     private static boolean applyBundle(Context context, ProotBootstrap boot, File root, JSONObject bundle,
@@ -233,44 +208,8 @@ public final class TavernBootstrap {
         }
     }
 
-    private static String readInstalledRevision(File root) {
-        JSONObject release = readJson(new File(root, "root/.dsh/apps/dsh-tavern/.dsh-tavern-release.json"));
-        if (release != null) {
-            String commit = release.optString("commit", "");
-            if (!commit.isEmpty()) return commit;
-        }
-        JSONObject manifest = readJson(new File(root, "root/.dsh/apps/dsh-tavern/dsh-tavern-runtime.json"));
-        return manifest == null ? "" : manifest.optString("revision", "");
-    }
-
-    private static String readInstalledVersion(File root) {
-        JSONObject manifest = readJson(new File(root, "root/.dsh/apps/dsh-tavern/package.json"));
-        return manifest == null ? "" : manifest.optString("version", "");
-    }
-
-    private static long installedAt(File root) {
-        JSONObject release = readJson(new File(root, "root/.dsh/apps/dsh-tavern/.dsh-tavern-release.json"));
-        return release == null ? 0 : parseInstant(release.optString("installedAt", ""));
-    }
-
     private static long parseInstant(String value) {
         try { return Instant.parse(value).toEpochMilli(); } catch (Exception error) { return 0; }
-    }
-
-    /** 只比较数字段；预发布后缀按发布版处理，够用于“是否降级”的判断。 */
-    private static int compareVersions(String left, String right) {
-        String[] a = left.replaceAll("[^0-9.].*$", "").split("\\.");
-        String[] b = right.replaceAll("[^0-9.].*$", "").split("\\.");
-        try {
-            for (int i = 0; i < Math.max(a.length, b.length); i++) {
-                int l = i < a.length && !a[i].isEmpty() ? Integer.parseInt(a[i]) : 0;
-                int r = i < b.length && !b[i].isEmpty() ? Integer.parseInt(b[i]) : 0;
-                if (l != r) return l < r ? -1 : 1;
-            }
-        } catch (NumberFormatException error) {
-            return 0;
-        }
-        return 0;
     }
 
     private static JSONObject readJson(File file) {
