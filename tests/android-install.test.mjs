@@ -155,6 +155,8 @@ test(`Android 安装固定 pnpm 并先安装依赖再停止旧服务：${initial
   const dshHome = path.join(directory, 'dsh-home')
   const offlineDir = path.join(directory, 'offline')
   await mkdir(path.join(offlineDir, 'store'), { recursive: true })
+  await mkdir(path.join(offlineDir, 'cache'), { recursive: true })
+  await writeFile(path.join(offlineDir, 'registry'), 'https://registry.npmjs.org\n')
   const mockBin = path.join(directory, 'mock-bin')
   const events = path.join(directory, 'events')
   const dependenciesReady = path.join(directory, 'dependencies-ready')
@@ -183,6 +185,9 @@ shift
 shift
 [ "\${pnpm_config_store_dir:-}" = "${offlineDir}/store" ] || exit 97
 case " \$* " in *" --store-dir"*) exit 98;; esac
+[ "\${pnpm_config_cache_dir:-}" = "${offlineDir}/cache" ] || exit 99
+[ "\${pnpm_config_prefer_offline:-}" = true ] || exit 100
+[ "\${pnpm_config_registry:-}" = "https://registry.npmjs.org" ] || exit 101
 if [ "\$1" = "--dir" ] && [ "\$2" = "${new URL('..', import.meta.url).pathname.replace(/\/$/, '')}" ]; then
   printf 'dependencies\\n' >> "${events}"
   : > "${dependenciesReady}"

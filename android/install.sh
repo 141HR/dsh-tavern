@@ -66,6 +66,17 @@ require_command dsh
 OFFLINE_DIR="${DSH_TAVERN_OFFLINE_DIR:-}"
 if [ -n "${OFFLINE_DIR}" ] && [ -d "${OFFLINE_DIR}/store" ]; then
   export DSH_TAVERN_PNPM_STORE="${OFFLINE_DIR}/store"
+  # store 只存包内容，离线解析还需要 pnpm 的 metadata 缓存；随包带上，
+  # 并让所有 pnpm（含 Profile 安装）优先用缓存，避免再等 registry 元数据。
+  if [ -d "${OFFLINE_DIR}/cache" ]; then
+    export pnpm_config_cache_dir="${OFFLINE_DIR}/cache"
+    export pnpm_config_prefer_offline=true
+  fi
+  # 构建时用的 registry 决定 metadata 的缓存键；用户显式指定镜像时不覆盖。
+  if [ -f "${OFFLINE_DIR}/registry" ] && [ -z "${DSH_TAVERN_NPM_REGISTRY:-}" ]; then
+    export npm_config_registry="$(cat "${OFFLINE_DIR}/registry")"
+    export pnpm_config_registry="$npm_config_registry"
+  fi
   info "使用内置依赖包：${DSH_TAVERN_PNPM_STORE}（$(du -sh "${DSH_TAVERN_PNPM_STORE}" 2>/dev/null | cut -f1)）"
 else
   OFFLINE_DIR=""

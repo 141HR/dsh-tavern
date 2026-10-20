@@ -3,6 +3,8 @@
 #   revision          打包时的酒馆源码提交
 #   source/           源码快照（该提交的 git archive，剔除 docs）
 #   store/            pnpm 11 store（源码依赖 + tavern/web Profile 依赖）
+#   cache/            pnpm metadata 缓存（离线解析必需，store 只有包内容）
+#   registry          采集时使用的 registry，决定 metadata 的缓存键
 #   pnpm.tgz          与 install.sh 锁定的 pnpm 本体 tarball
 #   pages/            分页后的 store 大文件（APK 资产压缩率低，分卷便于后续按需优化）
 # 首装时容器内解包：源码免下载、依赖走离线 store、pnpm 本体免 npm 安装。
@@ -130,6 +132,16 @@ else
   log 'web Profile 依赖采集失败（首装该步将回退联网）'
 fi
 
+stage "打包 pnpm metadata 缓存（离线解析必需）"
+if [ -d "${WORK}/home/.cache/pnpm" ]; then
+  rm -rf -- "${WORK}/cache" 2>/dev/null || true
+  cp -a "${WORK}/home/.cache/pnpm" "${WORK}/cache"
+  log "metadata 缓存：$(du -sh "${WORK}/cache" 2>/dev/null | cut -f1)"
+else
+  log '警告：未找到 pnpm metadata 缓存，离线解析可能退回联网' >&2
+fi
+printf '%s\n' "${npm_config_registry}" >"${WORK}/registry"
+
 stage "离线自检：空目录 --offline 安装必须成功"
 if [ "${TAVERN_OFFLINE_REUSE_STORE:-0}" = 1 ]; then
   log '已在上一步用 --offline 校验过源码依赖；Profile 依赖沿用上次自检结果'
@@ -139,12 +151,19 @@ else
   mkdir -p "${SELFTEST}/source" "${SELFTEST}/tavern"
   git -C "${ROOT}" archive "${COMMIT}" | tar -x -C "${SELFTEST}/source"
   find "${SELFTEST}/source" -type d -name docs -prune -exec rm -rf {} +
-  pnpm_in "${SELFTEST}/source" install --frozen-lockfile --offline --store-dir "${WORK}/store" \
-    || { echo '离线自检失败：源码依赖不完整，禁止打包。' >&2; exit 1; }
-  cp "${WORK}/tavern-profile/package.json" "${SELFTEST}/tavern/package.json"
-  pnpm_in "${SELFTEST}/tavern" install --offline --store-dir "${WORK}/store" \
-    || { echo '离线自检失败：tavern Profile 依赖不完整，禁止打包。' >&2; exit 1; }
-  log '离线自检通过（源码 + Profile 均可完全离线安装）'
+  # 自检必须模拟手机上的干净缓存：HOME 隔离，只用随包的 metadata 缓存。
+  SELFTEST_HOME="${SELFTEST}/home"
+  mkdir -p "${SELFTEST_HOME}"
+  (
+    export HOME="${SELFTEST_HOME}" XDG_CACHE_HOME="${SELFTEST_HOME}/.cache"
+    export pnpm_config_cache_dir="${WORK}/cache"
+    pnpm_in "${SELFTEST}/source" install --frozen-lockfile --offline --store-dir "${WORK}/store" \
+      || exit 1
+    cp "${WORK}/tavern-profile/package.json" "${SELFTEST}/tavern/package.json"
+    pnpm_in "${SELFTEST}/tavern" install --offline --store-dir "${WORK}/store" \
+      || exit 2
+  ) || { echo '离线自检失败：源码或 Profile 依赖不完整，禁止打包。' >&2; exit 1; }
+  log '离线自检通过（干净 HOME + 随包缓存，源码 + Profile 均可完全离线安装）'
 fi
 
 stage "整理 pnpm 运行时并打包"
@@ -156,12 +175,12 @@ log "pnpm 运行时：$(du -sh "${WORK}/pnpm-runtime" 2>/dev/null | cut -f1)"
 printf '%s\n' "${COMMIT}" >"${WORK}/revision"
 # 去掉快照里的内部标记，再以 source/ 名字入包。
 rm -f -- "${SNAPSHOT}/.snapshot-revision" 2>/dev/null || true
-log "打包中（源码 + store + pnpm 运行时，gzip 压缩，约 1-2 分钟）……"
+log "打包中（源码 + store + metadata 缓存 + pnpm 运行时，gzip 压缩，约 1-2 分钟）……"
 tar -czf "${OUT}.tmp" -C "${WORK}" \
   --transform="s|^$(basename "${SNAPSHOT}")|source|" \
   --exclude='*/node_modules' \
   --exclude='*/.pnpm-store' \
-  revision pnpm-runtime store "$(basename "${SNAPSHOT}")"
+  revision pnpm-runtime store cache registry "$(basename "${SNAPSHOT}")"
 mv -f "${OUT}.tmp" "${OUT}"
 printf '%s\n' "${COMMIT}" >"${SNAPSHOT}/.snapshot-revision"
 printf '%s\n' "${COMMIT}" >"${OUT}.revision"
