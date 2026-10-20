@@ -62,6 +62,11 @@ NODE
 
 require_command node
 require_command dsh
+# 依赖缓存放在 DSH_ROOT 下长期复用：更新时 pnpm 直接从本地 store 链接，
+# 不再把 287 个包重新下载一遍。内置包只负责首装，它的 store/cache 会在
+# 安装成功后转存到这里（见文件末尾）。
+STORE_DIR="${DSH_TAVERN_PNPM_STORE_DIR:-${DSH_ROOT}/runtime/tavern-pnpm-store}"
+CACHE_DIR="${DSH_TAVERN_PNPM_CACHE_DIR:-${DSH_ROOT}/runtime/tavern-pnpm-cache}"
 # APK 首装会先把内置依赖包解到 DSH_TAVERN_OFFLINE_DIR（源码 + pnpm store + pnpm 运行时）。
 OFFLINE_DIR="${DSH_TAVERN_OFFLINE_DIR:-}"
 if [ -n "${OFFLINE_DIR}" ] && [ -d "${OFFLINE_DIR}/store" ]; then
@@ -80,7 +85,16 @@ if [ -n "${OFFLINE_DIR}" ] && [ -d "${OFFLINE_DIR}/store" ]; then
   info "使用内置依赖包：${DSH_TAVERN_PNPM_STORE}（$(du -sh "${DSH_TAVERN_PNPM_STORE}" 2>/dev/null | cut -f1)）"
 else
   OFFLINE_DIR=""
-  info '无内置依赖包，按需联网下载依赖。'
+  export DSH_TAVERN_PNPM_STORE="${DSH_TAVERN_PNPM_STORE:-${STORE_DIR}}"
+  export pnpm_config_cache_dir="${pnpm_config_cache_dir:-${CACHE_DIR}}"
+  if [ -d "${pnpm_config_cache_dir}" ]; then
+    export pnpm_config_prefer_offline=true
+  fi
+  if [ -d "${DSH_TAVERN_PNPM_STORE}" ]; then
+    info "复用本地依赖缓存：${DSH_TAVERN_PNPM_STORE}（$(du -sh "${DSH_TAVERN_PNPM_STORE}" 2>/dev/null | cut -f1)）"
+  else
+    info "首次联网安装依赖；安装后缓存保存在 ${DSH_TAVERN_PNPM_STORE}，以后更新不再重下。"
+  fi
 fi
 # Keep Tavern's package manager independent of DSHA's bundled pnpm and PATH.
 PNPM_ROOT="${DSH_ROOT}/runtime/tavern-pnpm/${PNPM_VERSION}"
@@ -148,11 +162,11 @@ pnpm() {
   "${PNPM_COMMAND}" --config.update-notifier=false \
     --config.fetchTimeout="${pnpm_config_fetch_timeout:-600000}" "$@"
 }
-# 内置依赖包完整时先走 --offline（秒级完成）；缺包再联网补齐，而不是直接放弃。
+# 本地 store 完整时先走 --offline（秒级完成）；缺包再联网补齐，而不是直接放弃。
 pnpm_install() {
   if [ -n "${DSH_TAVERN_PNPM_STORE:-}" ]; then
     if pnpm "$@" --offline; then return 0; fi
-    info '内置依赖缺少部分包，改为联网补齐（只下载缺失项）……'
+    info '本地依赖缓存缺少部分包，改为联网补齐（只下载缺失项）……'
   fi
   pnpm "$@"
 }
@@ -170,7 +184,7 @@ run_dsh() {
 WEB_PROFILE_NAME="$(find_web_profile)"
 WEB_PROFILE_DIR="${DSH_ROOT}/profiles/${WEB_PROFILE_NAME}"
 
-stage "安装酒馆核心依赖（287 包；离线包命中时通常 10-40s，联网补齐则取决于网速）"
+stage "安装酒馆核心依赖（287 包；本地依赖缓存命中时通常 10-60s，需要联网补齐则取决于网速）"
 info "依赖目录：${REPO_ROOT}/node_modules"
 pnpm_install --dir "${REPO_ROOT}" install --frozen-lockfile
 info "核心依赖完成，node_modules：$(du -sh "${REPO_ROOT}/node_modules" 2>/dev/null | cut -f1)"
@@ -206,6 +220,21 @@ info "${WEB_PROFILE_NAME} Profile 配置可解析"
 # Profile installs above left the plugin without one of its runtime packages.
 node "${REPO_ROOT}/bin/runtime-dependencies.mjs" "${REPO_ROOT}"
 info '运行时依赖完整'
+
+# 首装的内置 store/cache 转存到持久目录：下次更新（源码会整体换掉）直接复用，
+# 不必再联网下载依赖。只在安装成功后移动，失败重试仍能用到完整的内置包。
+if [ -n "${OFFLINE_DIR}" ]; then
+  if [ -d "${OFFLINE_DIR}/store" ] && [ ! -e "${STORE_DIR}" ]; then
+    mkdir -p "$(dirname -- "${STORE_DIR}")"
+    if mv -- "${OFFLINE_DIR}/store" "${STORE_DIR}" 2>/dev/null; then
+      info "依赖缓存已保存：${STORE_DIR}（下次更新直接复用）"
+    fi
+  fi
+  if [ -d "${OFFLINE_DIR}/cache" ] && [ ! -e "${CACHE_DIR}" ]; then
+    mkdir -p "$(dirname -- "${CACHE_DIR}")"
+    mv -- "${OFFLINE_DIR}/cache" "${CACHE_DIR}" 2>/dev/null || true
+  fi
+fi
 
 if [ "${DSH_TAVERN_ANDROID_STANDALONE:-0}" = 1 ]; then
   printf '\n安装完成（总耗时 %ss）。请返回 DSH Tavern 应用并重新启动酒馆。\n' "$(( $(date +%s) - START_TIME ))"

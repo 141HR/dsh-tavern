@@ -45,8 +45,8 @@ for (const [name, paths] of [
 test('CDN 清单生成器包含全部依赖补丁及其校验值', async t => {
   const fixture = await mkdtemp(path.join(os.tmpdir(), 'tavern-runtime-package-'))
   t.after(() => rm(fixture, { recursive: true, force: true }))
-  for (const directory of ['bin', 'config', 'presets', 'tavern-plugin']) await mkdir(path.join(fixture, directory))
-  for (const file of new Set([...required, 'cordis.patch.yml', 'install.sh', 'install.ps1'])) {
+  for (const directory of ['android', 'bin', 'config', 'presets', 'tavern-plugin']) await mkdir(path.join(fixture, directory))
+  for (const file of new Set([...required, 'cordis.patch.yml', 'install.sh', 'install.ps1', 'android/setup.sh'])) {
     await mkdir(path.dirname(path.join(fixture, file)), { recursive: true })
     await writeFile(path.join(fixture, file), await readFile(path.join(root, file)))
   }
@@ -60,6 +60,7 @@ test('CDN 清单生成器包含全部依赖补丁及其校验值', async t => {
   assert.ok(!manifest.files.some(file => file.path.endsWith('/unused.txt')), 'CDN 也不应下载嵌套的测试或文档')
   assert.equal(manifest.releaseSequence, 42)
   assert.equal(manifest.version, JSON.parse(await readFile(path.join(fixture, 'package.json'), 'utf8')).version)
+  assert.ok(manifest.files.some(file => file.path === 'android/setup.sh'), 'CDN 清单需要 android/ 才能增量更新 APK 端的安装脚本')
   for (const file of required) {
     const entry = manifest.files.find(entry => entry.path === file)
     assert.ok(entry, `CDN 清单遗漏：${file}`)

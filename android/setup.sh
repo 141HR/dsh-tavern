@@ -9,6 +9,10 @@ REPOSITORY="${DSH_TAVERN_REPOSITORY:-${DEFAULT_REPOSITORY}}"
 BRANCH="${DSH_TAVERN_BRANCH:-main}"
 DEFAULT_TARBALL_URL="https://codeload.github.com/flizzywine/dsh-tavern/tar.gz/refs/heads/main"
 TARBALL_URL="${DSH_TAVERN_TARBALL_URL:-${DEFAULT_TARBALL_URL}}"
+# 运行清单与 CDN 源：按文件哈希逐个比对，只下载有变化的文件（整包压缩包为备用方案）。
+CDN_METADATA_URL="${DSH_TAVERN_CDN_METADATA_URL:-https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@main/dsh-tavern-runtime.json}"
+CDN_ROOT_URL="${DSH_TAVERN_CDN_ROOT_URL:-https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern}"
+SOURCE_CDN="${DSH_TAVERN_SOURCE_CDN:-1}"
 SOURCE_MARKER=".dsh-tavern-tarball-source"
 OFFLINE_TARBALL="/root/tavern-offline.tar"
 OFFLINE_DIR="${DSH_ROOT}/tavern-offline"
@@ -112,14 +116,17 @@ download_file() {
   local url="$1"
   local destination="$2"
   if command -v curl >/dev/null 2>&1; then
-    curl -fL --retry 2 --connect-timeout 20 -o "${destination}" "${url}"
+    # 手机网络可能在传输中途停住：60 秒低于 1 KB/s 或 15 分钟总时长即失败，
+    # 交给上层回退/重试，而不是像以前那样无限等待、看起来像卡死。
+    curl -fL --retry 2 --connect-timeout 20 --speed-limit 1024 --speed-time 60 --max-time 900 \
+      -o "${destination}" "${url}"
     return
   fi
   printf '未检测到 curl，正在通过 Node.js 下载……\n'
   node - "${url}" "${destination}" <<'NODE'
 const fs = require('node:fs')
 const [url, destination] = process.argv.slice(2)
-fetch(url, { redirect: 'follow' })
+fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(15 * 60 * 1000) })
   .then(response => {
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     return response.arrayBuffer()
@@ -172,6 +179,36 @@ NODE
   SOURCE_SWAPPED=0
 }
 
+# 增量更新：按 jsDelivr 运行清单逐文件比对，只下载有变化的文件，其余直接复用
+# 已安装目录。完整源码包十几 MB，而一次更新真正变化的文件往往只有几百 KB。
+install_from_cdn() {
+  [ "${SOURCE_CDN}" != 0 ] || return 1
+  [ -f "${APP_DIR}/bin/download.cjs" ] || return 1
+  prepare_temp_root
+  local candidate="${TEMP_ROOT}/cdn-source"
+  local version=""
+  version="$(node -e 'process.stdout.write(String(require(process.argv[1]).version || ""))' "${APP_DIR}/package.json" 2>/dev/null || true)"
+  local args=(runtime "${CDN_METADATA_URL}" "${CDN_ROOT_URL}" "${candidate}" "${APP_DIR}" --stall 15 --budget 90)
+  if [ -n "${version}" ]; then args+=(--min-version "${version}"); fi
+  stage "增量下载源码（只下载有变化的文件）"
+  if ! node "${APP_DIR}/bin/download.cjs" "${args[@]}"; then
+    info '增量下载不可用，改用完整源码包。'
+    return 1
+  fi
+  # 旧版运行清单还没有 android/：保留已安装的安装脚本，保证源码校验通过。
+  if [ ! -f "${candidate}/android/install.sh" ]; then
+    rm -rf -- "${candidate}/android"
+    if ! cp -a "${APP_DIR}/android" "${candidate}/android"; then
+      info '无法保留 Android 安装脚本，改用完整源码包。'
+      return 1
+    fi
+  fi
+  # 快照没有 .git：写 tarball 标记，之后继续走 CDN/压缩包覆盖。
+  printf '%s\n' "${DEFAULT_TARBALL_URL}" >"${candidate}/${SOURCE_MARKER}"
+  replace_source "${candidate}"
+  return 0
+}
+
 install_from_tarball() {
   require_command tar
   prepare_temp_root
@@ -193,7 +230,7 @@ install_source() {
     local attempt
     for attempt in 1 2 3; do
       printf '正在通过 Git 下载 DSH Tavern（第 %s/3 次）……\n' "${attempt}"
-      if git clone --filter=blob:none --no-checkout --branch "${BRANCH}" --single-branch "${REPOSITORY}" "${candidate}" \
+      if git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 clone --filter=blob:none --no-checkout --branch "${BRANCH}" --single-branch "${REPOSITORY}" "${candidate}" \
         && git -C "${candidate}" sparse-checkout set --no-cone '/*' '!**/docs/' \
         && git -C "${candidate}" checkout "${BRANCH}"; then
         replace_source "${candidate}"
@@ -225,7 +262,8 @@ update_source() {
     git -C "${APP_DIR}" config remote.origin.promisor true
     git -C "${APP_DIR}" config remote.origin.partialclonefilter blob:none
     git -C "${APP_DIR}" sparse-checkout set --no-cone '/*' '!**/docs/'
-    if git -C "${APP_DIR}" fetch origin "${BRANCH}"; then
+    # 60 秒低于 1 KB/s 就中止：GitHub 不可达时不要让 fetch 无限挂起。
+    if git -C "${APP_DIR}" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 fetch origin "${BRANCH}"; then
       if ! git -C "${APP_DIR}" merge-base --is-ancestor HEAD "origin/${BRANCH}"; then
         local generated_only=1
         local commit subject files
@@ -248,6 +286,8 @@ update_source() {
       git -C "${APP_DIR}" merge --ff-only "origin/${BRANCH}"
       return
     fi
+    # Git 走不通时优先按清单增量替换（jsDelivr 通常比 codeload 更容易连通）。
+    if install_from_cdn; then return; fi
     install_from_tarball
     return
   fi
@@ -256,6 +296,7 @@ update_source() {
       TARBALL_URL="$(sed -n '1p' "${APP_DIR}/${SOURCE_MARKER}")"
       [ -n "${TARBALL_URL}" ] || TARBALL_URL="${DEFAULT_TARBALL_URL}"
     fi
+    if install_from_cdn; then return; fi
     install_from_tarball
     return
   fi

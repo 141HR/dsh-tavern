@@ -45,8 +45,11 @@ pnpm 运行时。它作为 `assets/tavern-offline.bin` 打进 APK，首装时只
 - `TAVERN_APK_OFFLINE=0` 可关掉，恢复到联网首装；`TAVERN_OFFLINE_PKG` 可指定已有包。
 
 首装逻辑在 `android/setup.sh`（选源码）与 `android/install.sh`（装依赖）：内置包命中时先走
-`--offline`，缺包再联网补齐；源码快照没有被 Git 跟踪的历史，因此写 tarball 标记，之后的更新
-走官方压缩包覆盖。
+`--offline`，缺包再联网补齐；源码快照没有被 Git 跟踪的历史，因此写 tarball 标记。
+
+首装成功后，内置包里的 pnpm store/cache 会转存到 `~/.dsh/runtime/tavern-pnpm-store`（和
+`tavern-pnpm-cache`），供后续更新直接复用；更新时只按运行清单增量下载有变化的源码文件，
+不再整包重下源码和 287 个依赖。缓存可随时删除，下次更新会重新下载。
 
 上游的 `prepareStandardAssets` / `prepareRecoveryAssets` 会从源码重建整个 rootfs；这里跳过
 它们，直接使用官方 APK 中已验证的产物。上游的依赖校验清单没有收录 Linux 版 aapt2，
