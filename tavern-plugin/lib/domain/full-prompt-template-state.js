@@ -14,7 +14,8 @@ export function projectFullPromptTemplateState(chat) {
   return {
     chatId: chat.id, sessionId: chat.sessionId,
     stateRevision: helper.stateRevision, lifecycleRevision: helper.lifecycleRevision,
-    chat: helper.messages.map(projectTemplateMessage),
+    // A fresh, unshared projection: the template rows take its values over.
+    chat: helper.messages.map(message => projectTemplateMessage(message, { owned: true })),
     chat_metadata: { ...structuredClone(helper.chatMetadata), variables: structuredClone(helper.chatVariables) }
   }
 }
