@@ -25,6 +25,20 @@ test('识别 DSH NEXT：按 resources/app/package.json 包名，macOS 支持 .ap
   assert.equal(isDesktopNext(undefined), false)
 })
 
+test('识别 Windows 版 DSH NEXT：没有 resources/app，包名只在 app.asar 里', t => {
+  const root = temp(t, 'next-detect-win-')
+  mkdirSync(path.join(root, 'resources'))
+  const json = Buffer.from(JSON.stringify({ name: 'dsh-desktop-next' }))
+  const tree = Buffer.from(JSON.stringify({ files: { 'package.json': { size: json.length, offset: '0' } } }))
+  const padded = Buffer.concat([tree, Buffer.alloc((4 - tree.length % 4) % 4)])
+  const header = Buffer.alloc(8); header.writeUInt32LE(4 + padded.length, 0); header.writeUInt32LE(tree.length, 4)
+  const sizes = Buffer.alloc(8); sizes.writeUInt32LE(4, 0); sizes.writeUInt32LE(header.length + padded.length, 4)
+  writeFileSync(path.join(root, 'resources/app.asar'), Buffer.concat([sizes, header, padded, json]))
+  assert.equal(isDesktopNext(path.join(root, 'DSH NEXT.exe')), true)
+  writeFileSync(path.join(root, 'resources/app.asar'), 'not an archive')
+  assert.equal(isDesktopNext(path.join(root, 'DSH NEXT.exe')), false)
+})
+
 test('选择文件按 NEXT 格式读写，缺省为 desktop，拒绝带路径的名称', t => {
   const home = temp(t, 'next-select-')
   assert.equal(readNextProfile(home), 'desktop')
