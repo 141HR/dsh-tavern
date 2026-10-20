@@ -197,3 +197,27 @@ test('生成期回合里的宿主 developer 消息不切开重新生成，替换
   assert.equal(plan.cleanups.length, 0)
   assert.equal(plan.shadowedSeqs.at(-1), reply.seq)
 })
+
+// clearFailedTurns reads the save's header and latest floors only (long saves): the
+// failed tail after the latest round must come out the same as with the whole history.
+test('判断失败尾巴只需最后几层楼：结果与完整存档相同', () => {
+  const session = Session.create('failed-tail-latest-floors')
+  const messages = []
+  for (const turn of [1, 2, 3]) {
+    appendSessionEvent(session, 'turn/start', { turn })
+    appendSessionEvent(session, 'user/message', user('input-' + turn), { surfaceOp: 'append' })
+    appendSessionEvent(session, 'assistant/message', body('reply-' + turn, turn), { surfaceOp: 'append' })
+    appendSessionEvent(session, 'turn/end', { turn, reason: { kind: 'completed' } })
+    messages.push({ role: 'user', text: 'input-' + turn }, { role: 'assistant', turn, text: 'reply-' + turn })
+  }
+  appendSessionEvent(session, 'turn/start', { turn: 4 })
+  appendSessionEvent(session, 'user/message', user('input-4'), { surfaceOp: 'append' })
+  appendSessionEvent(session, 'assistant/message', body('partial', 4), { surfaceOp: 'append' })
+  appendSessionEvent(session, 'turn/end', { turn: 4, reason: { kind: 'error' } })
+  const input = { events: sessionEvents(session), nodes: session.surface.nodes }
+  const whole = rollbackAvailability({ messages }, input)
+  const latest = rollbackAvailability({ messages: messages.slice(-3) }, input)
+  assert.deepEqual(whole.unclearedTurns, [4])
+  assert.deepEqual(latest.unclearedTurns, whole.unclearedTurns)
+  assert.equal(latest.canRollback, whole.canRollback)
+})

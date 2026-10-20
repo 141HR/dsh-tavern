@@ -1123,14 +1123,15 @@ export async function apply(ctx) {
     if (chat && chat.sessionId === sessionId && chat.backgroundConfigVersion === 1 && chat.conversationFeaturesVersion === 1) return chat
     return chatForSession(sessionId)
   }
-  // The complete header and the latest floor; the complete Chat only for storage
-  // without floor reads (legacy saves, small by construction).
-  async function chatHeaderWithLatestFloor(sessionId) {
+  // The complete header and the latest `count` floors; the complete Chat only for
+  // storage without floor reads (legacy saves, small by construction).
+  async function chatHeaderWithLatestFloors(sessionId, count = 1) {
     const chatId = (await readSessionMap())[str(sessionId)]
     const head = chatId && await chatPersistence.readSlice(chatId, [])
     if (!head?.chat || head.chat.sessionId !== sessionId || !Number.isSafeInteger(head.messageCount)) return chatForSession(sessionId)
     if (head.messageCount === 0) return head.chat
-    const latest = await chatPersistence.readSlice(chatId, [head.messageCount - 1])
+    const from = Math.max(0, head.messageCount - count)
+    const latest = await chatPersistence.readSlice(chatId, Array.from({ length: head.messageCount - from }, (_, index) => from + index))
     return latest?.chat ? latest.chat : chatForSession(sessionId)
   }
   const chatSliceForSession = createSessionSliceReader({ links: readSessionMap, readSlice: chatPersistence.readSlice })
@@ -4447,7 +4448,7 @@ export async function apply(ctx) {
         // The opening-window slice carries only task fields. Adoption reads the header
         // (snapshot, card context) and the latest floor (its turn keys plugin world book
         // entries), never the history.
-        const full = chat.openingWorldbookSnapshot ? chat : await chatHeaderWithLatestFloor(chat.sessionId)
+        const full = chat.openingWorldbookSnapshot ? chat : await chatHeaderWithLatestFloors(chat.sessionId)
         if (full) await playCardSnapshots.autoSync(full, undefined, { busy: false })
       } catch (error) { console.warn('dsh-tavern: 世界书自动更新失败，本轮沿用本局快照：', str(error && error.message || error)) }
     },
@@ -4455,7 +4456,9 @@ export async function apply(ctx) {
       const mode = await turnOrchestrator.modeFor(sessionId)
       if (mode !== 'story' && mode !== 'script') return 0
       const session = sessionStore.get(sessionId) || agentRegistry.get(sessionId)?.session
-      const chat = session && await chatForSession(sessionId)
+      // A failed tail sits after the save's latest round, and the walk stops there: the
+      // header and the latest floors (that round's input and reply) are all it reads.
+      const chat = session && await chatHeaderWithLatestFloors(sessionId, 3)
       if (!chat) return 0
       const availability = rollbackAvailability(chat, { events: sessionEvents(session), nodes: session.surface?.nodes || [] })
       let cleared = 0
