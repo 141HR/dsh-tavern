@@ -2953,11 +2953,12 @@ export async function apply(ctx) {
   })
   const worldbookFilter = createWorldbookFilter({
     runAgent: input => backgroundAgentRunner.run(input), selection: backgroundModelSelection,
-    beginTask: chat => backgroundTasks.begin(chat, 'worldbook-filter')
+    // The caller's bounded snapshot (header and recent floors) is reused, as settlement does.
+    beginTask: chat => backgroundTasks.begin(chat, 'worldbook-filter', { reuseSnapshot: true })
   })
   const styleReferenceRecall = createStyleReferenceRecall({
     runAgent: input => backgroundAgentRunner.run(input), selection: backgroundModelSelection,
-    beginTask: chat => backgroundTasks.begin(chat, 'style-reference')
+    beginTask: chat => backgroundTasks.begin(chat, 'style-reference', { reuseSnapshot: true })
   })
   // After each reply, prepare what that reply brings into the next turn, so sending never
   // waits for a model: the worldbook pool (usually below the threshold, no request at all),

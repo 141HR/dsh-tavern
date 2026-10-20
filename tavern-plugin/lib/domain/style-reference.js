@@ -97,7 +97,7 @@ export function createStyleReferenceRecall({ runAgent, selection, beginTask }) {
         persistentSessionId: taskRun.participantRequest.sessionId,
         rewindTo: taskRun.participantRequest.rewindTo,
         rewindFormatVersion: taskRun.participantRequest.formatVersion,
-        onPersistentSessionReady: id => taskRun.bindSession(id),
+        onPersistentSessionReady: id => taskRun.bindSession(id, { stateOnly: true }),
         turn: afterTurn + 1,
         selection: selection(chat), webSearchEnabled: false, signal,
         backgroundTasks: { variables: false, posture: false, characterDesign: false },
@@ -114,7 +114,7 @@ export function createStyleReferenceRecall({ runAgent, selection, beginTask }) {
         }
       })
       if (!submitted) throw new Error('文风联想 Agent 未提交结果')
-      const completed = await taskRun.commit({ participant: taskRun.participant(run), stateChanged: false,
+      const completed = await taskRun.commit({ participant: taskRun.participant(run), stateChanged: false, headerFields: ['styleReferences'],
         apply(draft) { draft.styleReferences = rememberStyleReference(draft.styleReferences, submitted, afterTurn) } })
       if (completed.status !== 'committed') throw new Error('剧情已变化，本次文风联想已过期')
     } catch (error) {

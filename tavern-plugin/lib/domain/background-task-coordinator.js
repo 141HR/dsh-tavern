@@ -293,8 +293,13 @@ export function createBackgroundTaskCoordinator(options = {}) {
               if (saved) return {chat:{...completed.chat,...saved,messages:completed.chat.messages},status:completed.value.status}
             }
           }
-          if (role === 'candidate' && input.headerOnly === true && store.readSlice && store.patchChat) {
-            const fields = [...taskStateFields, 'scriptState']
+          // A task whose callback writes header fields only names them: the commit reads
+          // and patches the header, never the history (candidates: scriptState).
+          const headerFields = role === 'candidate' && input.headerOnly === true ? ['scriptState']
+            : Array.isArray(input.headerFields) ? input.headerFields.map(str).filter(field => field && field !== 'messages') : null
+          if (headerFields && store.readSlice && store.patchChat) {
+            const fields = [...taskStateFields, ...headerFields]
+            const writable = new Set(['timeline', 'candidateAgent', 'candidates', ...headerFields])
             for (let attempt = 0; attempt < 3; attempt++) {
               const before = (await store.readSlice(begun.chat.id, [], fields))?.chat
               if (before?.timeline?.schemaVersion !== 1 || Object.values(before.timeline.operations || {}).some(op => op?.kind === 'body' && op.status === 'foreground-completed')) break
@@ -302,7 +307,7 @@ export function createBackgroundTaskCoordinator(options = {}) {
               const completed = timeline.complete({chat:before,operationId:begun.value.operationId,basedOn:begun.value.basedOn,
                 outcome:{status:input.status||'success',stateChanged:input.stateChanged===true,participant:input.participant||null},apply:input.apply})
               const changes = diffJson(before, completed.chat)
-              if (changes.some(change => !['timeline','candidateAgent','candidates','scriptState'].includes(change.path[0]))) break
+              if (changes.some(change => !writable.has(change.path[0]))) break
               const saved = await store.patchChat(begun.chat.id,before._storageRevision,changes,{...metadata,returnProjection:fields})
               if (saved) return {chat:saved,status:completed.value.status}
             }
