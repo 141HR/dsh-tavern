@@ -115,7 +115,7 @@ export function regenerationAttemptTurns(input) {
 // STORY turn, which the host rows never carry. This list is the durable
 // statement "these native turns used to hold a body that has been replaced":
 // derived from the log, so it survives a reload.
-export function supersededRegenerationTurns({ events = [], nodes = [] } = {}) {
+export function supersededRegenerationTurns({ events = [], nodes = [], keepTurns = [] } = {}) {
   const visible = new Set(nodes.map(Number))
   const turns = new Set()
   // The bodies of the replacements that still own the page. The transcript draws
@@ -157,14 +157,23 @@ export function supersededRegenerationTurns({ events = [], nodes = [] } = {}) {
     if (Number.isSafeInteger(turn) && turn > 0) drawable.add(turn)
   }
   if (![...drawable].some(turn => !turns.has(turn))) {
-    const keep = [...drawable].find(turn => turns.has(turn))
+    // The row the view maps this round to is the one it will render: an old
+    // tool submission's fold copy carries the previous text, so it never matches
+    // the replacement body, yet it is the only row the page can draw. Keep it
+    // when no drawable copy of the new body survives outside the hidden set.
+    const mapped = new Set((Array.isArray(keepTurns) ? keepTurns : []).map(Number))
+    const keep = [...mapped].find(turn => turns.has(turn)) ?? [...drawable].find(turn => turns.has(turn))
     if (keep !== undefined) turns.delete(keep)
   }
   return [...turns].sort((left, right) => left - right)
 }
 
-// The native turn the committed body was written into: the projection's own
-// edit turn, not the synthetic generation turn the chat recorded first.
+// The native turn the committed body was written into. The transcript draws
+// append events only, so the round shows where its body is drawable: the range's
+// tail when that tail is an append, otherwise the last append copy of the same
+// body inside the replaced range. An old tool submission folds that copy before
+// the projection learns to add one after the range; pointing such a round at the
+// replacement's own turn leaves the page with no row to draw (#283).
 export function projectedReplyTurns({ events = [], nodes = [] } = {}) {
   const visible = new Set(nodes.map(Number))
   const bySeq = new Map(events.filter(event => Number.isSafeInteger(event?.seq)).map(event => [event.seq, event]))
@@ -174,13 +183,20 @@ export function projectedReplyTurns({ events = [], nodes = [] } = {}) {
     if (visible.size && !visible.has(Number(event.seq))) continue
     const story = Number(event.data?.message?.source?.tavernStoryTurn)
     if (!Number.isSafeInteger(story) || story < 1) continue
-    // The transcript draws append events only, so the round shows where the
-    // replaced range ends on one: the attempt's own reply for an ordinary round,
-    // the transcript copy for a tool-submitted one. The replacement's own turn
-    // holds nothing the page can draw.
-    const end = bySeq.get(surfaceReplacementRange(event.surfaceOp).end)
+    const range = surfaceReplacementRange(event.surfaceOp)
+    const end = bySeq.get(range.end)
     const drawn = end?.type === 'assistant/message' && end.surfaceOp === 'append' ? Number(end.data?.turn) : NaN
-    turns.set(story, Number.isSafeInteger(drawn) && drawn > 0 ? drawn : Number(event.data?.turn))
+    if (Number.isSafeInteger(drawn) && drawn > 0) { turns.set(story, drawn); continue }
+    // Inside the range, the last assistant append with text is the row the
+    // transcript drew for this round (the fold copy of a tool submission, or the
+    // attempt's own reply). Its text is the previous body when applying a
+    // replacement, so the row is located by shape, not by matching the new body.
+    const copy = events.findLast(source => source?.type === 'assistant/message' &&
+      source.surfaceOp === 'append' &&
+      Number(source.seq) >= Number(range.start) && Number(source.seq) <= Number(range.end) &&
+      contentText(source.data?.message) !== '' &&
+      Number(source.data?.turn) > 0 && Number(source.data?.turn) !== story)
+    turns.set(story, copy ? Number(copy.data.turn) : Number(event.data?.turn))
   }
   return turns
 }

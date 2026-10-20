@@ -174,7 +174,7 @@ export function createSessionStateView({ activity: activityOf, evidence: evidenc
     // the rows it already built for them, so the page shows the old body next to
     // the new one until these turns are hidden. Read from the log, not from a
     // transient marker: a reload must hide them too.
-    const supersededTurns = Array.isArray(nodes) ? supersededRegenerationTurns({ events: evidence.events || [], nodes }) : []
+    const supersededTurns = Array.isArray(nodes) ? supersededRegenerationTurns({ events: evidence.events || [], nodes, keepTurns: Object.values(mappings || {}) }) : []
     // Regeneration attempts, found by their input rather than by the number the save
     // stored (a renumbering turn repair shifts that number onto the next turn). One
     // still settling stays visible until its body is mapped: hiding it earlier would

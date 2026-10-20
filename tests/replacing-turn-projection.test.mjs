@@ -133,3 +133,42 @@ test('生成期回合按重新生成输入从日志认出，不依赖存档里�
   assert.equal(view.regeneratedDshTurns[3], 4, '正文画在生成期那一轮')
   assert.ok(view.suppressedDshTurns.includes(4), '生成期那一轮被认出：客户端只收掉它的「收到执行请求」，回复留着')
 })
+
+// 旧存档的工具回合：正文副本是在提交时折叠进生成期那一轮的 append，随后又被替换
+// 副本盖住；重新生成的范围把折叠替换也包了进去，末尾落在一个替换节点上。只看
+// range 末尾会映射到没有任何可画行的编辑回合，生成期那一轮又被当成作废回合，
+// 整轮正文于是消失（#283 的旧档形态）。
+const oldToolFoldEvents = [
+  { seq: 0, type: 'user/message', data: { role: 'user', source: { kind: 'user' } } },
+  { seq: 1, type: 'assistant/message', surfaceOp: 'append', data: { turn: 4, message: { source: { kind: 'model', provider: 'p', model: 'm' }, content: [{ type: 'text', text: '工具回合的旧流' }] } } },
+  { seq: 2, type: 'user/message', surfaceOp: 'append', data: { role: 'user', source: { kind: 'plugin:dsh-tavern-regen' } } },
+  { seq: 3, type: 'assistant/message', surfaceOp: 'append', data: { turn: 5, message: { source: { kind: 'model', provider: 'dsh-tavern', model: 'reply-projection' }, content: [{ type: 'text', text: '工具回合的旧流' }] } } },
+  { seq: 4, type: 'assistant/message', surfaceOp: { op: 'replace', startSeq: 1, endSeq: 3 }, sourceEventSeqs: [1, 2, 3],
+    data: { turn: 5, message: { source: { kind: 'model', provider: 'dsh-tavern', model: 'reply-projection' }, content: [{ type: 'text', text: '工具回合的旧流' }] } } },
+  { seq: 5, type: 'assistant/message', surfaceOp: { op: 'replace', startSeq: 1, endSeq: 4 }, sourceEventSeqs: [1, 2, 3, 4],
+    data: { turn: 6, message: { source: { kind: 'model', provider: 'p', model: 'm', tavernStoryTurn: 4 }, content: [{ type: 'text', text: '重新生成后的新正文' }] } } }
+]
+const oldToolFoldSession = { id: 's', events: oldToolFoldEvents, surface: { nodes: [0, 5] } }
+
+test('旧工具回合重新生成后，映射指向仍可画的折叠副本，而不是没有行的编辑回合', () => {
+  const view = fields.rollback({ id: 'c', sessionId: 's', mode: 'story', messages: [] },
+    { session: oldToolFoldSession, events: oldToolFoldEvents })
+  assert.equal(view.regeneratedDshTurns[4], 5, '折叠副本画在生成期那一轮')
+  assert.deepEqual(view.supersededDshTurns, [4], '只藏旧流所在的回合')
+})
+
+// 视图映射出来的那一轮就是这一轮正文唯一可见的副本。即使另一份可画的副本也在
+// 被替换名单里，也不能把映射指向的回合藏掉，否则页面只剩玩家输入（#283）。
+test('映射指向的回合不会被当成旧回合隐藏', () => {
+  const events = [
+    { seq: 0, type: 'user/message', data: { role: 'user', source: { kind: 'user' } } },
+    { seq: 1, type: 'assistant/message', surfaceOp: 'append', data: { turn: 7, message: { source: { kind: 'model', provider: 'p', model: 'm' }, content: [{ type: 'text', text: '新正文' }] } } },
+    { seq: 2, type: 'assistant/message', surfaceOp: 'append', data: { turn: 9, message: { source: { kind: 'model', provider: 'p', model: 'm' }, content: [{ type: 'text', text: '旧正文' }] } } },
+    { seq: 3, type: 'assistant/message', surfaceOp: { op: 'replace', startSeq: 1, endSeq: 1 }, sourceEventSeqs: [1, 2],
+      data: { turn: 10, message: { source: { kind: 'model', provider: 'p', model: 'm', tavernStoryTurn: 4 }, content: [{ type: 'text', text: '新正文' }] } } }
+  ]
+  const session = { id: 's', events, surface: { nodes: [0, 3] } }
+  const view = fields.rollback({ id: 'c', sessionId: 's', mode: 'story', messages: [] }, { session, events })
+  assert.equal(view.regeneratedDshTurns[4], 7)
+  assert.deepEqual(view.supersededDshTurns, [9], '映射指向的第 7 轮保留；没有映射的旧流才隐藏')
+})
