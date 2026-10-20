@@ -156,6 +156,10 @@ same_lockfile() {
   local candidate="$1"
   cmp -s "${APP_DIR}/pnpm-lock.yaml" "${candidate}/pnpm-lock.yaml" || return 1
   cmp -s "${APP_DIR}/pnpm-workspace.yaml" "${candidate}/pnpm-workspace.yaml" || return 1
+  # 依赖补丁变了也要重装，不能只看 lockfile。
+  if [ -d "${APP_DIR}/patches" ] || [ -d "${candidate}/patches" ]; then
+    diff -rq "${APP_DIR}/patches" "${candidate}/patches" >/dev/null 2>&1 || return 1
+  fi
   return 0
 }
 

@@ -64,7 +64,7 @@ public final class TavernBootstrap {
             status.accept(pending
                     ? "升级：正在继续上次未完成的离线安装，无需联网。请保持应用打开……"
                     : "升级：正在用应用内置的新版酒馆离线更新，无需联网。请保持应用打开……");
-            if (applyBundle(context, boot, root, bundle, cancelled, status)) {
+            if (applyBundle(context, boot, root, bundle, pending, cancelled, status)) {
                 prefs.edit().putBoolean(PREF_UPGRADE_PENDING, false).putInt(PREF_UPGRADE_ATTEMPTS, 0).apply();
                 return;
             }
@@ -115,11 +115,13 @@ public final class TavernBootstrap {
     }
 
     private static boolean applyBundle(Context context, ProotBootstrap boot, File root, JSONObject bundle,
-                                       BooleanSupplier cancelled, Consumer<String> status) throws Exception {
+                                       boolean repair, BooleanSupplier cancelled, Consumer<String> status) throws Exception {
         String revision = bundle.optString("revision", "");
         writeSetupScript(context, root);
         copyOfflineBundle(context, root, revision, "升级", cancelled, status);
-        int exit = run(boot, " DSH_TAVERN_APK_BUNDLE_UPDATE=1 DSH_TAVERN_APK_BUNDLE_REVISION=" + revision,
+        // 续装/修复时必须把依赖完整装一遍：中断过的 node_modules 不能当成就绪。
+        String force = repair ? " DSH_TAVERN_FORCE_DEPENDENCIES=1" : "";
+        int exit = run(boot, " DSH_TAVERN_APK_BUNDLE_UPDATE=1 DSH_TAVERN_APK_BUNDLE_REVISION=" + revision + force,
                 false, cancelled, status);
         if (exit != 0) return false;
         File profile = new File(root, "root/.dsh/profiles/tavern/package.json");
