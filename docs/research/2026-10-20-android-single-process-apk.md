@@ -18,7 +18,7 @@ Profile，因此手机上只有一个 DSH 常驻进程。构建、签名和静�
 | 酒馆版本 | 3.0.0（`versionCode` 30000） |
 | 包名 | `io.github.flizzywine.dshtavern.standalone` |
 | 构建产物 | `output/android-apk-020/dsh-tavern-android-release.apk` |
-| 产物 SHA-256 | `e417e953586aebf24635377604b3453a0241da67db985cb2b6758bad52dc8d8b` |
+| 产物 SHA-256 | `e4f5dd5708f05dc0f16241cfdc6fa378490ec60fe5e8e9c1c82d06b8d8521e71` |
 | 签名证书 SHA-256 | `D6:B8:B0:C7:25:BE:51:41:58:AF:97:4B:04:27:92:26:2E:CD:6E:97:47:06:89:95:24:2F:EE:30:55:59:E4:8D` |
 
 产物由 `TAVERN_APK_MODE=Release TAVERN_APK_SKIP_TESTS=1 bash android/apk/build.sh` 生成。
@@ -46,6 +46,16 @@ Profile，因此手机上只有一个 DSH 常驻进程。构建、签名和静�
 - 单测：`StartupPipelineTest`、`TavernWebProcessTest` 通过；新增的启动 shell 识别断言覆盖
   `exec dsh --profile 'tavern'` 与 `node /usr/local/bin/dsh --profile tavern`。
 - 文档测试与新客户端提示测试通过。
+
+## 首次安装实测反馈（2026-10-20，MuMu）
+
+真机日志显示 APK 引导链路正常：环境解压后自动进入「首次安装」，成功 clone `main`、安装
+Tavern 专用 pnpm 11.25.0，随后核心依赖从 `registry.npmmirror.com` 批量超时
+（`UND_ERR_CONNECT_TIMEOUT` / `error (23)`，单请求 20–70 秒），安装停在依赖阶段。
+
+APK 内无法设置 `DSH_TAVERN_NPM_REGISTRY`，因此 `TavernBootstrap` 增加一次自动重试：首次失败后用
+`https://registry.npmjs.org` 重跑 setup，日志以 `tee -a` 追加。仍失败才报错并提示检查网络。
+本次重建后的产物 SHA-256 已更新为上表的值；版本号未变（30000 / 3.0.0）。
 
 ## 待验收（需要设备）
 

@@ -13,7 +13,7 @@
 
 独立 APK 只运行酒馆自己的 `tavern` Profile（端口 3080），不启动 DSHA 的 `web` Profile，所以手机上只有一个 DSH 服务，内存、CPU 和电量开销明显低于 DSHA 路线。
 
-这是在线安装包，首次启动需要下载最新版酒馆；请保持应用运行。初始化失败时保留错误日志，再点击启动重试。安装日志位于容器内 /root/.dsh/logs/tavern-install.log。
+这是在线安装包，首次启动需要下载最新版酒馆；请保持应用运行。依赖下载失败时，应用会自动改用官方 npm 源（registry.npmjs.org）重试一次。仍失败时保留错误日志，再点击启动重试；安装日志位于容器内 /root/.dsh/logs/tavern-install.log。
 
 APK 使用独立包名 `io.github.flizzywine.dshtavern.standalone`，可以与旧版 v2.1 APK 和原版 DSHA 同时安装，数据各自独立。旧版 v2.1 APK 与本包签名不同，不能覆盖升级：先在旧包里导出存档和人物卡，装好本包后按[数据导入](data-import.md)导入。两个应用不要同时运行。Android 安装包不从应用内自更新；新版本从 [Releases](https://github.com/flizzywine/dsh-tavern/releases) 下载覆盖安装，不要先卸载。
 

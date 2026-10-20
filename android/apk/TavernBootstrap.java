@@ -14,6 +14,9 @@ import java.util.function.Consumer;
 public final class TavernBootstrap {
     private TavernBootstrap() { }
 
+    /** 默认走 npmmirror；依赖下载失败时用官方源再试一次，避免 APK 内无法改环境变量。 */
+    private static final String FALLBACK_REGISTRY = "https://registry.npmjs.org";
+
     public static void ensure(Context context, ProotBootstrap boot,
                               BooleanSupplier cancelled, Consumer<String> status) throws Exception {
         File root = boot.getRootfsDir();
@@ -28,12 +31,23 @@ public final class TavernBootstrap {
             byte[] buffer = new byte[8192]; int count;
             while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
         }
-        String command = "set -o pipefail; export DSH_TAVERN_ANDROID_STANDALONE=1; mkdir -p /root/.dsh/logs; "
-                + "bash /root/tavern-apk-setup.sh 2>&1 | tee /root/.dsh/logs/tavern-install.log";
-        int exit = InstallProcess.read(boot.execRootfsForInstall(command), 3600000L,
-                true, cancelled, status, Compat::destroy);
-        if (exit != 0) throw new java.io.IOException("酒馆安装失败，可点击启动重试；日志：.dsh/logs/tavern-install.log");
+        int exit = run(boot, "", false, cancelled, status);
+        if (exit != 0) {
+            status.accept("依赖下载未完成，正在改用官方 npm 源重试……");
+            exit = run(boot, " DSH_TAVERN_NPM_REGISTRY=" + FALLBACK_REGISTRY, true, cancelled, status);
+        }
+        if (exit != 0) throw new java.io.IOException("酒馆安装失败，可检查网络后点击启动重试；日志：.dsh/logs/tavern-install.log");
         if (!profile.isFile() || !source.isFile()) throw new java.io.IOException("酒馆安装结果不完整，请重试");
         Compat.write(marker, "1\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private static int run(ProotBootstrap boot, String extraEnvironment, boolean append,
+                           BooleanSupplier cancelled, Consumer<String> status) throws Exception {
+        String command = "set -o pipefail; export DSH_TAVERN_ANDROID_STANDALONE=1"
+                + extraEnvironment + "; mkdir -p /root/.dsh/logs; "
+                + "bash /root/tavern-apk-setup.sh 2>&1 | tee "
+                + (append ? "-a " : "") + "/root/.dsh/logs/tavern-install.log";
+        return InstallProcess.read(boot.execRootfsForInstall(command), 3600000L,
+                true, cancelled, status, Compat::destroy);
     }
 }
