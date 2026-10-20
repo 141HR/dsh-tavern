@@ -155,11 +155,12 @@ export async function settlementPerformanceChecks({ page, step, savedChat, outpu
     while(true) {
       const frame=await statusFrame(page)
       try {
-        await frame.locator('#e2e-gold').filter({hasText:/^金币：10$/}).waitFor({timeout:Math.max(1,statusDeadline-Date.now())})
+        // Short waits: DSH may bring its Tasks tab forward meanwhile, hiding the status again.
+        await frame.locator('#e2e-gold').filter({hasText:/^金币：10$/}).waitFor({timeout:Math.max(1,Math.min(5000,statusDeadline-Date.now()))})
         break
       } catch(error) {
         // The runtime replaces its loading iframe during initialization.
-        if(!frame.isDetached() || Date.now()>=statusDeadline)throw error
+        if(Date.now()>=statusDeadline || !(frame.isDetached() || error.name==='TimeoutError'))throw error
       }
     }
     if (reopening) {
