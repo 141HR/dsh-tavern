@@ -10,6 +10,8 @@ BRANCH="${DSH_TAVERN_BRANCH:-main}"
 DEFAULT_TARBALL_URL="https://codeload.github.com/flizzywine/dsh-tavern/tar.gz/refs/heads/main"
 TARBALL_URL="${DSH_TAVERN_TARBALL_URL:-${DEFAULT_TARBALL_URL}}"
 SOURCE_MARKER=".dsh-tavern-tarball-source"
+OFFLINE_TARBALL="/root/tavern-offline.tar"
+OFFLINE_DIR="${DSH_ROOT}/tavern-offline"
 TEMP_ROOT=""
 SOURCE_BACKUP=""
 SOURCE_SWAPPED=0
@@ -18,6 +20,15 @@ fail() {
   printf 'DSH Tavern 安装失败：%s\n' "$1" >&2
   exit 1
 }
+
+# 全程带步骤序号与耗时，日志会原样落到 APK 的安装日志里，方便判断卡在哪一步。
+START_TIME=$(date +%s)
+STEP=0
+stage() {
+  STEP=$((STEP + 1))
+  printf '\n== [步骤 %s] %s（已用 %ss）==\n' "${STEP}" "$*" "$(( $(date +%s) - START_TIME ))"
+}
+info() { printf '   %s\n' "$*"; }
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "缺少命令 $1，请先完成 DSHA 的基础安装。"
@@ -42,6 +53,49 @@ verify_source() {
   [ -f "${source}/package.json" ] || fail "下载内容不完整，缺少 package.json。"
   [ -f "${source}/bin/dsh-tavern.mjs" ] || fail "下载内容不完整，缺少 bin/dsh-tavern.mjs。"
   [ -f "${source}/android/install.sh" ] || fail "下载内容不完整，缺少 android/install.sh。"
+}
+
+# APK 自带的离线包：{ revision, source/, store/, pnpm-runtime/ }。
+# 首装完全离线；解包一次后保留在数据目录，失败重试时不必再解。
+OFFLINE_READY=0
+prepare_offline_bundle() {
+  [ "${OFFLINE_READY}" -eq 1 ] && return 0
+  if [ -f "${OFFLINE_DIR}/revision" ] && [ -d "${OFFLINE_DIR}/store" ] && [ -d "${OFFLINE_DIR}/source" ]; then
+    info "复用已解包的离线依赖：${OFFLINE_DIR}"
+    OFFLINE_READY=1
+    return 0
+  fi
+  [ -f "${OFFLINE_TARBALL}" ] || return 1
+  stage "解开 APK 内置依赖包（$(du -h "${OFFLINE_TARBALL}" 2>/dev/null | cut -f1)，约 20-60s）"
+  info "源文件：${OFFLINE_TARBALL}"
+  mkdir -p "${OFFLINE_DIR}"
+  # 分步解，日志里能看到每个目录的落盘时间，便于判断是慢还是卡死。
+  tar -xzf "${OFFLINE_TARBALL}" -C "${OFFLINE_DIR}" \
+    || { info '离线包解压失败，改用联网安装。'; return 1; }
+  if [ ! -f "${OFFLINE_DIR}/revision" ] || [ ! -d "${OFFLINE_DIR}/store" ] || [ ! -d "${OFFLINE_DIR}/source" ]; then
+    info '离线包内容不完整，改用联网安装。'
+    return 1
+  fi
+  info "离线包就绪：源码 $(find "${OFFLINE_DIR}/source" -type f | wc -l) 个文件，store $(du -sh "${OFFLINE_DIR}/store" 2>/dev/null | cut -f1)"
+  # 已解包则可以删掉压缩包，省出与包体相当的空间。
+  rm -f -- "${OFFLINE_TARBALL}" 2>/dev/null || true
+  OFFLINE_READY=1
+  return 0
+}
+
+install_from_offline() {
+  prepare_offline_bundle || return 1
+  stage "使用 APK 内置源码快照（$(cat "${OFFLINE_DIR}/revision")）"
+  prepare_temp_root
+  # 复制而不是移动：离线目录保持完整，安装失败重试时不必重新解包。
+  local candidate="${TEMP_ROOT}/offline-source"
+  cp -a "${OFFLINE_DIR}/source" "${candidate}" || { info '复制内置源码失败，改用联网安装。'; return 1; }
+  verify_source "${candidate}"
+  info "源码已就绪：$(find "${candidate}" -type f | wc -l) 个文件"
+  # 快照没有 .git：写 tarball 标记，之后的更新走官方压缩包覆盖，行为与既有压缩包安装一致。
+  printf '%s\n' "${DEFAULT_TARBALL_URL}" >"${candidate}/${SOURCE_MARKER}"
+  replace_source "${candidate}"
+  return 0
 }
 
 download_file() {
@@ -206,20 +260,33 @@ update_source() {
 require_command bash
 require_command node
 
+stage "准备酒馆源码"
 if [ ! -e "${APP_DIR}" ]; then
-  install_source
+  # 全新安装优先用 APK 内置快照：不联网、不受网络质量影响。
+  if install_from_offline; then
+    info '使用 APK 内置源码（离线）'
+  else
+    info '未找到可用的内置依赖包，改为联网下载。'
+    install_source
+  fi
 else
+  info '已有安装，检查更新。'
   update_source
 fi
 
 verify_source "${APP_DIR}"
 
-if ! DSH_HOME="${DSH_ROOT}" bash "${APP_DIR}/android/install.sh"; then
+stage "安装依赖并配置 Profile（最慢的一步，日志会持续输出）"
+if ! DSH_HOME="${DSH_ROOT}" DSH_TAVERN_OFFLINE_DIR="${OFFLINE_DIR}" bash "${APP_DIR}/android/install.sh"; then
   rollback_source || fail "无法确认服务已停止，未回滚源码，请检查进程后重试。"
   fail "依赖或 Profile 安装失败，源码已恢复到更新前版本。"
 fi
 
 SOURCE_SWAPPED=0
+# 安装成功后内置依赖包已无用，清掉可释放数百 MB（失败时保留，重试更快）。
+if [ -d "${OFFLINE_DIR}" ]; then
+  rm -rf -- "${OFFLINE_DIR}" 2>/dev/null || true
+fi
 if [ "${DSH_TAVERN_ANDROID_STANDALONE:-0}" = 1 ]; then
   printf '\n全部完成。请返回 DSH Tavern 应用并重新启动酒馆。\n'
 else

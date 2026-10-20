@@ -13,8 +13,8 @@ COMMIT = '8362bba747fcf84c19e436c3dbb594a0fc388a67'
 APK_SHA256 = '1fedf883d431af658d89c28b86d85974cc1d11b74e0c5d46ef3d3cf8650b1961'
 # 与上游 v2.1 APK 并存：签名不同，无法覆盖安装，也不该让用户卸载旧包丢数据。
 APPLICATION_ID = 'io.github.flizzywine.dshtavern.standalone'
-VERSION_CODE = 30000
-VERSION_NAME = '3.0.0'
+VERSION_CODE = 30001
+VERSION_NAME = '3.0.1'
 HERE = Path(__file__).resolve().parent
 
 
@@ -25,7 +25,7 @@ def replace(file, before, after):
     file.write_text(text.replace(before, after))
 
 
-def prepare(source, apk, destination):
+def prepare(source, apk, destination, offline=None):
     actual = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()
     if actual != COMMIT:
         raise ValueError(f'DSHA 源码版本不匹配：{actual}')
@@ -67,6 +67,12 @@ def prepare(source, apk, destination):
     setup += '\n# 独立 APK 由原生生命周期持有 tavern 主进程，结束安装器的临时服务。\n'
     setup += 'DSH_TAVERN_PORT=3088 DSH_TAVERN_RUNTIME_HOST=android node /root/.dsh/apps/dsh-tavern/bin/dsh-tavern.mjs stop\n'
     (assets / 'tavern-apk-setup.sh').write_text(setup)
+    # 首装离线包：源码 + pnpm store + pnpm 运行时。没有它首装要联网下载 287 个依赖，
+    # 手机上这一步经常几分钟到几十分钟，且失败只能整轮重来。
+    if offline is None or not Path(offline).is_file():
+        raise ValueError('缺少首装离线包，请先运行 android/apk/build-offline-bundle.sh')
+    shutil.copyfile(offline, assets / 'tavern-offline.bin')
+    print(f'离线包：{Path(offline).name} ({Path(offline).stat().st_size / 1048576:.1f} MB)')
     java = app / 'src/main/java/com/deepseekharness/app'
     shutil.copyfile(HERE / 'TavernBootstrap.java', java / 'core/TavernBootstrap.java')
     tests = app / 'src/test/java/com/deepseekharness/app/util'
@@ -253,5 +259,7 @@ if __name__ == '__main__':
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--apk', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--offline', type=Path, help='首装离线包（由 build-offline-bundle.sh 生成）')
     args = parser.parse_args()
-    prepare(args.source.resolve(), args.apk.resolve(), args.output.resolve())
+    prepare(args.source.resolve(), args.apk.resolve(), args.output.resolve(),
+            args.offline.resolve() if args.offline else None)

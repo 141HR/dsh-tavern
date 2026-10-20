@@ -19,7 +19,20 @@ fi
 BUILD="$(mktemp -d "${WORK}/build.XXXXXX")"
 rmdir "$BUILD"
 npm ci --prefix "$WORK/dsha/tools/web-compat" --ignore-scripts --no-audit --no-fund
-python3 "$ROOT/android/apk/prepare.py" --source "$WORK/dsha" --apk "$APK" --output "$BUILD"
+# 首装离线包：与即将发布的源码同一个提交，首装才不必联网下载依赖。
+OFFLINE_COMMIT="$(git -C "$ROOT" rev-parse HEAD)"
+OFFLINE_PKG="${TAVERN_OFFLINE_PKG:-$WORK/tavern-offline-${OFFLINE_COMMIT:0:12}.tar.gz}"
+if [ "${TAVERN_APK_OFFLINE:-1}" = 0 ]; then
+  echo 'TAVERN_APK_OFFLINE=0：生成本次安装包不带依赖（首装回到联网下载）。' >&2
+  OFFLINE_ARG=()
+else
+  if [ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]; then
+    echo '警告：工作区有未提交改动，离线包只含已提交内容。' >&2
+  fi
+  bash "$ROOT/android/apk/build-offline-bundle.sh" "$OFFLINE_COMMIT" "$OFFLINE_PKG"
+  OFFLINE_ARG=(--offline "$OFFLINE_PKG")
+fi
+python3 "$ROOT/android/apk/prepare.py" --source "$WORK/dsha" --apk "$APK" --output "$BUILD" "${OFFLINE_ARG[@]}"
 node "$ROOT/android/apk/build-web-compat.mjs" "$WORK/dsha" "$BUILD/app/src/tavern/assets"
 cd "$BUILD"
 MODE="${TAVERN_APK_MODE:-Debug}"

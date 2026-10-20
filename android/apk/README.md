@@ -29,6 +29,25 @@ WebView 的 `structuredClone` 后重新编译原生程序。兼容代码使用�
 构建时验证循环引用、Map、Date 和二进制数据的克隆结果。默认输出
 `output/android-apk-020/dsh-tavern-android-debug.apk` 及 SHA-256。
 
+## 首装离线包
+
+构建会先用 `android/apk/build-offline-bundle.sh <commit>` 采集当前提交的离线包
+（`tavern-offline-<commit>.tar.gz`，约 120 MB）：源码快照 + pnpm store（287 个依赖）+
+pnpm 运行时。它作为 `assets/tavern-offline.bin` 打进 APK，首装时只需解包，不必逐包下载。
+
+> 资产后缀必须是 `.bin`：aapt 会把 `.tar.gz` 静默解成 `.tar`，112 MB 的包会摊成 478 MB。
+> 内容仍是 gzip 压缩的 tar，容器内落地为 `/root/tavern-offline.tar`。
+
+- 采集命令可单独运行，结果按 commit 缓存；重复运行直接命中。
+- 采集结束会做一次「空目录 `--offline` 安装」自检，依赖不全直接失败，不会产出坏包。
+- 依赖全是纯 JS/wasm（锁文件里唯一平台限定包是 darwin 的 `fsevents`），x64 构建机采的
+  store 可直接给 arm64 手机用。
+- `TAVERN_APK_OFFLINE=0` 可关掉，恢复到联网首装；`TAVERN_OFFLINE_PKG` 可指定已有包。
+
+首装逻辑在 `android/setup.sh`（选源码）与 `android/install.sh`（装依赖）：内置包命中时先走
+`--offline`，缺包再联网补齐；源码快照没有被 Git 跟踪的历史，因此写 tarball 标记，之后的更新
+走官方压缩包覆盖。
+
 上游的 `prepareStandardAssets` / `prepareRecoveryAssets` 会从源码重建整个 rootfs；这里跳过
 它们，直接使用官方 APK 中已验证的产物。上游的依赖校验清单没有收录 Linux 版 aapt2，
 构建使用 `--dependency-verification=lenient`：缺失条目放行，摘要不符仍然失败。
