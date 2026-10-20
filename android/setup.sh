@@ -55,15 +55,25 @@ verify_source() {
   [ -f "${source}/android/install.sh" ] || fail "下载内容不完整，缺少 android/install.sh。"
 }
 
-# APK 自带的离线包：{ revision, source/, store/, pnpm-runtime/ }。
+# APK 自带的离线包：{ revision, source/, store/, cache/, registry, pnpm-runtime/ }。
 # 首装完全离线；解包一次后保留在数据目录，失败重试时不必再解。
 OFFLINE_READY=0
 prepare_offline_bundle() {
   [ "${OFFLINE_READY}" -eq 1 ] && return 0
   if [ -f "${OFFLINE_DIR}/revision" ] && [ -d "${OFFLINE_DIR}/store" ] && [ -d "${OFFLINE_DIR}/source" ]; then
-    info "复用已解包的离线依赖：${OFFLINE_DIR}"
-    OFFLINE_READY=1
-    return 0
+    # 新 APK 可能带更新的源码/缓存；只按目录存在复用会把旧 store 和缺失的
+    # metadata 缓存一直留着，首装继续退回联网。比对包内 revision，不同就重解。
+    local bundled_revision=""
+    if [ -f "${OFFLINE_TARBALL}" ]; then
+      bundled_revision="$(tar -xzOf "${OFFLINE_TARBALL}" revision 2>/dev/null || true)"
+    fi
+    if [ -z "${bundled_revision}" ] || [ "$(cat "${OFFLINE_DIR}/revision")" = "${bundled_revision}" ]; then
+      info "复用已解包的离线依赖：${OFFLINE_DIR}"
+      OFFLINE_READY=1
+      return 0
+    fi
+    info "内置依赖包版本变化（$(cat "${OFFLINE_DIR}/revision" 2>/dev/null) → ${bundled_revision}），重新解包"
+    rm -rf -- "${OFFLINE_DIR}" 2>/dev/null || true
   fi
   [ -f "${OFFLINE_TARBALL}" ] || return 1
   stage "解开 APK 内置依赖包（$(du -h "${OFFLINE_TARBALL}" 2>/dev/null | cut -f1)，约 20-60s）"
