@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "revision": "dd0dd6dcd4e3a4b1627bb7f33146f52655dfaf5e",
-  "releaseSequence": 776,
-  "version": "3.0.0",
+  "revision": "c7d4a118ca8cc0f57917bd054de35b950184381a",
+  "releaseSequence": 777,
+  "version": "3.0.1",
   "files": [
     {
       "path": "bin/application-update.mjs",
@@ -316,7 +316,7 @@
     },
     {
       "path": "package.json",
-      "sha256": "de106177edd92bd1817289d27b067775372e1fe65026f8efdf7a42a55fcceb03",
+      "sha256": "9dd1177c191ffce0480c047adafc9639d30f5708d8f346922973bc119a21de02",
       "size": 3911
     },
     {
@@ -836,8 +836,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/chat-session-state.js",
-      "sha256": "1d4eb3aacb40de043a5ba896d494fb2ac04e28f53b62c6e14ede519e8878c496",
-      "size": 19840
+      "sha256": "c2323e7228938980d3eda696b80ba3ffb3952a57d4ca9f781adaf48a13944358",
+      "size": 19882
     },
     {
       "path": "tavern-plugin/lib/domain/chat-snapshot-worker.js",
@@ -1556,8 +1556,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/rollback-surface.js",
-      "sha256": "adafa80fcfea8951efda57fcfb89682f31c1963c3cd0e115118177e38f1924c3",
-      "size": 41938
+      "sha256": "99a5f3cba2a2271478c3ece682f9932fbf6f7c183eaba9456affda83633e0bb7",
+      "size": 43192
     },
     {
       "path": "tavern-plugin/lib/domain/round-anchor.js",
