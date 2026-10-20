@@ -529,6 +529,7 @@ export function createChatJournalStore(options = {}) {
   }
   // Native-only opt-in. Null keeps legacy readers on their complete contract.
   async function readWindow(chatId,options) { return native.readWindow(chatId,options) }
+  async function readRecentSummaries(chatId,count) { return native.readRecentSummaries(chatId,count) }
   async function readHelperContext(chatId, range) {
     const selected = await native.readHelperContext(chatId, range)
     if (selected !== null) return selected
@@ -1082,5 +1083,5 @@ export function createChatJournalStore(options = {}) {
     })
   }
 
-  return Object.freeze({ compact, readRetentionHeader, removeLegacyFiles, detachedUpdate: true, upgradeStorage, migrateCompatibility, restoreLegacy, read, readWindow, readHelperContext, readSessionState, readSceneImageState, readSettlementCheckpoint, readBackgroundConfig, readDisplayRuntimeState, flushMaintenance, prepareSnapshot, readSlice, readSettlementBase, readChangedSlice, readChangedIndices, readViewDelta, patch, readRevision, update, version, remove })
+  return Object.freeze({ compact, readRetentionHeader, removeLegacyFiles, detachedUpdate: true, upgradeStorage, migrateCompatibility, restoreLegacy, read, readWindow, readRecentSummaries, readHelperContext, readSessionState, readSceneImageState, readSettlementCheckpoint, readBackgroundConfig, readDisplayRuntimeState, flushMaintenance, prepareSnapshot, readSlice, readSettlementBase, readChangedSlice, readChangedIndices, readViewDelta, patch, readRevision, update, version, remove })
 }

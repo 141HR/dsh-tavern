@@ -131,7 +131,7 @@ import { computeSceneTarget, createSceneIllustrations, sceneTarget, projectedSce
 import { legacyImageConfigurationReader } from './domain/image-generation-host.js'
 import { createPluginMedia, publicPluginMedia, pluginFileMediaType } from './domain/plugin-media.js'
 import { createPluginData } from './domain/plugin-data.js'
-import { createPluginTurnReader } from './domain/plugin-turns.js'
+import { createPluginTurnReader, RECENT_FLOORS } from './domain/plugin-turns.js'
 import { createPluginVariableWriter } from './domain/plugin-variables.js'
 import { createTavernPluginApi } from './plugin-api.js'
 import { createSceneWorldbooks, sceneWorldbookBinding } from './domain/scene-worldbook.js'
@@ -1122,6 +1122,17 @@ export async function apply(ctx) {
     // Alias recovery and configuration adoption still require the original reader.
     if (chat && chat.sessionId === sessionId && chat.backgroundConfigVersion === 1 && chat.conversationFeaturesVersion === 1) return chat
     return chatForSession(sessionId)
+  }
+  // The header's identity fields and the latest `count` floors' summaries (role, turn,
+  // greeting, MVU flags); `messagesFrom` is the first one's absolute index. Null where
+  // storage cannot read the latest floors alone (callers use the session state then).
+  async function recentStateForSession(sessionId, count) {
+    const chatId = (await readSessionMap())[str(sessionId)]
+    const recent = chatId && await chatPersistence.readRecentSummaries(chatId, count)
+    if (!recent) return null
+    const head = (await chatPersistence.readSlice(chatId, [], ['id', 'sessionId', 'mode', 'requestMode']))?.chat
+    if (!head || head.sessionId !== str(sessionId)) return null
+    return { ...head, messages: recent.messages, messagesFrom: recent.from, messageCount: recent.messageCount }
   }
   // The complete header and the latest `count` floors; the complete Chat only for
   // storage without floor reads (legacy saves, small by construction).
@@ -3075,6 +3086,7 @@ export async function apply(ctx) {
   const pluginData = createPluginData({ store: profileData })
   const pluginTurns = createPluginTurnReader({
     sessionState: sessionStateForSession,
+    recentState: recentStateForSession,
     sceneState: (sessionId, turns) => sessionChats.readSceneImageState(sessionId, { turns }),
     header: chatHeaderForSession,
     slice: (sessionId, indices) => chatSliceForSession(sessionId, indices, []),
@@ -3130,7 +3142,8 @@ export async function apply(ctx) {
   // The stage reads the latest turns as plain text, with their annotations and the card's cast.
   async function castStage(sessionId, count) {
     const card = await castCardOf(sessionId)
-    const state = await sessionStateForSession(str(sessionId))
+    // At most ten turns: the latest floors hold them.
+    const state = await recentStateForSession(str(sessionId), RECENT_FLOORS) || await sessionStateForSession(str(sessionId))
     const storyTurns = [...new Set((state?.messages || []).filter(message => message?.role === 'assistant').map(message => Number(message.turn || (message.greeting ? 1 : 0))).filter(turn => turn > 0))]
     const wanted = storyTurns.slice(-Math.max(1, Math.min(10, Number(count) || 5)))
     const annotated = await castPresentation.forTurns(str(sessionId), wanted)
