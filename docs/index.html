@@ -1669,38 +1669,33 @@ ctx.tavernUi.registerComposerAction({
 })</code></pre></div>
 <ul><li>图片、地图、音效放进插件文件夹的 <code>assets/</code>，用 <code>assetUrl</code> 取地址。</li><li>界面要知道当前是哪一轮、正文是否写完，用 <code>watchTurnState(gameId, state =&gt; …)</code>；<code>state.busy</code> 为真时不要提交输入。</li><li>战斗的中间状态（血量、回合数）跟剧情走就存成按轮数据（<code>saveTurnData</code>），这样回退后自然回到之前的状态。</li></ul>
 <h2 id="plugin-recipes--section-12">缺接口时</h2>
-<p>上面的组合做不到时，请提<a href="https://github.com/flizzywine/dsh-tavern/issues/new?template=plugin-api.yml">插件接口需求</a>，写清要做的插件和卡在哪一步。不要改 Tavern 源码或读 Tavern 的数据文件，Tavern 一更新插件就会失效。</p><footer class="article-footer"><span>DSH Tavern 使用文档</span><a class="" href="#help">需要帮助？</a></footer></article><article class="doc-page" id="plugin-publishing" data-group="plugins" data-title="插件开发：发布与一键安装"><div class="breadcrumb">使用文档 <span>/</span> <a class="" href="#plugins">插件</a> <span>/</span> 功能说明</div><h1 tabindex="-1">插件开发：发布与一键安装</h1><p class="lead">把插件放到 GitHub 上，别人就能在设置里粘贴地址一键安装。这里讲仓库怎么放、发布前查什么、怎么发新版本。</p><h2 id="plugin-publishing--section-1">一句话</h2>
-<p>把插件文件夹放到 GitHub 上，做成一个<strong>公开仓库</strong>，就算发布了。别人在酒馆的 <strong>设置 → DSH Tavern → 插件</strong> 里粘贴你的仓库地址，点「安装」，刷新页面就能用。</p>
-<h2 id="plugin-publishing--section-2">仓库长这样</h2>
-<p>仓库首页直接就是插件的文件，不要再套一层文件夹：</p>
-<div class="code-block"><div class="code-heading"><span>text</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh-tavern-hello/          ← GitHub 仓库
-├─ package.json            ← 必须有
-├─ index.mjs               ← 插件的后台部分（必须有，只做界面也放一个空的）
-├─ client.js               ← 插件的界面部分（可选）
-├─ assets/                 ← 图片、音效等（可选）
-└─ README.md</code></pre></div>
-<p><code>package.json</code> 照这个写，改掉名字、版本和说明即可：</p>
+<p>上面的组合做不到时，请提<a href="https://github.com/flizzywine/dsh-tavern/issues/new?template=plugin-api.yml">插件接口需求</a>，写清要做的插件和卡在哪一步。不要改 Tavern 源码或读 Tavern 的数据文件，Tavern 一更新插件就会失效。</p><footer class="article-footer"><span>DSH Tavern 使用文档</span><a class="" href="#help">需要帮助？</a></footer></article><article class="doc-page" id="plugin-publishing" data-group="plugins" data-title="插件开发：发布与一键安装"><div class="breadcrumb">使用文档 <span>/</span> <a class="" href="#plugins">插件</a> <span>/</span> 功能说明</div><h1 tabindex="-1">插件开发：发布与一键安装</h1><p class="lead">把插件放到 GitHub 上，别人就能在设置里粘贴地址一键安装。这里讲仓库怎么放、发布前查什么、怎么发新版本。</p><p>把插件放到 GitHub 公开仓库，别人在 <strong>设置 → DSH Tavern → 插件</strong> 粘贴仓库地址即可安装。</p>
+<h2 id="plugin-publishing--section-1">仓库结构</h2>
+<p>插件文件直接放在仓库根目录：</p>
+<div class="code-block"><div class="code-heading"><span>text</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh-tavern-hello/
+├─ package.json
+├─ index.mjs      宿主侧，必须有（只做界面也放一个空的）
+├─ client.js      浏览器侧，可选
+└─ assets/        静态资源，可选</code></pre></div>
 <div class="code-block"><div class="code-heading"><span>json</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>{
   &quot;name&quot;: &quot;dsh-tavern-hello&quot;,
   &quot;version&quot;: &quot;1.0.0&quot;,
-  &quot;description&quot;: &quot;一句话说明这个插件做什么&quot;,
+  &quot;description&quot;: &quot;一句话说明&quot;,
   &quot;type&quot;: &quot;module&quot;,
   &quot;exports&quot;: { &quot;.&quot;: &quot;./index.mjs&quot;, &quot;./client&quot;: &quot;./client.js&quot; },
   &quot;dsh&quot;: { &quot;client&quot;: { &quot;platform&quot;: &quot;web&quot;, &quot;inject&quot;: [&quot;dsh-tavern-plugin&quot;] } }
 }</code></pre></div>
-<p>用户在插件列表里看到的名字、版本和说明，就是这里的 <code>name</code>、<code>version</code>、<code>description</code>。<code>&quot;platform&quot;: &quot;web&quot;</code> 照写，不用分平台：桌面版、安卓 DSHA、命令行版的界面都是同一套网页，一份 <code>client.js</code> 三处通用。没有 <code>client.js</code> 时，去掉 <code>&quot;./client&quot;</code> 和整个 <code>dsh</code> 字段。每个文件里写什么，见<a href="#plugin-api">接口参考</a>的「快速开始」。</p>
-<h2 id="plugin-publishing--section-3">发布前查三件事</h2>
-<ol><li><strong><code>package.json</code> 里没有 <code>dependencies</code>。</strong> 一键安装不会帮用户下载 npm 包。用到了第三方库，就把库的代码直接放进仓库（或者连同 <code>node_modules</code> 一起提交）；否则用户安装时会看到「依赖 npm 包，暂不支持一键安装」。</li><li><strong>用户的设置不存在插件文件夹里。</strong> 用户点「更新」时，整个插件文件夹会被换成新版（旧版移到 <code>plugin-backups</code>），存在里面的设置就丢了。设置用 <code>savePluginData</code> 存（见<a href="#plugin-api">接口参考</a>的「插件存档数据」），更新不会丢，电脑和手机也是同一份；密钥用 DSH 的 <code>credentials</code> 服务。</li><li><strong>仓库是公开的。</strong> 私有仓库别人下载不了。</li></ol>
-<h2 id="plugin-publishing--section-4">发新版本</h2>
-<ul><li><strong>不发 Release 也行</strong>：别人装到的是仓库的最新代码，点「更新」也是拉最新代码。</li><li><strong>想让别人只装稳定版</strong>：先把 <code>package.json</code> 的 <code>version</code> 改大并提交，再到 GitHub 仓库页面 → Releases → Draft a new release，新建一个 tag（比如 <code>v1.1.0</code>），点 Publish。之后安装和「更新」都只取最新的 Release，平时在默认分支上改代码不影响用户。</li></ul>
-<h2 id="plugin-publishing--section-5">README 的「安装」一节</h2>
-<p>照抄下面这段即可，不用再教用户找数据目录：</p>
+<ul><li><code>name</code>、<code>version</code>、<code>description</code> 显示在用户的插件列表里。</li><li><code>&quot;platform&quot;: &quot;web&quot;</code> 照写，桌面版、安卓、命令行版通用。</li><li>没有 <code>client.js</code> 时，去掉 <code>&quot;./client&quot;</code> 和 <code>dsh</code> 字段。</li></ul>
+<h2 id="plugin-publishing--section-2">要求</h2>
+<ul><li><strong>不写 <code>dependencies</code></strong>：不会安装 npm 包，用到的库请打包进仓库。</li><li><strong>设置用 <code>savePluginData</code> 存</strong>：更新会整体替换插件文件夹。密钥用 DSH 的 <code>credentials</code>。见<a href="#plugin-api">接口参考</a>。</li></ul>
+<h2 id="plugin-publishing--section-3">版本</h2>
+<p>有 Release 时，安装和更新取最新 Release；没有时取默认分支。</p>
+<h2 id="plugin-publishing--section-4">README 安装说明</h2>
 <div class="code-block"><div class="code-heading"><span>markdown</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>## 安装
 
-需要 DSH Tavern 最新版。打开酒馆 → 设置 → DSH Tavern → 插件，粘贴本仓库地址，点「安装」，刷新页面。
-连不上 GitHub 时，在本页下载 ZIP（Code → Download ZIP），在同一处点「上传 ZIP」。</code></pre></div>
-<h2 id="plugin-publishing--section-6">发出去之前，自己先装一次</h2>
-<p>在自己的酒馆里，按上面 README 的步骤，粘贴你的仓库地址装一遍。插件列表里显示「已加载」，并且一局游戏里功能正常，别人也就能装。显示「加载失败」时，列表会写出原因；装不上时，安装框下面会提示缺了什么。</p><footer class="article-footer"><span>DSH Tavern 使用文档</span><a class="" href="#help">需要帮助？</a></footer></article><article class="doc-page" id="plugin-api" data-group="plugins" data-title="插件开发：接口参考"><div class="breadcrumb">使用文档 <span>/</span> <a class="" href="#plugins">插件</a> <span>/</span> 功能说明</div><h1 tabindex="-1">插件开发：接口参考</h1><p class="lead">第三方插件可用的 Tavern 接口，逐个说明。</p><p>接口版本：<strong>3</strong></p>
+打开 DSH Tavern → 设置 → DSH Tavern → 插件，粘贴本仓库地址，点「安装」，刷新页面。
+连不上 GitHub 时，下载本仓库 ZIP，在同一处点「上传 ZIP」。</code></pre></div>
+<p>发布前在自己的酒馆里按这段装一次，列表显示「已加载」即可。</p><footer class="article-footer"><span>DSH Tavern 使用文档</span><a class="" href="#help">需要帮助？</a></footer></article><article class="doc-page" id="plugin-api" data-group="plugins" data-title="插件开发：接口参考"><div class="breadcrumb">使用文档 <span>/</span> <a class="" href="#plugins">插件</a> <span>/</span> 功能说明</div><h1 tabindex="-1">插件开发：接口参考</h1><p class="lead">第三方插件可用的 Tavern 接口，逐个说明。</p><p>接口版本：<strong>3</strong></p>
 <p>DSH Tavern 把扩展功能交给第三方 <strong>DSH 插件</strong>：文生图、文生视频、配音，以及记忆、叙事锚点这类需要参与提示词和后台结算的功能。Tavern 提供一层稳定的接口：让插件知道「这一轮写完了、写了什么」，把图片或别的内容「挂回这一轮」，并往正文请求和后台结算里<strong>添加</strong>内容。多数是添加类接口，插件出错只会丢掉它自己那一份，游戏照常进行；少数替换类接口（如 <code>replaceSettlement</code>）让插件接管某个流程，插件失败时自动退回 Tavern 自己的做法。</p>
 <h2 id="plugin-api--section-1">三条承诺</h2>
 <ol><li><strong>方便</strong>：插件不需要改 Tavern 源码、不需要读 Tavern 的数据文件、不需要打补丁。</li><li><strong>稳定</strong>：接口带版本号，只加不改。Tavern 内部怎么重构，都不影响按本文写的插件。要废弃的东西先标记废弃，至少保留 6 个月。</li><li><strong>自由</strong>：挂什么、何时挂、挂几个、用什么模型和服务，全由插件决定。Tavern 只负责显示、和正文版本绑定、回退时隐藏。</li></ol>
