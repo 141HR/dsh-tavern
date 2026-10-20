@@ -3100,6 +3100,8 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
 @container (max-width: 420px) { .dsh-tavern-preset-hub-body { padding-left: 10px; } }
 .dsh-tavern-preset-hub-detail { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .dsh-tavern-preset-hub-back { padding: 10px 18px 0; }
+/* 子页面自身写着 height: 100%，放在「返回预设」下面会多出这一行的高度，底部被裁掉、滚不到。 */
+.dsh-tavern-preset-hub-detail > :not(.dsh-tavern-preset-hub-back) { flex: 1 1 0; min-height: 0; height: auto; }
 .dsh-tavern-preset-hub { container-type: inline-size; }
 .dsh-tavern-preset-hub-export { display: grid; gap: 8px; margin: 14px 18px 0; padding: 14px 16px; border: 1px solid var(--dsh-tavern-accent-border); border-radius: 12px; background: var(--dsh-tavern-accent-soft); }
 .dsh-tavern-preset-hub-export > b { font-size: 13px; font-weight: 600; }
