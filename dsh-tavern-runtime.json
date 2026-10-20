@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "c7d4a118ca8cc0f57917bd054de35b950184381a",
-  "releaseSequence": 777,
+  "revision": "0205b4d8bfe86484865d1aca988702d5495992c4",
+  "releaseSequence": 778,
   "version": "3.0.1",
   "files": [
     {
@@ -306,12 +306,12 @@
     },
     {
       "path": "install.ps1",
-      "sha256": "45f45e867ed589c144c0ebe13f687ce1b4978df6e54abaf32db4a4e91ff6af39",
+      "sha256": "8dcc83a2ffd43e3789be636cb5a67fe67e23e5c70098ef60f0399cce82d5f535",
       "size": 89150
     },
     {
       "path": "install.sh",
-      "sha256": "4c266822898926fcb2c58955ce6d9c74ae74ccf39292db24a41a3ac31fecae2e",
+      "sha256": "105f838c3b11ce2c54ae00211de3cee22686e510a41a2f769e8ef561857bd786",
       "size": 68800
     },
     {
