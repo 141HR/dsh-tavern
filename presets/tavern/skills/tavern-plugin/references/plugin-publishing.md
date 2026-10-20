@@ -31,7 +31,7 @@ dsh-tavern-hello/          ← GitHub 仓库
 }
 ```
 
-用户在插件列表里看到的名字、版本和说明，就是这里的 `name`、`version`、`description`。没有 `client.js` 时，去掉 `"./client"` 和整个 `dsh` 字段。每个文件里写什么，见[接口参考](plugin-api.md)的「快速开始」。
+用户在插件列表里看到的名字、版本和说明，就是这里的 `name`、`version`、`description`。`"platform": "web"` 照写，不用分平台：桌面版、安卓 DSHA、命令行版的界面都是同一套网页，一份 `client.js` 三处通用。没有 `client.js` 时，去掉 `"./client"` 和整个 `dsh` 字段。每个文件里写什么，见[接口参考](plugin-api.md)的「快速开始」。
 
 ## 发布前查三件事
 

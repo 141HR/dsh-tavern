@@ -1689,7 +1689,7 @@ ctx.tavernUi.registerComposerAction({
   &quot;exports&quot;: { &quot;.&quot;: &quot;./index.mjs&quot;, &quot;./client&quot;: &quot;./client.js&quot; },
   &quot;dsh&quot;: { &quot;client&quot;: { &quot;platform&quot;: &quot;web&quot;, &quot;inject&quot;: [&quot;dsh-tavern-plugin&quot;] } }
 }</code></pre></div>
-<p>用户在插件列表里看到的名字、版本和说明，就是这里的 <code>name</code>、<code>version</code>、<code>description</code>。没有 <code>client.js</code> 时，去掉 <code>&quot;./client&quot;</code> 和整个 <code>dsh</code> 字段。每个文件里写什么，见<a href="#plugin-api">接口参考</a>的「快速开始」。</p>
+<p>用户在插件列表里看到的名字、版本和说明，就是这里的 <code>name</code>、<code>version</code>、<code>description</code>。<code>&quot;platform&quot;: &quot;web&quot;</code> 照写，不用分平台：桌面版、安卓 DSHA、命令行版的界面都是同一套网页，一份 <code>client.js</code> 三处通用。没有 <code>client.js</code> 时，去掉 <code>&quot;./client&quot;</code> 和整个 <code>dsh</code> 字段。每个文件里写什么，见<a href="#plugin-api">接口参考</a>的「快速开始」。</p>
 <h2 id="plugin-publishing--section-3">发布前查三件事</h2>
 <ol><li><strong><code>package.json</code> 里没有 <code>dependencies</code>。</strong> 一键安装不会帮用户下载 npm 包。用到了第三方库，就把库的代码直接放进仓库（或者连同 <code>node_modules</code> 一起提交）；否则用户安装时会看到「依赖 npm 包，暂不支持一键安装」。</li><li><strong>用户的设置不存在插件文件夹里。</strong> 用户点「更新」时，整个插件文件夹会被换成新版（旧版移到 <code>plugin-backups</code>），存在里面的设置就丢了。设置存到浏览器本地（<code>localStorage</code>），或用 Tavern 的存档数据接口。</li><li><strong>仓库是公开的。</strong> 私有仓库别人下载不了。</li></ol>
 <h2 id="plugin-publishing--section-4">发新版本</h2>
