@@ -43,8 +43,11 @@ Profile，因此手机上只有一个 DSH 常驻进程。构建、签名和静�
   返回 `tavern`；`HarnessController.runCoreCommand()` 只被 debug / deviceAudit 源集引用。
   `android/configure-profiles.mjs` 清空 tavern Profile 的 web 插件，`dsh-tavern-entry` 只加入
   web Profile，APK 不会拉起 3088 入口插件。
+- pnpm **11.25.0**（安装器实际版本）验证：`pnpm_config_fetch_timeout=123` 会被
+  `pnpm config get fetchTimeout` 读为 123，`--config.fetchTimeout=600000` 可覆盖它。
 - 单测：`StartupPipelineTest`、`TavernWebProcessTest` 通过；新增的启动 shell 识别断言覆盖
-  `exec dsh --profile 'tavern'` 与 `node /usr/local/bin/dsh --profile tavern`。
+  `exec dsh --profile 'tavern'` 与 `node /usr/local/bin/dsh --profile tavern`；安装测试
+  21/21 通过（夹具校验新的 `--config.fetchTimeout=600000` 参数）。
 - 文档测试与新客户端提示测试通过。
 
 ## 首次安装实测反馈（2026-10-20，MuMu）
