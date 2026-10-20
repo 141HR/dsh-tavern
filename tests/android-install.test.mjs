@@ -153,6 +153,8 @@ test(`Android 安装固定 pnpm 并先安装依赖再停止旧服务：${initial
   const directory = await mkdtemp(path.join(tmpdir(), 'dsh-android-install-order-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
   const dshHome = path.join(directory, 'dsh-home')
+  const offlineDir = path.join(directory, 'offline')
+  await mkdir(path.join(offlineDir, 'store'), { recursive: true })
   const mockBin = path.join(directory, 'mock-bin')
   const events = path.join(directory, 'events')
   const dependenciesReady = path.join(directory, 'dependencies-ready')
@@ -179,6 +181,8 @@ fi
 shift
 [ "\$1" = "--config.fetchTimeout=600000" ] || exit 96
 shift
+[ "\${pnpm_config_store_dir:-}" = "${offlineDir}/store" ] || exit 97
+case " \$* " in *" --store-dir"*) exit 98;; esac
 if [ "\$1" = "--dir" ] && [ "\$2" = "${new URL('..', import.meta.url).pathname.replace(/\/$/, '')}" ]; then
   printf 'dependencies\\n' >> "${events}"
   : > "${dependenciesReady}"
@@ -231,7 +235,7 @@ esac
 `, { mode: 0o755 })
 
   const result = spawnSync('bash', [new URL('../android/install.sh', import.meta.url).pathname], {
-    env: { ...process.env, DSH_HOME: dshHome, DSH_TAVERN_ANDROID_STANDALONE: initialVersion === 'standalone' ? '1' : '0', PATH: `${mockBin}${path.delimiter}${process.env.PATH}` },
+    env: { ...process.env, DSH_HOME: dshHome, DSH_TAVERN_OFFLINE_DIR: offlineDir, DSH_TAVERN_ANDROID_STANDALONE: initialVersion === 'standalone' ? '1' : '0', PATH: `${mockBin}${path.delimiter}${process.env.PATH}` },
     encoding: 'utf8',
   })
   const recorded = (await readFile(events, 'utf8')).replace(/11\.25\.0\.install\.[^ \n]+/g, '11.25.0').trim().split('\n')

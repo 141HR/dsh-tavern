@@ -123,9 +123,10 @@ INSTALLED_PNPM_VERSION=$("${PNPM_COMMAND}" --version 2>/dev/null || :)
 export PATH="${PNPM_ROOT}/bin:${PATH}"
 export pnpm_config_update_notifier=false
 # All dependency and Profile installs below use this exact executable.
-PNPM_EXTRA=()
+# pnpm 的 config 子命令不接受 --store-dir；把 store 写进环境变量，所有 install
+# 和它们派生的 pnpm 都会使用内置 store，也不会污染 `pnpm config set` 的参数。
 if [ -n "${DSH_TAVERN_PNPM_STORE:-}" ]; then
-  PNPM_EXTRA+=("--store-dir=${DSH_TAVERN_PNPM_STORE}")
+  export pnpm_config_store_dir="${DSH_TAVERN_PNPM_STORE}"
 fi
 # 进度逐行追加：APK 日志框只追加新行，pnpm 默认的回车原地刷新在那里看起来像卡死。
 # 用配置项而不是命令行参数，避免污染包装函数传参顺序。
@@ -134,7 +135,7 @@ pnpm() {
   # 慢速移动网络下载大包会撞上 pnpm 单请求 60 秒默认超时（日志 error (23)）；
   # 提高到 10 分钟，避免一次超时就丢掉整轮安装。可用同名环境变量覆盖。
   "${PNPM_COMMAND}" --config.update-notifier=false \
-    --config.fetchTimeout="${pnpm_config_fetch_timeout:-600000}" "${PNPM_EXTRA[@]}" "$@"
+    --config.fetchTimeout="${pnpm_config_fetch_timeout:-600000}" "$@"
 }
 # 内置依赖包完整时先走 --offline（秒级完成）；缺包再联网补齐，而不是直接放弃。
 pnpm_install() {
