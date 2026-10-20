@@ -85,10 +85,12 @@ public final class TavernBootstrap {
     }
 
     /**
-     * 升级时是否用 APK 内置快照离线替换已装源码。只有两种情况算安全：
-     * 1) 源码自上次启动以来没变过（lastSeen 与当前提交一致），说明用户没有在应用内更新；
-     * 2) 首次从旧 APK 升上来（没有记录），且现有源码的安装时间早于本 APK 的构建时间、版本不高于内置版本。
-     * 其余情况都跳过，避免把用户应用内更新到的新版本降级。
+     * 升级时是否用 APK 内置快照离线替换已装源码。两个条件必须同时成立：
+     * 1) 已装源码的安装时间早于本 APK 的构建时间、且版本不高于内置版本——否则源码可能
+     *    比内置快照新（例如先下载了 APK，随后又在应用内更新过），替换就是降级；
+     * 2) 源码自上次启动以来没变过（lastSeen 与当前提交一致）——应用内刚更新过时，
+     *    即使时间判断有偏差也不动它，等下一次 APK 升级再处理。
+     * 其余情况都跳过，保留用户应用内更新到的版本。
      */
     private static boolean shouldApplyBundle(File root, SharedPreferences prefs, JSONObject bundle) {
         String bundled = bundle == null ? "" : bundle.optString("revision", "");
@@ -98,14 +100,12 @@ public final class TavernBootstrap {
         if (bundled.isEmpty() || installed.isEmpty()) { rememberSource(prefs, installed); return false; }
         if (installed.equalsIgnoreCase(bundled)) { rememberSource(prefs, installed); return false; }
         if (bundled.equalsIgnoreCase(lastBundle)) { rememberSource(prefs, installed); return false; }
-        if (!lastSeen.isEmpty()) {
-            if (lastSeen.equalsIgnoreCase(installed)) return true;
+        if (!installedBeforeBuild(root, bundle)) { rememberSource(prefs, installed); return false; }
+        if (!lastSeen.isEmpty() && !lastSeen.equalsIgnoreCase(installed)) {
             rememberSource(prefs, installed);
             return false;
         }
-        if (installedBeforeBuild(root, bundle)) return true;
-        rememberSource(prefs, installed);
-        return false;
+        return true;
     }
 
     private static void rememberSource(SharedPreferences prefs, String revision) {
