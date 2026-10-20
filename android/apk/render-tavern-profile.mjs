@@ -7,12 +7,12 @@ import path from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 
-const [work, host = 'android', dshVersion = '0.2.0-rc.2'] = process.argv.slice(2)
+const [work, sourceDirArg = '', host = 'android', dshVersion = '0.2.0-rc.2'] = process.argv.slice(2)
 if (!work) {
-  console.error('用法：render-tavern-profile.mjs <work-dir> [host] [dshVersion]')
+  console.error('用法：render-tavern-profile.mjs <work-dir> [source-dir] [host] [dshVersion]')
   process.exit(2)
 }
-const sourceRoot = path.join(work, 'source')
+const sourceRoot = sourceDirArg ? path.resolve(sourceDirArg) : path.join(work, 'source')
 const { mergeProfileManifest } = await import(pathToFileURL(path.join(sourceRoot, 'bin', 'profile-configuration.mjs')).href)
 const { hostLinePackages } = await import(pathToFileURL(path.join(sourceRoot, 'bin', 'dsh-compatibility.mjs')).href)
 const source = JSON.parse(readFileSync(path.join(sourceRoot, 'package.json'), 'utf8'))
