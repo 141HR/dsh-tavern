@@ -36,8 +36,19 @@ test('移动端实际样式：顶栏、键盘、候选、面板、编辑器与�
         })
         assert.equal(hit, true, `${width}: ${selectors[i]} 不被透明层拦截`)
       }
+      for (const selector of ['[data-mobile-nav="toggle"]', '[data-mobile-nav="files"]']) {
+        const rect = await box(selector)
+        assert.ok(rect && rect.width > 0 && rect.height > 0, `${width}: ${selector} 可见`)
+        assert.ok(Math.abs((rect.y + rect.height / 2) - (rects[0].y + rects[0].height / 2)) <= 1, `${width}: ${selector} 与顶栏对齐`)
+        const hit = await page.locator(selector).evaluate(element => {
+          const r = element.getBoundingClientRect()
+          return element.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2))
+        })
+        assert.equal(hit, true, `${width}: ${selector} 不被透明层拦截`)
+      }
       const title = await page.locator('header nav').boundingBox()
-      assert.ok(title.width >= 24, `${width}: 会话标题保留空间`)
+      // 顶栏宽度预算给标题留的下限是 16px（tavernHeaderMobileChrome 的注释）。
+      assert.ok(title.width >= 16, `${width}: 会话标题保留空间`)
       await assertNoOverflow(`${width}: 页面不溢出`)
     }
     await page.setViewportSize({ width: 390, height: 844 }); await settle()

@@ -174,12 +174,13 @@ test('手机按标题行宽折算槽位：放不下就留一格给 ⋮', () => {
   assert.equal(capacity(1, 300, { limit: 3 }), 3)
 })
 
-test('手机顶栏的布局约束：角落按钮留座、宿主动作组可收缩、窄屏让位', () => {
+test('手机顶栏的布局约束：角落按钮留座、宿主动作组保持自然宽度', () => {
   // 预算变量写在标题行上，JS 读它折算槽位。
   assert.match(css, /\[class\*="_titleRow"\] \{\s*--dsh-tavern-header-fixed: 196px;/)
-  assert.match(css, /\[class\*="_headerActions"\] \{\s*flex: 0 1 auto; min-width: 40px;/)
-  // 320px 级窄屏隐藏宿主的子智能体触发器，并降低固定开销。
-  assert.match(css, /@media \(max-width: 429px\) \{[\s\S]*?--dsh-tavern-header-fixed: 156px;/)
+  // 0.2.x 的 headerActions 是 display:contents 插槽，侧栏开关/文件/全屏都在里面；
+  // 容器压窄会让固定尺寸按钮互相覆盖，因此保持自然宽度，让标题区收缩。
+  assert.match(css, /\[class\*="_headerActions"\] \{\s*flex: none; min-width: 0; gap: 0;/)
+  assert.doesNotMatch(css, /--dsh-tavern-header-fixed: 156px;/)
   // 手机判定与上限要暴露给夹具。
   assert.match(client, /function useTavernMobileHeader\(\)/)
   assert.match(client, /"data-tavern-header-limit": mobile \? mobileLimit : ""/)
