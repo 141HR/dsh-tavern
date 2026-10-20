@@ -217,6 +217,7 @@ import { SILLYTAVERN_CSS_COMPAT_URLS } from './domain/sillytavern-css-compatibil
 import { createRoundHistory } from './domain/round-history.js'
 import { createResourceWorkspaceProjection } from './domain/resource-workspace-projection.js'
 import { projectAgentContent, projectAgentMessageText, projectRuntimeReply } from './domain/runtime-content-projection.js'
+import { plainReplyProse } from './domain/reply-prose.js'
 import { createScriptContinuity } from './domain/script-continuity.js'
 import { appendWritingSkillState } from './domain/skill-visibility.js'
 import { createStoryTimeline } from './domain/story-timeline.js'
@@ -795,6 +796,16 @@ export async function apply(ctx) {
     if (workspace === undefined) return undefined
     const extensions = cardPreparation.present({ card: workspace, as: 'card-extensions' })
     return withGlobalRegexScripts(extensions, await tavernExtensionSettings.read())
+  }
+  function presetRegexScripts(chat) {
+    if (!chat || groupOfMode(chat.mode) !== 'play') return []
+    const snapshot = chat.runtimePresetSnapshot && typeof chat.runtimePresetSnapshot === 'object' ? chat.runtimePresetSnapshot : null
+    return Array.isArray(snapshot && snapshot.regexScripts) ? snapshot.regexScripts : []
+  }
+  // The regex a story/script round's text was projected with when it was saved (reply-prose.js).
+  async function replyRegexScripts(chat) {
+    if (!['story', 'script'].includes(chat?.mode || 'story')) return []
+    return composeTavernRegexScripts(await readCardExtensions(chat.cardPath || chat.cardId, chat), presetRegexScripts(chat))
   }
   async function readScript(scriptOrCardPath) {
     if (str(scriptOrCardPath) === '') return undefined
@@ -2048,6 +2059,7 @@ export async function apply(ctx) {
   // the draft here while frames are built and releases it on success or failure.
   const importDrafts = new Map()
   const tavernScriptHostAdapter = createTavernScriptHostAdapter({
+    replyRegexScripts,
     recordResourceSave: (sessionId, summary) => apiDiagnostics.recordResourceSave(sessionId, summary),
     publishCreatedMessages: async function (chat, targets) {
       const session = sessionStore.get(chat.sessionId) || agentRegistry.get(chat.sessionId)?.session
@@ -2773,8 +2785,8 @@ export async function apply(ctx) {
         const nativeAnchor = { turn, input, reply: sessionEvents(session).at(-1).seq }
         appendSessionEvent(session, 'step/end', { turn, step: 1 })
         appendSessionEvent(session, 'turn/end', { turn, reason: { kind: 'completed' } })
-        messages.push({ role: 'user', text: user, ts: now }, { role: 'assistant', turn, text: body, sourceText: body, projectionText: body, sessionText: body,
-          displayText: body, displayMode: 'markdown', ts: now, native: true, swipeId: 0, swipes: [body], nativeAnchor })
+        messages.push({ role: 'user', text: user, ts: now }, { role: 'assistant', turn, ...plainReplyProse(body),
+          ts: now, native: true, swipeId: 0, swipes: [body], nativeAnchor })
       }
       await sessionStore.flush(session)
       return { messages, lastTurn: turn }
@@ -4396,11 +4408,7 @@ export async function apply(ctx) {
       const worldBook = await playWorldBook(chat, card)
       return prepareWorldBookRecall({ chat, card, turn, worldBook, latestBody: text, activationRequests: worldBook?.pluginActivationRequests })
     },
-    resolvePresetRegexScripts: async function (chat) {
-      if (!chat || groupOfMode(chat.mode) !== 'play') return []
-      const snapshot = chat.runtimePresetSnapshot && typeof chat.runtimePresetSnapshot === 'object' ? chat.runtimePresetSnapshot : null
-      return Array.isArray(snapshot && snapshot.regexScripts) ? snapshot.regexScripts : []
-    },
+    resolvePresetRegexScripts: async chat => presetRegexScripts(chat),
     now: Date.now,
     shellToolName: process.platform === 'win32' ? 'pwsh' : 'bash'
   })

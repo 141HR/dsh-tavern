@@ -25,6 +25,7 @@ import {
   replaceTavernHelperWorldbookOperations
 } from './tavern-helper-worldbook.js'
 import { createMvuSettlementEffect } from './mvu-settlement-effect.js'
+import { REPLY_PROSE_FIELDS } from './reply-prose.js'
 
 function str(value) {
   return typeof value === 'string' ? value : (value === undefined || value === null ? '' : String(value))
@@ -49,6 +50,8 @@ export function createTavernScriptHostAdapter(options = {}) {
   const mutationTails = new Map()
   const settlementTransactions = new Map()
   const settlementReaders = new WeakMap()
+  // The regex a saved reply's text was projected with; Helper rewrites reuse it (reply-prose.js).
+  const replyProjection = async chat => ({ regexScripts: options.replyRegexScripts ? await options.replyRegexScripts(chat) : [] })
   async function ensureRows(chat, indices) { await settlementReaders.get(chat)?.ensure?.(indices) }
   async function fullContext(chat) {
     await ensureRows(chat)
@@ -360,7 +363,7 @@ export function createTavernScriptHostAdapter(options = {}) {
       if (chat.messages.length) await transaction.work.ensure([0])
       assertTransactionEvent(settlementTransactions.get(str(sessionId)), eventId)
     }
-    const updated = replaceTavernHelperMessages(chat, patches)
+    const updated = replaceTavernHelperMessages(chat, patches, await replyProjection(chat))
     if (chat.mvu && chat.mvu.owner === 'official') {
       const opening = Array.isArray(chat.messages) ? chat.messages[0] : null
       const snapshots = opening && Array.isArray(opening.variables) ? opening.variables : []
@@ -657,7 +660,7 @@ export function createTavernScriptHostAdapter(options = {}) {
     if(settlementTransactions.has(str(sessionId)))throw new Error('MVU 结算进行中，模板存档不能覆盖结算事务')
     const compact={...request,changes:request.changes.map(c=>c.path[0]==='chat'?{...c,path:['chat',projectedIndices.indexOf(c.path[1]),...c.path.slice(2)]}:c)}
     const expanded=expandFullPromptTemplatePatch(baseline,compact)
-    const next=applyFullPromptTemplateState(latest,baseline,expanded)
+    const next=applyFullPromptTemplateState(latest,baseline,expanded,await replyProjection(latest))
     // No body rewrites on this path: native message history needs no resynchronization.
     const changes=diffJson(latest,next).map(c=>c.path[0]==='messages'?{...c,path:['messages',storedIndices[c.path[1]],...c.path.slice(2)]}:c)
     const saved=await options.patchChat(latest.id,revision,changes,{source:'prompt-template.state',assertCurrent:()=>{if(settlementTransactions.has(str(sessionId)))throw new Error('MVU 结算进行中，模板存档不能覆盖结算事务')}})
@@ -677,11 +680,12 @@ export function createTavernScriptHostAdapter(options = {}) {
     if (settlementTransactions.has(str(sessionId))) throw new Error('MVU 结算进行中，模板存档不能覆盖结算事务')
     const baseline = await options.readChatRevision(chat.id, request.stateRevision)
     if (patch) request = expandFullPromptTemplatePatch(baseline, request)
+    const projection = await replyProjection(chat)
     const saved = await options.updateChat(chat.id, async latest => {
       assertTemplateChat(latest)
       if (settlementTransactions.has(str(sessionId))) throw new Error('MVU 结算进行中，模板存档不能覆盖结算事务')
       if (str(latest.sessionId) !== str(sessionId)) throw new Error('模板聊天已切换')
-      const next = applyFullPromptTemplateState(latest, baseline, request)
+      const next = applyFullPromptTemplateState(latest, baseline, request, projection)
       return options.prepareTemplateHistory ? await options.prepareTemplateHistory(latest, next) : next
     }, { source: 'prompt-template.state' })
     if (!saved) throw new Error('模板聊天已不存在')
@@ -894,7 +898,7 @@ export function createTavernScriptHostAdapter(options = {}) {
       // Settlement writes variables only. The prose stays as the round saved it: text is
       // the prompt-regex projection the native surface holds, not the raw reply; turning it
       // back into the raw reply made every later reconcile see drift and repair (#306).
-      for (const key of ['swipes', 'sourceText', 'projectionText', 'text', 'sessionText', 'displayText']) {
+      for (const key of [...REPLY_PROSE_FIELDS, 'sessionText']) {
         if (Object.hasOwn(message, key)) settled[key] = structuredClone(message[key])
         else delete settled[key]
       }

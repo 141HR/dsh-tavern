@@ -14,6 +14,7 @@ import { diffJson } from './json-mutation.js'
 import { hasTavernCredit, withTavernCredit } from './card-credit.js'
 import { STORY_SUBMIT_TOOL_NAME, storyToolCallEnabled } from './story-tool-submission.js'
 import { styleReferenceFor } from './style-reference.js'
+import { replyProse } from './reply-prose.js'
 
 export const cordisToolNames = Object.freeze([
   'cordis_inspect_list',
@@ -807,13 +808,8 @@ export function createTurnOrchestrator(options) {
         delete draft.promptTemplateInput
         const assistantMessage = {
           role: 'assistant',
-          text: assistantText,
-          sourceText: str(reply.sourceText),
-          projectionText: str(reply.projectionText),
-          displayText: str(reply.displayText),
+          ...replyProse(reply.sourceText, { ...reply, sessionText: assistantText }),
           displayMode: 'html',
-          projectionVersion: 2,
-          projectionWarnings: Array.isArray(reply.warnings) ? clone(reply.warnings) : [],
           ts: now(),
           native: true,
           turn: turn,

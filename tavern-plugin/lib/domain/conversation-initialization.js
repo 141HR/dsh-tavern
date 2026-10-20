@@ -10,6 +10,7 @@ import { normalizeBackgroundModel } from './background-model-selection.js'
 import { normalizeBackgroundTasks, normalizePlayDefaults } from './tavern-settings.js'
 import { ensureSessionSeedTrajectory } from './session-seed-trajectory.js'
 import { defaultUserPreferenceProfile } from './user-preference-profile.js'
+import { replyProse } from './reply-prose.js'
 
 function str(value) { return value === undefined || value === null ? '' : String(value) }
 function groupOfMode(mode) { return !mode || mode === 'story' || mode === 'script' ? 'play' : 'card' }
@@ -207,13 +208,7 @@ export function createConversationInitialization(options) {
     if (typeof sessionId === 'string') chat.sessionId = sessionId
     if (greeting !== '') chat.messages.push(bindSceneWorldbook(Object.assign({
       role: 'assistant',
-      text: greeting,
-      sourceText: openingSourceText,
-      projectionText: openingProjection.renderedText,
-      displayText: openingProjection.displayText,
-      displayMode: openingProjection.displayMode,
-      projectionVersion: 2,
-      projectionWarnings: openingProjection.warnings,
+      ...replyProse(openingSourceText, openingProjection),
       ts: now(),
       greeting: true,
       turn: 1

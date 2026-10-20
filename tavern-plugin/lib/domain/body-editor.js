@@ -2,6 +2,7 @@ import { upgradeReferences } from './session-upgrade-references.js'
 import { replaceSessionSurface } from './session-surface-mutations.js'
 import { createHash, randomUUID } from 'node:crypto'
 import { editableReplyParts } from './reply-presentation.js'
+import { replyProse } from './reply-prose.js'
 import { locateRegenerationSurface } from './rollback-surface.js'
 import { sessionEvents } from './session-events.js'
 import { isScopedMessages } from './scoped-messages.js'
@@ -146,8 +147,7 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
       if (text === source(message)) return present(chat)
       const reply = await project(text, chat)
       const patch = {
-        sourceText: text, projectionText: text, text: reply.sessionText,
-        displayText: reply.displayText, displayMode: reply.displayMode,
+        ...replyProse(text, { ...reply, projectionText: text }),
         ...(target ? { bodyEdit: { formatVersion: 4, id: 'tavern-body-edit:' + randomUUID(), seq: target.assistantSeq, turn: target.turn } } : {})
       }
       if (Array.isArray(message.swipes)) {

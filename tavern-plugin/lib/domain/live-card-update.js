@@ -137,7 +137,7 @@ function refreshOpeningInitvar(chat, states) {
     if(!value||typeof value!=='object')return
     if(value.greeting===true){
       const index=value.swipeId||0
-      for(const key of ['text','sourceText','projectionText','displayText','sessionText','templateInputSource'])if(typeof value[key]==='string')value[key]=rewrite(value[key],index)
+      for(const key of ['text','sourceText','projectionText','displayText','templateInputSource'])if(typeof value[key]==='string')value[key]=rewrite(value[key],index)
       if(Array.isArray(value.swipes))value.swipes=value.swipes.map((text,index)=>rewrite(text,index))
       return
     }

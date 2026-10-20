@@ -48,7 +48,7 @@ function sameCaptureTarget(left, right) {
   if (!object(left) || !object(right)) return false
   for (const key of ['id', 'role', 'turn', 'greeting']) if (!same(left[key], right[key])) return false
   if (Number(left.swipeId || 0) !== Number(right.swipeId || 0)) return false
-  for (const key of ['text', 'sourceText', 'projectionText', 'sessionText', 'displayText']) {
+  for (const key of ['text', 'sourceText', 'projectionText', 'displayText']) {
     if (!same(left[key] ?? left.text, right[key] ?? right.text)) return false
   }
   return same(left.swipes ?? [left.text], right.swipes ?? [right.text])
