@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "3b56ad0aa5f6ef2390d6170c59f2c1ca42638a5c",
-  "releaseSequence": 786,
+  "revision": "4a8d572e7ba36ec99365dd295450278c817c168e",
+  "releaseSequence": 787,
   "version": "3.0.1",
   "files": [
     {
@@ -616,8 +616,8 @@
     },
     {
       "path": "tavern-plugin/lib/client-assets/tavern.css",
-      "sha256": "4ad52a04615c643fc9edd774d2e2e4c5cfec626a9ae88bdcacd45e11b27af0f3",
-      "size": 306469
+      "sha256": "0fa111de4e89f850337ecd6786ae7cab3a8fa550432240e17330aca6ed4bf068",
+      "size": 306715
     },
     {
       "path": "tavern-plugin/lib/client.js",
@@ -4641,8 +4641,8 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/lib/next.mjs",
-      "sha256": "8e1ba1ddf010bdc00a0044784a2706397fd84668afec543abce6afef639cd712",
-      "size": 2424
+      "sha256": "f42e639b7792cdd68e05536f33688daa0c4e0d7be30569d260a03d0146949c0c",
+      "size": 3279
     },
     {
       "path": "tavern-plugin/packages/dsh-profile-bridge/lib/shortcut.mjs",
