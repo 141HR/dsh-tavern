@@ -435,6 +435,8 @@ body.dsh-tavern-shell-active span:has(.dsh-tavern-hero-lockup) + span { display:
 .dsh-tavern-regen-title { font-weight: 700; font-size: 15px; }
 .dsh-tavern-regen-loading { padding: 4px 0 2px; color: var(--dsw-alias-label-secondary); font-size: 13px; }
 .dsh-tavern-regen-input { display: block; width: 100%; box-sizing: border-box; min-height: 64px; padding: 9px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 1.6; resize: vertical; transition: border-color .15s, box-shadow .15s; }
+.dsh-tavern-regen-style { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; font-size: 13px; }
+.dsh-tavern-regen-style input.dsh-tavern-regen-input { min-height: 0; padding: 6px 10px; }
 .dsh-tavern-regen-input::placeholder { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .dsh-tavern-regen-input:focus { outline: none; border-color: var(--dsh-tavern-accent-border); box-shadow: 0 0 0 3px var(--dsh-tavern-accent-soft); }
 .dsh-tavern-regen-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }

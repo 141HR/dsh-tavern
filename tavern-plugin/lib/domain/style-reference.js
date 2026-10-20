@@ -35,13 +35,21 @@ export function readStyleReference(args) {
   return { book, author, quote }
 }
 
-/** The reference recalled from the latest reply before `turn`; a regenerated turn keeps its own. */
-export function styleReferenceFor(chat, turn) {
+function replyTurn(message) {
+  return Number(message?.turn) || 0
+}
+
+/**
+ * The reference recalled from the reply this turn follows. Keyed by that reply, not by turn
+ * numbers: a regenerated turn gets a new native turn, but once its old reply is rolled back
+ * the reply before it is again the latest, so it finds its own reference.
+ */
+export function styleReferenceFor(chat) {
   if (chat?.backgroundTasks?.styleReference !== true) return null
+  const previous = (chat.messages || []).findLast(message => message?.role === 'assistant')
+  if (!previous) return null
   const list = Array.isArray(chat.styleReferences) ? chat.styleReferences : []
-  let found = null
-  for (const item of list) if (item && Number(item.afterTurn) < turn && (!found || Number(item.afterTurn) > Number(found.afterTurn))) found = item
-  return found
+  return list.findLast(item => item && Number(item.afterTurn) === replyTurn(previous)) || null
 }
 
 export function latestStyleReference(chat) {
@@ -56,11 +64,30 @@ export function rememberStyleReference(list, reference, afterTurn) {
   return [...kept, { ...reference, afterTurn }].slice(-KEPT)
 }
 
+// The guidance a player gives when asking for another passage; the passage it replaces is named
+// so the model does not pick it again.
+function retryText(guidance, replaced) {
+  const lines = []
+  if (replaced) lines.push(`【上一次选的是《${replaced.book}》${replaced.author}，这次换一段】`)
+  if (str(guidance).trim()) lines.push('【玩家对选段的要求，优先遵循】\n' + str(guidance).trim())
+  return lines.length ? '\n\n' + lines.join('\n') : ''
+}
+
+/**
+ * Recall a reference from a reply. `base: 'latest'` (after each reply) serves the next turn;
+ * `base: 'previous'` re-recalls for the latest turn before it is regenerated.
+ */
 export function createStyleReferenceRecall({ runAgent, selection, beginTask }) {
-  return async ({ chat, signal }) => {
-    const latest = (chat.messages || []).findLast(message => message.role === 'assistant')
-    if (!latest || latest.greeting === true) return null
-    const afterTurn = Number(latest.turn) || 0
+  return async ({ chat, signal, base = 'latest', guidance = '', retry = false }) => {
+    const replies = (chat.messages || []).filter(message => message?.role === 'assistant')
+    const latest = base === 'previous' ? replies.at(-2) : replies.at(-1)
+    if (!latest) {
+      if (base === 'previous') throw new Error('这一轮之前没有可依据的回复')
+      return null
+    }
+    if (!retry && latest.greeting === true) return null
+    const afterTurn = replyTurn(latest)
+    const replaced = retry ? (chat.styleReferences || []).findLast(item => item && Number(item.afterTurn) === afterTurn) : null
     let submitted
     const taskRun = await beginTask(chat)
     let run
@@ -75,7 +102,7 @@ export function createStyleReferenceRecall({ runAgent, selection, beginTask }) {
         selection: selection(chat), webSearchEnabled: false, signal,
         backgroundTasks: { variables: false, posture: false, characterDesign: false },
         system: SYSTEM,
-        messages: [{ role: 'user', content: [{ type: 'text', text: '【刚写完的正文】\n' + str(latest.sourceText || latest.text).slice(-2400) }] }],
+        messages: [{ role: 'user', content: [{ type: 'text', text: '【刚写完的正文】\n' + str(latest.sourceText || latest.text).slice(-2400) + retryText(guidance, replaced) }] }],
         tools: [STYLE_REFERENCE_SUBMIT_TOOL],
         maxToolCalls: 3,
         stopToolsWhen: () => submitted !== undefined,

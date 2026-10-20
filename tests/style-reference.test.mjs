@@ -10,15 +10,17 @@ const ref = (afterTurn, book = '边城') => ({ book, author: '沈从文', quote:
 test('文风参考默认关闭，只有手动开启才生效', () => {
   assert.equal(normalizeBackgroundTasks({}).styleReference, false)
   assert.equal(normalizeBackgroundTasks({ styleReference: true }).styleReference, true)
-  assert.equal(styleReferenceFor({ styleReferences: [ref(1)] }, 2), null)
+  assert.equal(styleReferenceFor({ messages: [{ role: 'assistant', turn: 1 }], styleReferences: [ref(1)] }), null)
   assert.equal(latestStyleReference({ styleReferences: [ref(1)] }), null)
 })
 
-test('每轮取上一条回复后摘的参考；重新生成本轮仍用同一条', () => {
-  const chat = { backgroundTasks: { styleReference: true }, styleReferences: [ref(1, '边城'), ref(2, '呼兰河传')] }
-  assert.equal(styleReferenceFor(chat, 3).book, '呼兰河传')
-  assert.equal(styleReferenceFor(chat, 2).book, '边城', '第 2 轮回复之后摘的参考不会用于重生成第 2 轮')
-  assert.equal(styleReferenceFor(chat, 1), null)
+test('每轮用前一条回复之后摘的参考；重新生成时旧回复已撤下，仍用前一条回复的参考', () => {
+  const chat = turns => ({ backgroundTasks: { styleReference: true }, styleReferences: [ref(1, '边城'), ref(2, '呼兰河传')],
+    messages: turns.flatMap(turn => [{ role: 'user', text: '…' }, { role: 'assistant', turn }]).concat([{ role: 'user', text: '本轮输入' }]) })
+  assert.equal(styleReferenceFor(chat([1, 2])).book, '呼兰河传')
+  // Regenerating the turn after reply 1: reply 2 is rolled back, and the regenerated turn gets a new native number.
+  assert.equal(styleReferenceFor(chat([1])).book, '边城')
+  assert.equal(styleReferenceFor(chat([1, 2, 5])), null, '没有为这条回复摘过参考就不带')
 })
 
 test('同一轮重摘会替换旧条目，并丢掉回滚后失效的后续条目', () => {
@@ -67,4 +69,21 @@ test('正文上下文带上文风参考与借鉴规则', async () => {
   assert.deepEqual(style, ['【文风参考 · 《边城》沈从文】\n小溪流下去。', '〈style-reference〉'])
   const without = await planner.plan({ purpose: 'body', card: { name: '阿青' }, chat: {}, worldBookContext: '', styleReference: null })
   assert.equal(without.sections.some(section => section.kind === 'style-reference'), false)
+})
+
+test('换一段：按玩家要求重摘，并告诉模型上次选了什么；重新生成时按前一条回复重摘', async () => {
+  const saved = { styleReferences: [ref(3, '边城'), ref(5, '药')] }
+  const taskRun = { participantRequest: { sessionId: 'bg', rewindTo: null, formatVersion: 1 }, bindSession() {}, participant: run => run,
+    async commit({ apply }) { apply(saved); return { status: 'committed' } }, async fail() { throw new Error('不应失败') } }
+  const requests = []
+  const recall = createStyleReferenceRecall({ selection: () => null, beginTask: async () => taskRun,
+    runAgent: async input => { requests.push(input); input.onToolCall({ name: 'style_reference_submit', arguments: { book: '射雕英雄传', author: '金庸', quote: '郭靖一掌拍出。' } }); return {} } })
+  const chat = { sessionId: 's', styleReferences: saved.styleReferences, messages: [{ role: 'assistant', turn: 3, text: '甲' }, { role: 'user', text: '乙' }, { role: 'assistant', turn: 5, text: '丙' }] }
+  await recall({ chat, signal: new AbortController().signal, base: 'previous', guidance: '要金庸的打斗描写', retry: true })
+  const text = requests[0].messages[0].content[0].text
+  assert.match(text, /甲/)
+  assert.match(text, /上一次选的是《边城》沈从文/)
+  assert.match(text, /要金庸的打斗描写/)
+  assert.deepEqual(saved.styleReferences.map(item => [item.afterTurn, item.book]), [[3, '射雕英雄传']], '被重写那一轮之后的参考一并失效')
+  await assert.rejects(recall({ chat: { ...chat, messages: [{ role: 'assistant', turn: 1, greeting: true }] }, signal: new AbortController().signal, base: 'previous', retry: true }), /之前没有可依据的回复/)
 })

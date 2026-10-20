@@ -2307,6 +2307,7 @@ export async function apply(ctx) {
       statusBarPlacement: chat.statusBarPlacement === 'body' ? 'body' : 'sidebar',
       posture: chat.posture || '',
       styleReference: latestStyleReference(chat),
+      styleReferenceEnabled: chat.backgroundTasks?.styleReference === true && (chat.mode || 'story') === 'story',
       ledger: readLedger(chat.ledger),
       ledgerTask: manualLedger.project(chat),
       characterDesigns: projectCharacterDesignDocument(chat.characterDesignDocument),
@@ -2501,6 +2502,7 @@ export async function apply(ctx) {
     const next = Object.assign({}, previous, volatileSessionViewFields(chat, activity, changes), {
       posture: chat.posture || '',
       styleReference: latestStyleReference(chat),
+      styleReferenceEnabled: chat.backgroundTasks?.styleReference === true && (chat.mode || 'story') === 'story',
       guides: Array.isArray(chat.guides) ? chat.guides : [],
       // Header state a background task rewrites without touching any message.
       ledger: readLedger(chat.ledger),
@@ -2945,6 +2947,23 @@ export async function apply(ctx) {
     }
   })
   ctx.effect(() => () => worldbookPrefilter.dispose())
+  // A player asking for another passage, optionally saying what they want. 'next' replaces the
+  // reference waiting for the next turn; 'regenerate' re-recalls the one the latest turn used,
+  // just before that turn is regenerated.
+  async function retryStyleReference(sessionId, { target = 'next', guidance = '' } = {}) {
+    const header = await chatForSession(str(sessionId))
+    if (!header || (header.mode || 'story') !== 'story') throw new Error('文风参考只用于自由模式')
+    if (header.backgroundTasks?.styleReference !== true) throw new Error('请先在本局设置里开启文风参考')
+    if (agentRegistry.get(header.sessionId)?.phase?.kind === 'running' || header.regenInProgress) throw new Error('前台正在生成，请完成后再换参考')
+    await worldbookPrefilter.cancel(header.id)
+    if (target === 'regenerate') await cancelSettlement(header.id)
+    else if (backgroundTasks.activity(header).busy) throw new Error('后台结算中，请稍后再换参考')
+    const base = target === 'regenerate' ? 'previous' : 'latest'
+    let chat = await storyContext({ chatId: header.id })
+    // The bounded read may stop short of the reply before the latest one.
+    if (base === 'previous' && (chat.messages || []).filter(message => message?.role === 'assistant').length < 2) chat = await readChat(header.id)
+    return await styleReferenceRecall({ chat, signal: new AbortController().signal, base, guidance: str(guidance).slice(0, 500), retry: true })
+  }
   const publishCharacterDesign = createCharacterDesignPublisher({ worldBooks, readCard })
   const characterDesignDocuments = createCharacterDesignDocumentTools({
     publishWorldbook: publishCharacterDesign,
@@ -5276,7 +5295,9 @@ export async function apply(ctx) {
         notifyPluginTimeline(args && args.sessionId, 'edit', { settled: true })
         return { view }
       }
+      case 'retryStyleReference': return { styleReference: await retryStyleReference(args?.sessionId, { target: 'next', guidance: args?.guidance }) }
       case 'regenBody': {
+        if (args?.restyle === true) await retryStyleReference(args.sessionId, { target: 'regenerate', guidance: args.styleGuidance })
         await reconcileStory(args && args.sessionId)
         const view = await regenBody(args && args.chatId, args && args.guidance, args && args.sessionId)
         notifyPluginTimeline(args && args.sessionId, 'regenerate')
