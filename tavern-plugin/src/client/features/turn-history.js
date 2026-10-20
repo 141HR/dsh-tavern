@@ -299,7 +299,35 @@
 				hideRow(row);
 			}
 		}
-			function apply(sessionId, turns, regeneratedDshTurns, replacingTurns, supersededTurns) {
+		// Row plan comparison (docs/design/transcript-row-plan.md, step 2): the page still
+		// follows the hiding lists; this only reports rows the plan would show differently.
+		// Same rule as planShowsRow in lib/domain/transcript-row-plan.js.
+		function tavernPlanShowsRow(plan, turnValue, kind) {
+			if (!plan || !Array.isArray(plan.rounds) || turnValue === null || turnValue === "") return true;
+			const turn = Number(turnValue);
+			if (plan.from !== null && plan.from !== undefined && turn < plan.from) return null;
+			if (plan.open !== null && plan.open !== undefined && turn === Number(plan.open)) return true;
+			const asInput = plan.rounds.some(function (round) { return round.input === turn; });
+			const asReply = plan.rounds.some(function (round) { return round.reply === turn; });
+			return kind === "user" || kind === "turn-trigger" ? asInput : asReply;
+		}
+		const reportedPlanDiffs = new Map();
+		function compareRowPlan(sessionId, plan) {
+			if (!plan) return;
+			const diffs = [];
+			for (const row of root().querySelectorAll('[data-chat-flow-kind][data-chat-turn]')) {
+				const kind = row.getAttribute("data-chat-flow-kind");
+				if (kind === "context") continue;
+				const planned = tavernPlanShowsRow(plan, row.getAttribute("data-chat-turn"), kind);
+				const shown = row.style.display !== "none";
+				if (planned !== null && planned !== shown) diffs.push(row.getAttribute("data-chat-turn") + ":" + kind + ":" + (shown ? "现行显示" : "现行隐藏"));
+			}
+			const key = diffs.join(",");
+			if (reportedPlanDiffs.get(sessionId) === key) return;
+			reportedPlanDiffs.set(sessionId, key);
+			if (diffs.length) console.debug("dsh-tavern 行计划对照：与现行隐藏不同的行", { sessionId: sessionId, rows: diffs, plan: plan });
+		}
+			function apply(sessionId, turns, regeneratedDshTurns, replacingTurns, supersededTurns, rowPlan) {
                 // Reconcile both directions: an older observer may have hidden a
                 // restored turn after the action's immediate DOM update.
                 restoreHiddenRows();
@@ -332,12 +360,13 @@
                     const source = row.querySelector('[data-context-source]');
                     if (source && source.textContent.trim() === "dsh-tavern-surface-restore") hideRow(row);
                 }
+                compareRowPlan(sessionId, rowPlan);
 			}
 			function regenerated(sessionId, view, tail) {
 				const adopted = view && view.adopted;
 				if (adopted && Number(adopted.hiddenTurn) > 0) forgetHiddenTurn(HIDDEN_TURNS_KEY, sessionId, Number(adopted.hiddenTurn));
 				if (adopted && Number(adopted.syntheticTurn) > 0) forgetHiddenTurn(HIDDEN_REGEN_USER_TURNS_KEY, sessionId, Number(adopted.syntheticTurn));
-				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns);
+				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && view.transcriptRows);
 			}
             function restored(sessionId, view) {
                 const turn = Number(view && view.undoneRollback && view.undoneRollback.turn);
@@ -352,10 +381,10 @@
                     tail.style.display = "";
                     turnRowsBefore(tail, tail.getAttribute("data-chat-turn")).forEach(function (row) { row.style.display = ""; });
                 }
-                apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns);
+                apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && view.transcriptRows);
             }
 			function rolledBack(sessionId, view) {
-				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns);
+				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && view.transcriptRows);
 			}
 			return Object.freeze({ apply: apply, regenerated: regenerated, rolledBack: rolledBack, restored: restored });
 		}

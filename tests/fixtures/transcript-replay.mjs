@@ -10,8 +10,10 @@ import { readFile } from 'node:fs/promises'
 import { chromium } from 'playwright'
 import { createSessionStateView } from '../../tavern-plugin/lib/domain/chat-session-state.js'
 import { sessionEvents } from '../../tavern-plugin/lib/domain/session-events.js'
+import { planTranscriptRows, planShowsRow, planStoryTurn } from '../../tavern-plugin/lib/domain/transcript-row-plan.js'
 
 const SEED_REPLY = /^tavern-seed-trajectory:v1:.+:2$/
+const isRegenerationInput = source => source?.plugin === 'dsh-tavern-regen' || source?.kind === 'plugin:dsh-tavern-regen'
 
 function textOf(message) {
   return (message?.content || []).filter(block => block?.type === 'text').map(block => block.text).join('')
@@ -45,7 +47,9 @@ export function hostRows(events) {
     if (event.surfaceOp !== 'append') continue
     if (event.type === 'user/message') {
       const source = event.data?.source
-      const kind = source?.kind === 'user' ? 'user' : woke || turn === null ? 'context' : 'turn-trigger'
+      // The host draws a plugin message as the trigger card only when the inbox handed it
+      // over to wake a turn; Tavern does that for a regeneration input. The rest is context.
+      const kind = source?.kind === 'user' ? 'user' : !woke && isRegenerationInput(source) ? 'turn-trigger' : 'context'
       if (kind !== 'context') woke = true
       const row = { seq: event.seq, turn, kind, text: textOf(event.data), source: source?.plugin || source?.kind || '' }
       rows.push(row)
@@ -66,7 +70,8 @@ export function hostRows(events) {
     row.ids.push(String(event.data?.message?.id || ''))
   }
   // A step with nothing visible is never drawn; Tavern hides its own seed reply.
-  return rows.filter(row => row.kind !== 'assistant-step' || ((row.text.trim() !== '' || row.tools > 0) && !row.ids.some(id => SEED_REPLY.test(id))))
+  // The renderer judges a step by its final message.
+  return rows.filter(row => row.kind !== 'assistant-step' || ((row.text.trim() !== '' || row.tools > 0) && !SEED_REPLY.test(row.ids.at(-1))))
 }
 
 /** The server's visibility fields for this save and log, from the production view. */
@@ -107,10 +112,17 @@ export async function visibleRows(rows, view) {
         root.append(node)
       }
       const projection = client.createTurnHistoryProjection({ root: () => root, storage: () => ({ getItem: () => '{}', setItem() {} }) })
-      projection.apply('replay', view.suppressedDshTurns, view.regeneratedDshTurns, view.replacingDshTurns, view.supersededDshTurns)
-      return Array.from(root.children, node => getComputedStyle(node).display !== 'none')
+      // The comparison log the client writes when the row plan would show rows differently.
+      const reported = []
+      const debug = console.debug
+      console.debug = (message, detail) => { if (String(message).includes('行计划对照')) reported.push(...detail.rows) }
+      try { projection.apply('replay', view.suppressedDshTurns, view.regeneratedDshTurns, view.replacingDshTurns, view.supersededDshTurns, view.transcriptRows) }
+      finally { console.debug = debug }
+      return { visible: Array.from(root.children, node => getComputedStyle(node).display !== 'none'), reported }
     }, { rows, view })
-    return rows.map((row, index) => ({ ...row, visible: shown[index] }))
+    const result = rows.map((row, index) => ({ ...row, visible: shown.visible[index] }))
+    result.planDiffsReported = shown.reported
+    return result
   } finally { await tab.close() }
 }
 
@@ -124,11 +136,13 @@ export function storyTurnOf(view, turn) {
  * What the player sees per story round, and every way it breaks the page's invariant.
  * Only a turn's closing step draws the round's story; earlier steps show their own text.
  */
-export function transcriptReport(chat, rows, view) {
+export function transcriptReport(chat, rows, view, storyTurn = turn => storyTurnOf(view, turn), open = null) {
   const rounds = new Map()
+  let inferred = 1
   for (const message of chat.messages || []) {
+    if (message?.role === 'user') { inferred += 1; continue }
     if (message?.role !== 'assistant') continue
-    const story = Number(message.turn)
+    const story = Number(message.turn) || (message.greeting === true ? 1 : inferred)
     if (!(story > 0)) continue
     rounds.set(story, { story, greeting: message.greeting === true, saved: String(message.text ?? ''), inputs: [], replies: [] })
   }
@@ -137,25 +151,32 @@ export function transcriptReport(chat, rows, view) {
   const orphans = []
   for (const row of rows) {
     if (!row.visible) continue
+    // A turn the save does not hold yet (running, failed, settling) is meant to show.
+    if (open !== null && Number(row.turn) === Number(open)) continue
     if (row.kind === 'user' || row.kind === 'turn-trigger') {
       const round = rounds.get(Number(row.turn))
       if (round) round.inputs.push(row)
       else orphans.push({ kind: 'input', row })
     }
     if (row.kind === 'assistant-step' && closing.get(row.turn) === row) {
-      const story = storyTurnOf(view, row.turn)
+      const story = storyTurn(row.turn)
       const round = rounds.get(story)
       if (round) round.replies.push(row)
       else orphans.push({ kind: 'reply', story, row })
     }
   }
-  const problems = []
+  const problems = [], stale = []
   // A round still being written (regenerating, settling) is not judged yet.
   const live = view.replacingDshTurns?.length || chat.regenInProgress === true
   for (const round of rounds.values()) {
     if (live) break
+    // The opening has display paths of its own (legacy greeting, prepared message).
+    if (round.greeting) continue
     if (round.replies.length === 0) problems.push(`第 ${round.story} 轮没有可见正文`)
     if (round.replies.length > 1) problems.push(`第 ${round.story} 轮有 ${round.replies.length} 份正文：原生轮 ${round.replies.map(row => row.turn).join('、')}`)
+    // The renderer draws the save's projection when it has one, else the row's own text;
+    // a row still holding an older version is only safe in the first case.
+    if (round.replies.length === 1 && round.replies[0].text.trim() !== round.saved.trim()) stale.push(`第 ${round.story} 轮显示的行（原生轮 ${round.replies[0].turn}）不是存档里这一版`)
     if (!round.greeting && round.inputs.filter(row => row.kind === 'user').length > 1) problems.push(`第 ${round.story} 轮的玩家输入出现了 ${round.inputs.length} 次`)
   }
   for (const orphan of orphans) {
@@ -163,13 +184,18 @@ export function transcriptReport(chat, rows, view) {
     else if (orphan.row.kind === 'user') problems.push(`原生轮 ${orphan.row.turn} 的玩家输入可见，但存档没有这一轮`)
     else problems.push(`原生轮 ${orphan.row.turn} 的触发卡（${orphan.row.source}）可见`)
   }
-  return { rounds: [...rounds.values()], orphans, problems }
+  return { rounds: [...rounds.values()], orphans, problems, stale }
 }
 
-/** Everything at once: rows, server view, client hiding, invariant report. */
+/**
+ * Everything at once: rows, server view, and what the page shows under the current
+ * hiding lists and under the row plan, each checked against the invariant.
+ */
 export async function replayTranscript(chat, session) {
   const events = sessionEvents(session)
   const view = serverView(chat, session)
   const rows = await visibleRows(hostRows(events), view)
-  return { view, rows, ...transcriptReport(chat, rows, view) }
+  const plan = planTranscriptRows({ chat, events, nodes: session.surface?.nodes || [] })
+  const planned = rows.map(row => ({ ...row, visible: planShowsRow(plan, row) }))
+  return { view, rows, clientPlanDiffs: rows.planDiffsReported, ...transcriptReport(chat, rows, view), plan: { plan, rows: planned, ...transcriptReport(chat, planned, view, turn => planStoryTurn(plan, turn), plan.open) } }
 }

@@ -64,12 +64,20 @@ function game(id) {
 async function problemsOf({ chat, session }) {
   return (await replayTranscript(chat, session)).problems
 }
+async function planProblemsOf({ chat, session }) {
+  return (await replayTranscript(chat, session)).plan.problems
+}
+// Both the current hiding lists and the row plan must keep the page whole.
+async function expectWhole(g) {
+  const replay = await replayTranscript(g.chat, g.session)
+  assert.deepEqual({ current: replay.problems, plan: replay.plan.problems, planStale: replay.plan.stale }, { current: [], plan: [], planStale: [] })
+}
 
 test('普通回合：每轮一份输入一份正文', async () => {
   const g = game('plain')
   g.round(1, '你好', '她点了点头。')
   g.round(2, '去花店', '花店的门开着。')
-  assert.deepEqual(await problemsOf(g), [])
+  await expectWhole(g)
 })
 
 test('同一轮连续重新生成三次：只剩最新一版', async () => {
@@ -79,7 +87,7 @@ test('同一轮连续重新生成三次：只剩最新一版', async () => {
   g.round(2, '去花店', '第一版')
   seq = sessionEvents(g.session).filter(event => event.type === 'assistant/message').at(-1).seq
   for (const body of ['第二版', '第三版', '第四版']) seq = g.regenerate(2, seq, body)
-  assert.deepEqual(await problemsOf(g), [])
+  await expectWhole(g)
 })
 
 // 本机文风联想 A/B 存档（chat-mvgunsss）：每轮都重新生成过一次，只有最早那轮看得见。
@@ -91,7 +99,7 @@ test('重新生成过的几轮各自都有正文', async () => {
     const old = g.round(story, '第 ' + turn + ' 次行动', '旧正文 ' + turn)
     g.regenerate(story, old.seq, '新正文 ' + turn)
   }
-  assert.deepEqual(await problemsOf(g), [])
+  await expectWhole(g)
 })
 
 // #283：工具提交的旧回合，折叠副本落在生成期回合里。
@@ -99,7 +107,7 @@ test('工具提交的回合重新生成后仍有正文（#283）', async () => {
   const g = game('regen-tool')
   const old = g.round(1, '你好', '旧正文', { tool: true })
   g.regenerate(1, old.seq, '新正文', { tool: true })
-  assert.deepEqual(await problemsOf(g), [])
+  await expectWhole(g)
 })
 
 // #304：第二次重新生成时宿主在生成期写了一条 developer 消息。
@@ -108,7 +116,7 @@ test('连续重新生成、生成期夹着宿主 developer 消息，这一楼不
   const old = g.round(1, '你好', '旧正文', { tool: true })
   const first = g.regenerate(1, old.seq, '第二版', { tool: true })
   g.regenerate(1, first, '第三版', { hostNote: true })
-  assert.deepEqual(await problemsOf(g), [])
+  await expectWhole(g)
 })
 
 test('回退最后一轮：页面回到上一轮', async () => {
@@ -117,7 +125,7 @@ test('回退最后一轮：页面回到上一轮', async () => {
   g.round(2, '去花店', '花店的门开着。')
   reshadowRolledBackRounds(g.session, new Set([2]))
   g.chat.messages.splice(-2)
-  assert.deepEqual(await problemsOf(g), [])
+  await expectWhole(g)
 })
 
 // #306：存档正文与模型上下文不一致时，修复把整轮重写进一个新的编辑轮。宿主照样把
@@ -130,4 +138,18 @@ test('修复模型上下文写入的整轮不出现在页面上（#306）', { to
   const repaired = repairNativeSurface(g.session, g.chat, { repairId: 'r1' })
   assert.equal(repaired.applied, true)
   assert.deepEqual(await problemsOf(g), [])
+})
+
+test('行计划下，修复写入的整轮只画一份（#306）', async () => {
+  const g = game('repair-plan')
+  g.round(1, '你好', '她点了点头。')
+  g.round(2, '去花店', '花店的门开着。')
+  g.chat.messages.at(-1).text = '花店的门开着。<StatusBar>{}</StatusBar>'
+  repairNativeSurface(g.session, g.chat, { repairId: 'r1' })
+  const replay = await replayTranscript(g.chat, g.session)
+  assert.deepEqual(replay.plan.problems, [])
+  // The page still follows the lists; the client reports where the plan differs.
+  const differs = replay.rows.filter((row, index) => row.kind !== 'context' && row.visible !== replay.plan.rows[index].visible)
+  assert.ok(differs.length > 0)
+  assert.deepEqual(replay.clientPlanDiffs, differs.map(row => row.turn + ':' + row.kind + ':' + (row.visible ? '现行显示' : '现行隐藏')))
 })

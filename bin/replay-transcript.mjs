@@ -48,14 +48,24 @@ if (!input) {
 }
 const session = Session.fromRestore(input.sessionId, input.events, input.header, 0, 'detached')
 try {
-  const { view, rows, problems } = await replayTranscript(input.chat, session)
+  const { view, rows, problems, stale, plan } = await replayTranscript(input.chat, session)
   const preview = text => (text.length > 24 ? text.slice(0, 24) + '…' : text).replace(/\s+/g, ' ')
-  for (const row of rows) {
-    if (row.kind === 'context') continue
-    const story = row.kind === 'assistant-step' ? ` → 第 ${storyTurnOf(view, row.turn)} 轮` : ''
-    console.log(`${row.visible ? '显示' : '隐藏'}  原生轮 ${String(row.turn ?? '-').padStart(3)}  ${row.kind.padEnd(14)} seq ${String(row.seq).padStart(5)}${story}  ${preview(row.text)}`)
+  const shown = visible => (visible ? '显示' : '隐藏')
+  if (!args.includes('--quiet')) {
+    console.log('现行  计划')
+    for (const [index, row] of rows.entries()) {
+      if (row.kind === 'context') continue
+      const story = row.kind === 'assistant-step' ? ` → 第 ${storyTurnOf(view, row.turn)} 轮` : ''
+      const differs = row.visible !== plan.rows[index].visible ? ' ←' : ''
+      console.log(`${shown(row.visible)}  ${shown(plan.rows[index].visible)}  原生轮 ${String(row.turn ?? '-').padStart(3)}  ${row.kind.padEnd(14)} seq ${String(row.seq).padStart(5)}${story}  ${preview(row.text)}${differs}`)
+    }
+    console.log('\n名单', JSON.stringify({ suppressed: view.suppressedDshTurns, replacing: view.replacingDshTurns, superseded: view.supersededDshTurns, regenerated: view.regeneratedDshTurns }))
+    console.log('计划', JSON.stringify(plan.plan))
   }
-  console.log('\n名单', JSON.stringify({ suppressed: view.suppressedDshTurns, replacing: view.replacingDshTurns, superseded: view.supersededDshTurns, regenerated: view.regeneratedDshTurns }))
-  console.log(problems.length ? '\n问题：\n- ' + problems.join('\n- ') : '\n没有发现问题：每个存档轮次一份输入、一份正文。')
-  process.exitCode = problems.length ? 2 : 0
+  const differs = rows.filter((row, index) => row.kind !== 'context' && row.visible !== plan.rows[index].visible).length
+  const list = items => items.length ? items.map(item => '\n- ' + item).join('') : ' 无'
+  console.log(`\n现行逻辑的问题：${list(problems)}${stale.length ? '\n  （显示旧版本：' + stale.length + ' 处）' : ''}`)
+  console.log(`行计划的问题：${list(plan.problems)}${plan.stale.length ? '\n  （显示旧版本：' + plan.stale.length + ' 处）' : ''}`)
+  console.log(`两者显示不同的行：${differs} 行`)
+  process.exitCode = problems.length || plan.problems.length ? 2 : 0
 } finally { await closeReplay() }
