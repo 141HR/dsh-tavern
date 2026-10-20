@@ -51,11 +51,14 @@ pnpm 运行时。它作为 `assets/tavern-offline.bin` 打进 APK，首装时只
 `tavern-pnpm-cache`），供后续更新直接复用；更新时只按运行清单增量下载有变化的源码文件，
 不再整包重下源码和 287 个依赖。缓存可随时删除，下次更新会重新下载。
 
-安装新 APK 后，`TavernBootstrap` 会在启动阶段用新 APK 的内置快照离线替换源码和依赖
-（不联网）。判定只看一件事：安装回执 `~/.dsh/logs/tavern-installation.json` 的
-`verifiedAt` 是否晚于本 APK 的构建时间（来自 `tavern-offline-meta.json`）。回执更早或缺失，
-说明这个 APK 的离线安装没跑完（升级，或上次启动被系统杀掉），下次启动会自动重装补齐；
-失败最多重试两次，换 APK 后计数重置。安装没完成时源码会回滚，应用继续用旧版本，不会打不开。
+覆盖安装 APK **不会**无条件重装酒馆。`TavernBootstrap` 只在两种情况下在启动阶段用内置快照
+离线替换源码和依赖（不联网）：
+
+- APK 内置的源码版本（`package.json` 的 version）高于已装版本——即真正的酒馆版本升级；
+- 上次离线安装被中断（`upgradePending` 标记还在）——下次启动续装，最多两次，换 APK 后重置计数。
+
+同版本重打包（只改安装器、签名或 APK 侧逻辑）直接跳过，不会让用户再等一次安装。安装没完成时
+源码会回滚，应用继续用旧版本，不会打不开。
 
 上游的 `prepareStandardAssets` / `prepareRecoveryAssets` 会从源码重建整个 rootfs；这里跳过
 它们，直接使用官方 APK 中已验证的产物。上游的依赖校验清单没有收录 Linux 版 aapt2，
