@@ -1123,6 +1123,16 @@ export async function apply(ctx) {
     if (chat && chat.sessionId === sessionId && chat.backgroundConfigVersion === 1 && chat.conversationFeaturesVersion === 1) return chat
     return chatForSession(sessionId)
   }
+  // The complete header and the latest floor; the complete Chat only for storage
+  // without floor reads (legacy saves, small by construction).
+  async function chatHeaderWithLatestFloor(sessionId) {
+    const chatId = (await readSessionMap())[str(sessionId)]
+    const head = chatId && await chatPersistence.readSlice(chatId, [])
+    if (!head?.chat || head.chat.sessionId !== sessionId || !Number.isSafeInteger(head.messageCount)) return chatForSession(sessionId)
+    if (head.messageCount === 0) return head.chat
+    const latest = await chatPersistence.readSlice(chatId, [head.messageCount - 1])
+    return latest?.chat ? latest.chat : chatForSession(sessionId)
+  }
   const chatSliceForSession = createSessionSliceReader({ links: readSessionMap, readSlice: chatPersistence.readSlice })
   // Header plus floor count; null keeps the complete reader for legacy stories.
   async function openingStateForSession(sessionId) {
@@ -4434,9 +4444,10 @@ export async function apply(ctx) {
     syncWorldBook: async function (chat) {
       if (!['story', 'script'].includes(chat.mode || 'story')) return
       try {
-        // The opening-window slice carries only task fields; the snapshot lives
-        // in the complete record that this turn is about to read anyway.
-        const full = chat.openingWorldbookSnapshot ? chat : await chatForSession(chat.sessionId)
+        // The opening-window slice carries only task fields. Adoption reads the header
+        // (snapshot, card context) and the latest floor (its turn keys plugin world book
+        // entries), never the history.
+        const full = chat.openingWorldbookSnapshot ? chat : await chatHeaderWithLatestFloor(chat.sessionId)
         if (full) await playCardSnapshots.autoSync(full, undefined, { busy: false })
       } catch (error) { console.warn('dsh-tavern: 世界书自动更新失败，本轮沿用本局快照：', str(error && error.message || error)) }
     },
