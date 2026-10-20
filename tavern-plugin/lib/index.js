@@ -10,6 +10,9 @@ import { registerTavernHttpRoutes } from './http/routes.js'
 import { installChatAnswerBootPatch } from './domain/chat-answer-boot-patch.js'
 import { registerRequestHooks } from './hooks/request.js'
 import { syncUserPlugins, watchUserPlugins, userPluginPaths } from './domain/user-plugins.js'
+import { createUserPluginInstaller } from './domain/user-plugin-install.js'
+import { listLegacyPlugins } from './domain/legacy-plugins.js'
+import { createPluginDataStore } from './domain/plugin-data-store.js'
 import { createPluginAssets } from './domain/plugin-assets.js'
 import { registerModelStreamHooks } from './hooks/model-stream.js'
 import { registerTurnLifecycleHooks } from './hooks/turn-lifecycle.js'
@@ -85,6 +88,7 @@ import { createServerTemplateRuntime } from './domain/server-template-runtime.js
 import { estimateWorldBookTokens, historyScanDepth } from './domain/worldbook-activation.js'
 import { createWorldbookFilter, WORLD_BOOK_FILTER_TOOLS } from './domain/worldbook-filter.js'
 import { createWorldbookPrefilter } from './domain/worldbook-prefilter.js'
+import { createStyleReferenceRecall, STYLE_REFERENCE_SUBMIT_TOOL, latestStyleReference } from './domain/style-reference.js'
 import { adoptConversationFeatures, adoptConversationBackground, patchConversationBackground } from './domain/conversation-background.js'
 import { clearLegacyTavernDefault } from './domain/legacy-agent-default.js'
 import { conversationStateAtTurn, conversationForkBoundary } from './domain/conversation-fork-point.js'
@@ -225,7 +229,8 @@ import { createGameFootprint } from './domain/game-footprint.js'
 import { buildGameSave, collectSaveRevisions, readGameSave } from './domain/game-save.js'
 import { compressSaveImage } from './domain/save-image-compression.js'
 import { readFileSync } from 'node:fs'
-import { readdir, readFile, rm } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
 
 const TAVERN_PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
@@ -1152,6 +1157,8 @@ export async function apply(ctx) {
   // DSH cards (docs/design/dsh-card-format.md): asset packs stored once by content; big files uploaded to disk.
   const assetPacks = createAssetPacks({ root: dataRoot, store: profileData })
   const uploads = createUploads({ root: dataRoot })
+  const pluginDataStore = createPluginDataStore({ dataRoot })
+  const userPluginInstaller = createUserPluginInstaller({ dataRoot, sync: () => syncUserPlugins({ dataRoot }) })
   const cardPlugins = createCardPlugins({ dataRoot, pluginsDir: userPluginPaths(dataRoot).plugins, keyOf: castAssets.keyOf })
   void uploads.sweep().catch(() => {})
   const cardImportIdentity = createCardImportIdentity({ cardPaths: () => fileResources.list('card'), castAssets, readCardText: cardPath => fileResources.readText(cardPath) })
@@ -1301,6 +1308,18 @@ export async function apply(ctx) {
     const name = str(document?.data?.name || '人物卡')
     return { name, bytes: pngWithTextChunks(image, [pngCardTextChunk('chara', text), pngCardTextChunk('ccv3', text)]) }
   }
+  // One export, format chosen by content: character material only travels in CHARX,
+  // a cover makes the standard PNG card, and a bare card stays SillyTavern JSON.
+  async function exportCardFile(input) {
+    const cardPath = normalizeResourcePath(input, 'card')
+    const manifest = await castAssets.read(cardPath)
+    const hasMaterial = manifest.characters.some(character => character.avatar || Object.values(character.sprites || {}).some(Boolean))
+      || (manifest.backgrounds || []).some(item => item.file) || (manifest.extras || []).some(item => item.file)
+    if (hasMaterial) return { ...await exportCardCharx(cardPath), extension: 'charx', contentType: 'application/zip' }
+    if (await fileResources.hasCardImage(cardPath)) return { ...await exportCardPng(cardPath), extension: 'png', contentType: 'image/png' }
+    const { document } = await presentCardText(cardPath)
+    return { name: str(document?.data?.name || '人物卡'), bytes: Buffer.from(JSON.stringify(document, null, 2)), extension: 'json', contentType: 'application/json; charset=utf-8' }
+  }
   const cardSummaries = createCardSummaryCache({
     absolute: cardPath => fileResources.absolute(cardPath),
     read: async cardPath => {
@@ -1379,7 +1398,7 @@ export async function apply(ctx) {
   const helperGenerationPreset = (name, snapshot) => resolveHelperGenerationPreset(name, snapshot, {
     catalog: () => presetLibrary.catalog(), read: readPreset, readDocument: readPresetDocument, selected: () => runtimePresets.state()
   })
-  const openingPreparation = createOpeningPreparation({ readCard, worldBooks, extensionSettings: tavernExtensionSettings,
+  const openingPreparation = createOpeningPreparation({ readCard, worldBooks, extensionSettings: tavernExtensionSettings, trace: requestPerformance,
     readRuntimeExtensions: async cardPath => tavernRemoteAssets.pinExtensions(await readCardExtensions(cardPath)),
     generateRaw: (config, context) => defaultOrderedRawConfig(config) ? openingGenerate(defaultOrderedRawConfig(config), context)
       : generateHelperRaw(config, { ...context, callModel: opts => callModel({ ...opts, background: true, signal: context.signal }) }),
@@ -2164,14 +2183,20 @@ export async function apply(ctx) {
   // lets a library edit enter this game without the explicit reload button.
   async function cardUpdateStatus(chat, context = {}) {
     try {
-      const card = await readCard(chat.cardPath)
+      if (context.fresh === true) return playCardSnapshots.libraryBoundStatus(chat, context.card)
+      const card = context.card ?? await readCard(chat.cardPath)
+      // A game that keeps no copy has no world book to offer as an update, but the
+      // constant prefix still has to follow an edited book on the next read.
       const synced = context.busy === true ? null
         : await playCardSnapshots.autoSync(chat, card, { settings: context.settings })
+      if (chat.openingWorldbookSnapshot?.version !== 1) return playCardSnapshots.libraryBoundStatus(chat, card)
       // One library read now serves both the automatic refresh and the badge.
       return await playCardSnapshots.updateStatus(chat, card, synced?.observed)
     } catch (error) { return {available:true,error:String(error.message || error)} }
   }
-  const liveCardUpdate = createLiveCardUpdate({readGlobals:readPromptTemplateGlobalVariables})
+  const liveCardUpdate = createLiveCardUpdate({readGlobals:readPromptTemplateGlobalVariables,
+    // Games without their own copy still preview against the book they play with.
+    readWorldBook: (chat, card) => worldBooks.bound(chat.cardPath, card, chat)})
   ctx.effect(() => () => liveCardUpdate.dispose())
   const inputFieldsProjection = createInputFieldsProjection()
   const incrementalReplyView = createIncrementalReplyView({ readChanges: (id, revision) => chatPersistence.readChangedSlice(id, revision, 'settlement') })
@@ -2228,7 +2253,7 @@ export async function apply(ctx) {
     const forkTurnsByMessageId = forkTurnsForChat(chat)
     const {inputSources,inputTemplateDisplays}=inputFieldsProjection.project(persistedProjection ? chat : {...chat,_storageRevision:undefined}, options.inputChanges)
     const cardUpdate = ['story', 'script'].includes(chat.mode || 'story') && chat.requestMode !== 'sillytavern'
-      ? await cardUpdateStatus(chat, { busy: activity.busy || ['pending', 'running', 'waiting-runtime'].includes(chat.settleStatus)
+      ? await cardUpdateStatus(chat, { card, fresh: options.freshSnapshot === true, busy: activity.busy || ['pending', 'running', 'waiting-runtime'].includes(chat.settleStatus)
         || agentRegistry.get(chat.sessionId)?.phase?.kind === 'running', settings: runtimeSettings })
       : { available: false }
     const helperEnabled = hasTavernScriptRuntime(chat, cardExtensions.helperScripts)
@@ -2244,6 +2269,10 @@ export async function apply(ctx) {
           helperWorldbook = document === null ? null : {
             name: worldBookDisplayName(document), resourceAccess: sessionResources.issue(chat.id, resourceRevision, 'worldbook')
           }
+        } else if (options.worldBook !== undefined) {
+          // The start path already holds this projection; re-resolving the same
+          // document here would copy and inspect it again for nothing.
+          helperWorldbook = options.worldBook === null ? null : projectTavernHelperWorldbook(options.worldBook.view)
         } else {
           const record = await worldBooks.bound(chat.cardPath, card, chat)
           if (record !== null) helperWorldbook = projectTavernHelperWorldbook(record.view)
@@ -2278,6 +2307,8 @@ export async function apply(ctx) {
       cardUpdate,
       statusBarPlacement: chat.statusBarPlacement === 'body' ? 'body' : 'sidebar',
       posture: chat.posture || '',
+      styleReference: latestStyleReference(chat),
+      styleReferenceEnabled: chat.backgroundTasks?.styleReference === true && (chat.mode || 'story') === 'story',
       ledger: readLedger(chat.ledger),
       ledgerTask: manualLedger.project(chat),
       characterDesigns: projectCharacterDesignDocument(chat.characterDesignDocument),
@@ -2392,10 +2423,14 @@ export async function apply(ctx) {
   async function startChat(cardPath, sessionId, mode, openingId, userName, requestMode, preparationId, cardTask) {
     // Plain greetings have no interactive preview draft, but need the same
     // game-local worldbook snapshot as scripted openings.
-    if (!preparationId && groupOfMode(mode || 'story') === 'play') {
-      preparationId = (await requestPerformance.stage('openingDraft', () => openingPreparation.create(cardPath, { userName }))).id
+    const ownsDraft = !preparationId
+    if (ownsDraft && groupOfMode(mode || 'story') === 'play') {
+      preparationId = (await requestPerformance.stage('openingDraft', () => openingPreparation.begin(cardPath, { userName }))).id
     }
-    const preparation = preparationId ? openingPreparation.resolve(preparationId, cardPath, openingId) : undefined
+    let preparation
+    try { preparation = preparationId ? openingPreparation.resolve(preparationId, cardPath, openingId) : undefined }
+    // The draft keeps the whole resolved book; a plain start never reads it again.
+    finally { if (ownsDraft && preparationId) openingPreparation.release(preparationId) }
     if (preparation?.sourceSessionId) {
       const source = await chatForSession(preparation.sourceSessionId)
       if (!source || !sessionOpeningDescriptor(source, await readChatCard(source)) || Number(source.tavernHelperLifecycleRevision || 0) !== preparation.sourceLifecycleRevision) throw new Error('原对话已变化，请重新选择开场')
@@ -2467,6 +2502,8 @@ export async function apply(ctx) {
     const changes = {baseRevision:previous.tavernHelper.stateRevision,indices:[...dirtyMessageIndices],layoutChanged,changedHeaderFields}
     const next = Object.assign({}, previous, volatileSessionViewFields(chat, activity, changes), {
       posture: chat.posture || '',
+      styleReference: latestStyleReference(chat),
+      styleReferenceEnabled: chat.backgroundTasks?.styleReference === true && (chat.mode || 'story') === 'story',
       guides: Array.isArray(chat.guides) ? chat.guides : [],
       // Header state a background task rewrites without touching any message.
       ledger: readLedger(chat.ledger),
@@ -2616,6 +2653,7 @@ export async function apply(ctx) {
     cards: { read: readCard, readChat: readChatCard, script: readScript, extensions: readCardExtensions,
       startDefaults: async cardPath => (await castAssets.read(normalizeResourcePath(cardPath, 'card'))).startDefaults || null },
     chats: { resolve: chatForSession, publish: conversationRegistry.publish, write: writeChat },
+    trace: requestPerformance,
     timeline: storyTimeline,
     snapshots: playCardSnapshots,
     userPreferenceProfile,
@@ -2637,8 +2675,8 @@ export async function apply(ctx) {
         await sessionStore.flush(target.session)
       }
     },
-    present: async function (chat, card) {
-      const result = await view(chat, card)
+    present: async function (chat, card, options) {
+      const result = await view(chat, card, false, options)
       if (chat.mode === 'card') result.workspace = workspaceViewOf(chat)
       return result
     }
@@ -2803,7 +2841,7 @@ export async function apply(ctx) {
   const backgroundCatalog = createBackgroundCatalogBackfill({ agents: agentRegistry, sessionQuery: ctx.get('sessionQuery'),
     onListed: parentId => sessionSignals.publish(parentId, { kind: 'subagents', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) }) })
   const runtimePresetSnapshots = new Map()
-  const BACKGROUND_TOOLS = [...WORLD_BOOK_FILTER_TOOLS, POSTURE_SUBMIT_TOOL, CHARACTER_DESIGN_READ_TOOL, CHARACTER_DESIGN_SAVE_TOOL, CHARACTER_DESIGN_REUSE_TOOL, MVU_SUBMIT_UPDATE_TOOL, CANDIDATE_SUBMIT_TOOL, SCRIPT_READ_TOOL, SCRIPT_POINT_TOOL, LEDGER_SUBMIT_TOOL]
+  const BACKGROUND_TOOLS = [...WORLD_BOOK_FILTER_TOOLS, POSTURE_SUBMIT_TOOL, CHARACTER_DESIGN_READ_TOOL, CHARACTER_DESIGN_SAVE_TOOL, CHARACTER_DESIGN_REUSE_TOOL, MVU_SUBMIT_UPDATE_TOOL, CANDIDATE_SUBMIT_TOOL, SCRIPT_READ_TOOL, SCRIPT_POINT_TOOL, LEDGER_SUBMIT_TOOL, STYLE_REFERENCE_SUBMIT_TOOL]
   const backgroundAgentRunner = createBackgroundAgentRunner({
     retirement: backgroundRetirement,
     // The browser's session list keeps a disposed subagent as an idle row until the list is
@@ -2885,8 +2923,13 @@ export async function apply(ctx) {
     runAgent: input => backgroundAgentRunner.run(input), selection: backgroundModelSelection,
     beginTask: chat => backgroundTasks.begin(chat, 'worldbook-filter')
   })
-  // After each reply, judge the worldbook pool that reply brings into the next turn, so
-  // sending never waits for a model. Usually below the threshold: no request at all.
+  const styleReferenceRecall = createStyleReferenceRecall({
+    runAgent: input => backgroundAgentRunner.run(input), selection: backgroundModelSelection,
+    beginTask: chat => backgroundTasks.begin(chat, 'style-reference')
+  })
+  // After each reply, prepare what that reply brings into the next turn, so sending never
+  // waits for a model: the worldbook pool (usually below the threshold, no request at all),
+  // then the experimental style reference. A new send cancels both.
   const worldbookPrefilter = createWorldbookPrefilter({
     async run(chatId, signal) {
       const chat = await storyContext({ chatId })
@@ -2897,9 +2940,31 @@ export async function apply(ctx) {
       const card = await readChatCard(chat)
       signal.throwIfAborted()
       await projectForegroundWorldbook({ chat, card, userText: '', purpose: 'prefilter', signal })
+        .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 世界书预筛失败，下一轮按关键词与预算注入:', str(error?.message || error)) })
+      if ((chat.mode || 'story') !== 'story' || chat.backgroundTasks?.styleReference !== true) return
+      signal.throwIfAborted()
+      await styleReferenceRecall({ chat: await storyContext({ chatId }), signal })
+        .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 文风联想失败，下一轮不带参考:', str(error?.message || error)) })
     }
   })
   ctx.effect(() => () => worldbookPrefilter.dispose())
+  // A player asking for another passage, optionally saying what they want. 'next' replaces the
+  // reference waiting for the next turn; 'regenerate' re-recalls the one the latest turn used,
+  // just before that turn is regenerated.
+  async function retryStyleReference(sessionId, { target = 'next', guidance = '' } = {}) {
+    const header = await chatForSession(str(sessionId))
+    if (!header || (header.mode || 'story') !== 'story') throw new Error('文风联想只用于自由模式')
+    if (header.backgroundTasks?.styleReference !== true) throw new Error('请先在本局设置里开启文风联想')
+    if (agentRegistry.get(header.sessionId)?.phase?.kind === 'running' || header.regenInProgress) throw new Error('前台正在生成，请完成后再换参考')
+    await worldbookPrefilter.cancel(header.id)
+    if (target === 'regenerate') await cancelSettlement(header.id)
+    else if (backgroundTasks.activity(header).busy) throw new Error('后台结算中，请稍后再换参考')
+    const base = target === 'regenerate' ? 'previous' : 'latest'
+    let chat = await storyContext({ chatId: header.id })
+    // The bounded read may stop short of the reply before the latest one.
+    if (base === 'previous' && (chat.messages || []).filter(message => message?.role === 'assistant').length < 2) chat = await readChat(header.id)
+    return await styleReferenceRecall({ chat, signal: new AbortController().signal, base, guidance: str(guidance).slice(0, 500), retry: true })
+  }
   const publishCharacterDesign = createCharacterDesignPublisher({ worldBooks, readCard })
   const characterDesignDocuments = createCharacterDesignDocumentTools({
     publishWorldbook: publishCharacterDesign,
@@ -3145,6 +3210,7 @@ export async function apply(ctx) {
     reservedToolNames: [...BACKGROUND_TOOLS, HISTORY_RECALL_TOOL].map(tool => tool?.name).concat([STORY_SUBMIT_TOOL_NAME, 'character_design_finish', 'worldbook_search', 'web_search', 'skill']).filter(Boolean),
     media: pluginMedia,
     data: pluginData,
+    pluginData: pluginDataStore,
     ...pluginTurns,
     backgroundModel: async sessionId => backgroundModelSelection(await backgroundConfigForSession(sessionId)),
     readCard: readPluginCard,
@@ -3313,7 +3379,7 @@ export async function apply(ctx) {
     store: { readChat, writeChat, updateChat, patchChat, readState: chatPersistence.readSessionState, readRecoveryState: taskStateReader.read, readSlice: chatPersistence.readSlice, readSettlementCheckpoint: chatPersistence.readSettlementCheckpoint },
     timeline: storyTimeline,
     blocked: function (chat) { return Boolean(autoCompaction?.blocked(chat)) },
-    preempt: async (chatId, role) => { if (role !== 'worldbook-filter') await worldbookPrefilter.cancel(chatId) }
+    preempt: async (chatId, role) => { if (role !== 'worldbook-filter' && role !== 'style-reference') await worldbookPrefilter.cancel(chatId) }
   })
   const configuredCompactionEngines = new WeakSet()
   const overflowingCompactions = new Set()
@@ -3934,7 +4000,6 @@ export async function apply(ctx) {
         onSubmission: submission => saveDelivery(submission),
         onPrepared: prepared => saveDelivery(prepared.submission, prepared),
         guidance: mvuTarget.message.mvu.guidance || '',
-        preserveForeground: variableRetry,
         onPersistentSessionReady: id => taskRun.bindSession(id, { stateOnly: true }),
         backgroundTasks: backgroundTasksSettings,
         operationId: taskRun.operationId,
@@ -4816,6 +4881,9 @@ export async function apply(ctx) {
         if (Object.hasOwn(args, 'backgroundModel')) await checkModel(args.backgroundModel, '后台模型')
         if (Object.hasOwn(args, 'imageModel')) await checkModel(args.imageModel, '生图 Agent 模型')
         const saved = await updateChat(chat.id, current => patchConversationBackground(current, args), { source: 'background-model.switch-conversation' })
+        // Turned on mid-game: recall from the latest reply now, so the very next turn has a reference. A game
+        // whose session is not loaded yet (never opened since import or restart) recalls after its next reply.
+        if (args.backgroundTasks?.styleReference === true && chat.backgroundTasks?.styleReference !== true && agentRegistry.get(sessionId)?.session) void worldbookPrefilter.start(chat.id)
         return { backgroundModel: saved.backgroundModelSelection || null, imageModel: saved.imageModelSelection || null, backgroundTasks: normalizeBackgroundTasks(saved.backgroundTasks), webSearchEnabled: saved.webSearchEnabled === true, sceneImagesEnabled: saved.sceneImagesEnabled === true }
       }
       case 'getBackgroundModelReasoning': return { reasoning: await readBackgroundModelReasoning(llm, args) }
@@ -4925,6 +4993,31 @@ export async function apply(ctx) {
         return { card: archive ? await importCardArchiveFile(archive.file, archive.name) : await importCard(await mobileCardImport.read(args && args.id)) }
       }
       case 'importCard': return { card: await importCard(args && args.payload) }
+      // The page side of a plugin reads and writes the same data as its host side (tavernUi.savePluginData).
+      case 'pluginData': {
+        const plugin = str(args && args.plugin)
+        if (args && args.op === 'save') { await pluginDataStore.save(plugin, args.data); return { ok: true } }
+        return { data: await pluginDataStore.read(plugin) }
+      }
+      case 'listUserPlugins': return { plugins: await userPluginInstaller.list(), dir: userPluginInstaller.pluginsDir }
+      case 'listLegacyPlugins': return listLegacyPlugins(userPluginPaths(dataRoot).profile)
+      case 'checkUserPluginUpdates': return { plugins: await userPluginInstaller.checkUpdates() }
+      case 'enableUserPlugin': return { plugin: await userPluginInstaller.enable(args && args.folder) }
+      case 'disableUserPlugin': return { plugin: await userPluginInstaller.disable(args && args.folder) }
+      case 'installUserPlugin': return { plugin: await userPluginInstaller.installFromGithub(args && args.url) }
+      case 'installUserPluginUpload': {
+        const upload = await uploads.take(args && args.uploadId)
+        try { return { plugin: await userPluginInstaller.installFromZip(await readFile(upload.file), args && args.name) } }
+        finally { await upload.remove() }
+      }
+      case 'updateUserPlugin': return { plugin: await userPluginInstaller.update(args && args.folder) }
+      case 'removeUserPlugin': return await userPluginInstaller.remove(args && args.folder)
+      case 'openUserPluginsFolder': {
+        await mkdir(userPluginInstaller.pluginsDir, { recursive: true })
+        const opener = process.platform === 'darwin' ? ['open', [userPluginInstaller.pluginsDir]] : process.platform === 'win32' ? ['explorer.exe', [userPluginInstaller.pluginsDir]] : ['xdg-open', [userPluginInstaller.pluginsDir]]
+        spawn(opener[0], opener[1], { detached: true, stdio: 'ignore', windowsHide: true }).on('error', () => {}).unref()
+        return { dir: userPluginInstaller.pluginsDir }
+      }
       case 'importCardUpload': {
         const upload = await uploads.take(args && args.uploadId)
         const name = str(args && args.name) || '人物卡.dshcard'
@@ -5237,7 +5330,9 @@ export async function apply(ctx) {
         notifyPluginTimeline(args && args.sessionId, 'edit', { settled: true })
         return { view }
       }
+      case 'retryStyleReference': return { styleReference: await retryStyleReference(args?.sessionId, { target: 'next', guidance: args?.guidance }) }
       case 'regenBody': {
+        if (args?.restyle === true) await retryStyleReference(args.sessionId, { target: 'regenerate', guidance: args.styleGuidance })
         await reconcileStory(args && args.sessionId)
         const view = await regenBody(args && args.chatId, args && args.guidance, args && args.sessionId)
         notifyPluginTimeline(args && args.sessionId, 'regenerate')
@@ -5341,7 +5436,7 @@ export async function apply(ctx) {
     ctx,
     castAssets,
     speech,
-    exportCardCharx,
+    exportCardFile,
     assetPacks,
     uploads,
     exposeHandler: handle => { tavernHttpHandle = handle },

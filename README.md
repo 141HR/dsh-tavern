@@ -101,6 +101,8 @@
 
 以上均为社区作者开发，更多插件见[讨论区的 Show and tell](https://github.com/flizzywine/dsh-tavern/discussions/categories/show-and-tell)。
 
+**安装酒馆插件**：设置 → DSH Tavern → 插件，粘贴插件的 GitHub 地址，点「安装」，刷新页面即可；有新版时显示「更新到 x.y.z」，更新后重启 DSH 生效；也可以随时「停用」或「启用」插件；连不上 GitHub 时，下载插件 ZIP 后在同一处上传。插件作者见[发布与一键安装](docs/plugin-publishing.md)。
+
 ## 看看实际效果
 
 **MVU 状态栏**：人物状态随剧情变化，正文下方可查看本轮更新了什么。
@@ -132,6 +134,10 @@
 
 ### Android
 
+首选 **独立 APK**（Android 11+ / ARM64）：[下载 DSH Tavern Android APK](https://github.com/flizzywine/dsh-tavern/releases/latest/download/dsh-tavern-android-release.apk)。它内置 DSHA v0.2.0-rc2 与 DSH 0.2.0-rc.2，只运行酒馆自己的 `tavern` Profile，手机上只有一个 DSH 服务，内存和电量开销最低。首次按引导完成环境部署后自动安装并进入；酒馆更新在应用内完成。包名独立，可与旧版 v2.1 APK、原版 DSHA 并存，旧包数据需先导出再导入。详见 [Android 安装说明](docs/android-install.md)。
+
+设备不满足 APK 要求时，可以改用 DSHA v0.2.0-rc2 + 安装脚本：
+
 1. 安装 [DSHA v0.2.0-rc2](https://github.com/DSH-APP/DSHA/releases/tag/v0.2.0-rc2)，打开一次。
 2. 打开底部 **终端**，粘贴下面这行并按回车执行：
 
@@ -140,6 +146,8 @@
    ```
 
 3. 看到 **全部完成** 后重启 DSHA，点 **启动** → **进入** → **酒馆工作台**。
+
+这条路线会同时运行 DSHA 和酒馆两个 DSH 服务，内存、耗电和 CPU 占用都高于独立 APK。
 
 ### macOS
 
@@ -185,7 +193,7 @@ curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install
 
 - 在酒馆里点「检查更新」即可更新，也可以重新运行上面的安装命令；只替换程序，人物卡、聊天和设置都会保留。
 - 旧版本的存档：打开后在「酒馆状态」里点「迁移存档」。正文、变量、分支和历史版本都会保留。迁移后的数据目录不要再让旧宿主直接读取。
-- 桌面版切回原版 DSH：设置 → Profile 切换 → 选「原版 DSH」→ 立即重启。不要删除 `.dsh/backups` 和 `profiles/desktop.fresh-*`。细节见[桥接插件说明](tavern-plugin/packages/dsh-profile-bridge/README.md)。
+- 桌面版切回原版 DSH：设置 → 原版DSH → 切到原版 DSH 并重启。之后在原版 DSH 的设置 → DSH酒馆，就能切回酒馆。不要删除 `.dsh/backups` 和 `profiles/desktop.fresh-*`。细节见[桥接插件说明](tavern-plugin/packages/dsh-profile-bridge/README.md)。
 - 旧酒馆在自定义目录、需要继承数据时，见[数据继承说明](docs/data-import.md)。
 
 ### 稳定版（DSH 0.1.5）

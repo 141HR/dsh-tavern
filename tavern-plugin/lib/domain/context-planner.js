@@ -130,6 +130,11 @@ export function createContextPlanner(options = {}) {
         sections.push({ kind: 'script', required: true, text: '【本轮剧本参考' + position + '】\n' + projectText(input.scriptReference.text) })
         sections.push({ kind: 'script', required: true, text: prompt('script-story') })
       }
+      const style = input.styleReference
+      if (style && str(style.quote) !== '') {
+        sections.push({ kind: 'style-reference', required: false, text: '【文风联想 · 《' + str(style.book) + '》' + str(style.author) + '】\n' + str(style.quote) })
+        sections.push({ kind: 'style-reference', required: false, text: prompt('style-reference') })
+      }
       const result = resultOf(sections, warnings, [{ kind: 'stable-card-details', reason: '人物卡基本信息、系统提示和常驻世界书已固定在游戏会话稳定前缀；系统提示变化时另行追加' }])
       result.systemPromptText = systemPromptText
       return result

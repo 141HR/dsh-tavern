@@ -202,6 +202,44 @@ function projectDeepSeekThinkingPassback(messages, request) {
   return changed ? projected : messages
 }
 
+/**
+ * Anthropic binds each thinking signature to the exact conversation before it.
+ * Tavern retires the previous turn's frame to save tokens, which changes that
+ * prefix, so a replayed signature from an earlier turn is rejected (400 "Invalid
+ * `signature` in `thinking` block"). Anthropic accepts history without earlier
+ * turns' thinking; only the turn in progress (its tool loop) must keep its own.
+ * Drop those blocks from replies before this turn's input, nothing else.
+ */
+export function projectAnthropicPriorThinking(messages) {
+  const source = Array.isArray(messages) ? messages : []
+  let inputIndex = -1
+  for (let index = source.length - 1; index >= 0; index--) {
+    if (isTurnInput(source[index])) { inputIndex = index; break }
+  }
+  if (inputIndex <= 0) return messages
+  let changed = false
+  const projected = source.map(function (message, index) {
+    const origin = message && message.source
+    const replay = origin && origin.kind === 'model' ? origin.replayState : undefined
+    if (index >= inputIndex || !message || message.role !== 'assistant' || !Array.isArray(message.content)
+      || str(replay && replay.response && replay.response.api) !== 'anthropic-messages'
+      || !message.content.some(function (block) { return block && block.type === 'reasoning' })) return message
+    const blocks = Array.isArray(replay.blocks) && replay.blocks.length === message.content.length ? replay.blocks : null
+    const kept = message.content.map(function (block, at) { return block && block.type === 'reasoning' ? -1 : at }).filter(function (at) { return at >= 0 })
+    changed = true
+    // A reply that was nothing but thinking leaves no message to send.
+    if (kept.length === 0) return null
+    return Object.assign({}, message, {
+      content: kept.map(function (at) { return message.content[at] }),
+      // The replay envelope lists one entry per content block; keep it aligned,
+      // or drop it when it cannot be (the host then sends the plain content).
+      source: Object.assign({}, origin, { replayState: blocks === null ? undefined
+        : Object.assign({}, replay, { blocks: kept.map(function (at) { return blocks[at] }) }) })
+    })
+  })
+  return changed ? projected.filter(Boolean) : messages
+}
+
 // Copies made by later hooks (workspace presentation) must still count as projected.
 const PROJECTED = 'foreground-projection'
 
@@ -388,6 +426,8 @@ export function createNativePlayOrchestrationStrategy(options) {
     if (replayMessages !== request.messages) request = Object.assign({}, request, { messages: replayMessages })
     const passbackMessages = projectDeepSeekThinkingPassback(request.messages, request)
     if (passbackMessages !== request.messages) request = Object.assign({}, request, { messages: passbackMessages })
+    const thinkingMessages = projectAnthropicPriorThinking(request.messages)
+    if (thinkingMessages !== request.messages) request = Object.assign({}, request, { messages: thinkingMessages })
     // Past bodies replayed as the submission tool's arguments instead of prose the
     // model wrote. Runs last so the earlier passes see the shape the host built;
     // the save, the view and every floor control keep the plain text. Only this

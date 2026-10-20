@@ -1,34 +1,45 @@
 # Android 安装与更新
 
-## Android 一键 APK（Android 11+ / ARM64）
+## 独立 APK（首选，Android 11+ / ARM64）
 
-[下载 DSH Tavern Android APK](https://github.com/flizzywine/dsh-tavern/releases/download/v2.1/dsh-tavern-android-release.apk) · [下载 SHA-256 校验文件](https://github.com/flizzywine/dsh-tavern/releases/download/v2.1/dsh-tavern-android-release.apk.sha256)
+[下载 DSH Tavern Android APK](https://github.com/flizzywine/dsh-tavern/releases/latest/download/dsh-tavern-android-release.apk) · [下载 SHA-256 校验文件](https://github.com/flizzywine/dsh-tavern/releases/latest/download/dsh-tavern-android-release.apk.sha256)
 
-1. 下载 APK，按 Android 提示允许当前浏览器或文件管理器安装应用，然后安装。
-2. 打开「DSH Tavern」，点击启动；首次保持联网并等待运行环境与酒馆安装完成，无需另装 DSHA，也无需输入命令。
-3. 启动完成后点击进入，在酒馆设置中配置文字模型，再导入人物卡。
-4. 以后直接打开此应用并启动、进入；更新酒馆后返回应用的启动页重启。
+独立 APK 内置 DSHA v0.2.0-rc2 与 DSH 0.2.0-rc.2，只启动酒馆自己的 `tavern` Profile（端口 3080）。它不运行 DSHA 的 `web` Profile，所以手机上只有一个 DSH 服务，内存、CPU 和电量开销明显低于下面的 DSHA 路线。
 
-这是在线安装包，首次启动需要下载最新版酒馆；请保持应用运行。初始化失败时保留错误日志，再点击启动重试。安装日志位于容器内 /root/.dsh/logs/tavern-install.log。
+1. 下载 APK（约 480 MB，内含酒馆源码与全部依赖），按 Android 提示允许当前浏览器或文件管理器安装应用，然后安装。
+2. 打开「DSH Tavern」，按首次引导完成内置环境部署（离线解压，不需联网）；随后应用会就地解包内置的酒馆与依赖并完成安装，**全程不需要联网**，通常 1–3 分钟。
+3. 安装完成后会自动进入酒馆；在酒馆设置中配置文字模型，再导入人物卡。
+4. 以后直接打开此应用；酒馆源码更新在应用内完成（更新时才联网），更新后返回启动页重启。安装新 APK 时，如果之前没在应用内更新过酒馆源码，启动阶段会直接用新 APK 内置的快照离线升级源码和依赖，不必再等一次联网全量更新。
 
-独立 APK 与原版 DSHA 可以同时安装，数据各自独立，不会自动迁移旧聊天。覆盖升级请安装本项目同签名的新 APK；不要为了更新先卸载应用，以免删除应用数据。
+APK 内置首装所需的源码快照、pnpm 依赖仓库与 pnpm 运行时，首次启动只做本地解包，不再逐包下载。首装完成后源码快照会被清理，依赖缓存则转存到 `~/.dsh/runtime/tavern-pnpm-store`：以后的应用内更新按运行清单只下载有变化的源码文件，依赖直接从本地缓存链接，不再整包重下。缓存占用约一两百 MB，空间紧张时可以删除，下次更新会重新下载。内置依赖缺项（例如源码版本比 APK 新）时会自动改用 npmmirror 联网补齐，失败再用官方源 registry.npmjs.org 重试一次；仍失败时保留错误日志，再点击启动重试。
 
-本包要求 Android 11 及以上、ARM64。其他系统版本可参考下方 DSHA 方案。
+应用内更新会在侧栏显示安装器当前步骤（下载源码、安装依赖、写入配置等）；手机网络较慢时可能停留较久，但只要有新输出就不会被判定为卡住，整个过程最多 30 分钟。
 
+安装日志位于容器内 `/root/.dsh/logs/tavern-install.log`，每一步都有 `== [步骤 N] …（已用 Xs）==` 抬头和 pnpm 逐行进度，可以直接看出卡在哪一步。
 
-> 不同手机系统、DSHA 版本、网络和后台限制都可能导致安装或运行失败；当前安装脚本只能修复项目已知问题。
+APK 使用独立包名 `io.github.flizzywine.dshtavern.standalone`，可以与旧版 v2.1 APK（DSH 0.1.5）和原版 DSHA 同时安装，数据各自独立。旧版 v2.1 APK 与本包签名不同，不能覆盖升级：先在旧包里导出存档和人物卡，装好本包后按 [数据导入](data-import.md) 导入。两个应用不要同时运行。
 
-> v2.1 要求宿主 DSH `0.1.5-rc.2`。请安装 **[DSHA v0.1.5-rc2](https://github.com/DSH-APP/DSHA/releases/tag/v0.1.5-rc2)**（内置这个版本）。Android 11 及以上用标准包 `dsha-0.1.5-rc2.apk`，更早的系统用兼容包 `dsha-0.1.5-rc2low.apk`。旧的 DSHA 1.2.0-rc1.4 内置的不是这个版本，安装会停止。历史包见 [DSHA 历史版本下载页面](https://github.com/DSH-APP/DSHA/releases)。
+Android 安装包不从应用内自更新：新版本从 [Releases](https://github.com/flizzywine/dsh-tavern/releases) 下载，直接覆盖安装同一包名的新 APK。不要为了更新先卸载应用，以免删除应用数据。
 
-dsh-tavern 可以借助 [DSHA](https://github.com/DSH-APP/DSHA) 尝试在 Android 手机上安装和使用。
+本包要求 Android 11 及以上、ARM64。设备不满足要求时使用下面的 DSHA 方案；DSHA 路线会同时运行两个 DSH 服务。
 
-## 最简单的安装方法
+> 不同手机系统、网络和后台限制都可能导致安装或运行失败；当前安装脚本只能修复项目已知问题。
+
+## 备选：通过 DSHA 安装（Android 11+）
+
+> DSHA 路线会同时运行 DSHA 自己的 DSH（`web` / `user` Profile，3080）和酒馆的 DSH（`tavern` Profile，3088），内存、耗电和 CPU 占用都高于独立 APK。Android 11 及以上的 ARM64 手机优先用独立 APK；只有在设备不满足 APK 要求，或已经在 DSHA 中积累了大量配置时才选这条路线。
+
+当前版本适配 DSHA **v0.2.0-rc2**（内置 DSH 0.2.0-rc.2）。请安装 **[DSHA v0.2.0-rc2](https://github.com/DSH-APP/DSHA/releases/tag/v0.2.0-rc2)**。Android 11 及以上用标准包 `dsha-0.2.0-rc2.apk`，更早的系统用兼容包 `dsha-0.2.0-rc2low.apk`。DSHA 0.1.5（内置 DSH 0.1.5）不能安装当前版本；需要旧宿主时改用 stable 分支的安装方法。历史包见 [DSHA 历史版本下载页面](https://github.com/DSH-APP/DSHA/releases)。
+
+dsh-tavern 可以借助 [DSHA](https://github.com/DSH-APP/DSHA) 在 Android 手机上安装和使用。下面从安装到排错的所有步骤都只针对 DSHA 路线；已经用独立 APK 跑通的用户不需要继续阅读。
+
+## DSHA：最简单的安装方法
 
 1. 安装 DSHA，配置模型，并确认 DSHA 自身可以正常打开。
 2. 打开 DSHA 底部的 **终端**，把下面整条命令复制进去并回车。安装脚本会自行完成下载、配置、校验、启动和失败回滚：
 
 ```bash
-node -e "fetch('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@69d74f5/android/setup.sh').then(async r=>{if(!r.ok)throw Error('HTTP '+r.status);require('fs').writeFileSync('/tmp/dsh-tavern-setup.sh',await r.text())}).then(()=>{const r=require('child_process').spawnSync('bash',['/tmp/dsh-tavern-setup.sh'],{stdio:'inherit'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"
+node -e "fetch('https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/android/setup.sh').then(async r=>{if(!r.ok)throw Error('HTTP '+r.status);require('fs').writeFileSync('/tmp/dsh-tavern-setup.sh',await r.text())}).then(()=>{const r=require('child_process').spawnSync('bash',['/tmp/dsh-tavern-setup.sh'],{stdio:'inherit'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"
 ```
 
 3. 如果不会使用终端，也可以打开“创造模式”，完整复制下面这一整段话发给 Agent：
@@ -36,7 +47,7 @@ node -e "fetch('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@69d74f5/androi
 ```text
 请帮我安装 DSH Tavern。只需要原样执行下面这一条命令，等待它结束，然后把最后的结果告诉我；不要拆解步骤，也不要修改命令：
 
-node -e "fetch('https://cdn.jsdelivr.net/gh/flizzywine/dsh-tavern@69d74f5/android/setup.sh').then(async r=>{if(!r.ok)throw Error('HTTP '+r.status);require('fs').writeFileSync('/tmp/dsh-tavern-setup.sh',await r.text())}).then(()=>{const r=require('child_process').spawnSync('bash',['/tmp/dsh-tavern-setup.sh'],{stdio:'inherit'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"
+node -e "fetch('https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/android/setup.sh').then(async r=>{if(!r.ok)throw Error('HTTP '+r.status);require('fs').writeFileSync('/tmp/dsh-tavern-setup.sh',await r.text())}).then(()=>{const r=require('child_process').spawnSync('bash',['/tmp/dsh-tavern-setup.sh'],{stdio:'inherit'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"
 ```
 
 4. 看到“全部完成”后重启 DSHA，在底部 **启动** 页点 **启动**；显示“已就绪，可进入”后点 **进入**，再从侧栏打开 **酒馆工作台**。
@@ -93,7 +104,7 @@ MuMu 用户也在**模拟器里面**完成这些步骤。这里的 `127.0.0.1` �
 
 这两个入口都会安全更新原安装、保留用户配置并重新启动酒馆。检测到项目目录有本地修改或分叉时会停止，不会强行覆盖。
 
-脚本通常优先通过 Git 下载；如果当前网络无法完成 GitHub 的 Git 下载，会自动改用 `codeload.github.com` 的普通 HTTPS 压缩包。压缩包会先在临时目录解压并校验，确认完整后才整体替换源码；安装失败时恢复旧源码。
+脚本优先通过 Git 更新；Git 不可用时按 jsDelivr 运行清单逐个文件比对，只下载有变化的文件（通常只有几百 KB），未变化的文件直接复用已安装目录。清单也不可用时才回退到 `codeload.github.com` 的完整源码包。两种方式都会先在临时目录准备好并校验，确认完整后才整体替换源码；安装失败时恢复旧源码。**lockfile 没变时，已安装的 `node_modules` 会原样带进新源码，安装器直接跳过依赖安装**；只有依赖真的变化才会重装。需要强制重装时设 `DSH_TAVERN_FORCE_DEPENDENCIES=1`。
 
 ## 一键脚本做了什么
 

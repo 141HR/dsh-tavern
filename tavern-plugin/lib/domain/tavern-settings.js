@@ -148,7 +148,7 @@ export function presentPromptSets(document) {
 
 export function normalizeBackgroundTasks(value) {
   const tasks = object(value)
-  return { posture: tasks.posture !== false, characterDesign: false, variables: tasks.variables !== false, ledger: false }
+  return { posture: tasks.posture !== false, characterDesign: false, variables: tasks.variables !== false, ledger: false, styleReference: tasks.styleReference === true }
 }
 
 
@@ -156,7 +156,8 @@ export function normalizePlayDefaults(value) {
   const input = object(value)
   return { playerName: typeof input.playerName === 'string' ? input.playerName.trim().slice(0, 80) || '你' : '你',
     statusBarPlacement: input.statusBarPlacement === 'body' ? 'body' : 'sidebar',
-    backgroundTasks: normalizeBackgroundTasks(input.backgroundTasks),
+    // New games get 文风联想 unless the defaults turn it off; an existing game without the key stays off.
+    backgroundTasks: { ...normalizeBackgroundTasks(input.backgroundTasks), styleReference: object(input.backgroundTasks).styleReference !== false },
     webSearchEnabled: input.webSearchEnabled === true, sceneImagesEnabled: input.sceneImagesEnabled === true }
 }
 
@@ -168,7 +169,7 @@ export function applyTavernSettingsPatch(current, patch) {
     for (const key of ['webSearchEnabled', 'sceneImagesEnabled']) if (Object.hasOwn(patch, key) && typeof patch[key] !== 'boolean') throw new Error('默认开关必须为布尔值')
     if (Object.hasOwn(patch, 'playerName') && (typeof patch.playerName !== 'string' || patch.playerName.length > 80)) throw new Error('玩家称呼最多 80 字')
     if (Object.hasOwn(patch, 'statusBarPlacement') && !['body', 'sidebar'].includes(patch.statusBarPlacement)) throw new Error('状态栏位置无效')
-    for (const key of ['variables', 'posture']) if (Object.hasOwn(object(patch.backgroundTasks), key) && typeof patch.backgroundTasks[key] !== 'boolean') throw new Error('默认结算开关必须为布尔值')
+    for (const key of ['variables', 'posture', 'styleReference']) if (Object.hasOwn(object(patch.backgroundTasks), key) && typeof patch.backgroundTasks[key] !== 'boolean') throw new Error('默认结算开关必须为布尔值')
     const current = normalizePlayDefaults(next.defaultPlaySettings)
     next.defaultPlaySettings = normalizePlayDefaults({ ...current, ...patch, backgroundTasks: { ...current.backgroundTasks, ...object(patch.backgroundTasks) } })
   }

@@ -435,6 +435,8 @@ body.dsh-tavern-shell-active span:has(.dsh-tavern-hero-lockup) + span { display:
 .dsh-tavern-regen-title { font-weight: 700; font-size: 15px; }
 .dsh-tavern-regen-loading { padding: 4px 0 2px; color: var(--dsw-alias-label-secondary); font-size: 13px; }
 .dsh-tavern-regen-input { display: block; width: 100%; box-sizing: border-box; min-height: 64px; padding: 9px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 1.6; resize: vertical; transition: border-color .15s, box-shadow .15s; }
+.dsh-tavern-regen-style { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; font-size: 13px; }
+.dsh-tavern-regen-style input.dsh-tavern-regen-input { min-height: 0; padding: 6px 10px; }
 .dsh-tavern-regen-input::placeholder { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .dsh-tavern-regen-input:focus { outline: none; border-color: var(--dsh-tavern-accent-border); box-shadow: 0 0 0 3px var(--dsh-tavern-accent-soft); }
 .dsh-tavern-regen-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -757,6 +759,7 @@ body.dsh-tavern-shell-active span:has(.dsh-tavern-hero-lockup) + span { display:
 .dsh-tavern-guide-list { display: flex; flex-direction: column; gap: 6px; }
 .dsh-tavern-guide-item { display: flex; align-items: flex-start; gap: 6px; padding: 7px 8px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-interactive-bg-hover); }
 .dsh-tavern-guide-text { flex: 1; min-width: 0; font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
+.dsh-tavern-style-reference { margin: 4px 0 0; padding-left: 8px; border-left: 2px solid currentColor; opacity: .8; font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
 .dsh-tavern-guide-add { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .dsh-tavern-guide-add textarea { box-sizing: border-box; width: 100%; resize: vertical; min-height: 54px; padding: 7px 8px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-specific-input-major); color: inherit; font: inherit; font-size: 12px; line-height: 1.5; }
 .dsh-tavern-script-preview { display: flex; flex-direction: column; gap: 7px; }
@@ -2770,6 +2773,16 @@ body.dsh-tavern-shell-active [class*="_headerUtilities"]:has(.dsh-tavern-header-
   }
   /* 原生右栏入口悬浮在顶栏右上角（见上方 header.corner 规则），标题行给它让出一格。 */
   body.dsh-tavern-shell-active [data-phase] header:has([data-conversation-header-corner] button) [class*="_titleRow"] { padding-right: 44px; }
+  /* dsh-web-mobile 3.1.0 在 [data-mobile-nav="frame"] 下把 titleRow 里的 corner 设成
+     display:none !important，用它的文件按钮替代右侧栏入口。酒馆要的是宿主的通用右侧栏
+     按钮（打开上次的页），所以用更高的特异性把它放出来，并隐藏重复的文件按钮；
+     corner 里没有按钮时（面板已展开）文件按钮保留作兜底。 */
+  body.dsh-tavern-shell-active [data-mobile-nav="frame"] [data-phase] header:has([data-conversation-header-corner]):has([data-conversation-header-corner]) [data-conversation-header-corner] {
+    display: flex !important;
+  }
+  body.dsh-tavern-shell-active [data-mobile-nav="frame"] [data-phase] header:has([data-conversation-header-corner] button) [data-mobile-nav="files"] {
+    display: none !important;
+  }
   body.dsh-tavern-shell-active :is([data-phase] > header, [data-slot="conversation.header"] > header) {
     position: relative; z-index: var(--dsh-play-z-header); flex: none;
     padding: 2px 4px 0;
@@ -2786,6 +2799,15 @@ body.dsh-tavern-shell-active [class*="_headerUtilities"]:has(.dsh-tavern-header-
   /* 有快捷入口时留出固定的一份宽度，量出来的可用空间才不会随收起数量变化。 */
   body.dsh-tavern-shell-active :is([data-phase] > header, [data-slot="conversation.header"] > header) [class*="_headerUtilities"]:has(.dsh-tavern-header-items) {
     flex: 0 1 auto; min-width: 0;
+  }
+  /* 兜底：dsh-web-mobile 在 `header:has(_headerLeading)` 下把整个 utilities 设成
+     display:none !important（手机上 header 带侧栏开关时命中）。上面那条覆盖依赖
+     body.dsh-tavern-shell-active，一旦这个类没加上（例如侧栏是抽屉、从未挂载），
+     顶栏会整块消失，只剩宿主角落的文件按钮。这条只认「里面装着酒馆按钮」，
+     与 body 类无关；重复 :has 是为了把特异性压过宿主那条 (0,4,1)。
+     注意用后代 :has（宿主在 utilities 里还套了一层 slot 包装 div）。 */
+  header:has([class*="_headerLeading"]) [class*="_headerUtilities"]:has(.dsh-tavern-header-items):has(.dsh-tavern-header-items):has(.dsh-tavern-header-items) {
+    display: flex !important; flex: 0 1 auto !important; min-width: 0 !important;
   }
   body.dsh-tavern-shell-active :is([data-phase] > header, [data-slot="conversation.header"] > header) .dsh-tavern-header-action-label { display: none; }
   body.dsh-tavern-shell-active :is([data-phase] > header, [data-slot="conversation.header"] > header) :is(.dsh-tavern-header-settings, .dsh-tavern-export-action) {
@@ -3081,6 +3103,8 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
 @container (max-width: 420px) { .dsh-tavern-preset-hub-body { padding-left: 10px; } }
 .dsh-tavern-preset-hub-detail { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .dsh-tavern-preset-hub-back { padding: 10px 18px 0; }
+/* 子页面自身写着 height: 100%，放在「返回预设」下面会多出这一行的高度，底部被裁掉、滚不到。 */
+.dsh-tavern-preset-hub-detail > :not(.dsh-tavern-preset-hub-back) { flex: 1 1 0; min-height: 0; height: auto; }
 .dsh-tavern-preset-hub { container-type: inline-size; }
 .dsh-tavern-preset-hub-export { display: grid; gap: 8px; margin: 14px 18px 0; padding: 14px 16px; border: 1px solid var(--dsh-tavern-accent-border); border-radius: 12px; background: var(--dsh-tavern-accent-soft); }
 .dsh-tavern-preset-hub-export > b { font-size: 13px; font-weight: 600; }
@@ -3114,3 +3138,68 @@ details.dsh-tavern-recall-guide > summary .dsh-tavern-recall-guide-heading > spa
 .dsh-tavern-wbsw-switch input:checked + .dsh-tavern-wbsw-track .dsh-tavern-wbsw-knob { transform: translateX(13px); }
 .dsh-tavern-wbsw-empty { padding: 20px 12px; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 1.6; text-align: center; }
 .dsh-tavern-wbsw-error { margin: 4px; padding: 7px 9px; border-radius: 6px; background: color-mix(in srgb, #c45f5f 12%, transparent); color: #b34646; font-size: 12px; line-height: 1.5; }
+/* 外观 → 正文排版：只在调过行距或字距时接管酒馆正文；DSH 的 markdown 用 font 简写定行高，需逐层压过。 */
+html[data-dsh-text-layout] :is(.dsh-tavern-assistant, .dsh-tavern-user-bubble, .dsh-tavern-stage-textbox) { line-height: var(--dsh-tavern-line-height, calc(24px + var(--dsh-content-font-delta, 0px))) !important; letter-spacing: var(--dsh-tavern-letter-spacing, normal) !important; }
+html[data-dsh-text-layout] :is(.dsh-tavern-assistant, .dsh-tavern-user-bubble, .dsh-tavern-stage-textbox) :is([class*="_markdown_"], [class*="_markdown_"] :not(pre, code, pre *)) { line-height: inherit !important; letter-spacing: inherit !important; }
+.dsh-tavern-text-layout { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; }
+.dsh-tavern-text-layout-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dsh-tavern-text-layout-head strong { font-size: 14px; }
+.dsh-tavern-text-layout-field { display: grid; grid-template-columns: 84px minmax(0, 1fr) 64px; align-items: center; gap: 10px; font-size: 13px; }
+.dsh-tavern-text-layout-label small { margin-left: 4px; color: var(--dsw-alias-label-tertiary); font-size: 11px; }
+.dsh-tavern-text-layout-field input[type="range"] { width: 100%; accent-color: var(--dsh-tavern-accent); }
+.dsh-tavern-text-layout-value { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; text-align: right; }
+.dsh-tavern-text-layout-preview { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--dsw-alias-bg-layer-1, rgba(127, 127, 127, .08)); color: var(--dsw-alias-label-primary); }
+
+/* 手机顶栏：快捷入口最多 3 个，其余进 ⋮。留给它们的宽度由 JS 读下面这个变量折算
+   槽位（每格 42px = 40px 按钮 + 2px 间距）：
+   196 = 左右内边距 40 + 4、三处间距 4×3、角落按钮 40 + 外边距 8、标题下限 16、
+   宿主右侧动作组（子智能体触发器 + 全屏）80。 */
+@media (max-width: 1023px), (pointer: coarse) {
+  body.dsh-tavern-shell-active header:has([class*="_headerUtilities"]) [class*="_titleRow"] {
+    --dsh-tavern-header-fixed: 196px;
+    /* 宿主角落按钮浮在这个位置；上游给的是固定 44px，这里同样留出一格。 */
+    padding-right: 44px;
+  }
+  /* 动作组里是固定尺寸的图标按钮（侧栏开关、文件、全屏）：容器可以被 flex 压窄，
+     但按钮不会跟着缩，压到 40px 就会互相覆盖。保持自然宽度，让标题区收缩；
+     标题栏本身有最小宽度和省略号，不会因此把页面撑开。 */
+  body.dsh-tavern-shell-active header:has([class*="_headerUtilities"]) [class*="_headerActions"] {
+    flex: none; min-width: 0; gap: 0;
+  }
+  body.dsh-tavern-shell-active header:has([class*="_headerUtilities"]) [class*="_crumbs"] {
+    flex: 1 1 auto; min-width: 0; overflow: hidden;
+  }
+}
+/* 0.2.x 把 headerActions 渲染成一个 display:contents 的插槽，宿主的侧栏开关、文件入口
+   和酒馆的全屏按钮都挂在这个插槽里。按「直接子元素」隐藏会命中整个插槽，把这三个按钮
+   一起藏掉，只剩右侧一片空白；窄屏也不该再按 156px 预算，因为动作组仍然占位。
+   子智能体触发器改由可收缩规则处理（见上面的 headerActions 规则）。 */
+/* 设置 → DSH Tavern → 插件。外层卡片规则把间距清零，这里按插件区自己的节奏排。 */
+.dsh-tavern-global-settings .dsh-tavern-user-plugins { gap: 14px; padding: 18px; }
+.dsh-tavern-user-plugins > p { margin: 0; }
+.dsh-tavern-user-plugins .dsh-tavern-settings-desc { margin: -4px 0 0; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 1.6; }
+.dsh-tavern-user-plugins-install { display: flex; gap: 8px; align-items: center; }
+.dsh-tavern-user-plugins-install input { flex: 1; min-width: 0; max-width: none; height: 36px; box-sizing: border-box; }
+.dsh-tavern-user-plugins-install .dsh-tavern-btn { flex: none; height: 36px; padding: 0 16px; }
+.dsh-tavern-user-plugins-notice { padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, #2f8a4c 9%, transparent); color: #2f7a44; font-size: 12px; }
+.dsh-tavern-user-plugins-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dsh-tavern-user-plugin { display: flex; gap: 14px; align-items: center; padding: 12px 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-alias-bg-base, transparent); }
+.dsh-tavern-user-plugin-copy { display: grid; flex: 1; min-width: 0; gap: 4px; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-secondary); }
+.dsh-tavern-user-plugin-copy strong { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--dsw-alias-label-primary); font-size: 14px; font-weight: 600; }
+.dsh-tavern-user-plugin-copy small { color: var(--dsw-alias-label-tertiary); font-size: 12px; font-weight: 400; }
+.dsh-tavern-user-plugin-state { padding: 1px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1, rgba(127, 127, 127, .1)); color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 500; }
+.dsh-tavern-user-plugin.is-loaded .dsh-tavern-user-plugin-state { background: color-mix(in srgb, #2f8a4c 12%, transparent); color: #2f7a44; }
+.dsh-tavern-user-plugin.is-failed .dsh-tavern-user-plugin-state, .dsh-tavern-user-plugin.is-skipped .dsh-tavern-user-plugin-state { background: color-mix(in srgb, #c44 12%, transparent); color: #b33; }
+.dsh-tavern-user-plugin.is-restart .dsh-tavern-user-plugin-state { background: color-mix(in srgb, #c98a00 14%, transparent); color: #8a6508; }
+.dsh-tavern-user-plugin.is-disabled { border-style: dashed; }
+.dsh-tavern-user-plugin.is-disabled .dsh-tavern-user-plugin-copy { opacity: .68; }
+.dsh-tavern-user-plugin.is-disabled .dsh-tavern-user-plugin-state { background: var(--dsw-alias-bg-layer-1, rgba(127, 127, 127, .1)); color: var(--dsw-alias-label-tertiary); }
+.dsh-tavern-user-plugin-source { color: var(--dsw-alias-label-tertiary); overflow-wrap: anywhere; }
+.dsh-tavern-user-plugin-actions { display: flex; flex: none; align-items: center; gap: 6px; }
+.dsh-tavern-user-plugin-actions .dsh-tavern-btn { height: 30px; padding: 0 12px; }
+.dsh-tavern-user-plugin-update { padding: 1px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1, rgba(127, 127, 127, .1)); color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 500; white-space: nowrap; }
+.dsh-tavern-user-plugin-update.is-checking { color: var(--dsw-alias-label-tertiary); }
+.dsh-tavern-user-plugins-folder { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding-top: 14px; border-top: 1px solid var(--dsw-alias-border-l2); }
+.dsh-tavern-user-plugins-folder span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.dsh-tavern-user-plugins-folder .dsh-tavern-btn { flex: none; height: 30px; padding: 0 12px; }
+@media (max-width: 640px) { .dsh-tavern-user-plugins-install, .dsh-tavern-user-plugin { flex-wrap: wrap; } .dsh-tavern-user-plugins-install input { flex-basis: 100%; } }

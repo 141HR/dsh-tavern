@@ -159,6 +159,9 @@
 			const [guideBusy, setGuideBusy] = React.useState(false);
             const [guideNotice, setGuideNotice] = React.useState("");
 			const [guideError, setGuideError] = usePersistentError("Guide");
+            const [styleDraft, setStyleDraft] = React.useState("");
+            const [styleBusy, setStyleBusy] = React.useState(false);
+            const [styleError, setStyleError] = React.useState("");
 			const [debugBusy, setDebugBusy] = React.useState(false);
 			const [settlementRetryBusy, setSettlementRetryBusy] = React.useState(false);
 			const [cardUpdateBusy, setCardUpdateBusy] = React.useState(false);
@@ -234,6 +237,15 @@
 				} catch (err) { setGuideError(String(err && err.message || err)); }
 				finally { setGuideBusy(false); }
 			}
+            async function retryStyleReference() {
+                setStyleBusy(true); setStyleError("");
+                try {
+                    await rpc("retryStyleReference", { guidance: styleDraft.trim() }, props.sessionId);
+                    liveTavernView.invalidate(props.sessionId);
+                    setStyleDraft("");
+                } catch (err) { setStyleError(String(err && err.message || err)); }
+                finally { setStyleBusy(false); }
+            }
             async function saveGuideLibrary() {
                 if (guideBusy || !(view.guides || []).length) return;
                 const name = await askTavernText({ title: "Guide 方案名称", initialValue: "本局 Guide", maxLength: 80 });
@@ -355,6 +367,14 @@
                         sessionId: props.sessionId, cursor: view.scriptProgress.cursor, total: view.scriptProgress.totalChunks, chunkSize: view.scriptProgress.chunkSize,
                         busy: running || view.activity?.busy || view.regenInProgress
                     }) : null,
+                    view.styleReferenceEnabled && view.styleReference ? h("section", { className: "dsh-tavern-status-section" },
+                        h("div", { className: "dsh-tavern-status-label" }, "下一轮文风联想"),
+                        h("p", { className: "dsh-tavern-settings-desc" }, "《" + view.styleReference.book + "》" + view.styleReference.author),
+                        h("blockquote", { className: "dsh-tavern-style-reference" }, view.styleReference.quote),
+                        h("div", { className: "dsh-tavern-guide-add" },
+                            h("textarea", { className: "dsh-tavern-regen-input", rows: 2, maxLength: 500, value: styleDraft, "aria-label": "换参考的要求", placeholder: "换一段的要求（可选），例如：要金庸的打斗描写；不要鲁迅", onChange: event => setStyleDraft(event.target.value) }),
+                            h("button", { className: "dsh-card-primary", disabled: styleBusy || running || view.regenInProgress, onClick: retryStyleReference }, styleBusy ? "正在换…" : "换一段")),
+                        styleError ? h("div", { className: "dsh-card-error", role: "alert" }, styleError) : null) : null,
 					h("section", { className: "dsh-tavern-status-section dsh-tavern-guide-section" },
 						h("div", { className: "dsh-tavern-status-label" }, "Guide", h("span", { className: "dsh-tavern-guide-caption" }, (view.guides || []).length + " 条")),
                         h("p", { className: "dsh-tavern-settings-desc" }, "Guide 是本局持续生效的要求，会同时注入前台（正文）和后台（候选、变量结算），可用来引导剧情走向、文风和数值尺度。"),
@@ -545,7 +565,7 @@
 		}
 
 		async function submitBodyRegeneration(sessionId, panel, guidance) {
-			const res = await rpc("regenBody", { guidance: String(guidance || "").trim() }, sessionId);
+			const res = await rpc("regenBody", Object.assign({ guidance: String(guidance || "").trim() }, panel.restyle ? { restyle: true, styleGuidance: String(panel.styleGuidance || "").trim() } : {}), sessionId);
 			applyBodyRegenerationResult({ liveTavernView: liveTavernView, historyProjection: historyProjection, sessionId: sessionId, view: res.view, tail: panel.tail });
 			setCandidatePanel(null);
 		}
@@ -1136,6 +1156,7 @@
                 h("section", { className: "dsh-local-section" }, h("h3", null, "功能"),
                     features.mvuCard ? toggle("variables", "变量结算", "关闭后变量和状态栏不再更新。", tasks.variables, checked => ({ backgroundTasks: { variables: checked } })) : null,
                     toggle("posture", "人物姿势", "每轮总结人物的位置、动作和姿势，供前台保持一致。", tasks.posture, checked => ({ backgroundTasks: { posture: checked } })),
+                    toggle("styleReference", "文风联想", "仅自由模式。每轮后台凭记忆摘一段风格相近的经典小说原文，供下一轮正文借鉴笔调。多一次后台请求。", tasks.styleReference === true, checked => ({ backgroundTasks: { styleReference: checked } })),
                     toggle("webSearchEnabled", "联网搜索", "前台和后台可按需搜索。", features.webSearchEnabled, checked => ({ webSearchEnabled: checked }))),
                 error || key && reasoning.key === key && reasoning.error ? h("p", { role: "alert", className: "dsh-tavern-prompt-error" }, error || reasoning.error) : null,
                 notice ? h("p", { role: "status" }, notice) : null,
@@ -1525,6 +1546,7 @@
 						onChange: function (e) { props.onChange(e.target.value); },
 						onKeyDown: onKeyDown
 					}),
+					props.extra || null,
 					h("div", { className: "dsh-tavern-regen-foot" },
 						h("div", { className: "dsh-tavern-regen-examples" }, props.examples.map(function (text) {
 							return h("button", { key: text, type: "button", className: "dsh-tavern-regen-example", onClick: function () { addExample(text); } }, text);
@@ -1549,6 +1571,10 @@
 			const sessionMode = useTavernSessionMode(props.sessionId);
 			const running = props.useSession(function (snapshot) { return snapshot.running; });
 			const [guidance, setGuidance] = React.useState(function () { return regenGuidance.get(props.sessionId) || ""; });
+			const [restyle, setRestyle] = React.useState(false);
+			const [styleGuidance, setStyleGuidance] = React.useState("");
+			const styleState = useLiveTavernView(props.sessionId, "regen-style");
+			const styleEnabled = styleState.view?.styleReferenceEnabled === true;
 			const opened = panel && panel.sessionId === props.sessionId && panel.phase === "input";
 			React.useEffect(function () { if (opened) setGuidance(regenGuidance.get(props.sessionId) || ""); }, [opened, props.sessionId]);
 			const h = React.createElement;
@@ -1556,9 +1582,10 @@
 			async function generate() {
 				const guide = guidance.trim();
 				if (guide) regenGuidance.set(props.sessionId, guide); else regenGuidance.delete(props.sessionId);
-				setRegenPanel(Object.assign({}, panel, { phase: "loading", error: "", rewrite: guide !== "" }));
+				const restyled = styleEnabled && restyle;
+				setRegenPanel(Object.assign({}, panel, { phase: "loading", error: "", rewrite: guide !== "", restyle: restyled }));
 				try {
-					await submitBodyRegeneration(props.sessionId, panel, guide);
+					await submitBodyRegeneration(props.sessionId, Object.assign({}, panel, { restyle: restyled, styleGuidance: styleGuidance }), guide);
 					setRegenPanel(null);
 				} catch (err) {
 					tavernErrorHub.report("正文重新生成", err);
@@ -1568,7 +1595,10 @@
 			return h(RegenGuideForm, {
 				title: "重新生成正文",
 				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改",
-				loading: panel.phase === "loading" ? (panel.rewrite ? "正在按意见改写正文…" : "正在重新生成正文…") : "",
+				loading: panel.phase === "loading" ? (panel.restyle ? "正在换文风联想并重新生成…" : panel.rewrite ? "正在按意见改写正文…" : "正在重新生成正文…") : "",
+				extra: styleEnabled ? h("div", { className: "dsh-tavern-regen-style" },
+					h("label", null, h("input", { type: "checkbox", checked: restyle, onChange: event => setRestyle(event.target.checked) }), " 同时换一段文风联想"),
+					restyle ? h("input", { className: "dsh-tavern-regen-input", value: styleGuidance, maxLength: 500, placeholder: "换参考的要求（可选），例如：要金庸的打斗描写", onChange: event => setStyleGuidance(event.target.value) }) : null) : null,
 				error: panel.error,
 				value: guidance,
 				onChange: setGuidance,
@@ -1638,10 +1668,16 @@
             const h = React.createElement;
             const catalog = useTavernHeaderCatalog();
             const header = useTavernHeaderItems();
-            const display = header.display === "icon" ? "icon" : "icon-text";
+            // 手机/触屏顶栏只有一行：强制纯图标，并把快捷入口限制在上限内。
+            // 存回设置时用用户自己选的形态，别把手机上的强制图标写进配置。
+            const mobile = useTavernMobileHeader();
+            const configuredDisplay = header.display === "icon" ? "icon" : "icon-text";
+            const display = mobile ? "icon" : configuredDisplay;
             const items = header.items;
             const owner = props.sessions.subagentAddress(props.sessionId)?.parentSessionId || props.sessionId;
             const [folded, setFolded] = React.useState([]);
+            // 手机上最多保留几个快捷入口（按标题行宽实测，见下方 effect）。
+            const [mobileLimit, setMobileLimit] = React.useState(TAVERN_HEADER_MOBILE_LIMIT);
             const [context, setContext] = React.useState(null);
             const [more, setMore] = React.useState(null);
             const [dialog, setDialog] = React.useState(false);
@@ -1667,14 +1703,22 @@
                 if (index < 0 || target < 0 || target >= items.length) return;
                 const next = items.slice();
                 [next[index], next[target]] = [next[target], next[index]];
-                saveHeader({ display: display, items: next });
+                saveHeader({ display: configuredDisplay, items: next });
             }
             function remove(id) {
-                saveHeader({ display: display, items: items.filter(value => value !== id) });
+                saveHeader({ display: configuredDisplay, items: items.filter(value => value !== id) });
             }
             // Natural widths are cached: a folded button is display:none, so it
             // cannot be measured again until the display mode changes.
             React.useLayoutEffect(function () {
+                // 手机上不量按钮宽度：容器会被 flex 压窄，量出来的「可用宽度」
+                // 反而恒为够用，于是从不折叠。这里按固定上限折，其余全进 ⋮。
+                if (mobile) {
+                    const next = tavernHeaderMobileFold(visible, mobileLimit);
+                    setFolded(current => current.length === next.length && current.every((id, index) => id === next[index]) ? current : next);
+                    return undefined;
+                }
+                setMobileLimit(TAVERN_HEADER_MOBILE_LIMIT);
                 const node = host.current;
                 if (!node) return undefined;
                 let frame = 0;
@@ -1705,7 +1749,39 @@
                 const row = node.closest("[class*=\"_titleRow\"]");
                 if (row) observer.observe(row);
                 return function () { observer.disconnect(); cancelAnimationFrame(frame); };
-            }, [visible.join("|"), display, catalog]);
+            }, [visible.join("|"), display, catalog, mobile, mobileLimit]);
+            // 手机上按标题行宽算槽位：行宽减掉宿主自己的固定开销（见
+            // tavernHeaderMobileChrome），剩下的按每格 42px 折算。行宽与当前保留
+            // 数量无关，所以不会「收一个 → 标题变宽 → 又想放回」来回跳。
+            React.useLayoutEffect(function () {
+                if (!mobile) return undefined;
+                let frame = window.requestAnimationFrame(function () {
+                    const node = host.current;
+                    if (!node) return;
+                    const row = node.closest("[class*=\"_titleRow\"]");
+                    const width = row ? row.clientWidth - tavernHeaderMobileChrome(row) : node.clientWidth;
+                    const capacity = tavernHeaderMobileCapacity(visible.length, width, { limit: TAVERN_HEADER_MOBILE_LIMIT });
+                    if (capacity !== mobileLimit) setMobileLimit(capacity);
+                });
+                return function () { window.cancelAnimationFrame(frame); };
+            }, [mobile, mobileLimit, folded.join("|"), visible.join("|")]);
+            React.useEffect(function () {
+                if (!mobile) return undefined;
+                let timer = 0;
+                function onResize() {
+                    window.clearTimeout(timer);
+                    // 旋屏后回到上限重算，不该一直停在横屏时收窄的结果。
+                    setMobileLimit(TAVERN_HEADER_MOBILE_LIMIT);
+                    timer = window.setTimeout(function () { setMobileLimit(TAVERN_HEADER_MOBILE_LIMIT); }, 0);
+                }
+                window.addEventListener("resize", onResize);
+                window.addEventListener("orientationchange", onResize);
+                return function () {
+                    window.clearTimeout(timer);
+                    window.removeEventListener("resize", onResize);
+                    window.removeEventListener("orientationchange", onResize);
+                };
+            }, [mobile]);
             React.useEffect(function () {
                 if (!context && !more) return undefined;
                 function close(event) {
@@ -1749,11 +1825,16 @@
                 }, content);
             }
             const foldedEntries = folded.map(id => ({ id: id, label: titleOf(id) })).filter(entry => entry.id !== "header:export");
-            return h("div", { ref: host, className: "dsh-tavern-header-items" + (display === "icon" ? " is-icon" : "") },
+            return h("div", {
+                ref: host,
+                className: "dsh-tavern-header-items" + (display === "icon" ? " is-icon" : ""),
+                // 手机上实测的保留上限；夹具与线上排查都读它。
+                "data-tavern-header-limit": mobile ? mobileLimit : ""
+            },
                 visible.map(item),
                 foldedEntries.length ? h("div", { className: "dsh-tavern-more-actions dsh-tavern-header-more" },
                     h("button", { type: "button", className: "dsh-tavern-btn dsh-tavern-header-more-button", "data-tavern-header-trigger": "more", "aria-label": "更多快捷入口", "aria-haspopup": "menu", "aria-expanded": Boolean(more), title: "更多快捷入口", onClick: function () { setContext(null); setMore(more ? null : { x: null, y: null }); } },
-                        h("svg", { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.4, strokeLinecap: "round", "aria-hidden": "true" }, h("path", { d: "M5 12h.01M12 12h.01M19 12h.01" }))),
+                        h("svg", { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.4, strokeLinecap: "round", "aria-hidden": "true" }, h("path", { d: mobile ? "M12 5h.01M12 12h.01M12 19h.01" : "M5 12h.01M12 12h.01M19 12h.01" }))),
                     more ? h("div", { className: "dsh-tavern-more-menu dsh-tavern-header-popup", role: "menu", "aria-label": "更多快捷入口" },
                         foldedEntries.map(entry => h("button", { key: entry.id, type: "button", role: "menuitem", onClick: function () { setMore(null); activate(entry.id, host.current); } }, tavernStartIcon(entry.id, entries.get(entry.id), 15), entry.label)),
                         h("div", { className: "dsh-tavern-header-menu-sep", role: "separator" }),

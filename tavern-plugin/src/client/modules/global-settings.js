@@ -1,5 +1,5 @@
 // Settings owns its initial snapshot; each editor saves only its own resource.
-function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernDefaultModelSetting, TavernConversationWritingSkills, DisplayPreferencesSettings, HeaderItemsSettings, CandidatePreferencesSettings, PromptTemplateSettingsEntry, ContextCompactionSettings }) {
+function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernDefaultModelSetting, TavernConversationWritingSkills, DisplayPreferencesSettings, HeaderItemsSettings, CandidatePreferencesSettings, PromptTemplateSettingsEntry, ContextCompactionSettings, TavernUserPluginsSettings }) {
     function GlobalPlayDefaults({ settings }) {
         const h = React.createElement;
         const [data, setData] = React.useState(null), [busy, setBusy] = React.useState(false), [message, setMessage] = React.useState("");
@@ -36,7 +36,8 @@ function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernD
                 h("label", { className: "dsh-local-field" }, "默认预设", h("select", { disabled, value: data?.preset || "", onChange: event => save(null, "selectPreset", { path: event.target.value }) }, h("option", { value: "" }, "不使用酒馆预设"), (data?.presets || []).filter(item => item.valid && item.recognized).map(item => h("option", { key: item.path, value: item.path }, item.title)))),
                 h("label", { className: "dsh-local-field" }, "默认长期偏好", h("select", { disabled, value: data?.profile.defaultProfileId || "", onChange: event => save(null, "manageUserPreferenceProfile", { action: "default", profileId: event.target.value }) }, h("option", { value: "" }, "不启用"), (data?.profile.profiles || []).filter(item => item.hasConfirmed).map(item => h("option", { key: item.id, value: item.id }, item.name))))),
             h("section", { className: "dsh-local-section" }, h("h3", null, "后台结算"),
-                toggle("variables", "变量结算", "MVU 卡建议开启；普通卡不执行此任务。", true), toggle("posture", "人物姿势结算", "总结本轮结束时人物的位置、动作和姿势。", true)),
+                toggle("variables", "变量结算", "MVU 卡建议开启；普通卡不执行此任务。", true), toggle("posture", "人物姿势结算", "总结本轮结束时人物的位置、动作和姿势。", true),
+                toggle("styleReference", "文风联想", "仅自由模式。每轮后台凭记忆摘一段风格相近的经典小说原文，供下一轮正文借鉴笔调。多一次后台请求。", true)),
             h("section", { className: "dsh-local-section" }, h("h3", null, "扩展功能"),
                 toggle("webSearchEnabled", "联网搜索", "允许新游戏的前台和后台按需搜索。")),
             message ? h("p", { role: "status" }, message) : null);
@@ -115,6 +116,7 @@ function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernD
                     description: "后台结算时顺带标注每句台词的说话人和情绪，台词显示成带头像的一行。主角用人物卡头像，其他人物用首字头像。" }) : null,
                 h(DisplayPreferencesSettings),
                 h(CandidatePreferencesSettings)),
+            group("插件", "给酒馆加功能：粘贴插件作者的 GitHub 地址即可安装。", h(TavernUserPluginsSettings)),
             group("高级", "",
                 state.settings ? h(SettingSwitch, { settings: state.settings, name: "storyToolCall", title: "正文走工具调用",
                     description: "让模型通过工具调用提交正文，历史里的正文和玩家消息也以工具参数的形式回放；可缓解 Gemini 等模型在正文中途截断或拒答。需要模型支持工具调用；正文生成完成后一次性显示，存档和界面不变。" }) : null,

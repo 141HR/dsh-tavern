@@ -80,6 +80,18 @@
 					if (typeof name !== "string" || !name) return Promise.reject(new TypeError("callHost 需要处理函数的名字"));
 					return rpc("callPluginHandler", { name: name, args: args === undefined ? {} : args }).then(function (reply) { return reply ? reply.result : null; });
 				},
+				// The plugin's own data, not tied to a game; the same copy its host side reads (tavern.readPluginData).
+				readPluginData() {
+					let owner;
+					try { owner = ownerOf(this); } catch (error) { return Promise.reject(error); }
+					return rpc("pluginData", { plugin: owner, op: "read" }).then(function (reply) { return reply ? reply.data : null; });
+				},
+				savePluginData(data) {
+					let owner;
+					try { owner = ownerOf(this); } catch (error) { return Promise.reject(error); }
+					if (data === undefined) return Promise.reject(new TypeError("savePluginData 需要 data；要清除请传 null"));
+					return rpc("pluginData", { plugin: owner, op: "save", data: data }).then(function () {});
+				},
 				// A sidebar page of the plugin's own, for the game open beside it (apiVersion 2).
 				registerPanel(input) {
 					if (!input || typeof input.id !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(input.id)) throw new TypeError("registerPanel 的 id 只能用小写字母、数字、点、下划线和连字符");

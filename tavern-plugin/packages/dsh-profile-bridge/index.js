@@ -1,8 +1,10 @@
 // Based on 2NF/dsh-profile-bridge (MIT); Tavern compatibility fork.
 // Queue a directory switch for when Desktop exits, then ask it to quit and reopen it.
 import { basename } from 'node:path'
-import { scheduleSwitch } from './lib/helper.mjs'
+import { relaunchApp, scheduleSwitch } from './lib/helper.mjs'
+import { createTavernShortcut } from './lib/shortcut.mjs'
 import { detectAppExe, fail, resolvePaths, statusPayload, validateTarget } from './lib/state.mjs'
+import { isDesktopNext } from './lib/next.mjs'
 
 /** Shared RPC channel owned by this plugin; the browser half calls it by name. */
 const CHANNEL = '/profile-bridge'
@@ -30,18 +32,29 @@ function runSwitch(mode, paths, payload) {
     )
   }
   const target = mode === 'link' ? validateTarget(paths, request.target) : undefined
+  const relaunch = detectAppExe()
   if (!process.versions.electron || !process.send || process.ppid <= 1) {
     fail('not-desktop', '请在官方桌面中执行切换')
   }
   const result = scheduleSwitch({ mode, profilesRoot: paths.profilesDir, liveDir: paths.activeDir,
     activeName: paths.activeName, targetDir: target?.dir, stateDir: paths.stateDir,
     stamp: new Date().toISOString().replace(/[:.]/g, '-') + '-' + process.pid,
-    pids: [process.pid, process.ppid], relaunch: detectAppExe() })
+    pids: [process.pid, process.ppid], relaunch,
+    // DSH NEXT switches by its own Profile selection; see lib/next.mjs.
+    next: isDesktopNext(relaunch), home: paths.home, targetName: target?.name })
   // Electron answers SIGTERM like the Quit menu (before-quit, task confirmation), so this is a
   // normal quit, not a kill. Windows has no such signal; there the user quits from the tray.
   const closesApp = process.platform !== 'win32'
   if (closesApp) setTimeout(() => { try { process.kill(process.ppid, 'SIGTERM') } catch { /* the user can still quit by hand */ } }, 500)
   return { ...result, mode, target: target?.name, warnings: target?.warnings ?? [], closesApp, reopensApp: true }
+}
+
+/** From the standalone DSH 酒馆 window: bring up (or start) the Desktop app, which runs the original DSH. */
+function openOriginal() {
+  const exe = detectAppExe()
+  if (!exe) fail('no-app', '找不到 DeepSeek Harness，请手动打开它。')
+  relaunchApp(exe)
+  return { opened: true }
 }
 
 /**
@@ -55,6 +68,8 @@ async function handleCall(endpoint, payload) {
     if (endpoint === 'status') return { ok: true, value: statusPayload(resolvePaths()) }
     if (endpoint === 'link') return { ok: true, value: runSwitch('link', resolvePaths(), payload) }
     if (endpoint === 'unlink') return { ok: true, value: runSwitch('unlink', resolvePaths(), payload) }
+    if (endpoint === 'shortcut') return { ok: true, value: createTavernShortcut({ paths: resolvePaths() }) }
+    if (endpoint === 'openOriginal') return { ok: true, value: openOriginal() }
     fail('not-found', `Unknown endpoint ${JSON.stringify(endpoint)}.`)
   } catch (error) {
     return {

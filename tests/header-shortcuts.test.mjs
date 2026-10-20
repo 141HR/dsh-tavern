@@ -123,3 +123,81 @@ test('会话模式不依赖左侧栏：顶栏自己拉一次会话列表，未�
   assert.match(client, /if \(!mode\) return null;/)
   assert.match(client, /if \(!isPlayMode\(mode\)\) return null;/)
 })
+
+// 手机上固定上限：与标题长短无关，不会随当前渲染数量来回变。
+function sliceFunction(source, name) {
+  const start = source.indexOf('function ' + name + '(')
+  assert.notEqual(start, -1, '未找到 ' + name)
+  let depth = 0
+  for (let index = source.indexOf('{', start); index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1
+    else if (source[index] === '}') {
+      depth -= 1
+      if (depth === 0) return source.slice(start, index + 1)
+    }
+  }
+  throw new Error('未闭合：' + name)
+}
+
+test('手机上最多保留三个快捷入口，导出优先，其余进 ⋮', () => {
+  const fold = vm.runInNewContext('(' + sliceFunction(client, 'tavernHeaderMobileFold') + ')', { TAVERN_HEADER_MOBILE_LIMIT: 3 })
+  // 三个以内不动，也不出现 ⋮。
+  assert.deepEqual(Array.from(fold(['dsh-tavern:status', 'header:export', 'dsh-tavern:cards'], 3)), [])
+  // 超过三个：导出 + 清单里前两个留下，其余全折。
+  assert.deepEqual(
+    Array.from(fold(['dsh-tavern:status', 'header:export', 'dsh-tavern:cards', 'dsh-tavern:worldbooks'], 3)),
+    ['dsh-tavern:worldbooks']
+  )
+  // 没有导出时按顺序保留前三个。
+  assert.deepEqual(Array.from(fold(['a', 'b', 'c', 'd'], 3)), ['d'])
+  // 上限传 0 视为「用默认上限」，不会让整排图标消失。
+  assert.deepEqual(Array.from(fold(['a', 'b'], 0)), [])
+  // 显式传 1 时只留一个，其余进 ⋮。
+  assert.deepEqual(Array.from(fold(['a', 'b'], 1)), ['b'])
+})
+
+test('手机按标题行宽折算槽位：放不下就留一格给 ⋮', () => {
+  const capacity = vm.runInNewContext('(' + sliceFunction(client, 'tavernHeaderMobileCapacity') + ')', { TAVERN_HEADER_MOBILE_SLOT: 42, TAVERN_HEADER_MOBILE_LIMIT: 3 })
+  // 行宽够 4 格、条目只有 3 个：全显示，上限读数就是容量 3。
+  assert.equal(capacity(3, 180, { limit: 3 }), 3)
+  // 条目比容量少时，上限不缩水（读数表示「放得下几个」）。
+  assert.equal(capacity(2, 180, { limit: 3 }), 3)
+  // 行宽只有 3 格、条目 5 个：2 个图标 + ⋮。
+  assert.equal(capacity(5, 126, { limit: 3 }), 2)
+  // 行宽 4 格但条目 8 个：受上限限制，3 个图标 + ⋮。
+  assert.equal(capacity(8, 180, { limit: 3 }), 3)
+  // 行宽只有 2 格：1 个图标 + ⋮。
+  assert.equal(capacity(5, 90, { limit: 3 }), 1)
+  // 一格都放不下也留 1 个（导出优先，折进 ⋮ 里点不到）。
+  assert.equal(capacity(5, 10, { limit: 3 }), 1)
+  // 只有 1 个条目：上限读数仍是容量，不额外收。
+  assert.equal(capacity(1, 300, { limit: 3 }), 3)
+})
+
+test('手机顶栏的布局约束：角落按钮留座、宿主动作组保持自然宽度', () => {
+  // 预算变量写在标题行上，JS 读它折算槽位。
+  assert.match(css, /\[class\*="_titleRow"\] \{\s*--dsh-tavern-header-fixed: 196px;/)
+  // 0.2.x 的 headerActions 是 display:contents 插槽，侧栏开关/文件/全屏都在里面；
+  // 容器压窄会让固定尺寸按钮互相覆盖，因此保持自然宽度，让标题区收缩。
+  assert.match(css, /\[class\*="_headerActions"\] \{\s*flex: none; min-width: 0; gap: 0;/)
+  assert.doesNotMatch(css, /--dsh-tavern-header-fixed: 156px;/)
+  // dsh-web-mobile 隐藏 titleRow 的 corner 时，酒馆要放回宿主右侧栏按钮，并隐藏重复的文件按钮。
+  assert.match(css, /\[data-mobile-nav="frame"\][\s\S]{0,240}\[data-conversation-header-corner\][\s\S]{0,80}display: flex !important;/)
+  assert.match(css, /\[data-mobile-nav="frame"\][\s\S]{0,300}\[data-mobile-nav="files"\]\s*\{\s*display: none !important;/)
+  // 手机判定与上限要暴露给夹具。
+  assert.match(client, /function useTavernMobileHeader\(\)/)
+  assert.match(client, /"data-tavern-header-limit": mobile \? mobileLimit : ""/)
+  // ⋮ 在手机上竖排三点。
+  assert.match(client, /mobile \? "M12 5h\.01M12 12h\.01M12 19h\.01"/)
+})
+
+test('宿主隐藏 utilities 时入口仍然在：加载即标记 shell，兜底规则不依赖 body 类', () => {
+  // dsh-web-mobile 在 `@media (max-width:767px) and (pointer:coarse)` 里把
+  // `header:has(_headerLeading) [class*=_headerUtilities]` 设成 display:none !important
+  // （特异性 (0,4,1)）。酒馆的快捷入口全在这个单元格里，竖屏就整排消失、横屏又回来。
+  // 两条都要：body 类一经缺席，所有 `body.dsh-tavern-shell-active …` 覆盖全部失效。
+  assert.match(client, /function markTavernShellActive\(\)/)
+  assert.match(client, /markTavernShellActive\(\);/)
+  assert.match(css, /header:has\(\[class\*="_headerLeading"\]\) \[class\*="_headerUtilities"\]:has\(\.dsh-tavern-header-items\)/)
+  assert.match(css, /display: flex !important; flex: 0 1 auto !important; min-width: 0 !important;/)
+})

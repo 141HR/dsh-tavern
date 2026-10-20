@@ -13,6 +13,7 @@ import { normalizeResourcePath } from './file-resources.js'
 import { diffJson } from './json-mutation.js'
 import { hasTavernCredit, withTavernCredit } from './card-credit.js'
 import { STORY_SUBMIT_TOOL_NAME, storyToolCallEnabled } from './story-tool-submission.js'
+import { styleReferenceFor } from './style-reference.js'
 
 export const cordisToolNames = Object.freeze([
   'cordis_inspect_list',
@@ -159,7 +160,8 @@ const FRAME_INSTRUCTION_KIND = Object.freeze({
   guide: 'foreground.guide',
   card: 'foreground.card-context',
   'card-instruction': 'foreground.writing-rules',
-  script: 'foreground.script-reference'
+  script: 'foreground.script-reference',
+  'style-reference': 'foreground.script-reference'
 })
 
 function presetMiddleInstructions(snapshot) {
@@ -433,7 +435,7 @@ export function createTurnOrchestrator(options) {
       chat.worldBookError = foregroundWorldBook.error
     }
     const sceneWorldbook = typeof options.captureSceneWorldbook === 'function' ? await options.captureSceneWorldbook(chat, card, undefined, turn) : null
-    const plan = await planner.plan({ purpose: 'body', card, chat: templateWorldBook?.macroState ? { ...chat, macroState: templateWorldBook.macroState } : chat, userText: runtimeUserText, sessionId: input.sessionId, nativeTurn: turn, scriptReference, worldBookContext })
+    const plan = await planner.plan({ purpose: 'body', card, chat: templateWorldBook?.macroState ? { ...chat, macroState: templateWorldBook.macroState } : chat, userText: runtimeUserText, sessionId: input.sessionId, nativeTurn: turn, scriptReference, styleReference: mode === 'story' ? styleReferenceFor(chat) : null, worldBookContext })
     // Seam to the plugin layer; it never throws and drops a failing plugin's part.
     const pluginSections = typeof options.pluginTurnContext === 'function'
       ? await options.pluginTurnContext({ gameId: input.sessionId, turn, input: userText }).catch(() => []) : []

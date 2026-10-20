@@ -12,6 +12,24 @@ window.__ModuleLoader__.load({
 		// @include stylesheet.js
 		if (typeof document !== "undefined") installTavernStylesheet(document, __TAVERN_BUNDLED_CSS__);
 
+		// `dsh-tavern-shell-active` gates every Tavern rule that touches host chrome.
+		// It used to be added only when the left sidebar mounted. On a phone that
+		// sidebar is a drawer, so the class never appeared: the header cell fell back
+		// to the host's `display: none` and the whole top bar vanished, while the
+		// host's own corner buttons stayed. Mark the document as soon as the Tavern
+		// client loads, independently of which panels are mounted.
+		function markTavernShellActive() {
+			if (typeof document === "undefined") return;
+			const mark = function () {
+				if (document.body && !document.body.classList.contains("dsh-tavern-shell-active")) {
+					document.body.classList.add("dsh-tavern-shell-active");
+				}
+			};
+			if (document.body) mark();
+			else document.addEventListener("DOMContentLoaded", mark, { once: true });
+		}
+		markTavernShellActive();
+
 
 		function isPlayMode(mode) {
 			return mode === "story" || mode === "script";
@@ -679,8 +697,8 @@ window.__ModuleLoader__.load({
 		function describeTavernActivity(value) {
 			const activity = value && typeof value === "object" ? value : {};
 			const role = String(activity.role || "");
-			// The worldbook prefilter yields to any other task, so it never blocks the player.
-			const busy = activity.busy === true && role !== "worldbook-filter";
+			// Next-turn preparation (worldbook prefilter, style reference) yields to any other task, so it never blocks the player.
+			const busy = activity.busy === true && role !== "worldbook-filter" && role !== "style-reference";
 			let label = "生成候选项";
 			let blockReason = "";
 			if (busy && role === "candidate") { label = "生成中…"; blockReason = "正在生成候选项，请稍候…"; }
@@ -804,6 +822,8 @@ window.__ModuleLoader__.load({
 // @include features/scene-images.js
 // @include features/settings.js
 
+// @include features/text-layout.js
+
 // @include features/user-profile.js
 
 // @include features/guide-library.js
@@ -837,9 +857,12 @@ window.__ModuleLoader__.load({
 // @include features/request-context.js
 
 
-		const inject = ["slots", "sessions", "workspaces", "layout", "connection", "conversation", "betterSidebar", "remote", "remote.commands", "tavernSessionSignals"];
+		const inject = ["slots", "sessions", "workspaces", "layout", "connection", "conversation", "betterSidebar", "remote", "remote.commands", "tavernSessionSignals", "theme"];
 
 		function apply(ctx) {
+			// The profile switch page (dsh-profile-bridge) names itself by side from this flag.
+			window.__dshTavernLoaded = true;
+			ctx.effect(function () { return tavernTextLayoutFeature.register(ctx); }, "dsh-tavern: text layout in appearance settings");
 			ctx.effect(() => displayPreferences.start(), "dsh-tavern: global display preferences");
 			ctx.effect(() => tavernInteractionDiagnostics.start(), "dsh-tavern: interaction diagnostics");
 			ctx.effect(() => syncTavernSubagentCatalogs(ctx.sessions, ctx.tavernSessionSignals), "dsh-tavern: subagent catalog synchronization");
