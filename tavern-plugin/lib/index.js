@@ -5804,6 +5804,7 @@ export async function apply(ctx) {
     requestCoordinates,
     runtimePrompt,
     sessionStateForSession,
+    recentStateForSession,
     sessionStore,
     str,
     updateChat,
