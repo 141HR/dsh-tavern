@@ -9,6 +9,10 @@ const ID_PREFIX = 'tavern-user-plugin-'
 export const GUARD_FILE = '.tavern-entry.mjs'
 // The guard records whether the plugin loaded, so the settings list can say why one is missing.
 export const STATUS_FILE = '.tavern-status.json'
+// A folder carrying this marker is kept in place but left out of the patch, so DSH unloads it.
+export const DISABLED_FILE = '.tavern-disabled'
+// Written when a plugin folder is replaced: DSH keeps running the old module until it restarts.
+export const RESTART_FILE = '.tavern-restart.json'
 
 /**
  * A plugin that fails to import or to apply must not stop DSH from starting:
@@ -17,8 +21,9 @@ export const STATUS_FILE = '.tavern-status.json'
 export function guardSource({ folder, name, main }) {
   const label = JSON.stringify('[Tavern 插件] plugins/' + folder)
   return `// Tavern 自动生成，请勿修改：插件加载或启动出错时只记日志，不影响 DSH 启动。
-import { writeFileSync } from 'node:fs'
+import { rmSync, writeFileSync } from 'node:fs'
 const record = status => { try { writeFileSync(new URL(${JSON.stringify('./' + STATUS_FILE)}, import.meta.url), JSON.stringify({ ...status, at: new Date().toISOString() })) } catch {} }
+const clearRestart = () => { try { rmSync(new URL(${JSON.stringify('./' + RESTART_FILE)}, import.meta.url), { force: true }) } catch {} }
 const report = (stage, error) => {
   console.warn(${label} + ' ' + stage + '失败：' + (error && error.stack || error))
   record({ ok: false, stage, message: String(error && error.message || error).slice(0, 500) })
@@ -42,6 +47,7 @@ export async function apply(ctx, config) {
     child = ctx.plugin({ name, apply: childContext => plugin.apply(childContext, config) })
     await child.await()
     record({ ok: true })
+    clearRestart()
   } catch (error) {
     if (child) await child.dispose()
     report('启动', error)
@@ -78,10 +84,12 @@ function hostEntry(pkg) {
 export async function scanUserPlugins(pluginsDir, { installed = () => false } = {}) {
   let names
   try { names = (await readdir(pluginsDir, { withFileTypes: true })).filter(item => item.isDirectory() && !item.name.startsWith('.')).map(item => item.name).sort() }
-  catch (error) { if (error.code === 'ENOENT') return { plugins: [], problems: [] }; throw error }
-  const plugins = [], problems = []
+  catch (error) { if (error.code === 'ENOENT') return { plugins: [], problems: [], disabled: [] }; throw error }
+  const plugins = [], problems = [], disabled = []
   for (const folder of names) {
     const dir = path.join(pluginsDir, folder)
+    // A disabled plugin keeps its files and settings but is not registered, so DSH does not load it.
+    if (existsSync(path.join(dir, DISABLED_FILE))) { disabled.push(folder); continue }
     let pkg
     try { pkg = JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8')) }
     catch (error) { problems.push({ folder, reason: error.code === 'ENOENT' ? '缺少 package.json' : 'package.json 无法解析：' + error.message }); continue }
@@ -96,7 +104,7 @@ export async function scanUserPlugins(pluginsDir, { installed = () => false } = 
     const relative = './' + path.relative(dir, entry).split(path.sep).join('/')
     plugins.push({ id, folder, name: String(pkg.name || folder), entry: path.join(dir, GUARD_FILE), main: relative })
   }
-  return { plugins, problems }
+  return { plugins, problems, disabled }
 }
 
 /** Rewrite only Tavern's own insert entries in the profile patch; returns whether the file changed. */
@@ -162,10 +170,10 @@ export async function syncUserPlugins({ dataRoot, dshHome, logger = console } = 
   await mkdir(paths.plugins, { recursive: true })
   if (!existsSync(path.join(paths.profile, 'package.json'))) {
     logger.warn?.('[Tavern 插件] 找不到 Tavern 的 DSH 配置目录 ' + paths.profile + '，plugins/ 里的插件不会加载')
-    return { skipped: true, plugins: [], problems: [] }
+    return { skipped: true, plugins: [], problems: [], disabled: [] }
   }
   const installed = name => existsSync(path.join(paths.profile, 'node_modules', ...name.split('/'), 'package.json'))
-  const { plugins, problems } = await scanUserPlugins(paths.plugins, { installed })
+  const { plugins, problems, disabled } = await scanUserPlugins(paths.plugins, { installed })
   for (const problem of problems) {
     const key = paths.plugins + '\u0000' + problem.folder
     if (reported.get(key) === problem.reason) continue
@@ -185,7 +193,7 @@ export async function syncUserPlugins({ dataRoot, dshHome, logger = console } = 
   const next = syncPatchText(text, plugins)
   if (next !== null) await replaceFile(file, next)
   await clearOriginalDesktop(paths.profile)
-  return { changed: next !== null, plugins, problems }
+  return { changed: next !== null, plugins, problems, disabled }
 }
 
 /** Keep the patch in step with the plugins folder; DSH reloads the patch live. */

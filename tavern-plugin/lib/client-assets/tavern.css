@@ -3187,9 +3187,15 @@ html[data-dsh-text-layout] :is(.dsh-tavern-assistant, .dsh-tavern-user-bubble, .
 .dsh-tavern-user-plugin-state { padding: 1px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1, rgba(127, 127, 127, .1)); color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 500; }
 .dsh-tavern-user-plugin.is-loaded .dsh-tavern-user-plugin-state { background: color-mix(in srgb, #2f8a4c 12%, transparent); color: #2f7a44; }
 .dsh-tavern-user-plugin.is-failed .dsh-tavern-user-plugin-state, .dsh-tavern-user-plugin.is-skipped .dsh-tavern-user-plugin-state { background: color-mix(in srgb, #c44 12%, transparent); color: #b33; }
+.dsh-tavern-user-plugin.is-restart .dsh-tavern-user-plugin-state { background: color-mix(in srgb, #c98a00 14%, transparent); color: #8a6508; }
+.dsh-tavern-user-plugin.is-disabled { border-style: dashed; }
+.dsh-tavern-user-plugin.is-disabled .dsh-tavern-user-plugin-copy { opacity: .68; }
+.dsh-tavern-user-plugin.is-disabled .dsh-tavern-user-plugin-state { background: var(--dsw-alias-bg-layer-1, rgba(127, 127, 127, .1)); color: var(--dsw-alias-label-tertiary); }
 .dsh-tavern-user-plugin-source { color: var(--dsw-alias-label-tertiary); overflow-wrap: anywhere; }
-.dsh-tavern-user-plugin-actions { display: flex; flex: none; gap: 6px; }
+.dsh-tavern-user-plugin-actions { display: flex; flex: none; align-items: center; gap: 6px; }
 .dsh-tavern-user-plugin-actions .dsh-tavern-btn { height: 30px; padding: 0 12px; }
+.dsh-tavern-user-plugin-update { padding: 1px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1, rgba(127, 127, 127, .1)); color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 500; white-space: nowrap; }
+.dsh-tavern-user-plugin-update.is-checking { color: var(--dsw-alias-label-tertiary); }
 .dsh-tavern-user-plugins-folder { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding-top: 14px; border-top: 1px solid var(--dsw-alias-border-l2); }
 .dsh-tavern-user-plugins-folder span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
 .dsh-tavern-user-plugins-folder .dsh-tavern-btn { flex: none; height: 30px; padding: 0 12px; }

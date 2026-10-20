@@ -373,14 +373,30 @@
         function TavernUserPluginsSettings() {
             const h = React.createElement;
             const [data, setData] = React.useState(null);
+            const [updates, setUpdates] = React.useState(null);
+            const [checking, setChecking] = React.useState(false);
             const [url, setUrl] = React.useState("");
             const [busy, setBusy] = React.useState(false);
             const [notice, setNotice] = React.useState("");
             const [error, setError] = React.useState("");
             const zipInput = React.useRef(null);
+            async function checkUpdates() {
+                setChecking(true);
+                try {
+                    const result = await rpc("checkUserPluginUpdates");
+                    const next = {};
+                    (result && result.plugins || []).forEach(function (item) { next[item.folder] = item; });
+                    setUpdates(next);
+                } catch (_error) { setUpdates({}); }
+                finally { setChecking(false); }
+            }
             async function refresh() {
-                try { setData(await rpc("listUserPlugins")); }
-                catch (err) { setError(String(err && err.message || err)); }
+                try {
+                    const next = await rpc("listUserPlugins");
+                    setData(next);
+                    if ((next.plugins || []).some(function (plugin) { return plugin.source && plugin.source.kind === "github"; })) await checkUpdates();
+                    else setUpdates({});
+                } catch (err) { setError(String(err && err.message || err)); }
             }
             React.useEffect(function () { void refresh(); }, []);
             async function run(work, done) {
@@ -389,7 +405,10 @@
                 catch (err) { setError(String(err && err.message || err)); }
                 finally { setBusy(false); }
             }
-            const installed = function (result) { const plugin = result.plugin; return (plugin.replaced ? "已更新 " : "已安装 ") + plugin.name + (plugin.version ? " " + plugin.version : "") + "，刷新页面后生效。"; };
+            const installed = function (result) {
+                const plugin = result.plugin;
+                return (plugin.replaced ? "已更新 " : "已安装 ") + plugin.name + (plugin.version ? " " + plugin.version : "") + (plugin.replaced ? "，重启 DSH 后生效。" : "，刷新页面后生效。");
+            };
             function installUrl() {
                 if (!url.trim()) return;
                 void run(function () { return rpc("installUserPlugin", { url: url.trim() }); }, function (result) { setUrl(""); return installed(result); });
@@ -411,7 +430,30 @@
                 if (!ok) return;
                 void run(function () { return rpc("removeUserPlugin", { folder: plugin.folder }); }, function () { return "已删除 " + plugin.name + "，刷新页面后生效。"; });
             }
-            const stateLabel = { loaded: "已加载", pending: "刷新后生效", failed: "加载失败", skipped: "未加载" };
+            function toggle(plugin) {
+                const enable = plugin.enabled === false;
+                void run(function () { return rpc(enable ? "enableUserPlugin" : "disableUserPlugin", { folder: plugin.folder }); }, function () { return (enable ? "已启用 " : "已停用 ") + plugin.name + "，刷新页面后生效。"; });
+            }
+            // 「已是最新」是插件状态，放在名称和「已加载」旁边，不占按钮区。
+            function updateBadge(plugin) {
+                const info = updates && updates[plugin.folder];
+                if (checking && !info) return h("span", { className: "dsh-tavern-user-plugin-update is-checking" }, "检查更新…");
+                if (info && info.status === "latest") return h("span", { className: "dsh-tavern-user-plugin-update is-latest", title: "已安装最新版本" + (info.current ? " " + info.current : "") }, "已是最新");
+                return null;
+            }
+            // Only offer an update when the latest Release is actually newer than what is installed.
+            function updateAction(plugin) {
+                const info = updates && updates[plugin.folder];
+                if (checking && !info) return null;
+                if (info && info.status === "latest") return null;
+                const latest = info && info.status === "available" ? String(info.latest || "").replace(/^v(?=\d)/i, "") : "";
+                const title = info && info.status === "branch" ? "这个插件没有 Release，更新会重新下载默认分支的最新代码"
+                    : info && info.status === "ref" ? "这个插件固定在分支或标签上，更新会重新下载同一个分支或标签"
+                        : info && info.status === "error" ? "检查更新失败：" + info.reason
+                            : info && info.status === "unknown" ? "无法比较版本号（最新 Release：" + (info.latest || "未标注") + "），仍可手动更新" : undefined;
+                return h("button", { type: "button", className: "dsh-tavern-btn", disabled: busy, title: title, onClick: function () { void run(function () { return rpc("updateUserPlugin", { folder: plugin.folder }); }, installed); } }, latest ? "更新到 " + latest : "更新");
+            }
+            const stateLabel = { loaded: "已加载", pending: "刷新后生效", restart: "重启 DSH 后生效", failed: "加载失败", skipped: "未加载", disabled: "已停用" };
             const sourceLabel = function (source) { return source.kind === "github" ? "GitHub · " + source.repo + (source.resolved ? " · " + source.resolved : "") : source.kind === "zip" ? "ZIP 上传" : source.kind === "card" ? "人物卡自带" : "手动放入"; };
             const plugins = data ? data.plugins || [] : [];
             return h("div", { className: "dsh-tavern-settings-group dsh-tavern-user-plugins" },
@@ -426,15 +468,18 @@
                 error ? h("p", { className: "dsh-tavern-settings-error", role: "alert" }, error) : null,
                 data && plugins.length === 0 ? h("p", { className: "dsh-tavern-settings-desc" }, "还没有装插件。") : null,
                 plugins.length ? h("ul", { className: "dsh-tavern-user-plugins-list" }, plugins.map(function (plugin) {
+                    const canToggle = plugin.source.kind !== "card" || plugin.enabled === false;
                     return h("li", { key: plugin.folder, className: "dsh-tavern-user-plugin is-" + plugin.state },
                         h("div", { className: "dsh-tavern-user-plugin-copy" },
                             h("strong", null, plugin.name, plugin.version ? h("small", null, " " + plugin.version) : null,
-                                h("span", { className: "dsh-tavern-user-plugin-state" }, stateLabel[plugin.state] || plugin.state)),
+                                h("span", { className: "dsh-tavern-user-plugin-state", title: plugin.state === "restart" ? "插件文件已更新，重启 DSH 后会加载新版本，这里自动变回「已加载」" : undefined }, stateLabel[plugin.state] || plugin.state),
+                                plugin.source.kind === "github" ? updateBadge(plugin) : null),
                             plugin.description ? h("span", null, plugin.description) : null,
                             h("span", { className: "dsh-tavern-user-plugin-source" }, sourceLabel(plugin.source)),
                             plugin.reason ? h("span", { className: "dsh-tavern-settings-error" }, plugin.reason) : null),
                         h("div", { className: "dsh-tavern-user-plugin-actions" },
-                            plugin.source.kind === "github" ? h("button", { type: "button", className: "dsh-tavern-btn", disabled: busy, onClick: function () { void run(function () { return rpc("updateUserPlugin", { folder: plugin.folder }); }, installed); } }, "更新") : null,
+                            canToggle ? h("button", { type: "button", className: "dsh-tavern-btn", disabled: busy, onClick: function () { toggle(plugin); } }, plugin.enabled === false ? "启用" : "停用") : null,
+                            plugin.source.kind === "github" ? updateAction(plugin) : null,
                             plugin.source.kind === "card" ? null : h("button", { type: "button", className: "dsh-tavern-btn danger", disabled: busy, onClick: function () { void remove(plugin); } }, "删除")));
                 })) : null,
                 h("div", { className: "dsh-tavern-user-plugins-folder" },

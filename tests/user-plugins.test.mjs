@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -48,6 +49,31 @@ test('plugins 目录里的插件写进 profile patch，用户自己的条目原�
   assert.deepEqual(parse(await readFile(patch, 'utf8')), [{ id: 'approval', config: { policy: 'never' } }], '删掉文件夹后条目随之移除')
 })
 
+test('停用的插件文件夹还在，但不写进 patch；重新启用后恢复条目', async t => {
+  const { dataRoot, profile } = await home(t)
+  const patch = path.join(profile, 'cordis.patch.yml')
+  const dir = await plugin(dataRoot, 'memory', { name: 'dsh-tavern-memory', main: 'index.mjs' })
+  await plugin(dataRoot, 'broken', null)
+  await syncUserPlugins({ dataRoot, logger: { warn() {} } })
+  assert.deepEqual(parse(await readFile(patch, 'utf8')).at(-1).insert.map(entry => entry.id), ['tavern-user-plugin-dsh-tavern-memory'])
+
+  await writeFile(path.join(dir, '.tavern-disabled'), '{}')
+  // 停用的坏插件也不该再报警告。
+  await writeFile(path.join(dataRoot, 'plugins', 'broken', '.tavern-disabled'), '{}')
+  const warnings = []
+  const stopped = await syncUserPlugins({ dataRoot, logger: { warn: text => warnings.push(text) } })
+  assert.deepEqual(stopped.disabled.sort(), ['broken', 'memory'])
+  assert.deepEqual(stopped.plugins, [])
+  assert.deepEqual(stopped.problems, [])
+  assert.deepEqual(warnings, [])
+  assert.deepEqual(parse(await readFile(patch, 'utf8')), [], '停用后移除加载条目')
+  assert.equal(JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8')).name, 'dsh-tavern-memory', '插件文件保留')
+
+  await rm(path.join(dir, '.tavern-disabled'))
+  await syncUserPlugins({ dataRoot, logger: { warn() {} } })
+  assert.deepEqual(parse(await readFile(patch, 'utf8')).at(-1).insert.map(entry => entry.id), ['tavern-user-plugin-dsh-tavern-memory'])
+})
+
 test('没有插件也没有旧条目时不碰 patch 文件；非 Tavern profile 时跳过', async t => {
   assert.equal(syncPatchText('[]', []), null)
   const { dataRoot, profile } = await home(t)
@@ -89,7 +115,10 @@ test('插件经由 Tavern 的保护入口加载：导入失败或 apply 抛错�
   const good = await plugin(dataRoot, 'good', { name: 'good-plugin', exports: { '.': './lib/main.mjs' } }, {})
   await mkdir(path.join(good, 'lib'))
   await writeFile(path.join(good, 'lib', 'main.mjs'), "export const name = 'good-plugin'\nexport const inject = ['tavern']\nexport function apply(ctx) { ctx.applied = true; return 'ok' }\n")
-  await plugin(dataRoot, 'throws', { name: 'throws', main: 'index.mjs' }, { 'index.mjs': "export async function apply() { throw new Error('启动炸了') }\n" })
+  const throwing = await plugin(dataRoot, 'throws', { name: 'throws', main: 'index.mjs' }, { 'index.mjs': "export async function apply() { throw new Error('启动炸了') }\n" })
+  // 更新后宿主重启前会留下这个标记；成功加载才清掉，失败时保留给列表提示。
+  await writeFile(path.join(good, '.tavern-restart.json'), '{}')
+  await writeFile(path.join(throwing, '.tavern-restart.json'), '{}')
   await plugin(dataRoot, 'syntax', { name: 'syntax', main: 'index.mjs' }, { 'index.mjs': 'export function apply( {\n' })
   await plugin(dataRoot, 'default', { name: 'default', main: 'index.mjs' }, { 'index.mjs': 'export default function (ctx) { ctx.applied = true }\n' })
   const result = await syncUserPlugins({ dataRoot, logger: { warn() {} } })
@@ -103,9 +132,11 @@ test('插件经由 Tavern 的保护入口加载：导入失败或 apply 抛错�
   assert.deepEqual(ok.inject, ['tavern'])
   await ok.apply(ctx)
   assert.equal(ctx.applied, true)
+  assert.equal(existsSync(path.join(good, '.tavern-restart.json')), false, '成功加载后清掉重启标记')
   const thrown = await load('throws')
   assert.equal(thrown.name, 'throws', '没有导出 name 时用包名')
   await thrown.apply(context())
+  assert.equal(existsSync(path.join(throwing, '.tavern-restart.json')), true, '启动失败时保留重启标记')
   const broken = await load('syntax')
   assert.equal(await broken.apply(context()), undefined)
   const fallback = await load('default'), other = context()

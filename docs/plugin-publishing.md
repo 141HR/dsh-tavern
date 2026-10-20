@@ -36,7 +36,7 @@ dsh-tavern-hello/
 
 ## 版本
 
-有 Release 时，安装和更新取最新 Release；没有时取默认分支。
+有 Release 时，安装和更新取最新 Release；没有时取默认分支。用户的插件列表会把 Release 标签（如 `v0.2.2`）和 `package.json` 的 `version` 比较：标签更新时才显示「更新到 …」，相同则显示「已是最新」。发布 Release 时记得同步提高 `version`，否则用户看不到更新。插件更新后需要重启 DSH 才会加载新代码；刷新页面只更新浏览器侧。
 
 ## README 安装说明
 

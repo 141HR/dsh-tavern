@@ -4931,6 +4931,9 @@ export async function apply(ctx) {
         return { data: await pluginDataStore.read(plugin) }
       }
       case 'listUserPlugins': return { plugins: await userPluginInstaller.list(), dir: userPluginInstaller.pluginsDir }
+      case 'checkUserPluginUpdates': return { plugins: await userPluginInstaller.checkUpdates() }
+      case 'enableUserPlugin': return { plugin: await userPluginInstaller.enable(args && args.folder) }
+      case 'disableUserPlugin': return { plugin: await userPluginInstaller.disable(args && args.folder) }
       case 'installUserPlugin': return { plugin: await userPluginInstaller.installFromGithub(args && args.url) }
       case 'installUserPluginUpload': {
         const upload = await uploads.take(args && args.uploadId)

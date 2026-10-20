@@ -2,14 +2,15 @@ import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { readZipEntries } from './zip-entries.js'
-import { scanUserPlugins, STATUS_FILE, userPluginPaths } from './user-plugins.js'
+import { DISABLED_FILE, RESTART_FILE, scanUserPlugins, STATUS_FILE, userPluginPaths } from './user-plugins.js'
 import { pluginDataFile } from './plugin-data-store.js'
 
 // 应用内安装插件：粘贴 GitHub 地址或上传 zip，放进 <data>/plugins/<文件夹>；
 // 之后的加载仍由 plugins/ 目录同步负责（宿主侧几秒内加载，浏览器侧刷新后出现）。
 export const SOURCE_FILE = '.tavern-source.json'
 const CARD_MARKER = '.dsh-card.json'
-const SKIP = new Set(['.git', '.github', 'node_modules/.cache'])
+const SKIP = new Set(['.git', '.github', 'node_modules/.cache', '.tavern-disabled', '.tavern-status.json', '.tavern-restart.json'])
+const RELEASE_TTL = 5 * 60 * 1000
 
 const fail = message => { throw Object.assign(new Error(message), { code: 'TAVERN_PLUGIN_INSTALL' }) }
 
@@ -27,11 +28,44 @@ export function parseGithubSource(input) {
   return { owner: parts[0], repo: parts[1], ref }
 }
 
-async function fetchOk(fetchImpl, url, accept) {
+async function fetchOk(fetchImpl, url, accept, signal) {
   let response
-  try { response = await fetchImpl(url, { headers: { Accept: accept, 'User-Agent': 'dsh-tavern' }, redirect: 'follow' }) }
+  try { response = await fetchImpl(url, { headers: { Accept: accept, 'User-Agent': 'dsh-tavern' }, redirect: 'follow', ...(signal ? { signal } : {}) }) }
   catch (error) { fail('连不上 GitHub（' + (error?.cause?.code || error?.message || error) + '）。网络不通时，可以在仓库页面下载 ZIP 后上传') }
   return response
+}
+
+/**
+ * Compare two plugin version strings ("0.2.2", "v0.2.2", "1.0.0-beta.1").
+ * Returns 1 when left is newer, -1 when older, 0 when the same, null when either is not a version.
+ */
+export function comparePluginVersions(left, right) {
+  const parse = value => {
+    const text = String(value || '').trim().replace(/^v(?=\d)/i, '').split('+')[0]
+    const match = /^(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?$/.exec(text)
+    if (!match) return null
+    return { core: match[1].split('.').map(Number), pre: match[2] ? match[2].split('.') : [] }
+  }
+  const a = parse(left), b = parse(right)
+  if (!a || !b) return null
+  const length = Math.max(a.core.length, b.core.length)
+  for (let index = 0; index < length; index++) {
+    const x = a.core[index] || 0, y = b.core[index] || 0
+    if (x !== y) return x > y ? 1 : -1
+  }
+  if (!a.pre.length || !b.pre.length) return a.pre.length === b.pre.length ? 0 : a.pre.length ? -1 : 1
+  const prereleaseLength = Math.max(a.pre.length, b.pre.length)
+  for (let index = 0; index < prereleaseLength; index++) {
+    const x = a.pre[index], y = b.pre[index]
+    if (x === undefined) return -1
+    if (y === undefined) return 1
+    const numeric = /^\d+$/.test(x), otherNumeric = /^\d+$/.test(y)
+    if (numeric && otherNumeric) {
+      if (Number(x) !== Number(y)) return Number(x) > Number(y) ? 1 : -1
+    } else if (numeric !== otherNumeric) return numeric ? -1 : 1
+    else if (x !== y) return x > y ? 1 : -1
+  }
+  return 0
 }
 
 /** 有 Release 用最新 Release，否则用默认分支；地址里写了分支或标签就用它。 */
@@ -98,6 +132,43 @@ export function createUserPluginInstaller({ dataRoot, fetchImpl = fetch, now = (
   let tail = Promise.resolve()
   const serial = work => { const run = tail.then(work, work); tail = run.catch(() => {}); return run }
   const stamp = () => now().toISOString().replace(/[:.]/g, '-')
+  const time = () => { const value = now(); return value instanceof Date ? value.getTime() : Number(value) }
+  // Settings asks on every open; one call per repository every few minutes is enough for GitHub's rate limit.
+  const releases = new Map()
+
+  async function latestRelease(source) {
+    const key = source.owner + '/' + source.repo
+    const cached = releases.get(key)
+    if (cached && time() - cached.at < RELEASE_TTL) return cached.value
+    const response = await fetchOk(fetchImpl, `https://api.github.com/repos/${source.owner}/${source.repo}/releases/latest`, 'application/vnd.github+json', AbortSignal.timeout(5000))
+    let value
+    if (response.status === 404) value = { status: 'none' }
+    else if (!response.ok) value = { status: 'error', reason: '读取发布信息失败（HTTP ' + response.status + '）' }
+    else {
+      const release = await response.json()
+      value = { status: 'release', tag: String(release?.tag_name || '') }
+    }
+    if (value.status !== 'error') releases.set(key, { at: time(), value })
+    return value
+  }
+
+  // Older installs did not record whether they replaced an existing folder. A backup holding a
+  // successful load record proves these files replaced a plugin DSH was already running.
+  async function replacedLoadedPlugin(folder) {
+    let names = []
+    try { names = await readdir(backups) } catch { return false }
+    for (const name of names.filter(name => name.startsWith(folder + '-')).sort().reverse().slice(0, 3)) {
+      const status = await readJson(path.join(backups, name, STATUS_FILE))
+      if (status?.ok === true) return true
+    }
+    return false
+  }
+
+  function folderOf(folder) {
+    const name = String(folder)
+    if (!name || name !== path.basename(name) || name.startsWith('.') || !existsSync(path.join(paths.plugins, name))) fail('插件不存在：' + name)
+    return name
+  }
 
   async function backup(folder) {
     await mkdir(backups, { recursive: true })
@@ -113,6 +184,11 @@ export function createUserPluginInstaller({ dataRoot, fetchImpl = fetch, now = (
     if (pkg.name && installedPackage(String(pkg.name))) fail('插件名 ' + pkg.name + ' 与已安装的包重名，不能装进 plugins/')
     const target = path.join(paths.plugins, folder)
     if (existsSync(path.join(target, CARD_MARKER))) fail('plugins/' + folder + ' 是人物卡自带的插件，由人物卡库管理，不能覆盖')
+    // Updating or reinstalling a disabled plugin must not switch it back on behind the user's back.
+    const wasDisabled = existsSync(path.join(target, DISABLED_FILE))
+    // DSH keeps the old module loaded until it restarts, so the new files are not running yet.
+    const wasInstalled = existsSync(target)
+    const previous = wasInstalled ? await readJson(path.join(target, 'package.json')) || {} : {}
     await mkdir(paths.plugins, { recursive: true })
     const staging = path.join(paths.plugins, '.installing-' + folder + '-' + process.pid)
     await rm(staging, { recursive: true, force: true })
@@ -122,9 +198,13 @@ export function createUserPluginInstaller({ dataRoot, fetchImpl = fetch, now = (
         await mkdir(path.dirname(file), { recursive: true })
         await writeFile(file, data)
       }
-      await writeFile(path.join(staging, SOURCE_FILE), JSON.stringify({ ...source, version: String(pkg.version || ''), installedAt: now().toISOString() }, null, 2) + '\n')
-      const replaced = existsSync(target) ? await backup(folder) : null
+      await writeFile(path.join(staging, SOURCE_FILE), JSON.stringify({ ...source, version: String(pkg.version || ''), replaced: wasInstalled, installedAt: now().toISOString() }, null, 2) + '\n')
+      if (wasDisabled) await writeFile(path.join(staging, DISABLED_FILE), JSON.stringify({ disabledAt: now().toISOString(), keptAcrossUpdate: true }, null, 2) + '\n')
+      if (wasInstalled) await writeFile(path.join(staging, RESTART_FILE), JSON.stringify({ updatedAt: now().toISOString(), previousVersion: String(previous.version || ''), version: String(pkg.version || '') }, null, 2) + '\n')
+      const replaced = wasInstalled ? await backup(folder) : null
       await rename(staging, target)
+      // The next settings visit should read the Release again, not a cached "available".
+      releases.clear()
       await sync()
       return { folder, name: String(pkg.name || folder), version: String(pkg.version || ''), replaced: Boolean(replaced) }
     } finally { await rm(staging, { recursive: true, force: true }) }
@@ -133,22 +213,82 @@ export function createUserPluginInstaller({ dataRoot, fetchImpl = fetch, now = (
   return {
     pluginsDir: paths.plugins,
     async list() {
-      const { plugins, problems } = await scanUserPlugins(paths.plugins, { installed: installedPackage })
+      const { plugins, problems, disabled } = await scanUserPlugins(paths.plugins, { installed: installedPackage })
       let folders = []
       try { folders = (await readdir(paths.plugins, { withFileTypes: true })).filter(item => item.isDirectory() && !item.name.startsWith('.')).map(item => item.name).sort() } catch {}
       return Promise.all(folders.map(async folder => {
         const dir = path.join(paths.plugins, folder)
         const pkg = await readJson(path.join(dir, 'package.json')) || {}
         const problem = problems.find(item => item.folder === folder)
-        const status = problem ? null : await readJson(path.join(dir, STATUS_FILE))
+        const status = problem || disabled.includes(folder) ? null : await readJson(path.join(dir, STATUS_FILE))
+        const restart = problem || disabled.includes(folder) ? null : await readJson(path.join(dir, RESTART_FILE))
         const card = await readJson(path.join(dir, CARD_MARKER))
+        const isDisabled = disabled.includes(folder)
+        const source = card ? { kind: 'card' } : await readJson(path.join(dir, SOURCE_FILE)) || { kind: 'folder' }
+        // Install sources from before the replaced flag: infer a past replacement from the backup's load record.
+        const replacedBefore = !isDisabled && !problem && source.replaced === undefined && !status && !restart && (source.kind === 'github' || source.kind === 'zip')
+          ? await replacedLoadedPlugin(folder)
+          : false
         return {
           folder, name: String(pkg.name || folder), version: String(pkg.version || ''), description: String(pkg.description || ''),
-          source: card ? { kind: 'card' } : await readJson(path.join(dir, SOURCE_FILE)) || { kind: 'folder' },
-          state: problem ? 'skipped' : status?.ok === false ? 'failed' : status?.ok === true ? 'loaded' : plugins.some(item => item.folder === folder) ? 'pending' : 'skipped',
-          reason: problem ? problem.reason : status?.ok === false ? status.stage + '失败：' + status.message : '',
+          source,
+          enabled: !isDisabled,
+          // An update replaces the folder while DSH keeps the old module; only a restart loads the new files.
+          state: isDisabled ? 'disabled' : problem ? 'skipped' : status?.ok === false ? 'failed' : restart || replacedBefore ? 'restart' : status?.ok === true ? 'loaded' : plugins.some(item => item.folder === folder) ? 'pending' : 'skipped',
+          reason: isDisabled ? '' : problem ? problem.reason : status?.ok === false ? status.stage + '失败：' + status.message : '',
         }
       }))
+    },
+    /**
+     * A GitHub plugin tracks a Release only when it was installed without an explicit ref.
+     * Compare that Release with the installed package.json version so the settings list can
+     * say "已是最新" instead of offering an update that changes nothing.
+     */
+    async checkUpdates() {
+      let folders = []
+      try { folders = (await readdir(paths.plugins, { withFileTypes: true })).filter(item => item.isDirectory() && !item.name.startsWith('.')).map(item => item.name).sort() } catch {}
+      const checked = await Promise.all(folders.map(async folder => {
+        const dir = path.join(paths.plugins, folder)
+        const source = await readJson(path.join(dir, SOURCE_FILE))
+        if (source?.kind !== 'github' || !source.repo) return null
+        const pkg = await readJson(path.join(dir, 'package.json')) || {}
+        const current = String(pkg.version || '')
+        if (source.ref) return { folder, current, status: 'ref' }
+        let parsed
+        try { parsed = parseGithubSource(source.repo) } catch { return { folder, current, status: 'error', reason: '来源地址无法识别' } }
+        try {
+          const release = await latestRelease(parsed)
+          if (release.status === 'none') return { folder, current, status: 'branch' }
+          if (release.status === 'error') return { folder, current, status: 'error', reason: release.reason }
+          const latest = release.tag
+          const relation = comparePluginVersions(latest, current)
+          if (relation === null) return { folder, current, latest, status: 'unknown' }
+          return { folder, current, latest, status: relation > 0 ? 'available' : 'latest' }
+        } catch (error) {
+          return { folder, current, status: 'error', reason: String(error?.message || error) }
+        }
+      }))
+      return checked.filter(Boolean)
+    },
+    enable(folder) {
+      return serial(async () => {
+        const name = folderOf(folder)
+        await rm(path.join(paths.plugins, name, DISABLED_FILE), { force: true })
+        // Drop the old load record so the list shows "刷新后生效" until the host loads it again.
+        await rm(path.join(paths.plugins, name, STATUS_FILE), { force: true })
+        await sync()
+        return { folder: name, enabled: true }
+      })
+    },
+    disable(folder) {
+      return serial(async () => {
+        const name = folderOf(folder)
+        if (existsSync(path.join(paths.plugins, name, CARD_MARKER))) fail('这是人物卡自带的插件，请在人物卡库里停用')
+        await writeFile(path.join(paths.plugins, name, DISABLED_FILE), JSON.stringify({ disabledAt: now().toISOString() }, null, 2) + '\n')
+        await rm(path.join(paths.plugins, name, STATUS_FILE), { force: true })
+        await sync()
+        return { folder: name, enabled: false }
+      })
     },
     installFromGithub(input) {
       return serial(async () => {
@@ -172,8 +312,7 @@ export function createUserPluginInstaller({ dataRoot, fetchImpl = fetch, now = (
     },
     remove(folder) {
       return serial(async () => {
-        const name = String(folder)
-        if (!name || name !== path.basename(name) || name.startsWith('.') || !existsSync(path.join(paths.plugins, name))) fail('插件不存在：' + name)
+        const name = folderOf(folder)
         if (existsSync(path.join(paths.plugins, name, CARD_MARKER))) fail('这是人物卡自带的插件，请在人物卡库里停用')
         const pkg = await readJson(path.join(paths.plugins, name, 'package.json'))
         const kept = await backup(name)
