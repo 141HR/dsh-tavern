@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "cf85bbd8f040b165ecf03e452bf5f0f38b898029",
-  "releaseSequence": 784,
+  "revision": "9f2fbe78445746541ddbe96b3e38267d7ae5a843",
+  "releaseSequence": 785,
   "version": "3.0.1",
   "files": [
     {
@@ -36,8 +36,8 @@
     },
     {
       "path": "android/apk/TavernBootstrap.java",
-      "sha256": "b298039f6a49552c2ccd5a308aa9cf14df5d8ed48547f7be8cd8654a6635db9c",
-      "size": 14382
+      "sha256": "89835599f24f7d60802bdd96b34ba1a1aeb437fd83dba8a8df8be0af9a8df3fd",
+      "size": 14596
     },
     {
       "path": "android/apk/TavernWebProcessTest.java",
@@ -91,8 +91,8 @@
     },
     {
       "path": "android/setup.sh",
-      "sha256": "048b793bc618b1e1a8c526ce09aa099ddebad7743570ea843309e7f9911ec860",
-      "size": 17396
+      "sha256": "e3b21c5e797af36b0a7700f24924ba9c4ead7b0c2112f0450e3b27931a5f32d6",
+      "size": 17620
     },
     {
       "path": "android/update.sh",
