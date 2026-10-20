@@ -354,6 +354,10 @@ export async function settlementPerformanceChecks({ page, step, savedChat, outpu
     await page.waitForTimeout(500)
   })
   await page.screenshot({ path: join(output, 'long-archive-settled.png') })
+  // The server's whole-read guard (warn mode) names any per-turn path that loaded this long save whole.
+  const wholeReads = [...readLog().matchAll(/每轮路径读取了完整存档[^\n]*/g)].map(match => match[0])
+  report.settlementPerformance.wholeReads = wholeReads
+  if (process.env.TAVERN_PERF_ALLOW_FULL_READS !== '1') assert.deepEqual(wholeReads, [], 'per-turn paths must not load the long save whole')
   if (process.argv.includes('--long-operations')) await longOperationChecks({ page, step, savedChat, readLog, report })
 }
 
