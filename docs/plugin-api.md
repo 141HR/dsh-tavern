@@ -73,24 +73,7 @@ window.__ModuleLoader__.load({
 
 Tavern 把 `plugins/` 下的插件登记在 DSH 的 Tavern 配置（`~/.dsh/profiles/tavern/cordis.patch.yml`）里，以 `tavern-user-plugin-` 开头的条目由 Tavern 自动维护，不要手改。插件文件夹缺 `package.json` 或宿主入口时会被跳过，原因写在 Tavern 日志里。Tavern 通过插件文件夹里自动生成的 `.tavern-entry.mjs` 加载宿主侧：插件代码有语法错误、导入失败或 `apply` 抛错时，只在日志里记一条「plugins/<文件夹> 加载失败 / 启动失败」，不会让 DSH 起不来。这个文件不要改，也不用提交到插件仓库。
 
-### 发布：让用户一键安装
-
-用户在 **设置 → DSH Tavern → 插件** 粘贴 GitHub 地址就能装：有 Release 时装最新 Release，否则装默认分支；连不上 GitHub 时可以上传 ZIP。装好后列表里会显示「已加载 / 刷新后生效 / 加载失败（附原因）」，从 GitHub 装的可以一键更新，删除会把文件夹移到 `plugin-backups` 留底。为了能一键安装，请做到：
-
-- 仓库根目录（或任意一层）就是插件文件夹：有 `package.json` 和宿主入口；
-- **不依赖 npm 包**（`dependencies` 为空）。确实要用，就把用到的代码打包进插件，或连同 `node_modules` 一起提交；否则安装时会提示「依赖 npm 包，暂不支持一键安装」；
-- 想让用户装固定版本，就发 Release（打 tag 即可），一键安装和更新都只取最新 Release；
-- 设置和数据不要只存在插件文件夹里：更新会整体替换文件夹（旧版留在 `plugin-backups`）。用 Tavern 提供的存档数据接口，或存到浏览器本地；
-- `package.json` 写上 `version` 和一句 `description`，用户在插件列表里看到的就是它们。
-
-README 的「安装」一节写这些就够了，不用再写数据目录在哪：
-
-```markdown
-## 安装
-
-需要 DSH Tavern 最新版。打开酒馆 → 设置 → DSH Tavern → 插件，粘贴本仓库地址，点「安装」，刷新页面。
-连不上 GitHub 时，在本页下载 ZIP（Code → Download ZIP），在同一处点「上传 ZIP」。
-```
+写好之后怎样发布，才能让别人在设置里一键安装，见[发布与一键安装](plugin-publishing.md)。
 
 > 不要把插件放进 `tools/` 和 `tools.cordis.yml`：那里是卡片工作台的自创工具，挂在 Agent 预设里，要等第一局开始才加载，浏览器侧也永远不会加载。
 

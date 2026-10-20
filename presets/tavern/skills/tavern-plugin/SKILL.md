@@ -25,7 +25,7 @@ Tavern 为第三方 DSH 插件开放了一套稳定的接口。插件只通过�
 
 ## 发布给别人用
 
-用户要把插件分享出去时，按接口文档「发布：让用户一键安装」整理：仓库就是插件文件夹，`dependencies` 为空（要用的库打包进插件或连同 `node_modules` 提交），`package.json` 写上 `version` 和一句 `description`，需要固定版本就发 Release，README 的安装一节照文档里的模板写。别人在 设置 → DSH Tavern → 插件 粘贴仓库地址即可安装，不要再教用户找数据目录。
+用户要把插件分享出去时，先读取 [发布与一键安装](references/plugin-publishing.md)（path 为 `references/plugin-publishing.md`），按它整理：仓库就是插件文件夹，`dependencies` 为空（要用的库打包进插件或连同 `node_modules` 提交），`package.json` 写上 `version` 和一句 `description`，需要固定版本就发 Release，README 的安装一节照文档里的模板写。别人在 设置 → DSH Tavern → 插件 粘贴仓库地址即可安装，不要再教用户找数据目录。
 
 ## 验证
 
