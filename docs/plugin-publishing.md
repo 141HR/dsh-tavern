@@ -24,7 +24,6 @@ dsh-tavern-hello/          ← GitHub 仓库
   "name": "dsh-tavern-hello",
   "version": "1.0.0",
   "description": "一句话说明这个插件做什么",
-  "private": true,
   "type": "module",
   "exports": { ".": "./index.mjs", "./client": "./client.js" },
   "dsh": { "client": { "platform": "web", "inject": ["dsh-tavern-plugin"] } }

@@ -34,7 +34,6 @@ DSH Tavern 把扩展功能交给第三方 **DSH 插件**：文生图、文生视
 ```json
 {
   "name": "dsh-tavern-xxx",
-  "private": true,
   "type": "module",
   "exports": { ".": "./index.mjs", "./client": "./client.js" },
   "dsh": { "client": { "platform": "web", "inject": ["dsh-tavern-plugin"] } }
