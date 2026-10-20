@@ -21,6 +21,10 @@ export function isOpeningAwaitingSettlement(chat) {
 }
 
 /** Coordinate one timeline-bound task without owning task-specific model work. */
+// Header-only writes retry a concurrent write with a fresh header read (cheap); a new turn
+// writes often, and the whole-Chat fallback costs the whole history.
+const HEADER_RETRIES = 10
+
 export function createBackgroundTaskCoordinator(options = {}) {
   const store = options.store
   const timeline = options.timeline
@@ -178,7 +182,7 @@ export function createBackgroundTaskCoordinator(options = {}) {
           // A concurrent writer invalidated our snapshot. agent.begin only reads and writes
           // task state: re-read those header fields and revalidate every guard against them.
           // The compatibility path (whole Chat) remains for legacy stories and lasting races.
-          const state = ++refreshes <= 3 && store.readRecoveryState ? await store.readRecoveryState(chatId) : undefined
+          const state = ++refreshes <= HEADER_RETRIES && store.readRecoveryState ? await store.readRecoveryState(chatId) : undefined
           if (state?.timeline?.schemaVersion === 1 && Number.isSafeInteger(state._storageRevision)
             && !Object.values(state.timeline.operations || {}).some(op => op?.kind === 'body' && op.status === 'foreground-completed')) {
             source = { ...source, ...state, timeline: { ...state.timeline, checkpoints: source.timeline.checkpoints } }
@@ -215,7 +219,7 @@ export function createBackgroundTaskCoordinator(options = {}) {
           const intent = { kind: 'agent.bind', operationId: begun.value.operationId, sessionId }
           const metadata = { source: 'background.' + str(role) + '.bind', operationId: begun.value.operationId }
           // A concurrent write between reading and patching retries with fresh task state.
-          for (let attempt = 0; store.readState && store.patchChat && attempt < 3; attempt++) {
+          for (let attempt = 0; store.readState && store.patchChat && attempt < HEADER_RETRIES; attempt++) {
             const state = await (store.readRecoveryState || store.readState)(chatId)
             const legacy = Object.values(state?.timeline?.operations || {}).some(op => op?.kind === 'body' && op.status === 'foreground-completed')
             if (state?.timeline?.schemaVersion === 1 && !legacy) {
@@ -310,7 +314,7 @@ export function createBackgroundTaskCoordinator(options = {}) {
           if (headerFields && store.readSlice && store.patchChat) {
             const fields = [...taskStateFields, ...headerFields]
             const writable = new Set(['timeline', 'candidateAgent', 'candidates', ...headerFields])
-            for (let attempt = 0; attempt < 3; attempt++) {
+            for (let attempt = 0; attempt < HEADER_RETRIES; attempt++) {
               const before = (await store.readSlice(begun.chat.id, [], fields))?.chat
               if (before?.timeline?.schemaVersion !== 1 || Object.values(before.timeline.operations || {}).some(op => op?.kind === 'body' && op.status === 'foreground-completed')) break
               before.timeline={...before.timeline,checkpoints:[]}
@@ -343,7 +347,9 @@ export function createBackgroundTaskCoordinator(options = {}) {
         })
       },
       async fail(trace) {
-        return task.commit({ status: 'failed', stateChanged: false, participant: task.participant(trace) })
+        // Failing marks the operation only: commit it through the header. A role whose
+        // failure writes more (settlement status) falls back to the whole-Chat update.
+        return task.commit({ status: 'failed', stateChanged: false, participant: task.participant(trace), headerFields: [] })
       },
       async defer(input = {}) {
         return task.commit({

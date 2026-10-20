@@ -1074,7 +1074,7 @@ export async function apply(ctx) {
   // `fields` or a lasting race falls back to the whole-Chat update.
   async function updateChatHeader(chatId, fields, mutate, metadata) {
     const pick = chat => Object.fromEntries(fields.filter(field => Object.hasOwn(chat, field)).map(field => [field, chat[field]]))
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 10; attempt++) {
       const head = (await chatPersistence.readSlice(chatId, [], ['_storageRevision', ...fields]))?.chat
       if (!head || !Number.isSafeInteger(head._storageRevision)) break
       const before = pick(head), changes = diffJson(before, await mutate(structuredClone(before)))
