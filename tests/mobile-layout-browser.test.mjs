@@ -36,16 +36,15 @@ test('移动端实际样式：顶栏、键盘、候选、面板、编辑器与�
         })
         assert.equal(hit, true, `${width}: ${selectors[i]} 不被透明层拦截`)
       }
-      for (const selector of ['[data-mobile-nav="toggle"]', '[data-mobile-nav="files"]']) {
-        const rect = await box(selector)
-        assert.ok(rect && rect.width > 0 && rect.height > 0, `${width}: ${selector} 可见`)
-        assert.ok(Math.abs((rect.y + rect.height / 2) - (rects[0].y + rects[0].height / 2)) <= 1, `${width}: ${selector} 与顶栏对齐`)
-        const hit = await page.locator(selector).evaluate(element => {
-          const r = element.getBoundingClientRect()
-          return element.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2))
-        })
-        assert.equal(hit, true, `${width}: ${selector} 不被透明层拦截`)
-      }
+      const toggle = await box('[data-mobile-nav="toggle"]')
+      assert.ok(toggle && toggle.width > 0 && toggle.height > 0, `${width}: 目录开关可见`)
+      assert.ok(Math.abs((toggle.y + toggle.height / 2) - (rects[0].y + rects[0].height / 2)) <= 1, `${width}: 目录开关与顶栏对齐`)
+      assert.equal(await page.locator('[data-mobile-nav="toggle"]').evaluate(element => {
+        const r = element.getBoundingClientRect()
+        return element.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2))
+      }), true, `${width}: 目录开关不被透明层拦截`)
+      // 原生 corner 有按钮时，酒馆隐藏 dsh-web-mobile 重复的文件按钮。
+      assert.equal(await box('[data-mobile-nav="files"]'), null, `${width}: 不重复显示文件按钮`)
       const title = await page.locator('header nav').boundingBox()
       // 顶栏宽度预算给标题留的下限是 16px（tavernHeaderMobileChrome 的注释）。
       assert.ok(title.width >= 16, `${width}: 会话标题保留空间`)

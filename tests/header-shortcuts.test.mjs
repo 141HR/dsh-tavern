@@ -181,6 +181,9 @@ test('手机顶栏的布局约束：角落按钮留座、宿主动作组保持�
   // 容器压窄会让固定尺寸按钮互相覆盖，因此保持自然宽度，让标题区收缩。
   assert.match(css, /\[class\*="_headerActions"\] \{\s*flex: none; min-width: 0; gap: 0;/)
   assert.doesNotMatch(css, /--dsh-tavern-header-fixed: 156px;/)
+  // dsh-web-mobile 隐藏 titleRow 的 corner 时，酒馆要放回宿主右侧栏按钮，并隐藏重复的文件按钮。
+  assert.match(css, /\[data-mobile-nav="frame"\][\s\S]{0,240}\[data-conversation-header-corner\][\s\S]{0,80}display: flex !important;/)
+  assert.match(css, /\[data-mobile-nav="frame"\][\s\S]{0,300}\[data-mobile-nav="files"\]\s*\{\s*display: none !important;/)
   // 手机判定与上限要暴露给夹具。
   assert.match(client, /function useTavernMobileHeader\(\)/)
   assert.match(client, /"data-tavern-header-limit": mobile \? mobileLimit : ""/)

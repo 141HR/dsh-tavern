@@ -2770,6 +2770,16 @@ body.dsh-tavern-shell-active [class*="_headerUtilities"]:has(.dsh-tavern-header-
   }
   /* 原生右栏入口悬浮在顶栏右上角（见上方 header.corner 规则），标题行给它让出一格。 */
   body.dsh-tavern-shell-active [data-phase] header:has([data-conversation-header-corner] button) [class*="_titleRow"] { padding-right: 44px; }
+  /* dsh-web-mobile 3.1.0 在 [data-mobile-nav="frame"] 下把 titleRow 里的 corner 设成
+     display:none !important，用它的文件按钮替代右侧栏入口。酒馆要的是宿主的通用右侧栏
+     按钮（打开上次的页），所以用更高的特异性把它放出来，并隐藏重复的文件按钮；
+     corner 里没有按钮时（面板已展开）文件按钮保留作兜底。 */
+  body.dsh-tavern-shell-active [data-mobile-nav="frame"] [data-phase] header:has([data-conversation-header-corner]):has([data-conversation-header-corner]) [data-conversation-header-corner] {
+    display: flex !important;
+  }
+  body.dsh-tavern-shell-active [data-mobile-nav="frame"] [data-phase] header:has([data-conversation-header-corner] button) [data-mobile-nav="files"] {
+    display: none !important;
+  }
   body.dsh-tavern-shell-active :is([data-phase] > header, [data-slot="conversation.header"] > header) {
     position: relative; z-index: var(--dsh-play-z-header); flex: none;
     padding: 2px 4px 0;
