@@ -11,6 +11,7 @@ import { installChatAnswerBootPatch } from './domain/chat-answer-boot-patch.js'
 import { registerRequestHooks } from './hooks/request.js'
 import { syncUserPlugins, watchUserPlugins, userPluginPaths } from './domain/user-plugins.js'
 import { createUserPluginInstaller } from './domain/user-plugin-install.js'
+import { createPluginDataStore } from './domain/plugin-data-store.js'
 import { createPluginAssets } from './domain/plugin-assets.js'
 import { registerModelStreamHooks } from './hooks/model-stream.js'
 import { registerTurnLifecycleHooks } from './hooks/turn-lifecycle.js'
@@ -1154,6 +1155,7 @@ export async function apply(ctx) {
   // DSH cards (docs/design/dsh-card-format.md): asset packs stored once by content; big files uploaded to disk.
   const assetPacks = createAssetPacks({ root: dataRoot, store: profileData })
   const uploads = createUploads({ root: dataRoot })
+  const pluginDataStore = createPluginDataStore({ dataRoot })
   const userPluginInstaller = createUserPluginInstaller({ dataRoot, sync: () => syncUserPlugins({ dataRoot }) })
   const cardPlugins = createCardPlugins({ dataRoot, pluginsDir: userPluginPaths(dataRoot).plugins, keyOf: castAssets.keyOf })
   void uploads.sweep().catch(() => {})
@@ -3158,6 +3160,7 @@ export async function apply(ctx) {
     reservedToolNames: [...BACKGROUND_TOOLS, HISTORY_RECALL_TOOL].map(tool => tool?.name).concat([STORY_SUBMIT_TOOL_NAME, 'character_design_finish', 'worldbook_search', 'web_search', 'skill']).filter(Boolean),
     media: pluginMedia,
     data: pluginData,
+    pluginData: pluginDataStore,
     ...pluginTurns,
     backgroundModel: async sessionId => backgroundModelSelection(await backgroundConfigForSession(sessionId)),
     readCard: readPluginCard,
@@ -4906,6 +4909,12 @@ export async function apply(ctx) {
         return { card: archive ? await importCardArchiveFile(archive.file, archive.name) : await importCard(await mobileCardImport.read(args && args.id)) }
       }
       case 'importCard': return { card: await importCard(args && args.payload) }
+      // The page side of a plugin reads and writes the same data as its host side (tavernUi.savePluginData).
+      case 'pluginData': {
+        const plugin = str(args && args.plugin)
+        if (args && args.op === 'save') { await pluginDataStore.save(plugin, args.data); return { ok: true } }
+        return { data: await pluginDataStore.read(plugin) }
+      }
       case 'listUserPlugins': return { plugins: await userPluginInstaller.list(), dir: userPluginInstaller.pluginsDir }
       case 'installUserPlugin': return { plugin: await userPluginInstaller.installFromGithub(args && args.url) }
       case 'installUserPluginUpload': {

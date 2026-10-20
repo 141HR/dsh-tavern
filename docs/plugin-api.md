@@ -744,7 +744,7 @@ ctx.tavern.speechProvider({
 | 存储 | 随回退、重新生成变化 | 用来放 |
 |---|---|---|
 | 按轮数据 | 是，自动 | 记忆、状态、锚点等跟剧情走的东西 |
-| 整局数据 | 否 | 插件设置、缓存、跨分支的统计 |
+| 整局数据 | 否 | 这一局的缓存、跨分支的统计 |
 
 ### `saveTurnData({ gameId, turn, textVersion?, data })`
 
@@ -774,6 +774,20 @@ ctx.tavern.speechProvider({
 | 分叉 | 分叉点及之前、当前显示的数据带到新游戏 | 复制一份到新游戏 |
 | 删局 | 删除 | 删除 |
 | 导出、导入存档 | 当前剧情线上的数据随存档带走，导入后在新游戏里照常读到 | 随存档带走 |
+
+### `savePluginData({ data })`、`readPluginData()`（第 3 版）
+
+插件自己的数据，**不跟某一局走**：服务地址、默认画风、全局开关这类插件设置，以及跨局的统计。每个插件一份，最多 256 KB；`data` 是能转成 JSON 的值，传 `null` 清除。`readPluginData` 没有数据时返回 `null`。
+
+```js
+await ctx.tavern.savePluginData({ data: { endpoint: 'http://127.0.0.1:8188', style: 'anime' } })
+const settings = (await ctx.tavern.readPluginData()) || {}
+```
+
+- 存在 Tavern 的数据目录里，不在插件文件夹里：用户更新插件不会丢；删除插件时随插件文件夹一起移进 `plugin-backups`。
+- 存在服务端：电脑、手机打开同一个酒馆，读到的是同一份。
+- 浏览器侧用 `tavernUi.readPluginData()`、`tavernUi.savePluginData(data)` 读写同一份，适合插件自己的设置页。
+- 密钥不要放这里，用 DSH 的 `credentials` 服务。
 
 ### `gameSettings({ title?, fields })`、`getGameSettings({ gameId })`、`onGameSettingsChanged(handler)`（第 2 版）
 
@@ -843,6 +857,10 @@ context = { gameId, turn, busy }
 ```
 
 想替换内置生图的插件就用这个入口。内置生图的入口在每轮正文下方的操作栏（图片图标），与插件按钮互不占位，由用户选择用哪个。
+
+### `readPluginData()`、`savePluginData(data)`（第 3 版）
+
+读写插件自己的数据，和宿主侧 `tavern.readPluginData()`、`tavern.savePluginData({ data })` 是同一份（见上文）。都返回 Promise；`savePluginData` 传 `null` 清除。
 
 ### `callHost(name, args)`（第 2 版）
 
@@ -1080,4 +1098,4 @@ Tavern 尽量开放接口，并保持每个接口简单、稳定；接口按插�
 |---|---|
 | 1 | 首个版本。 |
 | 2 | 新增 `turnSection`、`worldbookSource`、`settlementSection`、`settlementTool`：插件可以往每轮正文请求和后台结算里添加内容。新增插件存档数据（`saveTurnData`、`readTurnData`、`saveGameData`、`readGameData`）与 `onTimelineChanged`；编辑正文后重新发 `onTurnSettled`；分叉时带上插件数据和媒体项。新增第一个替换类接口 `replaceSettlement`，以及本局插件面板（按局开关、选择结算由谁负责、错误记录）。新增 `candidateSection`、`compactionSection`、`worldbookEntries`；新增 `getCharacterDesigns`、`saveCharacterDesign`（人物设计档案）、`listCards`、`readCardRaw`、`updateCardRaw`、`toolModes` 与 Skill 读写（`listSkills`、`readSkill`、`saveSkill`、`removeSkill`）；浏览器侧新增 `registerPanel`、`registerStartGroup`、`registerCardListView`（`tavernUi.apiVersion` 为 2）。`onTurnSettled`、`getTurn` 增加只读的 `variables`。新增 `getCard`、`getCardImage`、`getHistory`、`setVariables`、`editTurn`、`runTask`。新增宿主侧 `handle` 与浏览器侧 `callHost`，插件的浏览器侧可以调用自己的宿主侧。新增 `settlementTask`、`manualTask`、`startTask`：插件可以定义每轮结算前后运行的任务和玩家手动运行的任务。新增 `getTurnState`，`onTurnSettled`、`getTurn` 增加 `greeting`；浏览器侧新增 `getTurnState`、`watchTurnState`、`setInput`、`submitInput`、`openOverlay`、`assetUrl`（插件文件夹的 `assets/` 静态资源）。导出存档包含插件存档数据和媒体项，导入后照常可读。插件可放进数据目录的 `plugins/` 文件夹加载。新增演出接口：宿主侧 `getCast`、`onCastAnnotated`、`getCastAssets`，浏览器侧 `getStage`、`watchStage`、`registerStageView`。新增配音接口：宿主侧 `speechProvider`、`synthesizeSpeech`，浏览器侧 `speak`、`stopSpeech`。新增背景音乐 `playMusic`、`stopMusic`。新增本局配置项 `gameSettings`、`getGameSettings`、`onGameSettingsChanged`，浏览器侧 `getGameSettings`、`watchGameSettings`。第 1 版接口不变。 |
-| 3 | 新增 `versionSignal`：正文版本失效时中止的信号，结算任务的 `signal` 也随版本失效中止；`onTimelineChanged` 增加 `textVersion`；结算任务新增 `phase: 'parallel'`，与 Tavern 自己的结算同时运行。新增 `skillSource`：插件自带 Skill。`speechProvider` 新增 `version`，`synthesize` 多收 `gameId`、`speaker`、`narration`。新增 `cardImporter`：插件导入 Tavern 不认识的人物卡格式。新增写角色素材（`setCastImage`、`removeCastImage`、`setCastCharacter`、`setCastVoice`、`removeCastCharacter`）与素材包（`saveCardPack`、`removeCardPack`）。新增 `cardRevision`、`onCardChanged`，`updateCardRaw` 支持 `expectedRevision` 并返回 `revision`。新增 `getRequestContext`：读这一轮正文请求的本轮上下文。新增 `publishState` 与浏览器侧 `watchState`：插件把最新状态推给自己的页面。浏览器侧新增 `registerStatusSection`（酒馆状态页的插件分节）、`registerTurnView`（整轮正文的显示方式）（`tavernUi.apiVersion` 为 3）。第 1、2 版接口不变。 |
+| 3 | 新增 `versionSignal`：正文版本失效时中止的信号，结算任务的 `signal` 也随版本失效中止；`onTimelineChanged` 增加 `textVersion`；结算任务新增 `phase: 'parallel'`，与 Tavern 自己的结算同时运行。新增 `skillSource`：插件自带 Skill。`speechProvider` 新增 `version`，`synthesize` 多收 `gameId`、`speaker`、`narration`。新增 `cardImporter`：插件导入 Tavern 不认识的人物卡格式。新增写角色素材（`setCastImage`、`removeCastImage`、`setCastCharacter`、`setCastVoice`、`removeCastCharacter`）与素材包（`saveCardPack`、`removeCardPack`）。新增 `cardRevision`、`onCardChanged`，`updateCardRaw` 支持 `expectedRevision` 并返回 `revision`。新增 `getRequestContext`：读这一轮正文请求的本轮上下文。新增 `publishState` 与浏览器侧 `watchState`：插件把最新状态推给自己的页面。浏览器侧新增 `registerStatusSection`（酒馆状态页的插件分节）、`registerTurnView`（整轮正文的显示方式）（`tavernUi.apiVersion` 为 3）。新增插件数据 `savePluginData`、`readPluginData`（宿主侧与浏览器侧同一份，不跟某一局走）。第 1、2 版接口不变。 |

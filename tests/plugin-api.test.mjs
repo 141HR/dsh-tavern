@@ -1096,3 +1096,25 @@ test('skillSource：插件登记自己的 Skill 目录，卸载时撤销；卡�
   await fiber.dispose()
   assert.deepEqual(roots, [])
 })
+
+test('插件数据：不跟某一局走，每个插件只读写自己的那一份，256 KB 上限，null 清除', { skip: !cordis }, async t => {
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const path = (await import('node:path')).default
+  const { createPluginDataStore } = await import('../tavern-plugin/lib/domain/plugin-data-store.js')
+  const root = await mkdtemp(path.join(tmpdir(), 'plugin-data-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const h = await harness(t, { pluginData: createPluginDataStore({ dataRoot: root }) })
+  let image, other
+  await h.root.plugin({ name: 'dsh-tavern-image', inject: ['tavern'], apply(ctx) { image = ctx.tavern } })
+  await h.root.plugin({ name: 'other', inject: ['tavern'], apply(ctx) { other = ctx.tavern } })
+  await tick()
+  assert.equal(await image.readPluginData(), null)
+  await image.savePluginData({ data: { endpoint: 'http://127.0.0.1:8188' } })
+  assert.deepEqual(await image.readPluginData(), { endpoint: 'http://127.0.0.1:8188' })
+  assert.equal(await other.readPluginData(), null, '各插件互不可见')
+  await assert.rejects(image.savePluginData({}), /不能省略/)
+  await assert.rejects(image.savePluginData({ data: 'x'.repeat(300 * 1024) }), /256 KB/)
+  await image.savePluginData({ data: null })
+  assert.equal(await image.readPluginData(), null)
+})

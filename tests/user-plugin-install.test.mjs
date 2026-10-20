@@ -119,3 +119,16 @@ test('没有 Release 用默认分支；仓库不存在、连不上都给出办�
   const offline = await setup(t, async () => { throw Object.assign(new Error('fetch failed'), { cause: { code: 'ECONNRESET' } }) })
   await assert.rejects(offline.installer.installFromGithub('a/b'), /连不上 GitHub（ECONNRESET）.*下载 ZIP 后上传/)
 })
+
+test('删除插件时，插件数据随文件夹一起进备份；更新不动插件数据', async t => {
+  const { createPluginDataStore } = await import('../tavern-plugin/lib/domain/plugin-data-store.js')
+  const { installer, dataRoot } = await setup(t)
+  const store = createPluginDataStore({ dataRoot })
+  await installer.installFromZip(hello(), 'hello.zip')
+  await store.save('dsh-tavern-hello', { style: 'anime' })
+  await installer.installFromZip(hello('1.1.0'), 'hello.zip')
+  assert.deepEqual(await store.read('dsh-tavern-hello'), { style: 'anime' }, '更新后设置还在')
+  const removed = await installer.remove('dsh-tavern-hello')
+  assert.equal(await store.read('dsh-tavern-hello'), null)
+  assert.deepEqual(JSON.parse(await readFile(path.join(removed.backup, '.plugin-data.json'), 'utf8')), { style: 'anime' })
+})

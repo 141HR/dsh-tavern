@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promise
 import path from 'node:path'
 import { readZipEntries } from './zip-entries.js'
 import { scanUserPlugins, STATUS_FILE, userPluginPaths } from './user-plugins.js'
+import { pluginDataFile } from './plugin-data-store.js'
 
 // 应用内安装插件：粘贴 GitHub 地址或上传 zip，放进 <data>/plugins/<文件夹>；
 // 之后的加载仍由 plugins/ 目录同步负责（宿主侧几秒内加载，浏览器侧刷新后出现）。
@@ -174,7 +175,11 @@ export function createUserPluginInstaller({ dataRoot, fetchImpl = fetch, now = (
         const name = String(folder)
         if (!name || name !== path.basename(name) || name.startsWith('.') || !existsSync(path.join(paths.plugins, name))) fail('插件不存在：' + name)
         if (existsSync(path.join(paths.plugins, name, CARD_MARKER))) fail('这是人物卡自带的插件，请在人物卡库里停用')
+        const pkg = await readJson(path.join(paths.plugins, name, 'package.json'))
         const kept = await backup(name)
+        // The plugin's own data goes into the same backup, so reinstalling from there brings it back by hand.
+        const data = pluginDataFile(dataRoot, String(pkg?.name || name))
+        if (existsSync(data)) await rename(data, path.join(kept, '.plugin-data.json'))
         await sync()
         return { folder: name, backup: kept }
       })
