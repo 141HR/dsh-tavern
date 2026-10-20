@@ -1,4 +1,8 @@
 import { resolveCharacterForms } from './character-forms.js'
+import { charactersFromWorldbookText, charactersFromCardBook, charactersFromExtraction, mergeCharacters } from './character-import.js'
+import { buildMinorBatchPrompt, scrubMinorNegatives } from './character-import.js'
+import { parseCharacters } from './character-generator.js'
+import { buildOutfitPrompt, clampBatchCount, mergeOutfits, parseOutfits } from './outfit-generator.js'
 /**
  * dsh-tavern-image —— DSH Tavern 多渠道场景生图插件（host 半边）。
  *
@@ -625,6 +629,7 @@ export function apply(ctx, config = {}) {
   route(`${BASE}/workflow`, (request, response, url, engine) => engine.handleConsole('workflow', request, response, url))
   route(`${BASE}/reload`, (request, response, url, engine) => engine.handleConsole('reload', request, response, url))
   route(`${BASE}/definitions`, (request, response, url, engine) => engine.handleConsole('definitions', request, response, url))
+  route(`${BASE}/import-characters`, (request, response, url, engine) => engine.handleConsole('import-characters', request, response, url))
   route(`${BASE}/generate`, (request, response, url, engine) => engine.handleConsole('generate', request, response, url))
   route(`${BASE}/history`, (request, response, url, engine) => engine.handleConsole('history', request, response, url))
   route(`${BASE}/character-history`, (request, response, url, engine) => engine.handleConsole('character-history', request, response, url))
@@ -641,6 +646,9 @@ export function apply(ctx, config = {}) {
   route(`${BASE}/worldbook-entry`, (request, response, url, engine) => engine.handleConsole('worldbook-entry', request, response, url))
   route(`${BASE}/worldbook-add`, (request, response, url, engine) => engine.handleConsole('worldbook-add', request, response, url))
   route(`${BASE}/worldbook-export`, (request, response, url, engine) => engine.handleConsole('worldbook-export', request, response, url))
+route(`${BASE}/generate-outfits`, (request, response, url, engine) => engine.handleConsole('generate-outfits', request, response, url))
+  route(`${BASE}/generate-outfits-bulk`, (request, response, url, engine) => engine.handleConsole('generate-outfits-bulk', request, response, url))
+route(`${BASE}/generate-characters-minor`, (request, response, url, engine) => engine.handleConsole('generate-characters-minor', request, response, url))
   route(`${BASE}/plugin-download`, (request, response, url, engine) => engine.handleConsole('plugin-download', request, response, url))
   route(`${BASE}/media-action`, (request, response, url, engine) => engine.handleConsole('media-action', request, response, url))
   route(`${BASE}/workflow-import`, (request, response, url, engine) => engine.handleConsole('workflow-import', request, response, url))
@@ -1433,7 +1441,7 @@ function createRuntime(ctx, overrides, logger, deps) {
         }
         if (existing && (existing.state === 'pending' || existing.state === 'running' || existing.state === 'done')) return publicJob(existing)
       }
-      const channel = forceWorkflow ? null : activeChannel(jobConfig)
+      const channel = forceWorkflow ? null : channelWithPresetParams(jobConfig)
       let workflow = forceWorkflow || (!channel && jobConfig.comfyMode === 'simple' ? null : (!channel ? pickWorkflow(usable(), jobConfig, params.model) : null))
       let simpleBuild = null
       if (!channel && !forceWorkflow && jobConfig.comfyMode === 'simple') {
@@ -1786,29 +1794,119 @@ function createRuntime(ctx, overrides, logger, deps) {
     }
 
     /** 读世界书文件（保留 enabled 标记），返回 { name, entries }。 */
-    async function loadWorldbook() {
-      let raw = await readJson(join(ROOT, 'worldbook.json'), null)
-      // 首次运行：worldbook.json 是使用者自己的数据，不进公开仓库。
-      // 仓库另外带了一份「通用生图规则」当种子 —— 只在 worldbook.json
-      // 不存在时生成一次，之后永不覆盖（用户改过的条目必须原样留住）。
-      if (!raw) {
-        const seed = await readJson(join(ROOT, '世界书-通用生图规则.json'), null)
-        const seeded = seed ? normalizeWorldbook(seed) : null
-        if (seeded && seeded.entries.length) {
-          raw = seeded
-          try {
-            await writeJsonSafe(join(ROOT, 'worldbook.json'), seeded, join(ROOT, 'backups'))
-            logger.info?.('dsh-tavern-image: 首次运行，已用通用规则生成默认世界书（' + seeded.entries.length + ' 条）')
-          } catch (error) {
-            logger.warn?.('dsh-tavern-image: 默认世界书落盘失败 ' + (error?.message ?? error))
-          }
-        }
-      }
-      const norm = raw ? normalizeWorldbook(raw) : null
-      return norm ?? { name: '生图世界书', entries: [] }
-    }
+    // 两本世界书并列，互不覆盖：
+//   1. 生图规则      worldbook.json         ← 种子 世界书-通用生图规则.json
+//   2. 角色与服装库  worldbook-outfits.json ← 种子 世界书-角色与服装库.json
+// 每本各自独立落盘、独立编辑；加载时按固定顺序合并进同一份提示词。
+const WORLD_BOOKS = [
+  { data: 'worldbook.json', seed: '世界书-通用生图规则.json', label: '生图规则', fallbackName: '生图世界书' },
+  { data: 'worldbook-outfits.json', seed: '世界书-角色与服装库.json', label: '角色与服装库', fallbackName: '角色与服装库' },
+]
 
-    let worldbookCache = null
+async function loadOneWorldbook(book) {
+  let raw = await readJson(join(ROOT, book.data), null)
+  // 首次运行：这两个文件都是使用者自己的数据，不进公开仓库。
+  // 仓库各带一份种子 —— 只在对应文件不存在时生成一次，之后永不覆盖。
+  if (!raw) {
+    const seed = await readJson(join(ROOT, book.seed), null)
+    const seeded = seed ? normalizeWorldbook(seed) : null
+    if (seeded && seeded.entries.length) {
+      raw = seeded
+      try {
+        await writeJsonSafe(join(ROOT, book.data), seeded, join(ROOT, 'backups'))
+        logger.info?.('dsh-tavern-image: 首次运行，已用种子生成「' + book.label + '」（' + seeded.entries.length + ' 条）')
+      } catch (error) {
+        logger.warn?.('dsh-tavern-image: 「' + book.label + '」落盘失败 ' + (error?.message ?? error))
+      }
+    }
+  }
+  const norm = raw ? normalizeWorldbook(raw) : null
+  return norm ?? { name: book.fallbackName, entries: [] }
+}
+
+async function loadWorldbook() {
+  const loaded = []
+  for (const book of WORLD_BOOKS) {
+    try {
+      const one = await loadOneWorldbook(book)
+      loaded.push({ label: book.label, name: one.name, entries: one.entries })
+    } catch (error) {
+      // 单本坏掉不能连累另一本，也不能连累生图。
+      logger.warn?.('dsh-tavern-image: 世界书「' + book.label + '」加载失败：' + (error?.message ?? error))
+    }
+  }
+  if (!loaded.length) return { name: '生图世界书', entries: [] }
+  const entries = []
+  for (const book of loaded) for (const entry of book.entries) entries.push(entry)
+  return {
+    name: loaded[0].name,
+    entries,
+    // 便于 /state 与前端区分两本，并显示各自条数
+    books: loaded.map(book => ({ label: book.label, name: book.name, count: book.entries.length })),
+  }
+}
+
+    /**
+ * 按「本」读写（编辑用）。
+ * loadWorldbook() 是给提示词用的合并视图；编辑必须落到某一本上，
+ * 否则改第二本的条目时会把合并结果写回第一本，两本互相污染。
+ */
+const BOOK_KEYS = { main: 'worldbook.json', outfits: 'worldbook-outfits.json' }
+const BOOK_SEEDS = { main: '世界书-通用生图规则.json', outfits: '世界书-角色与服装库.json' }
+
+function normalizeBookKey(key) {
+  const k = String(key ?? '').trim()
+  return Object.prototype.hasOwnProperty.call(BOOK_KEYS, k) ? k : 'main'
+}
+
+/** 读某一本（不含合并），文件不存在时用对应种子兜底。 */
+async function loadOneBook(key) {
+  const bookKey = normalizeBookKey(key)
+  const raw = await readJson(join(ROOT, BOOK_KEYS[bookKey]), null)
+  if (raw) return normalizeWorldbook(raw) ?? { name: BOOK_KEYS[bookKey], entries: [] }
+  const seed = await readJson(join(ROOT, BOOK_SEEDS[bookKey]), null)
+  const seeded = seed ? normalizeWorldbook(seed) : null
+  return seeded ?? { name: BOOK_KEYS[bookKey], entries: [] }
+}
+
+/** 写某一本，并清掉合并缓存。 */
+async function saveOneBook(key, doc) {
+  const bookKey = normalizeBookKey(key)
+  await writeJsonSafe(join(ROOT, BOOK_KEYS[bookKey]), doc, join(ROOT, 'backups'))
+  worldbookCache = null
+  return doc
+}
+
+/** 两本各自的摘要 + 条目正文，随 /state 给前端做书选择器与折叠列表。 */
+async function worldbookBookIndex() {
+  const out = []
+  for (const key of Object.keys(BOOK_KEYS)) {
+    try {
+      const one = await loadOneBook(key)
+      out.push({
+        key,
+        file: BOOK_KEYS[key],
+        seed: BOOK_SEEDS[key],
+        name: one.name,
+        count: one.entries.length,
+        enabled: one.entries.filter(entry => entry.enabled !== false).length,
+        entries: one.entries.map((entry, index) => ({
+          index,
+          comment: String(entry.comment ?? ''),
+          content: String(entry.content ?? ''),
+          enabled: entry.enabled !== false,
+          activation: entry.activation === 'keywords' ? 'keywords' : 'always',
+          keywords: Array.isArray(entry.keywords) ? entry.keywords.map(String) : [],
+        })),
+      })
+    } catch (error) {
+      out.push({ key, file: BOOK_KEYS[key], name: '', count: 0, enabled: 0, entries: [], error: String(error?.message ?? error) })
+    }
+  }
+  return out
+}
+
+let worldbookCache = null
     let lastPlannerContext = null
     async function worldbook() {
       if (!worldbookCache) {
@@ -2619,6 +2717,8 @@ function createRuntime(ctx, overrides, logger, deps) {
         worldbookName: String((await loadWorldbook().catch(() => ({ name: '' }))).name ?? ''),
         // 启用条数：生图规划 tab 用它显示"几条第几条在生效"
         worldbookEnabledCount: worldbookList.filter(e => e.enabled !== false && String(e.content ?? '').trim()).length,
+      // 两本世界书各自的名字/条数/条目：前端用它的书选择器与折叠列表
+      worldbookBooks: await worldbookBookIndex().catch(() => []),
         plannerContext: lastPlannerContext,
         pluginDownloads: { ...PLUGIN_DOWNLOADS, local: `${BASE}/plugin-download` },
         config: {
@@ -2873,10 +2973,15 @@ function createRuntime(ctx, overrides, logger, deps) {
           try {
             const dir = join(TAVERN_DATA, 'resources', 'cards')
             const names = await readdir(dir).catch(() => [])
-            const cards = names
-              .filter(name => /\.json$/i.test(name))
-              .map(name => ({ path: 'cards/' + name, name: name.replace(/\.json$/i, '') }))
-              .sort((a, b) => a.name.localeCompare(b.name, 'zh'))
+            const cards = []
+            for (const name of names.filter(n => /\.json$/i.test(n))) {
+              const payload = await readJson(join(dir, name), null).catch(() => null)
+              const raw = payload?.raw ?? payload ?? null
+              const title = String(raw?.name ?? '').trim()
+              const count = Array.isArray(raw?.character_book?.entries) ? raw.character_book.entries.length : (Array.isArray(raw?.data?.character_book?.entries) ? raw.data.character_book.entries.length : 0)
+              cards.push({ path: 'cards/' + name, name: name.replace(/\.json$/i, ''), title: title || name.replace(/\.json$/i, ''), entries: count })
+            }
+            cards.sort((a, b) => a.title.localeCompare(b.title, 'zh'))
             sendJson(response, 200, { ok: true, cards })
           } catch (error) {
             sendJson(response, 400, { ok: false, error: String(error?.message ?? error) })
@@ -3236,6 +3341,7 @@ function createRuntime(ctx, overrides, logger, deps) {
         // ---- 导入世界书（接受 ST 格式 / 本插件格式 / 数组 / 纯文本）----
         if (action === 'worldbook-import') {
           try {
+            const bookKey = normalizeBookKey(body?.book)
             let src = body?.worldbook
             if (typeof src === 'string') {
               try { src = JSON.parse(src) } catch { /* 当纯文本处理 */ }
@@ -3244,16 +3350,16 @@ function createRuntime(ctx, overrides, logger, deps) {
             if (!norm || !norm.entries.length) { sendJson(response, 400, { ok: false, error: '没能从这份内容里读出任何条目' }); return }
             // 导入前备份旧的
             try {
-              const old = await readJson(join(ROOT, 'worldbook.json'), null)
+              const old = await readJson(join(ROOT, BOOK_KEYS[bookKey]), null)
               if (old) {
                 const dir = join(ROOT, 'backups'); await mkdir(dir, { recursive: true })
-                await copyFile(join(ROOT, 'worldbook.json'), join(dir, 'worldbook-' + Date.now() + '.json'))
+                await copyFile(join(ROOT, BOOK_KEYS[bookKey]), join(dir, BOOK_KEYS[bookKey].replace(/\.json$/, '') + '-' + Date.now() + '.json'))
               }
             } catch {}
-            await queueWorldbookWrite(() => writeJsonSafe(join(ROOT, 'worldbook.json'), norm, join(ROOT, 'backups')))
+            await queueWorldbookWrite(() => saveOneBook(bookKey, norm))
             worldbookCache = null
             logger.info?.('dsh-tavern-image: 已导入世界书《' + norm.name + '》' + norm.entries.length + ' 条')
-            sendJson(response, 200, { ok: true, name: norm.name, count: norm.entries.length })
+            sendJson(response, 200, { ok: true, book: bookKey, name: norm.name, count: norm.entries.length })
           } catch (error) {
             sendJson(response, 400, { ok: false, error: String(error?.message ?? error) })
           }
@@ -3270,8 +3376,10 @@ function createRuntime(ctx, overrides, logger, deps) {
             if (patch.andKeywords !== undefined && (!Array.isArray(patch.andKeywords) || patch.andKeywords.length > 64 || patch.andKeywords.some(key => typeof key !== 'string' || key.length > 200))) throw new Error('附加条件最多 64 个，每个最多 200 字')
             const backendIds = new Set(['comfyui', ...IMAGE_PROVIDERS.map(item => item.id)])
             if (patch.backends !== undefined && (!Array.isArray(patch.backends) || patch.backends.some(id => !backendIds.has(id)))) throw new Error('请选择支持的生图渠道类型')
-            const count = await queueWorldbookWrite(async () => {
-              const wb = await loadWorldbook()
+            const bookKey = normalizeBookKey(body?.book)
+    const count = await queueWorldbookWrite(async () => {
+      // 编辑必须落在单本上：用合并视图会把第二本的内容写回第一本。
+      const wb = await loadOneBook(bookKey)
               if (!Number.isInteger(index) || index < 0 || index >= wb.entries.length) throw new Error('条目不存在')
               if (body?.remove === true) wb.entries.splice(index, 1)
               else {
@@ -3281,11 +3389,10 @@ function createRuntime(ctx, overrides, logger, deps) {
                 if (typeof patch.enabled === 'boolean') e.enabled = patch.enabled
                 Object.assign(e, normalizeEntryActivation({ ...e, ...patch }))
               }
-              await writeJsonSafe(join(ROOT, 'worldbook.json'), wb, join(ROOT, 'backups'))
-              worldbookCache = null
+              await saveOneBook(bookKey, wb)
               return wb.entries.length
             })
-            sendJson(response, 200, { ok: true, count })
+            sendJson(response, 200, { ok: true, book: bookKey, count })
           } catch (error) {
             sendJson(response, 400, { ok: false, error: String(error?.message ?? error) })
           }
@@ -3295,14 +3402,14 @@ function createRuntime(ctx, overrides, logger, deps) {
         // ---- 新增一条空条目 ----
         if (action === 'worldbook-add') {
           try {
-            const count = await queueWorldbookWrite(async () => {
-              const wb = await loadWorldbook()
+            const bookKey = normalizeBookKey(body?.book)
+    const count = await queueWorldbookWrite(async () => {
+      const wb = await loadOneBook(bookKey)
               wb.entries.push({ comment: String(body?.comment ?? '新条目'), content: String(body?.content ?? ''), enabled: true, ...normalizeEntryActivation({}) })
-              await writeJsonSafe(join(ROOT, 'worldbook.json'), wb, join(ROOT, 'backups'))
-              worldbookCache = null
+              await saveOneBook(bookKey, wb)
               return wb.entries.length
             })
-            sendJson(response, 200, { ok: true, count, index: count - 1 })
+            sendJson(response, 200, { ok: true, book: bookKey, count, index: count - 1 })
           } catch (error) {
             sendJson(response, 400, { ok: false, error: String(error?.message ?? error) })
           }
@@ -3374,6 +3481,7 @@ function createRuntime(ctx, overrides, logger, deps) {
               negative: String(x.negative ?? '').slice(0, 2000),
               position: x.position === 'suffix' ? 'suffix' : 'prefix',
               enabled: x.enabled !== false,
+              params: normalizePresetParams(x.params),
             }))
         }
         if (typeof patch.activePreset === 'string') config.activePreset = patch.activePreset.slice(0, 60)
@@ -3409,7 +3517,237 @@ function createRuntime(ctx, overrides, logger, deps) {
         return
       }
 
-      if (action === 'definitions') {
+      // ═══ 服装库生成（按偏好 / 批量 / 支持任意年龄段的 nsfw）═══
+  if (action === 'generate-outfits' || action === 'generate-outfits-bulk') {
+    const bulk = action === 'generate-outfits-bulk'
+    const preference = String(body?.preference ?? '').slice(0, 500)
+    const ageBand = String(body?.ageBand ?? 'adult')
+    const nsfw = body?.nsfw === true
+    const clamped = clampBatchCount(body?.count ?? 3, body?.maxTotal ?? 60)
+    const wanted = bulk
+      ? (Array.isArray(body?.characterIds) ? body.characterIds.map(String).filter(Boolean) : [])
+      : (body?.characterId ? [String(body.characterId)] : [])
+    if (!wanted.length) {
+      sendJson(response, 400, { ok: false, error: bulk ? '没有指定角色（characterIds）' : '没有指定角色（characterId）' })
+      return
+    }
+    if (bulk && wanted.length * clamped.perCharacter > clamped.maxTotal) {
+      sendJson(response, 400, {
+        ok: false,
+        error: '一次批量最多产 ' + clamped.maxTotal + ' 套，当前 ' + wanted.length + ' 个角色 × ' + clamped.perCharacter + ' 套超额。请减少角色数或每角色套数。',
+      })
+      return
+    }
+    try {
+      const fallback = await backgroundModel(lastSessionId)
+      const provider = config.plannerProvider || fallback?.provider || ''
+      const model = config.plannerModel || fallback?.model || ''
+      if (!provider || !model) {
+        sendJson(response, 400, { ok: false, error: '没定用哪个模型：Tavern 后台模型是空的，就来插件设置里指定一个' })
+        return
+      }
+      const definitions = await loadDefinitions()
+      const characters = Array.isArray(definitions.characters) ? definitions.characters : []
+      const results = []
+      const missing = []
+      for (const key of wanted) {
+        const character = characters.find(c => c && (c.id === key || c.name === key))
+        if (!character) { missing.push(key); continue }
+        const prompt = buildOutfitPrompt({ character, preference, count: clamped.perCharacter, ageBand, nsfw })
+        let text = ''
+        try {
+          const result = await runPlanner(deps.llm, {
+            provider,
+            model,
+            reasoningEffort: plannerEffortFor(fallback),
+            system: prompt.system,
+            text: prompt.text,
+            temperature: 0.95,
+          })
+          text = String(result?.text ?? '')
+        } catch (error) {
+          results.push({ character: character.name, ok: false, error: (error?.message ?? String(error)).slice(0, 200) })
+          continue
+        }
+        const parsed = parseOutfits(text)
+        const merged = mergeOutfits(character.outfits, parsed.outfits)
+        // 只对这一个角色赋值，其余角色对象原样保留；saveDefinitions 的防清空闸门兜底。
+        character.outfits = merged.outfits
+        results.push({
+          character: character.name,
+          ok: merged.added > 0,
+          added: merged.added,
+          skipped: merged.skipped,
+          dropped: parsed.dropped,
+          total: merged.outfits.length,
+          nsfwCount: merged.outfits.filter(o => o && o.nsfw === true).length,
+          sample: merged.outfits.slice(-merged.added).map(o => o.name).filter(Boolean),
+          ...(merged.added ? {} : { raw: text.slice(0, 600) }),
+        })
+      }
+      if (!results.some(r => r.ok)) {
+        sendJson(response, 400, {
+          ok: false,
+          error: '没有产出可用的服装',
+          missing,
+          results,
+        })
+        return
+      }
+      const saved = await saveDefinitions(definitions)
+      if (saved === false) {
+        sendJson(response, 500, { ok: false, error: '保存被拒绝（防清空闸门），未写入' })
+        return
+      }
+      sendJson(response, 200, {
+        ok: true,
+        bulk,
+        preference,
+        ageBand,
+        nsfw,
+        perCharacter: clamped.perCharacter,
+        results,
+        missing,
+      })
+      return
+    } catch (error) {
+      sendJson(response, 500, { ok: false, error: (error?.message ?? String(error)).slice(0, 400) })
+      return
+    }
+  }
+
+  // ═══ 从卡片风格批量生成未成年 NSFW 角色 ═══
+  // 原型取人物库里已有的角色（同世界风格参照），风格取当前卡的设定摘要。
+  // 每个角色都带完整 NSFW 分块（正/背面 × SFW/NSFW 四处），生图时四个视角都能调。
+  if (action === 'generate-characters-minor') {
+    const ageBand = String(body?.ageBand ?? 'child')
+    const age = body?.age ?? ''
+    const preference = String(body?.preference ?? '').slice(0, 500)
+    const wanted = Math.max(1, Math.min(12, Number.isFinite(Number(body?.count)) ? Math.trunc(Number(body?.count)) : 3))
+    try {
+      const sessionId = String(body?.sessionId ?? lastSessionId ?? '')
+      const definitions = await loadDefinitions()
+      const existing = Array.isArray(definitions.characters) ? definitions.characters : []
+
+      let cardName = ''
+      let cardContext = ''
+      let prototypes = []
+
+      // 优先用「指定的卡」：人物库里的「从选定的卡生成」会把卡片文件名传进来。
+      // 读那张卡的设定当风格依据，卡里的角色当原型；读不到再退回当前游玩卡。
+      const wantedCard = String(body?.card ?? '').trim()
+      if (wantedCard) {
+        try {
+          const cardDir = join(TAVERN_DATA, 'resources', 'cards')
+          const fileName = wantedCard.replace(/^cards[\/\\]/, '')
+          const payload = await readJson(join(cardDir, fileName), null)
+          const raw = payload?.raw ?? payload ?? null
+          if (raw) {
+            cardName = String(raw.name ?? fileName.replace(/\.json$/i, ''))
+            cardContext = [raw.description, raw.personality, raw.scenario, raw.mes_example]
+              .map(v => String(v ?? '')).filter(Boolean).join('\n')
+            const fromBook = charactersFromCardBook(raw)
+            if (fromBook.length) prototypes = fromBook.slice(0, 12)
+          }
+        } catch (error) {
+          logger.warn?.('dsh-tavern-image: 读卡失败 ' + wantedCard + ' ' + (error?.message ?? error))
+        }
+      }
+
+      // 没指定卡（或那张卡读不出来）时，退回当前游玩卡 + 人物库已有角色
+      if (!cardContext) {
+        const card = await currentCard(sessionId)
+        const ctx = await cardContextRaw(sessionId)
+        cardName = cardName || String(card?.name ?? '')
+        cardContext = ctx
+          ? [ctx.description, ctx.personality, ctx.scenario].map(v => String(v ?? '')).filter(Boolean).join('\n')
+          : ''
+      }
+      if (!prototypes.length) prototypes = existing.slice(0, 12)
+
+      // 卡里的原型可能跟人物库重名，去掉重复的（不覆盖已有角色）
+      const existingNames = new Set(existing.map(c => String(c?.name ?? '').trim()).filter(Boolean))
+      prototypes = prototypes.filter(p => !existingNames.has(String(p?.name ?? '').trim()))
+
+      const fallback = await backgroundModel(sessionId)
+      const provider = config.plannerProvider || fallback?.provider || ''
+      const model = config.plannerModel || fallback?.model || ''
+      if (!provider || !model) {
+        sendJson(response, 400, { ok: false, error: '没定用哪个模型：Tavern 后台模型是空的，就来插件设置里指定一个' })
+        return
+      }
+
+      const prompt = buildMinorBatchPrompt({
+        prototypes,
+        cardName,
+        cardContext,
+        count: wanted,
+        ageBand,
+        age,
+        preference,
+        existing,
+      })
+
+      let text = ''
+      try {
+        const result = await runPlanner(deps.llm, {
+          provider,
+          model,
+          reasoningEffort: plannerEffortFor(fallback),
+          system: prompt.system,
+          text: prompt.text,
+          temperature: 0.95,
+        })
+        text = String(result?.text ?? '')
+      } catch (error) {
+        sendJson(response, 500, { ok: false, error: '模型调用失败：' + (error?.message ?? String(error)).slice(0, 300) })
+        return
+      }
+
+      const parsed = parseCharacters(text)
+      const cleaned = scrubMinorNegatives(parsed.characters)
+      if (!cleaned.length) {
+        sendJson(response, 400, {
+          ok: false,
+          error: '没有解析出可用角色',
+          dropped: parsed.dropped,
+          raw: text.slice(0, 800),
+        })
+        return
+      }
+
+      const merged = mergeCharacters(existing, cleaned)
+      const saved = await saveDefinitions(Object.assign({}, definitions, { characters: merged.characters }))
+      if (saved === false) {
+        sendJson(response, 500, { ok: false, error: '保存被拒绝（防清空闸门），未写入' })
+        return
+      }
+
+      sendJson(response, 200, {
+        ok: true,
+        ageBand: prompt.ageBand,
+        age: prompt.age,
+        count: cleaned.length,
+        added: merged.report?.added ?? 0,
+        updated: merged.report?.updated ?? 0,
+        skipped: merged.report?.skipped ?? 0,
+        dropped: parsed.dropped,
+        card: cardName,
+        characters: cleaned.map(c => ({
+          name: c.name,
+          nsfwBlocks: ['bodyNSFW', 'bodyNSFWBack', 'lowerNSFW', 'lowerNSFWBack'].filter(k => c.traits?.[k]).length,
+          outfits: (c.outfits || []).length,
+          nsfwOutfits: (c.outfits || []).filter(o => o.nsfw).length,
+        })),
+      })
+      return
+    } catch (error) {
+      sendJson(response, 500, { ok: false, error: (error?.message ?? String(error)).slice(0, 400) })
+      return
+    }
+  }
+
+  if (action === 'definitions') {
         const next = body?.definitions ?? {}
         // ⚠ 防护（2026-10-07）：曾经有一次前端/脚本带着空数组调用这个接口，
         //   把用户辛苦建的角色一次性清光。现在：新数据为空而现有数据非空时直接拒绝。
@@ -3446,6 +3784,245 @@ function createRuntime(ctx, overrides, logger, deps) {
         return
       }
 
+      if (action === 'import-characters') {
+        try {
+          // 扫会话数据，收集世界书正文（模型请求优先，聊天分块兜底）
+          const texts = []
+          const seen = new Set()
+          const reqFiles = []
+          const chatFiles = []
+          const walkJson = async (dir, bucket, depth = 0) => {
+            if (depth > 3) return
+            const names = await readdir(dir).catch(() => [])
+            for (const name of names) {
+              const full = join(dir, name)
+              const info = await stat(full).catch(() => null)
+              if (!info) continue
+              if (info.isDirectory()) { await walkJson(full, bucket, depth + 1); continue }
+              if (!name.endsWith('.json') || name.endsWith('.result.json')) continue
+              if (info.size > 3_000_000) continue
+              bucket.push({ full, mtimeMs: info.mtimeMs })
+            }
+          }
+          await walkJson(join(TAVERN_DATA, 'model-requests'), reqFiles)
+          await walkJson(join(TAVERN_DATA, 'chats'), chatFiles)
+          reqFiles.sort((a, b) => b.mtimeMs - a.mtimeMs)
+          chatFiles.sort((a, b) => b.mtimeMs - a.mtimeMs)
+          let scannedFiles = 0
+          for (const file of [...reqFiles.slice(0, 30), ...chatFiles.slice(0, 10)]) {
+            if (texts.join('').length > 120_000) break
+            scannedFiles += 1
+            const payload = await readJson(file.full, null).catch(() => null)
+            if (!payload) continue
+            const collect = (node, depth = 0) => {
+              if (depth > 8 || !node || typeof node !== 'object') return
+              for (const value of Object.values(node)) {
+                if (typeof value === 'string') {
+                  if (value.length > 400 && (value.includes('常驻世界书') || (value.includes('姓名') && value.includes('年龄')))) {
+                    const key = value.slice(0, 64)
+                    if (!seen.has(key)) { seen.add(key); texts.push(value) }
+                  }
+                } else if (value && typeof value === 'object') {
+                  collect(value, depth + 1)
+                }
+              }
+            }
+            collect(payload)
+          }
+
+          // 角色卡里的 character_book 就是这张卡的世界书。
+          // 先确定"当前卡"，避免把别的卡的人一起导进来。
+          const cardDir = join(TAVERN_DATA, 'resources', 'cards')
+          const cardFiles = await readdir(cardDir).catch(() => [])
+          const loadedCards = []
+          for (const name of cardFiles) {
+            if (!name.endsWith('.json')) continue
+            const payload = await readJson(join(cardDir, name), null).catch(() => null)
+            if (!payload) continue
+            const raw = payload.raw ?? payload
+            const book = raw?.character_book ?? raw?.characterBook ?? raw?.data?.character_book ?? null
+            const entries = Array.isArray(book?.entries) ? book.entries : []
+            const blob = [
+              ...entries.map(e => String(e?.content ?? e?.text ?? '')),
+              String(raw?.description ?? ''), String(raw?.scenario ?? ''),
+              String(raw?.first_mes ?? ''), String(raw?.mes_example ?? ''),
+            ].join('\n')
+            loadedCards.push({ file: name, name: String(raw?.name ?? ''), entries, blob, mtimeMs: (await stat(join(cardDir, name)).catch(() => null))?.mtimeMs ?? 0 })
+          }
+
+          // 当前会话最近一轮的正文，用来判定这张卡
+          const bodySession = String(body?.sessionId ?? '').trim()
+          const sessions = [...lastTurn.keys()]
+          const activeGame = bodySession || sessions[0] || ''
+          const activeTurn = activeGame ? lastTurn.get(activeGame) : 0
+          let turnText = ''
+          if (activeGame && deps.tavern && typeof deps.tavern.getTurn === 'function') {
+            const snap = await deps.tavern.getTurn({ gameId: activeGame, turn: activeTurn }).catch(() => null)
+            const pick = node => {
+              if (!node || typeof node !== 'object') return ''
+              let out = ''
+              for (const v of Object.values(node)) {
+                if (typeof v === 'string') out += v + '\n'
+                else if (v && typeof v === 'object') out += pick(v)
+              }
+              return out
+            }
+            turnText = pick(snap).slice(0, 20000)
+          }
+
+          // 选卡：优先"正文里出现该卡角色名最多"的，其次最新修改的
+          // 会话为空时，用"最近活跃的聊天"来认卡：聊天块里带着卡名和人物
+          let chatBlob = ''
+          let activeChat = ''
+          if (!activeGame || !turnText) {
+            const chatRoot = join(TAVERN_DATA, 'chats')
+            const chatDirs = await readdir(chatRoot).catch(() => [])
+            let newestChat = null
+            for (const name of chatDirs) {
+              const info = await stat(join(chatRoot, name)).catch(() => null)
+              if (info && (!newestChat || info.mtimeMs > newestChat.mtimeMs)) newestChat = { name, mtimeMs: info.mtimeMs }
+            }
+            if (newestChat) {
+              activeChat = newestChat.name
+              const files = []
+              const walk = async (dir, depth = 0) => {
+                if (depth > 2) return
+                const names = await readdir(dir).catch(() => [])
+                for (const n of names) {
+                  const full = join(dir, n)
+                  const info = await stat(full).catch(() => null)
+                  if (!info) continue
+                  if (info.isDirectory()) { await walk(full, depth + 1); continue }
+                  if (n.endsWith('.json') && info.size < 3_000_000) files.push({ full, mtimeMs: info.mtimeMs })
+                }
+              }
+              await walk(join(chatRoot, newestChat.name))
+              files.sort((a, b) => b.mtimeMs - a.mtimeMs)
+              for (const file of files.slice(0, 12)) {
+                const payload = await readJson(file.full, null).catch(() => null)
+                if (!payload) continue
+                try { chatBlob += JSON.stringify(payload) } catch {}
+                if (chatBlob.length > 200000) break
+              }
+            }
+          }
+
+          // 用 Tavern 的卡上下文锁定当前卡（比猜名字可靠）
+          let contextBlob = ''
+          const ctxInfo = { has: false, keys: [], len: 0 }
+          if (activeGame && deps.tavern && typeof deps.tavern.getCardContext === 'function') {
+            const ctx = await deps.tavern.getCardContext({ gameId: activeGame, turn: activeTurn }).catch(() => null)
+            if (ctx) {
+              ctxInfo.has = true
+              ctxInfo.keys = typeof ctx === 'object' ? Object.keys(ctx).slice(0, 12) : []
+              try { contextBlob = JSON.stringify(ctx).slice(0, 200000) } catch { contextBlob = '' }
+              ctxInfo.len = contextBlob.length
+            }
+          }
+
+          const probeBlob = contextBlob || chatBlob
+          const wantCard = String(body?.card ?? '').trim()
+          let chosen = null
+          if (wantCard) {
+            const base = wantCard.split(/[\\/]/).pop() || ''
+            chosen = loadedCards.find(card => card.file === base || card.name === wantCard || card.file === wantCard + '.json') || null
+          }
+          if (!chosen && probeBlob) {
+            // 卡名出现在聊天内容里 → 精确命中；同时用角色名打分兜底
+            const byName = loadedCards.filter(card => {
+              const n = String(card.name || '').trim()
+              return n.length >= 3 && probeBlob.includes(n)
+            }).sort((a, b) => String(b.name).length - String(a.name).length)
+            if (byName.length) chosen = byName[0]
+          }
+          if (!chosen && loadedCards.length) {
+            const scored = loadedCards.map(card => {
+              let score = 0
+              if (probeBlob) {
+                const names = new Set()
+                for (const e of card.entries) {
+                  const m = /姓名\s*[:：]\s*([^\n]{2,12})/.exec(String(e?.content ?? ''))
+                  if (m) names.add(m[1].trim())
+                }
+                for (const n of names) if (probeBlob.includes(n)) score += 1
+              }
+              return { card, score }
+            }).sort((a, b) => (b.score - a.score) || (b.card.mtimeMs - a.card.mtimeMs))
+            chosen = scored[0].score > 0 ? scored[0].card : loadedCards.sort((a, b) => b.mtimeMs - a.mtimeMs)[0]
+          }
+          let cardScanned = 0
+          if (chosen) {
+            cardScanned = 1
+            for (const entry of chosen.entries) {
+              const content = String(entry?.content ?? entry?.text ?? '')
+              if (content.length > 200 && content.includes('姓名')) {
+                const key = content.slice(0, 64)
+                if (!seen.has(key)) { seen.add(key); texts.push(content) }
+              }
+            }
+          }
+
+          const worldbookText = texts.join('\n')
+          let found = charactersFromWorldbookText(worldbookText)
+
+          // 规则抽不到时让规划模型读一遍世界书
+          if (found.length < 3 && worldbookText.trim()) {
+            try {
+              const provider = config.plannerProvider || ''
+              const model = config.plannerModel || ''
+              if (deps.llm && provider && model) {
+                const EXTRACT_SYSTEM = [
+                  '你是角色卡提取器。用户会给你一段中文世界书，里面用「姓名 / 年龄 / 身份关系 / 职业 / 简介」的 YAML 结构描述人物。',
+                  '把里面所有人物都提取成 JSON，只输出 JSON，不要解释。',
+                  '要求：',
+                  '1. 只输出 {"characters":[{"name","age","identity","feature","body","outfit","note"}]}',
+                  '2. 年龄小于 18 岁的角色一律跳过。',
+                  '3. 只保留看得见的外观：发色发型、五官、身高、体型、身材比例、常穿服装；剧情、家庭关系不要写进 feature。',
+                  '4. 体积词改比例词：巨乳→胸型饱满，肥臀→臀部圆润，赘肉→线条紧实。',
+                  '5. 年龄按档位下压：18-22→十八九岁，23-28→二十五六岁，29-34→二十七八岁，35-42→三十出头，43-50→三十五岁左右，50 以上→四十出头。',
+                  '6. feature 60-120 字，body 20-50 字，note 15 字以内。',
+                ].join('\n')
+                const output = await runPlanner(deps.llm, {
+                  provider, model, system: EXTRACT_SYSTEM,
+                  text: worldbookText.slice(0, 24000), temperature: 0.2, maxTokens: 8000,
+                })
+                const rawText = typeof output === 'string' ? output : String(output?.text ?? '')
+                const extracted = charactersFromExtraction(rawText)
+                if (extracted.length) found = [...extracted, ...found]
+              }
+            } catch { /* 模型不可用就用规则结果 */ }
+          }
+
+          const existing = Array.isArray(definitions?.characters) ? definitions.characters : []
+          const merged = mergeCharacters(existing, found)
+          definitions = Object.assign({}, definitions, { characters: merged.characters })
+          await saveDefinitions(definitions)
+          sendJson(response, 200, {
+            ok: true,
+            added: merged.report.added,
+            updated: merged.report.updated,
+            skipped: merged.report.skipped,
+            scanned: scannedFiles,
+            cards: cardScanned,
+            cardName: chosen ? (chosen.name || chosen.file) : '',
+            session: activeGame,
+            turn: activeTurn,
+            turnTextLength: turnText.length,
+            ctxInfo,
+            activeChat,
+            chatBlobLength: chatBlob.length,
+            candidates: loadedCards.slice(0, 5).map(card => ({ name: card.name || card.file, entries: card.entries.length })),
+
+            texts: texts.length,
+            state: await consoleState(),
+          })
+          return
+        } catch (error) {
+          sendJson(response, 200, { ok: false, error: '导入失败：' + String(error?.message ?? error).slice(0, 200) })
+          return
+        }
+      }
+
       if (action === 'img') {
         // 给卡里的显示正则用：/img?key=<jobId 前 8 位>
         try {
@@ -3467,10 +4044,14 @@ function createRuntime(ctx, overrides, logger, deps) {
         try {
           const dir = join(TAVERN_DATA, 'resources', 'cards')
           const names = await readdir(dir).catch(() => [])
-          const cards = names
-            .filter(name => /\.json$/i.test(name))
-            .map(name => ({ path: 'cards/' + name, name: name.replace(/\.json$/i, '') }))
-            .sort((a, b) => a.name.localeCompare(b.name, 'zh'))
+          const cards = []
+          for (const name of names.filter(n => /\.json$/i.test(n))) {
+            const payload = await readJson(join(dir, name), null).catch(() => null)
+            const raw = payload?.raw ?? payload ?? null
+            const title = String(raw?.name ?? '').trim()
+            cards.push({ path: 'cards/' + name, name: name.replace(/\.json$/i, ''), title: title || name.replace(/\.json$/i, '') })
+          }
+          cards.sort((a, b) => a.title.localeCompare(b.title, 'zh'))
           sendJson(response, 200, { ok: true, cards })
         } catch (error) {
           sendJson(response, 400, { ok: false, error: String(error?.message ?? error) })
@@ -3747,6 +4328,53 @@ function comfyHeaders(config) {
   return {}
 }
 
+const PRESET_SAMPLERS = new Set(['k_euler_ancestral', 'k_euler', 'k_dpmpp_2m', 'k_dpmpp_2s_ancestral', 'k_dpmpp_sde', 'k_dpmpp_2m_sde', 'ddim_v3', 'k_lms', 'k_heun', 'k_dpm_2', 'k_dpm_2_ancestral'])
+const PRESET_NOISE_SCHEDULES = new Set(['native', 'karras', 'exponential', 'polyexponential'])
+
+/** 画风预设自带的生成参数：只保留认识的键并夹到合法范围；没写的键表示跟随渠道。 */
+function normalizePresetParams(raw) {
+  if (!raw || typeof raw !== 'object') return {}
+  const out = {}
+  const number = (key, min, max, integer) => {
+    const source = raw[key]
+    if (source === undefined || source === null || source === '') return
+    const value = Number(source)
+    if (!Number.isFinite(value)) return
+    out[key] = Math.max(min, Math.min(max, integer ? Math.round(value) : value))
+  }
+  number('steps', 1, 100, true)
+  number('cfg', 0, 30)
+  number('cfgRescale', 0, 1)
+  number('uncondScale', 0, 10)
+  number('skipCfgAboveSigma', 0, 1000)
+  number('ucPreset', 0, 4, true)
+  if (typeof raw.sampler === 'string' && PRESET_SAMPLERS.has(raw.sampler)) out.sampler = raw.sampler
+  if (typeof raw.noiseSchedule === 'string' && PRESET_NOISE_SCHEDULES.has(raw.noiseSchedule)) out.noiseSchedule = raw.noiseSchedule
+  if (typeof raw.qualityToggle === 'boolean') out.qualityToggle = raw.qualityToggle
+  if (typeof raw.varietyBoost === 'boolean') out.varietyBoost = raw.varietyBoost
+  return out
+}
+
+/** 当前选中的画风预设里存的生成参数（没选或没设就是空对象）。 */
+function activePresetParams(config) {
+  const id = String(config?.activePreset ?? config?.activeArtistSet ?? '')
+  if (!id) return {}
+  const presets = Array.isArray(config?.stylePresets) ? config.stylePresets : []
+  const preset = presets.find(item => item && String(item.id) === id && item.enabled !== false)
+  const params = preset?.params
+  return params && typeof params === 'object' ? params : {}
+}
+
+/** 生图渠道 + 当前画风预设的参数覆盖；预设没写的键保持渠道原值。 */
+function channelWithPresetParams(config) {
+  const channel = activeChannel(config)
+  if (!channel) return channel
+  const params = activePresetParams(config)
+  if (channel.provider !== 'novelai' || !Object.keys(params).length) return channel
+  channel.options = { ...(channel.options ?? {}), ...params }
+  return channel
+}
+
 /**
  * 取当前启用的画师串。多套里选一套（activeArtistSet 指向它），
  * 没选就用默认的 styleArtists；每套自己带 position（放最前 / 放最后）。
@@ -3854,6 +4482,8 @@ function normalizeCharacter(raw, index) {
     formCues: Array.isArray(raw?.formCues) ? raw.formCues.join(', ') : String(raw?.formCues ?? ''),
     continuity: String(raw?.continuity ?? ''),
     note: String(raw?.note ?? ''),
+    // 分组：只用于人物库列表的分组排序和搜索，不参与关键词触发、宏解析或提示词。
+    group: String(raw?.group ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40),
     inject: raw?.inject && typeof raw.inject === 'object' ? { ...raw.inject } : {},
     // 绑定到哪些卡（空 = 所有卡都能用）；可复用的通用服装 id
     cards: Array.isArray(raw?.cards) ? raw.cards.map(String) : splitTags(raw?.cards),

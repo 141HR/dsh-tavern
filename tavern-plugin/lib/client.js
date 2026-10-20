@@ -14220,12 +14220,9 @@ function bindTavernFontZoom(node, win) {
 						characterImageUrl: castPath ? "/api/dsh-tavern/card-image?path=" + encodeURIComponent(castPath) : "" } : null;
 				}, [props.sessionId, castLines, castCharacters, castName, castPath]);
 				const sceneImagesEnabled = Boolean(liveState.view && liveState.view.releaseCapabilities && liveState.view.releaseCapabilities.sceneImages);
-				// 「能否查看」只看这一轮是否已结算、是否在游玩视图，与发行版能力无关：
-			// 生图被插件接管或本版未开放时，原生生成器为 null，但历史插图仍在会话数据里，必须照常显示。
-			const sceneViewable = settled && playView;
-			// 「能否生成/重画」才依赖能力开关；被接管时为 false，所有生成入口据此隐藏。
-			const sceneGeneratable = sceneImagesEnabled && sceneViewable;
-			const sceneShown = sceneViewable;
+				// Old pictures show whenever the turn is settled; only drawing new ones needs the capability.
+				const sceneShown = settled && playView;
+				const sceneGeneratable = sceneImagesEnabled && sceneShown;
 				const sceneRecord = useSceneImageRecord(sceneShown ? props.sessionId : null, storyTurn);
 				const sceneAnchor = (function () {
 					const versions = sceneRecord && sceneRecord.versions || [];
@@ -16316,7 +16313,10 @@ function bindTavernFontZoom(node, win) {
 			const [notice, setNotice] = React.useState("");
 			const load = React.useCallback(async function () {
 				setBusy(true);
-				try { setItems((await rpc("listSceneImageHistory", { sessionId: props.gallerySessionId }, props.gallerySessionId)).items); }
+				try {
+					const result = await rpc("listSceneImageHistory", { sessionId: props.gallerySessionId }, props.gallerySessionId);
+					setItems({ native: result.items || [], plugin: result.pluginItems || [] });
+				}
 				catch (e) { setNotice(String(e.message || e)); }
 				finally { setBusy(false); }
 			}, [props.gallerySessionId]);
@@ -16324,16 +16324,25 @@ function bindTavernFontZoom(node, win) {
 				setItems(null); setPicked({}); setPicking(false); void load();
 				function changed() { void load(); }
 				window.addEventListener("dsh-tavern-image-changed", changed);
-				return function () { window.removeEventListener("dsh-tavern-image-changed", changed); };
+				// A plugin attached or removed a picture.
+				const stopPlugin = props.gallerySessionId ? tavernPluginMediaIndex.subscribe(props.gallerySessionId, changed) : function () {};
+				return function () { window.removeEventListener("dsh-tavern-image-changed", changed); stopPlugin(); };
 			}, [load]);
 			const rows = [];
-			(items || []).forEach(function (item) {
+			// Tavern's own pictures (old saves) and pictures plugins attached share one timeline.
+			(items ? items.native : []).forEach(function (item) {
 				let row = rows.find(function (entry) { return entry.turn === item.turn; });
 				if (!row) rows.push(row = { turn: item.turn, shots: [] });
 				item.versions.forEach(function (version) {
 					row.shots.push({ item: item, version: version, id: item.chatId + "/" + item.key + "/" + version.id,
 						url: "/api/dsh-tavern/scene-image-stored?" + new URLSearchParams({ chatId: item.chatId, key: item.key, versionId: version.id }).toString() });
 				});
+			});
+			(items ? items.plugin : []).forEach(function (item) {
+				let row = rows.find(function (entry) { return entry.turn === item.turn; });
+				if (!row) rows.push(row = { turn: item.turn, shots: [] });
+				row.shots.push({ item: item, plugin: true, version: { id: item.id, description: item.caption, createdAt: item.createdAt }, id: "plugin/" + item.id,
+					url: "/api/dsh-tavern/plugin-media?" + new URLSearchParams({ sessionId: props.gallerySessionId, id: item.id, v: String(item.updatedAt || "") }).toString() });
 			});
 			rows.sort(function (a, b) { return a.turn - b.turn; });
 			rows.forEach(function (row) { row.shots.sort(function (a, b) { return a.version.createdAt - b.version.createdAt; }); });
@@ -16345,7 +16354,10 @@ function bindTavernFontZoom(node, win) {
 				if (!list.length || !await askConfirm(list.length === 1 ? "删除第 " + list[0].item.turn + " 轮的这张图片？只移除图片，不影响正文与存档。" : "删除选中的 " + list.length + " 张图片？只移除图片，不影响正文与存档。")) return;
 				setBusy(true); setNotice("");
 				try {
-					const results = (await rpc("removeSceneImageHistory", { items: list.map(function (shot) { return { chatId: shot.item.chatId, key: shot.item.key, versionId: shot.version.id }; }) }, props.gallerySessionId)).results;
+					const results = (await rpc("removeSceneImageHistory", {
+						items: list.filter(function (shot) { return !shot.plugin; }).map(function (shot) { return { chatId: shot.item.chatId, key: shot.item.key, versionId: shot.version.id }; }),
+						pluginItems: list.filter(function (shot) { return shot.plugin; }).map(function (shot) { return shot.item.id; })
+					}, props.gallerySessionId)).results;
 					const failed = results.filter(function (row) { return !row.ok; });
 					if (failed.length || list.length > 1) setNotice("已删除 " + (results.length - failed.length) + " 张" + (failed.length ? "，" + failed.length + " 张失败：" + failed[0].error : ""));
 					setPicked({}); setPicking(false);

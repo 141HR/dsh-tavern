@@ -3276,6 +3276,36 @@ export async function apply(ctx) {
     const items = (await pluginMedia.list({ chatId: game.chatId, turn: Number(turn) })).filter(item => item.key === key)
     return { key, items: items.map(item => publicPluginMedia(item)) }
   }
+  // The gallery also shows pictures plugins attached (dsh-tavern-image draws new ones there),
+  // limited to the current text version of each turn, the same rule the story view uses.
+  async function pluginGalleryItems(sessionId) {
+    const game = await pluginTurns.resolveGame(str(sessionId))
+    if (!game) return []
+    const keys = new Map(), items = []
+    for (const item of await pluginMedia.list({ chatId: game.chatId })) {
+      if (item.status !== 'ready' || !str(item.attachment?.mediaType).startsWith('image/')) continue
+      if (!keys.has(item.turn)) keys.set(item.turn, await pluginTurns.currentKey(game.sessionId, item.turn))
+      if (keys.get(item.turn) !== item.key) continue
+      items.push({ id: item.id, turn: Number(item.turn) || 0, caption: str(item.caption), createdAt: Number(item.createdAt) || 0, updatedAt: Number(item.updatedAt) || 0 })
+    }
+    return items
+  }
+  async function removePluginGalleryItems(sessionId, ids) {
+    if (!Array.isArray(ids) || !ids.length) return []
+    if (ids.length > 500) throw new Error('一次最多删除 500 张')
+    const game = await pluginTurns.resolveGame(str(sessionId))
+    const results = []
+    for (const id of ids) {
+      try {
+        const item = game ? await pluginMedia.find(game.chatId, str(id)) : null
+        if (!item) throw new Error('图片不存在或已删除')
+        await pluginMedia.remove({ chatId: game.chatId, owner: item.owner, itemId: item.id })
+        results.push({ versionId: str(id), ok: true })
+      } catch (error) { results.push({ versionId: str(id), ok: false, error: str(error?.message || error) }) }
+    }
+    if (game && results.some(row => row.ok)) sessionSignals.publish(game.sessionId, { kind: 'plugin-media', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
+    return results
+  }
   function enabledSceneIllustrations() {
     return sceneIllustrations
   }
@@ -4851,9 +4881,12 @@ export async function apply(ctx) {
         const illustrations = enabledSceneIllustrations()
         if (!args?.sessionId) return { items: await illustrations.history() }
         const chat = await backgroundConfigForSession(str(args.sessionId))
-        return { items: chat?.id ? await illustrations.history(chat.id) : [] }
+        return { items: chat?.id ? await illustrations.history(chat.id) : [], pluginItems: await pluginGalleryItems(args.sessionId) }
       }
-      case 'removeSceneImageHistory': return { results: await enabledSceneIllustrations().removeStoredImages(args && args.items) }
+      case 'removeSceneImageHistory': {
+        const results = await enabledSceneIllustrations().removeStoredImages(args && args.items || [])
+        return { results: results.concat(await removePluginGalleryItems(args && args.sessionId, args && args.pluginItems)) }
+      }
       case 'removeSceneImage': return { illustration: await enabledSceneIllustrations().removeImage(args.sessionId, args.turn, args.key, args.versionId) }
       case 'setSceneImageReference': return { illustration: await enabledSceneIllustrations().setReference(args.sessionId, args.turn, args.key, args.versionId, args.consent, args.enabled !== false, args.personId) }
       case 'updateTavernSettings': return { settings: await updateTavernSettings(args && args.patch) }

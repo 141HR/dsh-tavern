@@ -1,5 +1,6 @@
 {
   "name": "dsh-tavern-comfy",
-  "version": "2.8.0",
-  "bundledAt": "2026-10-19T11:27:57.604Z"
+  "version": "2.9.0",
+  "note": "由 bin/bundled-scene-image-plugin.mjs 在 Tavern 首装时安装到 data/plugins/dsh-tavern-image/。此文件本身不安装。",
+  "builtFrom": "weixinlll/dsh-tavern-image"
 }

@@ -2281,6 +2281,25 @@ function versionsOf(jobId) {
       const [peopleActiveId, setPeopleActiveId] = React.useState('')
       const [peopleEditorOpen, setPeopleEditorOpen] = React.useState(true)
       const [peoplePicked, setPeoplePicked] = React.useState({})
+      // 从卡导入：卡列表 + 当前选中的卡
+      const [importCards, setImportCards] = React.useState([])
+      const [importCard, setImportCard] = React.useState('')
+      React.useEffect(() => {
+        let alive = true
+        ;(async () => {
+          try {
+            const r = await post('/cards', {})
+            if (!alive) return
+            const list = (r?.cards || []).map(item => ({
+              path: item.path,
+              label: item.title || item.name,
+            }))
+            setImportCards(list)
+            setImportCard(current => current || (list[0]?.path ?? ''))
+          } catch {}
+        })()
+        return () => { alive = false }
+      }, [])
       const [peopleBatchOpen, setPeopleBatchOpen] = React.useState(false)
       const [peopleBatchField, setPeopleBatchField] = React.useState('feature')
       const [peopleBatchMode, setPeopleBatchMode] = React.useState('replace')
@@ -2320,6 +2339,10 @@ function versionsOf(jobId) {
       const [galleryPicked, setGalleryPicked] = React.useState({})
       // 世界书：正在编辑的条目（-1 = 没在编辑）/ 导入面板 / 粘贴内容
       const [wbEditing, setWbEditing] = React.useState(-1)
+      // 世界书分两本（生图规则 / 角色与服装库），编辑必须落在选中的那一本上
+      const [wbBook, setWbBook] = React.useState('main')
+      // 条目默认折叠：只显示标题行，点标题展开只读预览，点「编辑」才进编辑态
+      const [wbOpen, setWbOpen] = React.useState({})
       const [wbImportOpen, setWbImportOpen] = React.useState(false)
       const [wbPaste, setWbPaste] = React.useState('')
       const [wbNote, setWbNote] = React.useState('')
@@ -2701,6 +2724,71 @@ function versionsOf(jobId) {
           label(caption), h('input', { 'aria-label': caption, type, value: String(localFields[fieldName] ?? ''), placeholder: placeholder || '', style: full(), onChange: e => editChannel({ [fieldName]: e.target.value }) }))
         const optionField = (key, caption, placeholder, type = 'text') => h('div', { style: { marginBottom: '10px' } },
           label(caption), h('input', { 'aria-label': caption, type, value: String((localFields.options || {})[key] ?? ''), placeholder: placeholder || '', style: full(), onChange: e => updateOption(key, type === 'number' ? Number(e.target.value) : e.target.value) }))
+        // NovelAI 常用模型 / 采样器 / 噪点表（下拉候选；不在表里的旧值会作为「当前值」保留）
+        const NAI_MODEL_OPTIONS = [
+          ['nai-diffusion-4-5-full', 'V4.5 Full（默认）'],
+          ['nai-diffusion-4-5-curated', 'V4.5 Curated'],
+          ['nai-diffusion-4-5-full-inpainting', 'V4.5 Full · 重绘'],
+          ['nai-diffusion-4-5-curated-inpainting', 'V4.5 Curated · 重绘'],
+          ['nai-diffusion-4-full', 'V4 Full'],
+          ['nai-diffusion-4-curated-preview', 'V4 Curated'],
+          ['nai-diffusion-4-full-inpainting', 'V4 Full · 重绘'],
+          ['nai-diffusion-4-curated-inpainting', 'V4 Curated · 重绘'],
+          ['nai-diffusion-3-full', 'V3 Full'],
+          ['nai-diffusion-3-curated', 'V3 Curated'],
+          ['nai-diffusion-3', 'V3 Anime'],
+          ['nai-diffusion-3-inpainting', 'V3 · 重绘'],
+          ['nai-diffusion-furry-3', 'V3 Furry'],
+          ['nai-diffusion-furry-3-inpainting', 'V3 Furry · 重绘'],
+        ]
+        const NAI_SAMPLER_OPTIONS = [
+          ['k_euler_ancestral', 'Euler Ancestral（常用）'],
+          ['k_euler', 'Euler'],
+          ['k_dpmpp_2m', 'DPM++ 2M'],
+          ['k_dpmpp_2s_ancestral', 'DPM++ 2S Ancestral'],
+          ['k_dpmpp_sde', 'DPM++ SDE'],
+          ['k_dpmpp_2m_sde', 'DPM++ 2M SDE'],
+          ['ddim_v3', 'DDIM'],
+          ['k_lms', 'LMS（V3 及以前）'],
+          ['k_heun', 'Heun（V3 及以前）'],
+          ['k_dpm_2', 'DPM2（V3 及以前）'],
+          ['k_dpm_2_ancestral', 'DPM2 Ancestral（V3 及以前）'],
+        ]
+        const NAI_NOISE_OPTIONS = [
+          ['karras', 'Karras（常用）'],
+          ['native', 'Native'],
+          ['exponential', 'Exponential'],
+          ['polyexponential', 'Polyexponential'],
+        ]
+        const storedOption = key => String((localFields.options || {})[key] ?? '')
+        const selectOptionField = (key, caption, items, fallback) => {
+          const stored = storedOption(key)
+          const current = stored || fallback
+          const known = items.some(([value]) => value === current)
+          const list = known ? items : [[current, current + '（当前值，不在列表里）'], ...items]
+          return h('div', { style: { marginBottom: '10px' } }, label(caption),
+            h('select', { 'aria-label': caption, value: current, style: full(), onChange: e => updateOption(key, e.target.value) },
+              list.map(([value, text]) => h('option', { key: value, value, style: optStyle }, text))))
+        }
+        // 宽 / 高分开填（NovelAI）：两个都填才覆盖，留空回落到旧的 size 文本或规划给的分辨率
+        const legacySize = (() => {
+          const m = String((localFields.options || {}).size ?? '').match(/^(\d{2,5})\s*[x×*]\s*(\d{2,5})$/i)
+          return m ? { width: m[1], height: m[2] } : { width: '', height: '' }
+        })()
+        const sizeValue = (key, fallback) => {
+          const raw = (localFields.options || {})[key]
+          const text = raw === undefined || raw === null ? '' : String(raw).trim()
+          return text && Number(text) > 0 ? text : String(fallback ?? '')
+        }
+        const setSizeValue = (key, value) => {
+          const next = Object.assign({}, localFields.options || {})
+          next.sizeWidth = sizeValue('sizeWidth', legacySize.width)
+          next.sizeHeight = sizeValue('sizeHeight', legacySize.height)
+          next[key] = String(value)
+          editChannel({ options: next })
+        }
+        const sizeField = (key, caption, placeholder, fallback) => h('div', { style: { marginBottom: '10px' } }, label(caption),
+          h('input', { 'aria-label': caption, type: 'number', min: '64', max: '8192', step: '64', value: sizeValue(key, fallback), placeholder, style: full(), onChange: e => setSizeValue(key, e.target.value) }))
         const modelSuggestions = channel ? [...new Set([
           providers.find(item => item.id === backend)?.model,
           ...(channelTestStatuses[channel.id]?.models || []),
@@ -2708,6 +2796,17 @@ function versionsOf(jobId) {
         const modelInput = channel ? h('div', { style: { marginBottom: '10px' } },
           label('模型'), h('input', { 'aria-label': '模型', list: 'image-models-' + channel.id, type: 'text', value: String(localFields.model ?? ''), placeholder: '选择建议模型或填写自定义模型 ID', style: full(), onChange: e => editChannel({ model: e.target.value }) }),
           modelSuggestions.length ? h('datalist', { id: 'image-models-' + channel.id }, modelSuggestions.map(model => h('option', { key: model, value: model }))) : null) : null
+        // NovelAI：模型用下拉选，不在候选表里的自定义 ID 仍可手填
+        const naiModelField = channel ? (() => {
+          const current = String(localFields.model ?? '')
+          const known = NAI_MODEL_OPTIONS.some(([value]) => value === current)
+          return h('div', { style: { marginBottom: '10px' } },
+            label('模型'),
+            h('select', { 'aria-label': '模型', value: known ? current : '__custom__', style: full(), onChange: e => editChannel({ model: e.target.value === '__custom__' ? '' : e.target.value }) },
+              NAI_MODEL_OPTIONS.map(([value, text]) => h('option', { key: value, value, style: optStyle }, text)),
+              h('option', { key: '__custom__', value: '__custom__', style: optStyle }, '自定义 / 未列出的模型 ID…')),
+            known ? null : h('input', { 'aria-label': '自定义模型 ID', type: 'text', value: current, placeholder: '填 NovelAI 模型 ID，例如 nai-diffusion-4-5-full；留空 = 用默认 V4.5 Full', style: Object.assign({}, full(), { marginTop: '6px' }), onChange: e => editChannel({ model: e.target.value }) }))
+        })() : null
         const generatePathPlaceholder = ({ novelai: '/ai/generate-image', openai: '/images/generations', 'gemini-chat': '/chat/completions', grok: '/images/generations', seedream: '/images/generations', qwen: '/services/aigc/multimodal-generation/generation', sdwebui: '/sdapi/v1/txt2img' })[backend]
         const authMode = String(config.comfyAuthMode ?? 'none')
         const saveComfy = async () => {
@@ -2787,7 +2886,7 @@ function versionsOf(jobId) {
             ),
             field('name', '渠道名称', '例如：个人 API / 公司中转'),
             field('baseUrl', 'API 根地址', 'https://api.example.com/v1'),
-            modelInput,
+            backend === 'novelai' ? naiModelField : modelInput,
             h('div', { style: { marginBottom: '10px' } }, label('鉴权方式'), h('select', { 'aria-label': '鉴权方式', value: localFields.authMode || 'bearer', style: full(), onChange: e => editChannel({ authMode: e.target.value }) },
               h('option', { value: 'bearer', style: optStyle }, 'Bearer API Key'), h('option', { value: 'none', style: optStyle }, '无需鉴权'), h('option', { value: 'basic', style: optStyle }, 'Basic 用户名 / 密码'))),
             localFields.authMode === 'basic' ? h('div', null,
@@ -2799,11 +2898,40 @@ function versionsOf(jobId) {
               label('API Key', channel.hasApiKey ? '已保存；留空保留原 Key' : ''),
               h('input', { 'aria-label': '渠道 API Key', type: 'password', value: channelDraft.apiKey || '', placeholder: channel.hasApiKey ? '已保存，留空可保留' : '粘贴 API Key', style: full(), onChange: e => { setChannelSecretDrafts(current => Object.assign({}, current, { [channel.id]: Object.assign({}, current[channel.id], { apiKey: e.target.value, clearApiKey: false }) })); markSecretEdited(channel.id) } }),
               channel.hasApiKey ? h('button', { style: buttonStyle, onClick: () => { setChannelSecretDrafts(current => Object.assign({}, current, { [channel.id]: Object.assign({}, current[channel.id], { clearApiKey: true, apiKey: '' }) })); markSecretEdited(channel.id) } }, '清除已保存 Key') : null) : null,
-            ['novelai', 'sdwebui'].includes(backend) ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: '8px' } },
-              optionField('steps', '步数', backend === 'novelai' ? '28' : '20', 'number'), optionField('cfg', 'CFG', backend === 'novelai' ? '5' : '7', 'number'), optionField('sampler', '采样器', backend === 'novelai' ? 'k_euler_ancestral' : 'Euler a')) : null,
-            backend === 'novelai' ? optionField('noiseSchedule', 'Noise schedule', 'karras') : null,
+            backend === 'sdwebui' ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: '8px' } },
+              optionField('steps', '步数', '20', 'number'), optionField('cfg', 'CFG', '7', 'number'), optionField('sampler', '采样器', 'Euler a')) : null,
+            backend === 'novelai' ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '10px 12px' } },
+              selectOptionField('sampler', '采样器', NAI_SAMPLER_OPTIONS, 'k_euler_ancestral'),
+              selectOptionField('noiseSchedule', '噪点表（Noise Schedule）', NAI_NOISE_OPTIONS, 'karras')) : null,
+            backend === 'novelai' ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(128px,1fr))', gap: '10px 12px' } },
+              optionField('steps', '步数', '28', 'number'),
+              optionField('cfg', 'CFG', '5', 'number'),
+              h('div', { style: { marginBottom: '10px' } }, label('CFG Rescale'), h('input', { 'aria-label': 'CFG Rescale', type: 'number', step: '0.01', min: '0', max: '1', value: String((localFields.options || {}).cfgRescale ?? 0), placeholder: '0 ~ 1，0 = 关', style: full(), onChange: e => updateOption('cfgRescale', Number(e.target.value)) })),
+              h('div', { style: { marginBottom: '10px' } }, label('Uncond Scale'), h('input', { 'aria-label': 'Uncond Scale', type: 'number', step: '0.1', min: '0', value: String((localFields.options || {}).uncondScale ?? 0), placeholder: '0 = 不改动', style: full(), onChange: e => updateOption('uncondScale', Number(e.target.value)) })),
+              h('div', { style: { marginBottom: '10px' } }, label('Skip CFG Sigma'), h('input', { 'aria-label': 'Skip CFG Above Sigma', type: 'number', step: '0.1', min: '0', value: String((localFields.options || {}).skipCfgAboveSigma ?? 0), placeholder: '0 = 不改动，常用 19', style: full(), onChange: e => updateOption('skipCfgAboveSigma', Number(e.target.value)) }))) : null,
+            backend === 'novelai' ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '10px 12px' } },
+              h('div', { style: { marginBottom: '10px' } }, label('官方负面预设（ucPreset）'),
+                h('select', { 'aria-label': '官方负面预设', value: String((localFields.options || {}).ucPreset ?? 3), style: full(), onChange: e => updateOption('ucPreset', Number(e.target.value)) },
+                  h('option', { value: '0', style: optStyle }, '0 · 强（Heavy）'),
+                  h('option', { value: '1', style: optStyle }, '1 · 弱（Light）'),
+                  h('option', { value: '2', style: optStyle }, '2 · Furry 侧重'),
+                  h('option', { value: '3', style: optStyle }, '3 · Human 侧重（默认）'),
+                  h('option', { value: '4', style: optStyle }, '4 · 不指定'))),
+              h('div', { style: { marginBottom: '10px' } }, label('官方质量词（qualityToggle）'),
+                h('select', { 'aria-label': '官方质量词', value: String((localFields.options || {}).qualityToggle ?? true), style: full(), onChange: e => updateOption('qualityToggle', e.target.value === 'true') },
+                  h('option', { value: 'true', style: optStyle }, '开（默认）'),
+                  h('option', { value: 'false', style: optStyle }, '关'))),
+              h('div', { style: { marginBottom: '10px' } }, label('多样性（variety_boost）'),
+                h('select', { 'aria-label': '多样性', value: String((localFields.options || {}).varietyBoost ?? false), style: full(), onChange: e => updateOption('varietyBoost', e.target.value === 'true') },
+                  h('option', { value: 'false', style: optStyle }, '关（默认）'),
+                  h('option', { value: 'true', style: optStyle }, '开（Variety Boost）')))) : null,
             backend === 'openai' ? optionField('quality', '质量', 'auto') : null,
-            ['openai', 'novelai', 'sdwebui', 'qwen'].includes(backend) ? optionField('size', '尺寸覆盖（可选）', '例如：1024x1536') : null,
+            backend === 'novelai' ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: '10px 12px' } },
+              sizeField('sizeWidth', '宽（像素）', '如 832', legacySize.width),
+              sizeField('sizeHeight', '高（像素）', '如 1216', legacySize.height),
+              (sizeValue('sizeWidth', legacySize.width) && sizeValue('sizeHeight', legacySize.height)) ? null
+                : h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginBottom: '10px', alignSelf: 'end', paddingBottom: '8px' } }, '宽高都填才覆盖；留空跟随规划给的分辨率')) : null,
+            ['openai', 'sdwebui', 'qwen'].includes(backend) ? optionField('size', '尺寸覆盖（可选）', '例如：1024x1536') : null,
             backend === 'seedream' ? optionField('size', '输出尺寸（可选）', '1K、1.5K、2K 或 2048x2048') : null,
             backend === 'gemini' ? optionField('imageSize', '输出分辨率（可选）', '1K、2K 或 4K') : null,
             ['gemini', 'novelai', 'sdwebui', 'qwen'].includes(backend) ? optionField('aspectRatio', '画面比例覆盖（可选）', '例如：2:3') : null,
@@ -3029,15 +3157,24 @@ function versionsOf(jobId) {
         const picked = characters.filter(character => peoplePicked[character.id])
         const search = peopleSearch.trim().toLocaleLowerCase()
         const filteredCharacters = (search
-          ? characters.filter(character => [character.name, character.match].some(value => String(value || '').toLocaleLowerCase().includes(search)))
-          : characters).slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'))
+          ? characters.filter(character => [character.name, character.match, character.group].some(value => String(value || '').toLocaleLowerCase().includes(search)))
+          : characters).slice().sort((a, b) => {
+            const ga = String(a.group || '').trim()
+            const gb = String(b.group || '').trim()
+            if (ga !== gb) {
+              if (!ga) return 1
+              if (!gb) return -1
+              return ga.localeCompare(gb, 'zh-CN')
+            }
+            return String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN')
+          })
         const activeCharacter = filteredCharacters.find(character => character.id === peopleActiveId) || filteredCharacters[0] || null
         const activeIndex = activeCharacter ? characters.findIndex(character => character.id === activeCharacter.id) : -1
         const batchFields = [
           ['feature', '角色特征'], ['face', '五官外貌'], ['faceBack', '五官外貌背面'],
           ['bodySFW', '上半身SFW'], ['bodySFWBack', '上半身SFW背面'], ['lowerSFW', '下半身SFW'], ['lowerSFWBack', '下半身SFW背面'],
           ['bodyNSFW', '上半身NSFW'], ['bodyNSFWBack', '上半身NSFW背面'], ['lowerNSFW', '下半身NSFW'], ['lowerNSFWBack', '下半身NSFW背面'],
-          ['negative', '负面'], ['match', '英文触发名'], ['continuity', '状态与变化'], ['note', '备注'], ['enabled', '启用状态'], ['cards', '绑定卡片'],
+          ['negative', '负面'], ['match', '英文触发名'], ['group', '分组'], ['continuity', '状态与变化'], ['note', '备注'], ['enabled', '启用状态'], ['cards', '绑定卡片'],
         ]
 
         function applyBatch() {
@@ -3050,7 +3187,7 @@ function versionsOf(jobId) {
             if (!selected.has(character.id)) return character
             if (peopleBatchField === 'enabled') return Object.assign({}, character, { enabled: peopleBatchValue !== 'false' })
             if (peopleBatchField === 'cards') return Object.assign({}, character, { cards: peopleBatchMode === 'append' ? [...new Set([...(character.cards || []), ...peopleBatchCards])] : peopleBatchCards.slice() })
-            const topLevel = ['match', 'continuity', 'note'].includes(peopleBatchField)
+            const topLevel = ['match', 'group', 'continuity', 'note'].includes(peopleBatchField)
             const previous = String((topLevel ? character[peopleBatchField] : character.traits?.[peopleBatchField]) || '')
             const value = peopleBatchMode === 'append' && previous.trim()
               ? previous + (['continuity', 'note'].includes(peopleBatchField) ? '\n' : ', ') + peopleBatchValue.trim()
@@ -3101,6 +3238,7 @@ function versionsOf(jobId) {
                 : h('textarea', { 'aria-label': '批量编辑内容', value: peopleBatchValue, placeholder: '填写要应用到所选角色的内容', rows: 3, style: Object.assign({}, S.input, { width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }), onChange: event => setPeopleBatchValue(event.target.value) }),
             h('div', { style: S.row },
               h('button', { style: buttonStyle, disabled: !picked.length, onClick: applyBatch }, '应用到所选角色'),
+              h('button', { style: Object.assign({}, buttonStyle, { borderColor: 'rgba(242,104,107,.65)', color: '#f2686b' }), disabled: !picked.length, onClick: deletePicked }, '删除所选'),
               h('span', { style: { fontSize: '12px', color: '#9aa3b2' } }, peopleBatchField === 'cards' && peopleBatchMode === 'replace' && !peopleBatchCards.length ? '未选卡片时清除绑定，所有卡片都能使用' : peopleBatchMode === 'replace' && peopleBatchField !== 'enabled' ? '覆盖会替换原内容；文本留空会清空该字段' : '应用后点保存即可写入人物库'),
             ),
             peopleBatchNote ? h('div', { role: 'status', style: { fontSize: '12px', color: '#9aa3b2' } }, peopleBatchNote) : null,
@@ -3110,7 +3248,7 @@ function versionsOf(jobId) {
         function blankCharacter() {
           const traits = {}
           for (const key of ["feature","face","faceBack","bodySFW","bodySFWBack","lowerSFW","lowerSFWBack","bodyNSFW","bodyNSFWBack","lowerNSFW","lowerNSFWBack","negative"]) traits[key] = ''
-          return { id: 'c' + Date.now() + Math.random().toString(36).slice(2, 6), name: '', match: '', formCues: '', enabled: true, continuity: '', note: '', inject: {}, cards: [], outfitRefs: [], traits,
+          return { id: 'c' + Date.now() + Math.random().toString(36).slice(2, 6), name: '', match: '', group: '', formCues: '', enabled: true, continuity: '', note: '', inject: {}, cards: [], outfitRefs: [], traits,
             outfits: [{ id: 'o' + Date.now(), name: '常服', upper: '', lower: '', shoes: '', accessory: '', full: '', back: '', negative: '', enabled: true, default: true }] }
         }
         function addCharacter() {
@@ -3141,7 +3279,7 @@ function versionsOf(jobId) {
           if (!person) return
           const next = Object.assign({}, person, changes)
           const query = peopleSearch.trim().toLocaleLowerCase()
-          const stillMatches = [next.name, next.match].some(value => String(value || '').toLocaleLowerCase().includes(query))
+          const stillMatches = [next.name, next.match, next.group].some(value => String(value || '').toLocaleLowerCase().includes(query))
           setPeopleActiveId(person.id)
           if (query && !stillMatches) setPeopleSearch('')
           patch(index, changes)
@@ -3166,6 +3304,56 @@ function versionsOf(jobId) {
           const outfitId = characters[index]?.outfits?.[position]?.id
           patch(index, person => ({ outfits: (person.outfits || []).map(outfit => outfit.id === outfitId ? Object.assign({}, outfit, changes) : outfit) }))
         }
+        /** 批量删除所选角色（直接算好新列表再写盘，避免读到旧的 React 状态） */
+        async function deletePicked() {
+          const ids = picked.map(person => person.id)
+          if (!ids.length) { setPeopleBatchNote('请先选择角色'); return }
+          const names = picked.map(person => person.name || '未命名角色').join('、')
+          if (typeof window !== 'undefined' && !window.confirm('确定删除这 ' + ids.length + ' 个角色？\n' + names)) return
+          const current = dataRef.current || {}
+          const defs = Object.assign({}, current.definitions || {})
+          const nextChars = (defs.characters || []).filter(person => !ids.includes(person.id))
+          defs.characters = nextChars
+          defs.outfits = current.outfits ?? defs.outfits ?? []
+          setPeopleBatchNote('正在保存删除…')
+          try {
+            const r = await post('/definitions', { definitions: defs })
+            if (!r?.ok || !r.state) throw new Error(r?.error || '服务器没有确认保存')
+            receiveState(r.state)
+            setCharacters(nextChars)
+            setPeoplePicked({})
+            setPeopleBatchNote('已删除 ' + ids.length + ' 个角色')
+            if (typeof showToast === 'function') showToast('已删除 ' + ids.length + ' 个角色')
+          } catch (error) {
+            const message = '删除失败：' + (error?.message ?? error)
+            setPeopleBatchNote(message)
+            if (typeof showToast === 'function') showToast(message)
+          }
+        }
+
+        /** 从当前会话的世界书导入成年角色 */
+        async function importFromCard() {
+          try {
+            setNote('正在读取这张卡里的角色…')
+            const result = await post('/import-characters', { sessionId: String(lastSessionId || ''), card: importCard })
+            if (result?.state) receiveState(result.state)
+            const added = result?.added || []
+            const updated = result?.updated || []
+            const parts = []
+            if (added.length) parts.push('新增 ' + added.join('、'))
+            if (updated.length) parts.push('补全 ' + updated.join('、'))
+            const message = parts.length ? ('从选定的卡导入：' + parts.join('；')) : '这张卡里没有可导入的角色'
+            setNote(message)
+            if (typeof showToast === 'function') showToast(message)
+            return result
+          } catch (error) {
+            const message = '导入失败：' + (error?.message ?? error)
+            setNote(message)
+            if (typeof showToast === 'function') showToast(message)
+            return null
+          }
+        }
+
         function commit(silent) {
           // 排队写入，并在真正开始时读取最新草稿；并行设计完成不会互相覆盖整库。
           const pending = librarySaveQueue.current.then(async () => {
@@ -3421,6 +3609,7 @@ function versionsOf(jobId) {
           }, style: { border: '1px solid #3a4150', borderRadius: '10px', padding: '10px 12px', margin: '8px 0' } },
             h('summary', { style: { cursor: 'pointer', fontSize: '13px', fontWeight: 600 } }, title),
             h('div', { style: S.row },
+              h('input', { type: 'text', placeholder: '分组（只影响排序）', title: '只用于人物库列表的分组排序和搜索，不参与关键词触发', value: c.group || '', style: Object.assign({}, S.input, { width: '130px' }), onChange: e => patchIdentity(i, { group: e.target.value.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 40) }) }),
               h('input', { type: 'text', placeholder: '角色名', value: c.name || '', style: Object.assign({}, S.input, { width: '140px' }), onChange: e => patchIdentity(i, { name: e.target.value }) }),
               h('input', { type: 'text', placeholder: '英文名（逗号分隔，用来触发）', value: c.match || '', style: Object.assign({}, S.input, { flex: 1, minWidth: '180px' }), onChange: e => patchIdentity(i, { match: e.target.value }) }),
               h('label', { style: S.row }, h('input', { type: 'checkbox', checked: c.enabled !== false, onChange: e => patch(i, { enabled: e.target.checked }) }), h('span', { style: { fontSize: '12px' } }, '启用')),
@@ -3546,12 +3735,20 @@ function versionsOf(jobId) {
           h('div', { style: Object.assign({}, S.row, { alignItems: 'stretch' }) },
             h('input', { type: 'search', 'aria-label': '搜索角色', value: peopleSearch, placeholder: '搜索中文名或英文触发名', style: Object.assign({}, S.input, { flex: '1 1 220px', minWidth: '180px' }), onChange: event => setPeopleSearch(event.target.value) }),
             h('select', { 'aria-label': '当前角色', value: activeCharacter?.id || '', style: Object.assign({}, S.input, { flex: '1 1 220px', minWidth: '180px' }), onChange: event => { setPeopleActiveId(event.target.value); setPeopleEditorOpen(true) } },
-              activeCharacter ? filteredCharacters.map(character => h('option', { key: character.id, value: character.id, style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, (character.name || '（未命名角色）') + (character.match ? ' · ' + character.match : ''))) : h('option', { value: '', style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, '没有匹配的角色'),
+              activeCharacter ? filteredCharacters.map(character => h('option', { key: character.id, value: character.id, style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, (character.group ? '[' + character.group + '] ' : '') + (character.name || '（未命名角色）') + (character.match ? ' · ' + character.match : ''))) : h('option', { value: '', style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, '没有匹配的角色'),
             ),
             h('button', { style: buttonStyle, onClick: () => setPeopleEditorOpen(open => !open) }, peopleEditorOpen ? '收起编辑' : '展开编辑'),
           ),
           h('div', { style: Object.assign({}, S.row, { marginTop: '8px' }) },
             h('button', { style: buttonStyle, onClick: addCharacter }, '新增角色'),
+            importCards.length ? h('select', {
+              'aria-label': '选择要导入的卡',
+              title: '选哪张卡，就导入哪张卡的人物',
+              value: importCard,
+              style: Object.assign({}, S.input, { maxWidth: '200px' }),
+              onChange: event => setImportCard(event.target.value),
+            }, importCards.map(item => h('option', { key: item.path, value: item.path, style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, item.label))) : null,
+            h('button', { style: buttonStyle, onClick: importFromCard }, '从选定的卡导入'),
             h('button', { style: buttonStyle, disabled: !activeCharacter, onClick: () => copyCharacter(activeCharacter) }, '复制当前角色'),
             h('button', { style: buttonStyle, disabled: !activeCharacter, onClick: () => activeCharacter && pickPhoto(activeCharacter) }, '从照片识别'),
             h('button', { style: buttonStyle, onClick: designPeople }, '让 agent 设计角色'),
@@ -4060,7 +4257,13 @@ function versionsOf(jobId) {
 
       // ---- 世界书 ----
       function worldbookTab() {
-        const list = data.worldbook || []
+        // 两本世界书：生图规则（main）与角色与服装库（outfits），各自独立编辑
+        const books = Array.isArray(data.worldbookBooks) && data.worldbookBooks.length
+          ? data.worldbookBooks
+          : [{ key: 'main', name: String(data.worldbookName || '生图世界书'), count: (data.worldbook || []).length, entries: data.worldbook || [] }]
+        const activeBook = books.find(book => book.key === wbBook) || books[0]
+        const activeKey = activeBook?.key || 'main'
+        const list = Array.isArray(activeBook?.entries) ? activeBook.entries : (data.worldbook || [])
         const onCount = list.filter(e => e.enabled !== false).length
         const context = data.plannerContext || null
         const providers = [
@@ -4079,7 +4282,7 @@ function versionsOf(jobId) {
         }
         async function sendEntryPatch(index, patch, remove, tip) {
           return queueWbWrite(async () => {
-            const r = await post('/worldbook-entry', remove ? { index, remove: true } : { index, patch })
+            const r = await post('/worldbook-entry', remove ? { book: activeKey, index, remove: true } : { book: activeKey, index, patch })
             if (!r?.ok) { setWbNote((tip || '改') + '失败：' + (r?.error || '')); return false }
             setWbNote(tip ? (tip + '已保存') : '')
             await refreshWb()
@@ -4195,7 +4398,7 @@ function versionsOf(jobId) {
         }
         async function addEntry() {
           try {
-            const r = await post('/worldbook-add', { comment: '新条目', content: '' })
+            const r = await post('/worldbook-add', { book: activeKey, comment: '新条目', content: '' })
             if (!r?.ok) { setWbNote('加失败：' + (r?.error || '')); return }
             await refreshWb()
             setWbEditing(typeof r.index === 'number' ? r.index : -1)
@@ -4205,7 +4408,7 @@ function versionsOf(jobId) {
           try {
             let payload = text
             try { payload = JSON.parse(text) } catch { /* 当纯文本 */ }
-            const r = await post('/worldbook-import', { worldbook: payload })
+            const r = await post('/worldbook-import', { book: activeKey, worldbook: payload })
             if (!r?.ok) { setWbNote('导入失败：' + (r?.error || '没读出条目')); return }
             setWbNote('✓ 已导入《' + r.name + '》' + r.count + ' 条')
             setWbImportOpen(false)
@@ -4255,8 +4458,31 @@ function versionsOf(jobId) {
         const ta = Object.assign({}, S.input, { width: '100%', minHeight: '130px', fontFamily: 'inherit', lineHeight: '1.6', resize: 'vertical', boxSizing: 'border-box' })
 
         return h('div', { style: S.card },
-          h('div', { style: { fontSize: '13px', marginBottom: '4px' } },
-            '生图世界书' + (data.worldbookName ? '《' + data.worldbookName + '》' : '') + '（' + onCount + ' / ' + list.length + ' 条启用）'),
+          h('div', { style: { fontSize: '13px', marginBottom: '8px' } },
+            '世界书：' + (activeBook?.name ? '《' + activeBook.name + '》' : '') + '（' + onCount + ' / ' + list.length + ' 条启用）'),
+          // 书选择器：两本并列，切换后下方列表与所有编辑动作都作用在选中的那一本
+          h('div', { style: { display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' } },
+            books.map(book => {
+              const on = book.key === activeKey
+              return h('button', {
+                key: book.key,
+                title: book.file ? ('保存到 ' + book.file) : '',
+                style: Object.assign({}, buttonStyle, {
+                  fontSize: '12px',
+                  padding: '5px 12px',
+                  borderColor: on ? 'rgba(106,168,255,.85)' : 'rgba(120,140,170,.35)',
+                  background: on ? 'rgba(106,168,255,.18)' : 'transparent',
+                  color: on ? '#cfe2ff' : '#9aa3b2',
+                }),
+                onClick: () => {
+                  setWbBook(book.key)
+                  setWbEditing(-1)
+                  setWbOpen({})
+                  setWbNote('')
+                },
+              }, '📖 ' + (book.name || book.key) + '（' + (book.count ?? 0) + ' 条）')
+            }),
+          ),
           h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '10px' } },
             '启用的常驻条目会作为画图规则发送给规划模型；关键词条目仅在正文命中关键词时发送。旧条目默认常驻。可逐条调整触发方式和适用渠道。'),
           h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginBottom: '10px' } },
@@ -4298,10 +4524,31 @@ function versionsOf(jobId) {
                 }),
                 h('span', { style: { flex: 1, minWidth: 0, fontSize: '13px', color: entry.enabled === false ? '#9aa3b2' : '#dbe3ee', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
                   String(entry.index + 1) + '. ' + (entry.comment || '未命名')),
-                h('span', { style: { fontSize: '11px', color: '#9aa3b2', flexShrink: 0 } }, entry.length + ' 字'),
+                h('span', { style: { fontSize: '11px', color: '#9aa3b2', flexShrink: 0 } },
+                  (entry.length ?? String(entry.content ?? '').length) + ' 字'),
+                h('button', {
+                  style: Object.assign({}, buttonStyle, { fontSize: '11px', padding: '2px 8px' }),
+                  title: '只读预览这条内容，不影响编辑',
+                  onClick: () => setWbOpen(current => ({ ...current, [entry.index]: !current[entry.index] })),
+                }, wbOpen[entry.index] ? '▾ 收起' : '▸ 内容'),
                 h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 10px' }), onClick: () => setWbEditing(wbEditing === entry.index ? -1 : entry.index) }, wbEditing === entry.index ? '收起' : '编辑'),
                 h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 10px', borderColor: 'rgba(242,104,107,.6)', color: '#f2686b' }), onClick: () => { if (confirm('删除这条世界书条目？')) patchEntry(entry.index, null, true) } }, '删'),
               ),
+              wbOpen[entry.index] && wbEditing !== entry.index ? h('div', {
+                style: {
+                  marginTop: '8px',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  background: '#141a22',
+                  color: '#c8d2df',
+                  fontSize: '12px',
+                  lineHeight: '1.75',
+                  whiteSpace: 'pre-wrap',
+                  maxHeight: '340px',
+                  overflow: 'auto',
+                  border: '1px solid rgba(120,140,170,.22)',
+                },
+              }, String(entry.content ?? '').trim() || '（这条还没有内容）') : null,
               wbEditing === entry.index ? h('div', { style: { marginTop: '8px' } },
                 h('input', {
                   type: 'text', value: wbDrafts[entry.index]?.comment ?? entry.comment ?? '', placeholder: '条目标题',
@@ -4630,6 +4877,34 @@ function versionsOf(jobId) {
           lineHeight: '1.6', resize: 'vertical', boxSizing: 'border-box', fontSize: '12px',
         })
         const optStyle = { color: '#12161c', background: '#e9eef6' }
+        // 每套画风预设自己的生成参数（空 = 跟渠道设置）
+        const PRESET_SAMPLERS = [['k_euler_ancestral', 'Euler Ancestral'], ['k_euler', 'Euler'], ['k_dpmpp_2m', 'DPM++ 2M'], ['k_dpmpp_2s_ancestral', 'DPM++ 2S Anc'], ['k_dpmpp_sde', 'DPM++ SDE'], ['k_dpmpp_2m_sde', 'DPM++ 2M SDE'], ['ddim_v3', 'DDIM'], ['k_lms', 'LMS'], ['k_heun', 'Heun'], ['k_dpm_2', 'DPM2'], ['k_dpm_2_ancestral', 'DPM2 Anc']]
+        const PRESET_NOISE = [['karras', 'Karras'], ['native', 'Native'], ['exponential', 'Exponential'], ['polyexponential', 'Polyexponential']]
+        const PRESET_UC = [['0', '0 · 强（Heavy）'], ['1', '1 · 弱（Light）'], ['2', '2 · Furry'], ['3', '3 · Human（默认）'], ['4', '4 · 不指定']]
+        const paramValue = (p, key) => (p.params && p.params[key] !== undefined && p.params[key] !== null ? String(p.params[key]) : '')
+        const setParam = (i, p, key, value) => {
+          const next = Object.assign({}, p.params || {})
+          if (value === undefined) delete next[key]
+          else next[key] = value
+          patch(i, { params: next })
+        }
+        const PARAM_ROW = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '10px 12px' }
+        const paramGroupTitle = (text, first) => h('div', {
+          style: { fontSize: '11px', letterSpacing: '.02em', color: '#7f8a9c', margin: first ? '0 0 6px' : '12px 0 6px', paddingTop: first ? '0' : '10px', borderTop: first ? 'none' : '1px solid rgba(120,140,170,.14)' },
+        }, text)
+        const paramField = (caption, control) => h('div', { style: { display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '0' } },
+          h('div', { style: { fontSize: '11px', color: '#9aa3b2' } }, caption), control)
+        const paramSelect = (i, p, key, caption, items) => paramField(caption,
+          h('select', { value: paramValue(p, key), title: caption + '：留空表示沿用渠道设置', style: Object.assign({}, S.input, { width: '100%', boxSizing: 'border-box' }), onChange: e => setParam(i, p, key, e.target.value === '' ? undefined : e.target.value) },
+            h('option', { value: '', style: optStyle }, '跟随渠道'),
+            items.map(([value, text]) => h('option', { key: value, value, style: optStyle }, text))))
+        const paramNumber = (i, p, key, caption, step) => paramField(caption,
+          h('input', { type: 'number', step: step || '1', value: paramValue(p, key), placeholder: '跟随渠道', title: caption + '：留空表示沿用渠道设置', style: Object.assign({}, S.input, { width: '100%', boxSizing: 'border-box' }), onChange: e => setParam(i, p, key, e.target.value.trim() === '' ? undefined : Number(e.target.value)) }))
+        const paramBool = (i, p, key, caption) => paramField(caption,
+          h('select', { value: paramValue(p, key), title: caption + '：跟随渠道表示沿用渠道设置', style: Object.assign({}, S.input, { width: '100%', boxSizing: 'border-box' }), onChange: e => setParam(i, p, key, e.target.value === '' ? undefined : e.target.value === 'true') },
+            h('option', { value: '', style: optStyle }, '跟随渠道'),
+            h('option', { value: 'true', style: optStyle }, '开'),
+            h('option', { value: 'false', style: optStyle }, '关')))
 
         return h('div', { style: S.card },
           h('div', { style: { fontSize: '13px', marginBottom: '4px' } },
@@ -4679,6 +4954,28 @@ function versionsOf(jobId) {
                 style: ta('46px'),
                 onChange: e => patch(i, { negative: e.target.value }),
               }),
+              h('details', { style: { marginTop: '10px' } },
+                h('summary', { style: { fontSize: '11px', color: '#9aa3b2', cursor: 'pointer', padding: '2px 0' } }, '这套自己的生成参数（采样 / 步数 / CFG / NovelAI 高级…；留空 = 跟随渠道）'),
+                h('div', { style: { marginTop: '8px', padding: '12px 14px', borderRadius: '8px', background: '#151a22', border: '1px solid rgba(120,140,170,.18)' } },
+                  paramGroupTitle('采样', true),
+                  h('div', { style: PARAM_ROW },
+                    paramSelect(i, p, 'sampler', '采样器', PRESET_SAMPLERS),
+                    paramSelect(i, p, 'noiseSchedule', '噪点表', PRESET_NOISE)),
+                  paramGroupTitle('步数与 CFG'),
+                  h('div', { style: PARAM_ROW },
+                    paramNumber(i, p, 'steps', '步数', '1'),
+                    paramNumber(i, p, 'cfg', 'CFG', '0.1'),
+                    paramNumber(i, p, 'cfgRescale', 'CFG Rescale', '0.01')),
+                  paramGroupTitle('NovelAI 高级'),
+                  h('div', { style: PARAM_ROW },
+                    paramNumber(i, p, 'uncondScale', 'Uncond Scale', '0.1'),
+                    paramNumber(i, p, 'skipCfgAboveSigma', 'Skip CFG Sigma', '0.1')),
+                  paramGroupTitle('官方预设（NovelAI）'),
+                  h('div', { style: PARAM_ROW },
+                    paramSelect(i, p, 'ucPreset', '负面预设（ucPreset）', PRESET_UC),
+                    paramBool(i, p, 'qualityToggle', '质量词（qualityToggle）'),
+                    paramBool(i, p, 'varietyBoost', '多样性（variety_boost）'))),
+              ),
             )),
           ) : h('div', { style: { fontSize: '12px', color: '#9aa3b2', padding: '10px 0' } }, '还没有画风预设。点「➕ 新增一套」开始。'),
 
@@ -4824,7 +5121,7 @@ function versionsOf(jobId) {
             const value = String(downloads.local ?? '')
             if (!value.startsWith('/') || value.startsWith('//')) return ''
             const url = new URL(value, window.location.origin)
-            const validPath = ['/plugins/dsh-tavern-image/plugin-download', '/plugins/dsh-tavern-comfy/plugin-download'].includes(url.pathname)
+            const validPath = ['/api/dsh-tavern-image/plugin-download', '/api/dsh-tavern-comfy/plugin-download', '/plugins/dsh-tavern-image/plugin-download', '/plugins/dsh-tavern-comfy/plugin-download'].includes(url.pathname)
             return url.origin === window.location.origin && validPath && !url.username && !url.password && !url.search && !url.hash ? url.pathname : ''
           } catch { return '' }
         })()
@@ -4908,7 +5205,18 @@ function versionsOf(jobId) {
         tab === 'worldbook' ? worldbookTab() : null,
         tab === 'plugin-update' ? pluginUpdateTab() : null,
         h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginTop: '14px' } }, '人物与服装修改后请点「保存人物库」。'),
-        wfGraphFile ? h(WorkflowGraphEditor, { file: wfGraphFile, post, onClose: () => setWfGraphFile(''), onSaved: () => { void openWorkflow(wfGraphFile, true) } }) : null,
+        // 注意：openWorkflow 定义在 workflow 标签页函数内部，这里跨作用域调用会 ReferenceError。
+        // 保存后只做本层能做的收尾：关掉编辑器、清掉旧详情，让用户重新点开时读到新数据。
+        wfGraphFile ? h(WorkflowGraphEditor, {
+          file: wfGraphFile,
+          post,
+          onClose: () => setWfGraphFile(''),
+          onSaved: () => {
+            setWfGraphFile('')
+            setWfDetail(null)
+            setWfNote('工作流已保存，重新点开即可看到新参数')
+          },
+        }) : null,
       )
     }
     // ─────────────────────────────────────────────────────────────
