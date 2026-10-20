@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "4c6e846330503d3bd3417ad443490e166565f947",
-  "releaseSequence": 775,
+  "revision": "dd0dd6dcd4e3a4b1627bb7f33146f52655dfaf5e",
+  "releaseSequence": 776,
   "version": "3.0.0",
   "files": [
     {
@@ -141,8 +141,8 @@
     },
     {
       "path": "bin/official-desktop-runtime.cjs",
-      "sha256": "8f6554a016924769be70144f6fbe7ba6365d00d95f04d9f52ee90467049a454c",
-      "size": 9307
+      "sha256": "97967766091d34852a9006997607c3fed380e77f1a156ad951fa7ca36efd7777",
+      "size": 9477
     },
     {
       "path": "bin/plugin-dependencies.mjs",
@@ -306,13 +306,13 @@
     },
     {
       "path": "install.ps1",
-      "sha256": "59bf6cad21e23e7a99342f8a42ae9a872cc62485a161d5fa8eedd2709ee4bdee",
-      "size": 88980
+      "sha256": "45f45e867ed589c144c0ebe13f687ce1b4978df6e54abaf32db4a4e91ff6af39",
+      "size": 89150
     },
     {
       "path": "install.sh",
-      "sha256": "182ea66bf0a7f2d739d2accc6669699993f6965f9820fbe598810523ad37fb3b",
-      "size": 68630
+      "sha256": "4c266822898926fcb2c58955ce6d9c74ae74ccf39292db24a41a3ac31fecae2e",
+      "size": 68800
     },
     {
       "path": "package.json",
