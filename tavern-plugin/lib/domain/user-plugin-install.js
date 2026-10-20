@@ -100,7 +100,9 @@ export function createUserPluginInstaller({ dataRoot, fetchImpl = fetch, now = (
 
   async function backup(folder) {
     await mkdir(backups, { recursive: true })
-    const target = path.join(backups, folder + '-' + stamp())
+    const base = path.join(backups, folder + '-' + stamp())
+    let target = base
+    for (let index = 2; existsSync(target); index++) target = base + '-' + index
     await rename(path.join(paths.plugins, folder), target)
     return target
   }
