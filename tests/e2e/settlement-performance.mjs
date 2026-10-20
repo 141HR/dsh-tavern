@@ -71,6 +71,15 @@ export async function settlementPerformanceChecks({ page, step, savedChat, outpu
     await page.waitForFunction(()=>document.body?.innerText.includes('这是性能测试的合成剧情'),null,{timeout:15000}).then(()=>{firstWindow.bodyVisibleAt=Date.now()},()=>{})
   }
   page.on('response',observeWindow)
+  // Every request that widens the history window (scrolling into older floors). Opening a
+  // long save must not walk the window back on its own: each step makes views heavier.
+  const historyRequests=report.settlementPerformance.historyRequests=[]
+  page.on('request',request=>{
+    if(!request.url().endsWith('/api/dsh-tavern/getSession'))return
+    let body;try{body=JSON.parse(request.postData()||'{}')}catch{return}
+    const args=body.args||body
+    if(Number.isSafeInteger(args?.historyFrom)||args?.fullView)historyRequests.push({at:Date.now(),historyFrom:args.historyFrom,fullView:args.fullView===true})
+  })
   await step(`构造 ${rounds} 轮隔离长档并重新打开`, async () => {
     const reopening = await restartServer(async () => {
       const next = structuredClone(fixture), greeting = next.messages[0], user = next.messages.find(m => m.role === 'user'), assistant = next.messages.at(-1)
