@@ -5,6 +5,7 @@ import {pathToFileURL} from 'node:url'
 import { createChatJournalStore } from '../../tavern-plugin/lib/domain/chat-journal-store.js'
 import { createChatPersistence } from '../../tavern-plugin/lib/domain/chat-persistence.js'
 import { encodeMigratedSessionLog, encodeCurrentGeneration, parseSessionLog } from '../../tavern-plugin/lib/domain/session-log-codec.js'
+import { currentSessionLogs, dropOtherGenerations } from './session-files.mjs'
 
 // Avoid Playwright's iframe element preview: a srcdoc containing a complete
 // compatibility context can be hundreds of MB and preview formatting dominates
@@ -110,8 +111,8 @@ export async function settlementPerformanceChecks({ page, step, savedChat, outpu
       await persistence.write(next)
       const sessions = join(root, 'profile-data/tavern/sessions')
       let found = false
-      for (const file of (await readdir(sessions, { recursive: true })).filter(x => x.endsWith('session.v3.jsonl.zstd'))) {
-        const path = join(sessions, file), saved = parseSessionLog(await readFile(path))
+      for (const { path, directory } of await currentSessionLogs(sessions)) {
+        const saved = parseSessionLog(await readFile(path))
         if (saved.header.id !== fixture.sessionId) continue
         const header = { type: 'session', delegationDepth: 0, version: 0, id: fixture.sessionId, createdAt: saved.header.createdAt, cwd: saved.header.cwd }
         if(process.argv.includes('--native-format')){
@@ -119,13 +120,15 @@ export async function settlementPerformanceChecks({ page, step, savedChat, outpu
           const restore=catalog.createRestore(header,{recovery:'recoverable',validation:'current'})
           for(const row of rows)restore.decodeRow(row)
           const artifact=restore.finish()
-          assert.equal(artifact.header.version,3)
-          await writeFile(path,encodeCurrentGeneration(artifact,catalog))
-          await rm(join(dirname(path),'session.jsonl.zstd'),{force:true})
-          size.sessionFormat=3
+          // Written in whatever format the host currently stores, as it would itself.
+          const name=`session.v${artifact.header.version}.jsonl.zstd`
+          await writeFile(join(directory,name),encodeCurrentGeneration(artifact,catalog))
+          await dropOtherGenerations(directory,name)
+          size.sessionFormat=artifact.header.version
         }else{
-          await writeFile(join(dirname(path), 'session.jsonl.zstd'), encodeMigratedSessionLog(JSON.stringify(header), rows))
-          await rm(path)
+          // An unversioned log: the host migrates it to its current format on startup.
+          await writeFile(join(directory, 'session.jsonl.zstd'), encodeMigratedSessionLog(JSON.stringify(header), rows))
+          await dropOtherGenerations(directory, 'session.jsonl.zstd')
           size.sessionFormat=0
         }
         found = true; break

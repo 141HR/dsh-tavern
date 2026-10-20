@@ -43,6 +43,7 @@ import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import { chromium } from 'playwright'
 import { createChatJournalStore } from '../../tavern-plugin/lib/domain/chat-journal-store.js'
+import { currentSessionLogs, dropOtherGenerations } from './session-files.mjs'
 
 const pinScenario = process.argv.includes('--pin-panel')
 const displayScenario = pinScenario || process.argv.includes('--display-regression')
@@ -648,9 +649,7 @@ try {
       let directory, storedHeader
       await restartServer(async () => {
         const sessions = join(root, 'profile-data/tavern/sessions')
-        const files = (await readdir(sessions, { recursive: true })).filter(file => file.endsWith('session.v3.jsonl.zstd'))
-        for (const relative of files) {
-          const full = join(sessions, relative)
+        for (const { path: full } of await currentSessionLogs(sessions)) {
           const saved = parseSessionLog(await readFile(full))
           if (saved.header.id === chat.sessionId) { directory = dirname(full); storedHeader = saved.header; break }
         }
@@ -684,9 +683,12 @@ try {
         const bytes = encodeMigratedSessionLog(JSON.stringify(fixture.header), fixture.events)
         await writeFile(join(output, 'legacy-input.jsonl.zstd'), bytes)
         await writeFile(join(directory, 'session.jsonl.zstd'), bytes)
-        await rm(join(directory, 'session.v3.jsonl.zstd'))
+        await dropOtherGenerations(directory, 'session.jsonl.zstd')
       })
-      const migrated = await readFile(join(directory, 'session.v3.jsonl.zstd'))
+      // Startup migrates the unversioned input to the host's current format.
+      const current = (await currentSessionLogs(directory)).find(log => log.directory === directory)
+      assert.ok(current && current.generation > 0, '启动时把旧格式会话迁移到当前格式')
+      const migrated = await readFile(current.path)
       await writeFile(join(output, 'legacy-migrated.jsonl.zstd'), migrated)
       const rows = parseSessionLog(migrated).events
       assert.ok(rows.some(row => row.type === 'compaction/summary'), '启动迁移保留压缩事件')
