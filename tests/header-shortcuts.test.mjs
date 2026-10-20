@@ -186,3 +186,14 @@ test('手机顶栏的布局约束：角落按钮留座、宿主动作组可收�
   // ⋮ 在手机上竖排三点。
   assert.match(client, /mobile \? "M12 5h\.01M12 12h\.01M12 19h\.01"/)
 })
+
+test('宿主隐藏 utilities 时入口仍然在：加载即标记 shell，兜底规则不依赖 body 类', () => {
+  // dsh-web-mobile 在 `@media (max-width:767px) and (pointer:coarse)` 里把
+  // `header:has(_headerLeading) [class*=_headerUtilities]` 设成 display:none !important
+  // （特异性 (0,4,1)）。酒馆的快捷入口全在这个单元格里，竖屏就整排消失、横屏又回来。
+  // 两条都要：body 类一经缺席，所有 `body.dsh-tavern-shell-active …` 覆盖全部失效。
+  assert.match(client, /function markTavernShellActive\(\)/)
+  assert.match(client, /markTavernShellActive\(\);/)
+  assert.match(css, /header:has\(\[class\*="_headerLeading"\]\) \[class\*="_headerUtilities"\]:has\(\.dsh-tavern-header-items\)/)
+  assert.match(css, /display: flex !important; flex: 0 1 auto !important; min-width: 0 !important;/)
+})
