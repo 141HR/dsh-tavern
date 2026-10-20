@@ -514,13 +514,13 @@ test('管线护栏：官方 MVU 卡的变量结算收到的提示词与开关逐
   h.sandbox.runtimePrompt = name => '〈' + name + '〉'
   const inputs = []
   h.sandbox.mvuSettlement.settleVariables = async input => {
-    inputs.push(JSON.parse(JSON.stringify({ system: input.system, backgroundTasks: input.backgroundTasks, guidance: input.guidance, preserveForeground: input.preserveForeground,
+    inputs.push(JSON.parse(JSON.stringify({ system: input.system, backgroundTasks: input.backgroundTasks, guidance: input.guidance,
       storyText: input.storyText, turn: input.turn, messageId: input.messageId, swipeId: input.swipeId, webSearchEnabled: input.webSearchEnabled })))
     return { receipt: { version: 1, status: 'unchanged', changes: [] } }
   }
   await h.sandbox.queueSettlement('chat')
   assert.deepEqual(inputs, [{ system: '〈posture-settlement〉', backgroundTasks: { posture: true, characterDesign: false, variables: true, ledger: false, styleReference: false }, guidance: '',
-    preserveForeground: false, storyText: '门开了', turn: 2, messageId: 1, swipeId: 0, webSearchEnabled: false }])
+    storyText: '门开了', turn: 2, messageId: 1, swipeId: 0, webSearchEnabled: false }])
 })
 
 test('管线护栏：一轮的阶段顺序是前置任务、主结算、后置任务、收尾', async () => {

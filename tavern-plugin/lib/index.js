@@ -3968,7 +3968,6 @@ export async function apply(ctx) {
         onSubmission: submission => saveDelivery(submission),
         onPrepared: prepared => saveDelivery(prepared.submission, prepared),
         guidance: mvuTarget.message.mvu.guidance || '',
-        preserveForeground: variableRetry,
         onPersistentSessionReady: id => taskRun.bindSession(id, { stateOnly: true }),
         backgroundTasks: backgroundTasksSettings,
         operationId: taskRun.operationId,

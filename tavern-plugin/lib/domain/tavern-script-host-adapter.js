@@ -891,19 +891,14 @@ export function createTavernScriptHostAdapter(options = {}) {
       if (!settled || Math.max(0, Number(settled.swipeId) || 0) !== swipeId) {
         return { updated: false, stale: true, context: await fullContext(current) }
       }
-      if (!Array.isArray(settled.swipes)) settled.swipes = [originalText]
-      settled.swipes[swipeId] = originalText
-      settled.sourceText = originalText
-      settled.projectionText = originalText
-      settled.text = originalText
-      settled.sessionText = originalText
-      settled.displayText = originalText
-      if (input.preserveForeground === true) {
-        for (const key of ['swipes', 'sourceText', 'projectionText', 'text', 'sessionText', 'displayText']) {
-          if (Object.hasOwn(message, key)) settled[key] = structuredClone(message[key])
-          else delete settled[key]
-        }
+      // Settlement writes variables only. The prose stays as the round saved it: text is
+      // the prompt-regex projection the native surface holds, not the raw reply; turning it
+      // back into the raw reply made every later reconcile see drift and repair (#306).
+      for (const key of ['swipes', 'sourceText', 'projectionText', 'text', 'sessionText', 'displayText']) {
+        if (Object.hasOwn(message, key)) settled[key] = structuredClone(message[key])
+        else delete settled[key]
       }
+      if (!Array.isArray(settled.swipes)) settled.swipes = [originalText]
       const beforeVariables = input.baselineVariables || current.messages[messageId].variables?.[swipeId] || {}
       const afterVariables = transaction.draft.messages[messageId].variables?.[swipeId] || {}
       const validation = typeof input.validate === 'function'
