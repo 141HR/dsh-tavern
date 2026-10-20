@@ -117,9 +117,32 @@ test('插件经由 Tavern 的保护入口加载：导入失败或 apply 抛错�
 })
 
 
-test('官方 Desktop 用户插件使用 desktop 配置，存储仍沿用 tavern 数据目录', () => {
-  const root = path.resolve('/test-home')
+test('官方 Desktop：有 tavern 配置就写 tavern（桌面版切回原版时不把插件装进原版）；只有老式 desktop 安装才写 desktop', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'tavern-plugin-paths-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
   const data = path.join(root, 'profile-data/tavern/data')
   assert.deepEqual(userPluginPaths(data, root, 'desktop'), {plugins: path.join(data, 'plugins'), profile: path.join(root, 'profiles/desktop')})
+  await mkdir(path.join(root, 'profiles/tavern'), { recursive: true })
+  await writeFile(path.join(root, 'profiles/tavern/package.json'), '{}')
+  assert.equal(userPluginPaths(data, root, 'desktop').profile, path.join(root, 'profiles/tavern'))
   assert.equal(userPluginPaths(data, root, 'cli').profile, path.join(root, 'profiles/tavern'))
+})
+
+test('桌面版回到原版 DSH 时，从原版配置里清掉旧版本写进去的酒馆插件条目', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'tavern-plugin-original-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const dataRoot = path.join(root, 'profile-data/tavern/data')
+  for (const name of ['tavern', 'desktop']) {
+    await mkdir(path.join(root, 'profiles', name), { recursive: true })
+    await writeFile(path.join(root, 'profiles', name, 'package.json'), '{}')
+  }
+  const original = path.join(root, 'profiles/desktop/cordis.patch.yml')
+  await writeFile(original, '- insert:\n    - id: user-own\n      name: keep-me\n- insert:\n    - id: tavern-user-plugin-x\n      name: /x/.tavern-entry.mjs\n')
+  const previous = process.env.DSH_TAVERN_RUNTIME_HOST
+  process.env.DSH_TAVERN_RUNTIME_HOST = 'desktop'
+  t.after(() => { if (previous === undefined) delete process.env.DSH_TAVERN_RUNTIME_HOST; else process.env.DSH_TAVERN_RUNTIME_HOST = previous })
+  await syncUserPlugins({ dataRoot, logger: { warn() {} } })
+  const text = await readFile(original, 'utf8')
+  assert.doesNotMatch(text, /tavern-user-plugin-/)
+  assert.match(text, /keep-me/, '用户自己的条目原样保留')
 })

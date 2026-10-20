@@ -10,6 +10,8 @@ import { registerTavernHttpRoutes } from './http/routes.js'
 import { installChatAnswerBootPatch } from './domain/chat-answer-boot-patch.js'
 import { registerRequestHooks } from './hooks/request.js'
 import { syncUserPlugins, watchUserPlugins, userPluginPaths } from './domain/user-plugins.js'
+import { createUserPluginInstaller } from './domain/user-plugin-install.js'
+import { createPluginDataStore } from './domain/plugin-data-store.js'
 import { createPluginAssets } from './domain/plugin-assets.js'
 import { registerModelStreamHooks } from './hooks/model-stream.js'
 import { registerTurnLifecycleHooks } from './hooks/turn-lifecycle.js'
@@ -225,7 +227,8 @@ import { createGameFootprint } from './domain/game-footprint.js'
 import { buildGameSave, collectSaveRevisions, readGameSave } from './domain/game-save.js'
 import { compressSaveImage } from './domain/save-image-compression.js'
 import { readFileSync } from 'node:fs'
-import { readdir, readFile, rm } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
 
 const TAVERN_PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
@@ -1152,6 +1155,8 @@ export async function apply(ctx) {
   // DSH cards (docs/design/dsh-card-format.md): asset packs stored once by content; big files uploaded to disk.
   const assetPacks = createAssetPacks({ root: dataRoot, store: profileData })
   const uploads = createUploads({ root: dataRoot })
+  const pluginDataStore = createPluginDataStore({ dataRoot })
+  const userPluginInstaller = createUserPluginInstaller({ dataRoot, sync: () => syncUserPlugins({ dataRoot }) })
   const cardPlugins = createCardPlugins({ dataRoot, pluginsDir: userPluginPaths(dataRoot).plugins, keyOf: castAssets.keyOf })
   void uploads.sweep().catch(() => {})
   const cardImportIdentity = createCardImportIdentity({ cardPaths: () => fileResources.list('card'), castAssets, readCardText: cardPath => fileResources.readText(cardPath) })
@@ -3155,6 +3160,7 @@ export async function apply(ctx) {
     reservedToolNames: [...BACKGROUND_TOOLS, HISTORY_RECALL_TOOL].map(tool => tool?.name).concat([STORY_SUBMIT_TOOL_NAME, 'character_design_finish', 'worldbook_search', 'web_search', 'skill']).filter(Boolean),
     media: pluginMedia,
     data: pluginData,
+    pluginData: pluginDataStore,
     ...pluginTurns,
     backgroundModel: async sessionId => backgroundModelSelection(await backgroundConfigForSession(sessionId)),
     readCard: readPluginCard,
@@ -4903,6 +4909,27 @@ export async function apply(ctx) {
         return { card: archive ? await importCardArchiveFile(archive.file, archive.name) : await importCard(await mobileCardImport.read(args && args.id)) }
       }
       case 'importCard': return { card: await importCard(args && args.payload) }
+      // The page side of a plugin reads and writes the same data as its host side (tavernUi.savePluginData).
+      case 'pluginData': {
+        const plugin = str(args && args.plugin)
+        if (args && args.op === 'save') { await pluginDataStore.save(plugin, args.data); return { ok: true } }
+        return { data: await pluginDataStore.read(plugin) }
+      }
+      case 'listUserPlugins': return { plugins: await userPluginInstaller.list(), dir: userPluginInstaller.pluginsDir }
+      case 'installUserPlugin': return { plugin: await userPluginInstaller.installFromGithub(args && args.url) }
+      case 'installUserPluginUpload': {
+        const upload = await uploads.take(args && args.uploadId)
+        try { return { plugin: await userPluginInstaller.installFromZip(await readFile(upload.file), args && args.name) } }
+        finally { await upload.remove() }
+      }
+      case 'updateUserPlugin': return { plugin: await userPluginInstaller.update(args && args.folder) }
+      case 'removeUserPlugin': return await userPluginInstaller.remove(args && args.folder)
+      case 'openUserPluginsFolder': {
+        await mkdir(userPluginInstaller.pluginsDir, { recursive: true })
+        const opener = process.platform === 'darwin' ? ['open', [userPluginInstaller.pluginsDir]] : process.platform === 'win32' ? ['explorer.exe', [userPluginInstaller.pluginsDir]] : ['xdg-open', [userPluginInstaller.pluginsDir]]
+        spawn(opener[0], opener[1], { detached: true, stdio: 'ignore', windowsHide: true }).on('error', () => {}).unref()
+        return { dir: userPluginInstaller.pluginsDir }
+      }
       case 'importCardUpload': {
         const upload = await uploads.take(args && args.uploadId)
         const name = str(args && args.name) || '人物卡.dshcard'

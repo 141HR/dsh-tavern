@@ -43,11 +43,13 @@ Desktop 固定为 **0.2.1-rc.2**；以后在酒馆界面更新插件。仅 Deskt
 需要 Git，在终端运行：
 
 ```bash
-dsh plugin --profile tavern add github:flizzywine/dsh-tavern
+dsh plugin --profile tavern add @deepseek-ai/dsh-web-app github:flizzywine/dsh-tavern
 dsh --profile tavern
 ```
 
-第一条命令由 DSH 创建 Profile、安装完整运行包并启用酒馆；第二条启动网页。酒馆使用当前 DSH，不会另装或升级宿主。运行包包含 Web 配置、侧栏、人物卡功能、预设和 Skill，无需自行构建。启动时检查 DSH 适配版本。
+第一条命令由 DSH 创建 Profile，装上网页组件和完整运行包并启用酒馆；第二条启动网页。新建的 `tavern` Profile 默认不带网页组件，所以要在同一条命令里一起加上。酒馆使用当前 DSH，不会另装或升级宿主。运行包包含侧栏、人物卡功能、预设和 Skill，无需自行构建。启动时检查 DSH 适配版本。
+
+> **暂不可用：** DSH 0.2.1-rc.2 解析依赖时有缺陷，这条路线启动会报 `createRequire.resolve.paths is not a function`（[#300](https://github.com/flizzywine/dsh-tavern/issues/300)），需等 DSH 修复。在此之前请用下面的命令行安装方式。
 
 数据位于当前 `DSH_HOME` 下的 `profile-data/tavern/`；未设置 `DSH_HOME` 时通常为 `~/.dsh/profile-data/tavern/`。程序由 Profile 的包管理器维护。更新时先关闭酒馆，重新运行第一条安装命令，再启动。页面中的「查看更新命令」提供同一条命令，不使用原来的源码更新器。
 

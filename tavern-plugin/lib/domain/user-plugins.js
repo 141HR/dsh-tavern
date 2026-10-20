@@ -1,5 +1,5 @@
 import { existsSync, watch } from 'node:fs'
-import { mkdir, readdir, readFile, writeFile, rename } from 'node:fs/promises'
+import { lstat, mkdir, readdir, readFile, realpath, writeFile, rename } from 'node:fs/promises'
 import path from 'node:path'
 import { parseDocument, YAMLSeq } from 'yaml'
 
@@ -7,6 +7,8 @@ import { parseDocument, YAMLSeq } from 'yaml'
 const ID_PREFIX = 'tavern-user-plugin-'
 // Loaded in place of the plugin's own entry, beside its package.json so its browser half is still found.
 export const GUARD_FILE = '.tavern-entry.mjs'
+// The guard records whether the plugin loaded, so the settings list can say why one is missing.
+export const STATUS_FILE = '.tavern-status.json'
 
 /**
  * A plugin that fails to import or to apply must not stop DSH from starting:
@@ -15,7 +17,12 @@ export const GUARD_FILE = '.tavern-entry.mjs'
 export function guardSource({ folder, name, main }) {
   const label = JSON.stringify('[Tavern 插件] plugins/' + folder)
   return `// Tavern 自动生成，请勿修改：插件加载或启动出错时只记日志，不影响 DSH 启动。
-const report = (stage, error) => console.warn(${label} + ' ' + stage + '失败：' + (error && error.stack || error))
+import { writeFileSync } from 'node:fs'
+const record = status => { try { writeFileSync(new URL(${JSON.stringify('./' + STATUS_FILE)}, import.meta.url), JSON.stringify({ ...status, at: new Date().toISOString() })) } catch {} }
+const report = (stage, error) => {
+  console.warn(${label} + ' ' + stage + '失败：' + (error && error.stack || error))
+  record({ ok: false, stage, message: String(error && error.message || error).slice(0, 500) })
+}
 let plugin = null
 try {
   const mod = await import(new URL(${JSON.stringify(main)}, import.meta.url).href)
@@ -34,6 +41,7 @@ export async function apply(ctx, config) {
     // on failure. The guard remains alive so one broken plugin cannot stop DSH.
     child = ctx.plugin({ name, apply: childContext => plugin.apply(childContext, config) })
     await child.await()
+    record({ ok: true })
   } catch (error) {
     if (child) await child.dispose()
     report('启动', error)
@@ -43,10 +51,14 @@ export async function apply(ctx, config) {
 }
 
 export function userPluginPaths(dataRoot, dshHome = path.resolve(dataRoot, '../../..'), host = process.env.DSH_TAVERN_RUNTIME_HOST || (process.versions.electron ? 'desktop' : 'cli')) {
-  return {
-    plugins: path.join(path.resolve(dataRoot), 'plugins'),
-    profile: path.join(path.resolve(dshHome), 'profiles', host === 'desktop' ? 'desktop' : 'tavern'),
-  }
+  const profiles = path.join(path.resolve(dshHome), 'profiles')
+  // Tavern runs from profiles/tavern; the desktop app reaches it through a profiles/desktop link.
+  // When the desktop app is back on the original DSH (a real profiles/desktop) and Tavern runs on
+  // its own, writing to desktop would load Tavern plugins into the original DSH instead. Only an
+  // older desktop install with Tavern directly in profiles/desktop has no tavern profile.
+  const tavern = path.join(profiles, 'tavern')
+  const profile = host !== 'desktop' || existsSync(path.join(tavern, 'package.json')) ? tavern : path.join(profiles, 'desktop')
+  return { plugins: path.join(path.resolve(dataRoot), 'plugins'), profile }
 }
 
 function hostEntry(pkg) {
@@ -131,6 +143,20 @@ async function replaceFile(file, text) {
   }
 }
 
+// Earlier versions wrote these entries to profiles/desktop even when it was the original DSH
+// (the desktop app switched back), loading Tavern plugins there. Take them out of that profile.
+async function clearOriginalDesktop(profile) {
+  if (path.basename(profile) !== 'tavern') return
+  const desktop = path.join(path.dirname(profile), 'desktop')
+  try { if ((await lstat(desktop)).isSymbolicLink() || (await realpath(desktop)) === (await realpath(profile))) return } catch { return }
+  const file = path.join(desktop, 'cordis.patch.yml')
+  let text
+  try { text = await readFile(file, 'utf8') } catch { return }
+  if (!text.includes(ID_PREFIX)) return
+  const next = syncPatchText(text, [])
+  if (next !== null) await replaceFile(file, next)
+}
+
 export async function syncUserPlugins({ dataRoot, dshHome, logger = console } = {}) {
   const paths = userPluginPaths(dataRoot, dshHome)
   await mkdir(paths.plugins, { recursive: true })
@@ -158,6 +184,7 @@ export async function syncUserPlugins({ dataRoot, dshHome, logger = console } = 
   try { text = await readFile(file, 'utf8') } catch (error) { if (error.code !== 'ENOENT') throw error }
   const next = syncPatchText(text, plugins)
   if (next !== null) await replaceFile(file, next)
+  await clearOriginalDesktop(paths.profile)
   return { changed: next !== null, plugins, problems }
 }
 

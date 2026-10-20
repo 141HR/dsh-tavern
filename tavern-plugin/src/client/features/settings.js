@@ -369,9 +369,82 @@
                     h("span", { className: "dsh-tavern-settings-desc" }, notice)) : null);
         }
 
+        // 设置 → DSH Tavern → 插件：粘贴 GitHub 地址或上传 ZIP 安装，列出已装插件与加载情况。
+        function TavernUserPluginsSettings() {
+            const h = React.createElement;
+            const [data, setData] = React.useState(null);
+            const [url, setUrl] = React.useState("");
+            const [busy, setBusy] = React.useState(false);
+            const [notice, setNotice] = React.useState("");
+            const [error, setError] = React.useState("");
+            const zipInput = React.useRef(null);
+            async function refresh() {
+                try { setData(await rpc("listUserPlugins")); }
+                catch (err) { setError(String(err && err.message || err)); }
+            }
+            React.useEffect(function () { void refresh(); }, []);
+            async function run(work, done) {
+                setBusy(true); setError(""); setNotice("");
+                try { const result = await work(); setNotice(done(result)); await refresh(); }
+                catch (err) { setError(String(err && err.message || err)); }
+                finally { setBusy(false); }
+            }
+            const installed = function (result) { const plugin = result.plugin; return (plugin.replaced ? "已更新 " : "已安装 ") + plugin.name + (plugin.version ? " " + plugin.version : "") + "，刷新页面后生效。"; };
+            function installUrl() {
+                if (!url.trim()) return;
+                void run(function () { return rpc("installUserPlugin", { url: url.trim() }); }, function (result) { setUrl(""); return installed(result); });
+            }
+            function installZip(event) {
+                const file = event.target.files && event.target.files[0];
+                event.target.value = "";
+                if (!file) return;
+                void run(async function () {
+                    const response = await fetch("/api/dsh-tavern/card-upload", { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+                    let reply = null;
+                    try { reply = await response.json(); } catch (_error) {}
+                    if (!reply || !reply.ok) throw new Error(reply && reply.error || "上传失败（HTTP " + response.status + "）");
+                    return rpc("installUserPluginUpload", { uploadId: reply.uploadId, name: file.name });
+                }, installed);
+            }
+            async function remove(plugin) {
+                const ok = await askTavernConfirm("删除插件 " + plugin.name + "？插件文件夹会移到 plugin-backups 备份目录，可以手动找回。", { confirmText: "删除" });
+                if (!ok) return;
+                void run(function () { return rpc("removeUserPlugin", { folder: plugin.folder }); }, function () { return "已删除 " + plugin.name + "，刷新页面后生效。"; });
+            }
+            const stateLabel = { loaded: "已加载", pending: "刷新后生效", failed: "加载失败", skipped: "未加载" };
+            const sourceLabel = function (source) { return source.kind === "github" ? "GitHub · " + source.repo + (source.resolved ? " · " + source.resolved : "") : source.kind === "zip" ? "ZIP 上传" : source.kind === "card" ? "人物卡自带" : "手动放入"; };
+            const plugins = data ? data.plugins || [] : [];
+            return h("div", { className: "dsh-tavern-settings-group dsh-tavern-user-plugins" },
+                h("div", { className: "dsh-tavern-user-plugins-install" },
+                    h("input", { className: "dsh-tavern-settings-select", value: url, disabled: busy, placeholder: "粘贴插件的 GitHub 地址，例如 https://github.com/作者/仓库",
+                        onChange: function (event) { setUrl(event.target.value); }, onKeyDown: function (event) { if (event.key === "Enter") installUrl(); } }),
+                    h("button", { type: "button", className: "dsh-tavern-btn primary", disabled: busy || !url.trim(), onClick: installUrl }, busy ? "处理中…" : "安装"),
+                    h("button", { type: "button", className: "dsh-tavern-btn", disabled: busy, onClick: function () { if (zipInput.current) zipInput.current.click(); } }, "上传 ZIP"),
+                    h("input", { ref: zipInput, type: "file", accept: ".zip,application/zip", style: { display: "none" }, onChange: installZip })),
+                h("p", { className: "dsh-tavern-settings-desc" }, "插件会运行在你的电脑上，只装信任的作者发布的插件。有 Release 时安装最新 Release，否则安装默认分支；连不上 GitHub 时，可以在仓库页面下载 ZIP 后上传。"),
+                notice ? h("p", { className: "dsh-tavern-user-plugins-notice", role: "status" }, notice) : null,
+                error ? h("p", { className: "dsh-tavern-settings-error", role: "alert" }, error) : null,
+                data && plugins.length === 0 ? h("p", { className: "dsh-tavern-settings-desc" }, "还没有装插件。") : null,
+                plugins.length ? h("ul", { className: "dsh-tavern-user-plugins-list" }, plugins.map(function (plugin) {
+                    return h("li", { key: plugin.folder, className: "dsh-tavern-user-plugin is-" + plugin.state },
+                        h("div", { className: "dsh-tavern-user-plugin-copy" },
+                            h("strong", null, plugin.name, plugin.version ? h("small", null, " " + plugin.version) : null,
+                                h("span", { className: "dsh-tavern-user-plugin-state" }, stateLabel[plugin.state] || plugin.state)),
+                            plugin.description ? h("span", null, plugin.description) : null,
+                            h("span", { className: "dsh-tavern-user-plugin-source" }, sourceLabel(plugin.source)),
+                            plugin.reason ? h("span", { className: "dsh-tavern-settings-error" }, plugin.reason) : null),
+                        h("div", { className: "dsh-tavern-user-plugin-actions" },
+                            plugin.source.kind === "github" ? h("button", { type: "button", className: "dsh-tavern-btn", disabled: busy, onClick: function () { void run(function () { return rpc("updateUserPlugin", { folder: plugin.folder }); }, installed); } }, "更新") : null,
+                            plugin.source.kind === "card" ? null : h("button", { type: "button", className: "dsh-tavern-btn danger", disabled: busy, onClick: function () { void remove(plugin); } }, "删除")));
+                })) : null,
+                h("div", { className: "dsh-tavern-user-plugins-folder" },
+                    h("span", { className: "dsh-tavern-settings-desc", title: data ? data.dir : "" }, data ? "插件文件夹：" + data.dir : ""),
+                    h("button", { type: "button", className: "dsh-tavern-btn", disabled: busy, onClick: function () { void rpc("openUserPluginsFolder").catch(function (err) { setError(String(err && err.message || err)); }); } }, "打开插件文件夹")));
+        }
+
         // @include modules/global-settings.js
         const { TavernSettingsSection } = createGlobalSettingsModule({
             React, rpc, notifySettingsChanged: () => window.dispatchEvent(new CustomEvent("dsh-tavern-settings-changed")),
             TavernDefaultModelSetting, TavernConversationWritingSkills, DisplayPreferencesSettings, HeaderItemsSettings,
-            CandidatePreferencesSettings, PromptTemplateSettingsEntry, ContextCompactionSettings
+            CandidatePreferencesSettings, PromptTemplateSettingsEntry, ContextCompactionSettings, TavernUserPluginsSettings
         });

@@ -430,6 +430,18 @@ export function createTavernPluginApi(deps) {
       return game ? deps.data.readGame({ chatId: game.chatId, owner }) : null
     },
 
+    // The plugin's own data, not tied to a game: kept outside its folder, so updates keep it.
+    async savePluginData({ data } = {}) {
+      const owner = ownerOf(this)
+      if (!deps.pluginData) throw new Error('当前 Tavern 不支持插件数据')
+      await deps.pluginData.save(owner, data)
+    },
+
+    async readPluginData() {
+      const owner = ownerOf(this)
+      return deps.pluginData ? deps.pluginData.read(owner) : null
+    },
+
     // Options of this plugin in each game's settings: Tavern draws them in 本局设置 and keeps the values with the game.
     gameSettings(input) {
       const owner = ownerOf(this)
