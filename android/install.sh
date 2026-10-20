@@ -184,10 +184,35 @@ run_dsh() {
 WEB_PROFILE_NAME="$(find_web_profile)"
 WEB_PROFILE_DIR="${DSH_ROOT}/profiles/${WEB_PROFILE_NAME}"
 
-stage "安装酒馆核心依赖（287 包；本地依赖缓存命中时通常 10-60s，需要联网补齐则取决于网速）"
-info "依赖目录：${REPO_ROOT}/node_modules"
-pnpm_install --dir "${REPO_ROOT}" install --frozen-lockfile
-info "核心依赖完成，node_modules：$(du -sh "${REPO_ROOT}/node_modules" 2>/dev/null | cut -f1)"
+# 旧版 setup.sh 是整目录替换：它把旧源码留在 apps/.dsh-tavern-download.*/previous-source，
+# 新版安装器在它被清理前把 node_modules 接回来，这次更新就不必再重装一遍依赖。
+if [ ! -e "${REPO_ROOT}/node_modules" ]; then
+  for previous in "${DSH_ROOT}/apps"/.dsh-tavern-download.*/previous-source; do
+    [ -d "${previous}/node_modules" ] || continue
+    if cmp -s "${previous}/pnpm-lock.yaml" "${REPO_ROOT}/pnpm-lock.yaml" 2>/dev/null; then
+      mv -- "${previous}/node_modules" "${REPO_ROOT}/node_modules" 2>/dev/null \
+        && info '复用更新前的依赖目录（lockfile 未变），跳过重新安装'
+      break
+    fi
+  done
+fi
+
+# 更新而不是重装：lockfile 没变、node_modules 与它一致时 pnpm 只会做一次空校验，
+# 直接跳过；桌面版更新也是这个行为。只有依赖真的变化（或首次安装）才装。
+deps_up_to_date() {
+  [ -f "${REPO_ROOT}/node_modules/.pnpm/lock.yaml" ] || return 1
+  cmp -s "${REPO_ROOT}/node_modules/.pnpm/lock.yaml" "${REPO_ROOT}/pnpm-lock.yaml" || return 1
+  return 0
+}
+if [ "${DSH_TAVERN_FORCE_DEPENDENCIES:-0}" != 1 ] && deps_up_to_date; then
+  stage "检查酒馆核心依赖"
+  info '依赖未变化（lockfile 未变），跳过安装'
+else
+  stage "安装酒馆核心依赖（287 包；本地依赖缓存命中时通常 10-60s，需要联网补齐则取决于网速）"
+  info "依赖目录：${REPO_ROOT}/node_modules"
+  pnpm_install --dir "${REPO_ROOT}" install --frozen-lockfile
+  info "核心依赖完成，node_modules：$(du -sh "${REPO_ROOT}/node_modules" 2>/dev/null | cut -f1)"
+fi
 
 if [ "${DSH_TAVERN_ANDROID_STANDALONE:-0}" != 1 ] && [ -f "${TAVERN_PROFILE_DIR}/package.json" ]; then
   stage "停止旧版酒馆服务"

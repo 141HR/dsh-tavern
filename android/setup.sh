@@ -23,6 +23,7 @@ APK_BUNDLE_REVISION="${DSH_TAVERN_APK_BUNDLE_REVISION:-}"
 TEMP_ROOT=""
 SOURCE_BACKUP=""
 SOURCE_SWAPPED=0
+NODE_MODULES_CARRIED=0
 
 fail() {
   printf 'DSH Tavern 安装失败：%s\n' "$1" >&2
@@ -149,11 +150,26 @@ fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(15 * 60 * 1000) })
 NODE
 }
 
+# 依赖锁文件没变时，已装的 node_modules 可以原样复用；整体替换源码时把它搬进新目录，
+# 后续 pnpm install 只是校验一遍，不再把 287 个包重新复制或下载。
+same_lockfile() {
+  local candidate="$1"
+  cmp -s "${APP_DIR}/pnpm-lock.yaml" "${candidate}/pnpm-lock.yaml" || return 1
+  cmp -s "${APP_DIR}/pnpm-workspace.yaml" "${candidate}/pnpm-workspace.yaml" || return 1
+  return 0
+}
+
 replace_source() {
   local candidate="$1"
   verify_source "${candidate}"
   if [ -d "${APP_DIR}/data" ] && [ ! -e "${candidate}/data" ]; then
     cp -a "${APP_DIR}/data" "${candidate}/data"
+  fi
+  if [ -d "${APP_DIR}/node_modules" ] && [ ! -e "${candidate}/node_modules" ] && same_lockfile "${candidate}"; then
+    if mv -- "${APP_DIR}/node_modules" "${candidate}/node_modules" 2>/dev/null; then
+      NODE_MODULES_CARRIED=1
+      info '依赖未变化，复用已安装的 node_modules'
+    fi
   fi
   if [ -e "${APP_DIR}" ]; then
     SOURCE_BACKUP="${TEMP_ROOT}/previous-source"
@@ -183,6 +199,11 @@ NODE
     printf '服务可能仍在运行，保留源码和备份：%s\n' "${TEMP_ROOT}" >&2
     TEMP_ROOT=""
     return 1
+  fi
+  # 复用过去的 node_modules 跟着新源码一起回滚，别让旧版本失去可用依赖。
+  if [ "${NODE_MODULES_CARRIED}" = 1 ] && [ -d "${APP_DIR}/node_modules" ] \
+    && [ -n "${SOURCE_BACKUP}" ] && [ -d "${SOURCE_BACKUP}" ] && [ ! -e "${SOURCE_BACKUP}/node_modules" ]; then
+    mv -- "${APP_DIR}/node_modules" "${SOURCE_BACKUP}/node_modules" 2>/dev/null || true
   fi
   if [ -e "${APP_DIR}" ]; then mv -- "${APP_DIR}" "${TEMP_ROOT}/failed-source"; fi
   if [ -n "${SOURCE_BACKUP}" ] && [ -d "${SOURCE_BACKUP}" ]; then mv -- "${SOURCE_BACKUP}" "${APP_DIR}"; fi

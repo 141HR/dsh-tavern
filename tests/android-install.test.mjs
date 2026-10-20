@@ -255,7 +255,7 @@ esac
 `, { mode: 0o755 })
 
   const result = spawnSync('bash', [new URL('../android/install.sh', import.meta.url).pathname], {
-    env: { ...process.env, DSH_HOME: dshHome, DSH_TAVERN_OFFLINE_DIR: offlineDir, DSH_TAVERN_ANDROID_STANDALONE: initialVersion === 'standalone' ? '1' : '0', PATH: `${mockBin}${path.delimiter}${process.env.PATH}` },
+    env: { ...process.env, DSH_HOME: dshHome, DSH_TAVERN_OFFLINE_DIR: offlineDir, DSH_TAVERN_ANDROID_STANDALONE: initialVersion === 'standalone' ? '1' : '0', DSH_TAVERN_FORCE_DEPENDENCIES: '1', PATH: `${mockBin}${path.delimiter}${process.env.PATH}` },
     encoding: 'utf8',
   })
   const recorded = (await readFile(events, 'utf8')).replace(/11\.25\.0\.install\.[^ \n]+/g, '11.25.0').trim().split('\n')
@@ -598,6 +598,7 @@ test('更新按运行清单增量下载：只取有变化的文件，保留用�
   const oldFiles = new Map([
     ['package.json', '{"name":"dsh-profile-tavern","version":"1.0.0"}\n'],
     ['pnpm-workspace.yaml', 'packages:\n  - .\n'],
+    ['pnpm-lock.yaml', 'lockfileVersion: 9\n'],
     ['bin/dsh-tavern.mjs', ''],
     ['android/install.sh', '#!/usr/bin/env bash\nexit 1\n'],
     ['tavern-plugin/lib/stable.js', unchanged],
@@ -611,6 +612,9 @@ test('更新按运行清单增量下载：只取有变化的文件，保留用�
   await writeFile(path.join(appDir, '.dsh-tavern-tarball-source'), 'https://example.invalid/previous.tar.gz\n')
   await mkdir(path.join(appDir, 'data'), { recursive: true })
   await writeFile(path.join(appDir, 'data/cards.json'), '{"keep":true}\n')
+  // 已装依赖：lockfile 未变，更新时应直接搬进新源码，而不是重新安装。
+  await mkdir(path.join(appDir, 'node_modules'), { recursive: true })
+  await writeFile(path.join(appDir, 'node_modules', 'marker.txt'), 'keep\n')
 
   const revision = 'c'.repeat(40)
   const next = new Map(oldFiles)
@@ -650,6 +654,7 @@ test('更新按运行清单增量下载：只取有变化的文件，保留用�
   assert.equal(await readFile(path.join(appDir, 'android/install.sh'), 'utf8'), installScript)
   assert.equal(await readFile(path.join(appDir, 'tavern-plugin/lib/stable.js'), 'utf8'), unchanged)
   assert.equal(await readFile(path.join(appDir, 'data/cards.json'), 'utf8'), '{"keep":true}\n')
+  assert.equal(await readFile(path.join(appDir, 'node_modules', 'marker.txt'), 'utf8'), 'keep\n', 'lockfile 未变时应复用已安装依赖')
   await assert.rejects(access(path.join(appDir, 'docs/hello.md')), '清单外的文件不会进入新版本')
   await access(path.join(appDir, '.dsh-tavern-tarball-source'))
   await assert.rejects(access(path.join(appDir, '.git')))
