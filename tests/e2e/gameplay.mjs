@@ -226,6 +226,7 @@ try {
           TAVERN_E2E_BACKGROUND_DIR: (process.argv.includes('--background-lifecycle') || process.argv.includes('--background-failure')) ? output : '',
           TAVERN_E2E_REQUEST_AUDIT: join(output, 'preset-requests.jsonl'),
           TAVERN_E2E_STORY_TOOL_LOG: storyToolScenario ? join(output, 'story-tool.jsonl') : '',
+          TAVERN_E2E_STORY_TOOL_LONG: storyToolScenario ? (process.env.TAVERN_E2E_STORY_TOOL_LONG || '60') : '',
           TAVERN_E2E_SETTLEMENT_DUMP: process.env.TAVERN_E2E_SETTLEMENT_DUMP || '',
           TAVERN_E2E_CAST: castScenario ? '1' : '',
           TAVERN_E2E_MEMORY_AUDIT: process.argv.includes('--card-memory') ? join(output, 'memory-requests.jsonl') : '',
@@ -279,7 +280,7 @@ try {
       return {bootMs,openStarted,openSessionStarted}
     }
     browser = await chromium.launch({ headless: true })
-    context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, ...(recoveryScenario ? { hasTouch: true } : {}) })
+    context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: process.env.TAVERN_E2E_LOCALE || 'en-US', ...(recoveryScenario ? { hasTouch: true } : {}) })
     context.setDefaultTimeout(timeout)
     if (!process.argv.includes('--settlement-performance')) await context.tracing.start({ screenshots: true, snapshots: true, sources: true })
     page = await context.newPage()
@@ -503,15 +504,17 @@ try {
   } else if (recoveryScenario) {
     await surfaceRecoveryChecks({ page, step, savedChat, output, report, root, restartServer })
   } else {
+  // Host settings live behind shell chrome that differs per DSH release; the
+  // acceptance only needs the switches, so write them through the same RPC the
+  // settings page uses.
+  const setTavernSettings = async patch => {
+    const result = await page.evaluate(async patch => (await fetch('/api/dsh-tavern/updateTavernSettings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ patch }) })).json(), patch)
+    for (const [name, value] of Object.entries(patch)) assert.equal(result.settings?.[name], value, JSON.stringify(result))
+    return result
+  }
   if (storyToolScenario) await step('开启正文走工具调用', async () => {
-    // A global switch: DSH settings → DSH Tavern → 高级.
     const chatUrl = page.url()
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
-    await page.getByText('DSH Tavern', { exact: true }).first().click()
-    const toggle = page.getByRole('switch', { name: '正文走工具调用', exact: true })
-    await toggle.click()
-    await page.getByText('已保存，所有游戏下一轮生效').waitFor()
-    assert.equal(await toggle.isChecked(), true)
+    await setTavernSettings({ storyToolCall: true })
     // The stage is per card and off for ordinary cards; this card turns it on.
     const stage = await page.evaluate(async () => (await fetch('/api/dsh-tavern/setCardStage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: 'cards/e2e.json', enabled: true }) })).json())
     assert.equal(stage.enabled, true)
@@ -520,12 +523,7 @@ try {
   })
   if (castScenario) await step('开启对话头像', async () => {
     const chatUrl = page.url()
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
-    await page.getByText('DSH Tavern', { exact: true }).first().click()
-    const toggle = page.getByRole('switch', { name: '对话头像', exact: true })
-    await toggle.click()
-    await page.getByText('已保存，所有游戏下一轮生效').first().waitFor()
-    assert.equal(await toggle.isChecked(), true)
+    await setTavernSettings({ castPresentation: true })
     await page.goto(chatUrl)
     await page.getByRole('textbox', { name: /发消息|Message/ }).waitFor()
   })
@@ -536,6 +534,21 @@ try {
     await inspectScreen()
     report.beforeReload = inspectSaved(await savedChat())
     await page.screenshot({ path: join(output, 'before-reload.png'), fullPage: true })
+  })
+  // 工具提交的正文一次性落地，长正文必须从第一行开始读，而不是停在最后一行。
+  if (storyToolScenario) await step('工具提交的长正文从开头显示', async () => {
+    const reveal = await page.evaluate(() => {
+      const scroller = document.querySelector('[data-conversation-scroll]')
+      const rows = [...document.querySelectorAll('[data-chat-flow-kind="assistant-step"]')].filter(row => row.getBoundingClientRect().height > 0 && !row.closest('[hidden]'))
+      const row = rows.at(-1)
+      const box = scroller.getBoundingClientRect()
+      return { top: Math.round(row.getBoundingClientRect().top - box.top), height: Math.round(row.getBoundingClientRect().height),
+        scrollTop: Math.round(scroller.scrollTop), floor: Math.round(scroller.scrollHeight - scroller.clientHeight) }
+    })
+    report.storyToolReveal = reveal
+    assert.ok(reveal.height > 1500, '长正文没有渲染成整段：' + JSON.stringify(reveal))
+    assert.ok(reveal.scrollTop < reveal.floor - 400, '生成完长正文后停在底部：' + JSON.stringify(reveal))
+    assert.ok(reveal.top >= 0 && reveal.top <= 40, '正文开头没有对齐视口顶部：' + JSON.stringify(reveal))
   })
   if (castScenario) await step('台词显示成带头像的说话人行，刷新后仍在', async () => {
     const rows = page.locator('.dsh-tavern-cast-line').filter({ visible: true })
