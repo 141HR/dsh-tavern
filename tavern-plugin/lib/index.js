@@ -2940,8 +2940,6 @@ export async function apply(ctx) {
         .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 世界书预筛失败，下一轮按关键词与预算注入:', str(error?.message || error)) })
       if ((chat.mode || 'story') !== 'story' || chat.backgroundTasks?.styleReference !== true) return
       signal.throwIfAborted()
-      // Switched on for a game whose session is not loaded yet (e.g. just imported): load it first.
-      if (!agentRegistry.get(chat.sessionId)?.session) await agentRegistry.resume({ resumeSessionId: chat.sessionId })
       await styleReferenceRecall({ chat: await storyContext({ chatId }), signal })
         .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 文风参考失败，下一轮不带参考:', str(error?.message || error)) })
     }
@@ -4833,8 +4831,9 @@ export async function apply(ctx) {
         if (Object.hasOwn(args, 'backgroundModel')) await checkModel(args.backgroundModel, '后台模型')
         if (Object.hasOwn(args, 'imageModel')) await checkModel(args.imageModel, '生图 Agent 模型')
         const saved = await updateChat(chat.id, current => patchConversationBackground(current, args), { source: 'background-model.switch-conversation' })
-        // Turned on mid-game: recall from the latest reply now, so the very next turn has a reference.
-        if (args.backgroundTasks?.styleReference === true && chat.backgroundTasks?.styleReference !== true) void worldbookPrefilter.start(chat.id)
+        // Turned on mid-game: recall from the latest reply now, so the very next turn has a reference. A game
+        // whose session is not loaded yet (never opened since import or restart) recalls after its next reply.
+        if (args.backgroundTasks?.styleReference === true && chat.backgroundTasks?.styleReference !== true && agentRegistry.get(sessionId)?.session) void worldbookPrefilter.start(chat.id)
         return { backgroundModel: saved.backgroundModelSelection || null, imageModel: saved.imageModelSelection || null, backgroundTasks: normalizeBackgroundTasks(saved.backgroundTasks), webSearchEnabled: saved.webSearchEnabled === true, sceneImagesEnabled: saved.sceneImagesEnabled === true }
       }
       case 'getBackgroundModelReasoning': return { reasoning: await readBackgroundModelReasoning(llm, args) }
