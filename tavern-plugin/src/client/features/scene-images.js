@@ -90,26 +90,31 @@
 			const [picked, setPicked] = React.useState({});
 			const [busy, setBusy] = React.useState(false);
 			const [notice, setNotice] = React.useState("");
+			const loadRevision = React.useRef(0);
 			const load = React.useCallback(async function () {
+				const requested = ++loadRevision.current;
+				const sessionId = props.gallerySessionId;
 				setBusy(true);
 				try {
-					const result = await rpc("listSceneImageHistory", { sessionId: props.gallerySessionId }, props.gallerySessionId);
-					setItems({ native: result.items || [], plugin: result.pluginItems || [] });
+					const result = await rpc("listSceneImageHistory", { sessionId: sessionId }, sessionId);
+					if (requested === loadRevision.current) { setItems({ sessionId: sessionId, native: result.items || [], plugin: result.pluginItems || [] }); setNotice(""); }
 				}
-				catch (e) { setNotice(String(e.message || e)); }
-				finally { setBusy(false); }
+				catch (e) { if (requested === loadRevision.current) setNotice(String(e.message || e)); }
+				finally { if (requested === loadRevision.current) setBusy(false); }
 			}, [props.gallerySessionId]);
 			React.useEffect(function () {
-				setItems(null); setPicked({}); setPicking(false); void load();
+				++loadRevision.current;
+				setItems(null); setPicked({}); setPicking(false); setNotice(""); void load();
 				function changed() { void load(); }
 				window.addEventListener("dsh-tavern-image-changed", changed);
 				// A plugin attached or removed a picture.
 				const stopPlugin = props.gallerySessionId ? tavernPluginMediaIndex.subscribe(props.gallerySessionId, changed) : function () {};
-				return function () { window.removeEventListener("dsh-tavern-image-changed", changed); stopPlugin(); };
+				return function () { ++loadRevision.current; window.removeEventListener("dsh-tavern-image-changed", changed); stopPlugin(); };
 			}, [load]);
+			const currentItems = items && items.sessionId === props.gallerySessionId ? items : null;
 			const rows = [];
 			// Tavern's own pictures (old saves) and pictures plugins attached share one timeline.
-			(items ? items.native : []).forEach(function (item) {
+			(currentItems ? currentItems.native : []).forEach(function (item) {
 				let row = rows.find(function (entry) { return entry.turn === item.turn; });
 				if (!row) rows.push(row = { turn: item.turn, shots: [] });
 				item.versions.forEach(function (version) {
@@ -117,7 +122,7 @@
 						url: "/api/dsh-tavern/scene-image-stored?" + new URLSearchParams({ chatId: item.chatId, key: item.key, versionId: version.id }).toString() });
 				});
 			});
-			(items ? items.plugin : []).forEach(function (item) {
+			(currentItems ? currentItems.plugin : []).forEach(function (item) {
 				let row = rows.find(function (entry) { return entry.turn === item.turn; });
 				if (!row) rows.push(row = { turn: item.turn, shots: [] });
 				row.shots.push({ item: item, plugin: true, version: { id: item.id, description: item.caption, createdAt: item.createdAt }, id: "plugin/" + item.id,
@@ -134,6 +139,7 @@
 				setBusy(true); setNotice("");
 				try {
 					const results = (await rpc("removeSceneImageHistory", {
+						sessionId: props.gallerySessionId,
 						items: list.filter(function (shot) { return !shot.plugin; }).map(function (shot) { return { chatId: shot.item.chatId, key: shot.item.key, versionId: shot.version.id }; }),
 						pluginItems: list.filter(function (shot) { return shot.plugin; }).map(function (shot) { return shot.item.id; })
 					}, props.gallerySessionId)).results;
@@ -147,7 +153,7 @@
 			}
 			return h("section", { className: "dsh-tavern-full-context dsh-tavern-gallery" + (picking ? " is-picking" : "") },
 				h("header", { className: "dsh-context-header" },
-					h("div", null, h("h3", null, "画廊"), h("p", null, items ? "本局共 " + shots.length + " 张，按轮次排列" : "读取中…")),
+					h("div", null, h("h3", null, "画廊"), h("p", null, currentItems ? "本局共 " + shots.length + " 张，按轮次排列" : notice ? "读取失败" : "读取中…")),
 					h("button", { disabled: busy, onClick: load }, busy ? "读取中…" : "刷新")),
 				shots.length ? h("div", { className: "dsh-context-toolbar" },
 					picking ? h(React.Fragment, null,
@@ -156,7 +162,7 @@
 						h("button", { type: "button", disabled: busy, onClick: function () { setPicking(false); setPicked({}); } }, "完成"))
 						: h("button", { type: "button", disabled: busy, onClick: function () { setPicking(true); } }, "批量删除")) : null,
 				notice ? h("p", { role: "status" }, notice) : null,
-				items && !shots.length ? h("p", { className: "dsh-context-empty" }, "这一局还没有插图。") : null,
+				currentItems && !shots.length ? h("p", { className: "dsh-context-empty" }, "这一局还没有插图。") : null,
 				rows.map(function (row) {
 					return h("section", { key: row.turn, className: "dsh-tavern-gallery-turn" },
 						h("h4", null, row.turn > 0 ? "第 " + row.turn + " 轮" : "开场", h("span", null, row.shots.length + " 张")),

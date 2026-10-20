@@ -545,8 +545,15 @@ test('generation handed to the plugin: old pictures stay readable, nothing is pl
   assert.equal(state.versions.length, 1, 'the old picture is still shown')
   assert.equal(state.enabled, false, 'redraw, retry and add controls are hidden')
   assert.equal(state.auto, false)
+  assert.deepEqual((await off.readImage('parent', 2, key, state.versions[0].id)).data, png, 'saved bytes remain readable')
+  assert.ok((await off.history('test-chat')).some(item => item.key === key), 'old pictures remain in history')
   assert.equal(await off.autoGenerate('parent'), null)
-  await assert.rejects(off.start('parent', 2, key, { kind: 'replan' }), error => error.code === 'scene-images-delegated')
+  for (const kind of ['generate', 'replan', 'add', 'adjust', 'repaint', 'prompt']) {
+    await assert.rejects(off.start('parent', 2, key, { kind, requestId: 'disabled-' + kind }), error => error.code === 'scene-images-delegated')
+  }
   await assert.rejects(off.testGenerate(), error => error.code === 'scene-images-delegated')
   assert.deepEqual({ agents, calls }, paid, 'no planning model run and no paid image request')
+  const removed = await off.removeImage('parent', 2, key, state.versions[0].id)
+  assert.equal(removed.status, 'idle', 'old pictures remain deletable')
+  await assert.rejects(off.readImage('parent', 2, key, state.versions[0].id), /就绪|删除/)
 })

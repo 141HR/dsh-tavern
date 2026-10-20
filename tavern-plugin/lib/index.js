@@ -4952,8 +4952,11 @@ export async function apply(ctx) {
         return { items: chat?.id ? await illustrations.history(chat.id) : [], pluginItems: await pluginGalleryItems(args.sessionId) }
       }
       case 'removeSceneImageHistory': {
-        const results = await enabledSceneIllustrations().removeStoredImages(args && args.items || [])
-        return { results: results.concat(await removePluginGalleryItems(args && args.sessionId, args && args.pluginItems)) }
+        const legacyItems = args && args.items || []
+        const pluginItems = args && args.pluginItems || []
+        if (!Array.isArray(legacyItems) || !Array.isArray(pluginItems) || legacyItems.length + pluginItems.length > 500) throw new Error('一次最多删除 500 张')
+        const results = await enabledSceneIllustrations().removeStoredImages(legacyItems)
+        return { results: results.concat(await removePluginGalleryItems(args && args.sessionId, pluginItems)) }
       }
       case 'removeSceneImage': return { illustration: await enabledSceneIllustrations().removeImage(args.sessionId, args.turn, args.key, args.versionId) }
       case 'setSceneImageReference': return { illustration: await enabledSceneIllustrations().setReference(args.sessionId, args.turn, args.key, args.versionId, args.consent, args.enabled !== false, args.personId) }

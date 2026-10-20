@@ -471,7 +471,7 @@
 					catch (e) { setError(String(e.message || e)); }
 					finally { setBusy(false); notify(); }
 				}
-				const url = version ? "/api/dsh-tavern/scene-image?" + new URLSearchParams({ sessionId: props.sessionId, turn: String(props.turn), key: state.key, versionId: version.id }).toString() : "";
+				const url = version && state ? "/api/dsh-tavern/scene-image?" + new URLSearchParams({ sessionId: props.sessionId, turn: String(props.turn), key: state.key, versionId: version.id }).toString() : "";
 				if (!state) return null;
 				// Without a picture, generation lives in the turn's action row.
 				if (!version && state.status === "idle") return null;
