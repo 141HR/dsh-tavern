@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "46e86f998e4060162ad06ab56172fa99f16adda3",
-  "releaseSequence": 792,
+  "revision": "dcdd315cb8557692b8316bfd443452d508ce94d7",
+  "releaseSequence": 793,
   "version": "3.0.1",
   "files": [
     {
@@ -631,8 +631,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "d93eb0f3e9403ea1cf73b28b52181b3c1be1f0077eb2ab665db85d7b8c18d678",
-      "size": 2003509
+      "sha256": "07e1d3696aba7336ebb116047643536506fe594dd62a8ecb4dcb5876e00c7c9a",
+      "size": 2003859
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -2081,8 +2081,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/surface-recovery.js",
-      "sha256": "d0582747736cbf464095f85f6ea66a71a05ff0a48f359e0c91dddf7615c315d9",
-      "size": 3979
+      "sha256": "e41d713ba2960b4a496c345c0d7adeb2e87610f1b534be9958dd6fc7a9a36b7d",
+      "size": 4182
     },
     {
       "path": "tavern-plugin/lib/domain/surface-restoration.js",
@@ -5481,8 +5481,8 @@
     },
     {
       "path": "tavern-plugin/src/client/ui/message-frame.js",
-      "sha256": "e888ccecfd2647ac1045eb29ef3dcb575bc6b150b4379861eb6da03099f656e1",
-      "size": 38478
+      "sha256": "f5e6f34e9d664bf81b0dbb786fa8d1b14b302e97426ebf197dc5e4429a92350e",
+      "size": 38828
     },
     {
       "path": "tavern-plugin/src/client/ui/visible-refresh.js",
