@@ -1,5 +1,4 @@
 import { createImmutableTurnFields } from './freeze-json.js'
-import { planTranscriptRows } from './transcript-row-plan.js'
 import { createMvuReceiptIndex } from './mvu-receipt-index.js'
 import { copyJsonTree } from './copy-json-tree.js'
 import { copyLazyHistoryHeader } from './lazy-history-read.js'
@@ -190,10 +189,6 @@ export function createSessionStateView({ activity: activityOf, evidence: evidenc
       replacingDshTurns: replacingTurns,
       supersededDshTurns: supersededTurns,
       regeneratedDshTurns: mappings,
-      // The row plan (docs/design/transcript-row-plan.md), sent alongside the hiding
-      // lists; the client only compares the two until it switches over.
-      transcriptRows: Array.isArray(nodes) && ['story', 'script'].includes(chat.mode || 'story')
-        ? planTranscriptRows({ chat, events: evidence.events || [], nodes, partial: chat.windowRevision !== undefined }) : null,
       suppressedDshErrorTurns: supersededRegenerationErrorTurns({ events: evidence.events || [], suppressedDshTurns: chat.suppressedDshTurns }),
       staleDshErrorTurns: failures.staleTurns,
       filteredFailureStreak: failures.filteredStreak,

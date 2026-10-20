@@ -60,7 +60,7 @@ try {
       console.log(`${shown(row.visible)}  ${shown(plan.rows[index].visible)}  原生轮 ${String(row.turn ?? '-').padStart(3)}  ${row.kind.padEnd(14)} seq ${String(row.seq).padStart(5)}${story}  ${preview(row.text)}${differs}`)
     }
     console.log('\n名单', JSON.stringify({ suppressed: view.suppressedDshTurns, replacing: view.replacingDshTurns, superseded: view.supersededDshTurns, regenerated: view.regeneratedDshTurns }))
-    console.log('计划', JSON.stringify(plan.plan))
+    console.log('计划（例外）', JSON.stringify(Object.fromEntries(Object.keys(plan.plan).map(key => [key, plan.plan[key]]))), '进行中', plan.open)
   }
   const differs = rows.filter((row, index) => row.kind !== 'context' && row.visible !== plan.rows[index].visible).length
   const list = items => items.length ? items.map(item => '\n- ' + item).join('') : ' 无'

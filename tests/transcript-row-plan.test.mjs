@@ -1,66 +1,117 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { planTranscriptRows, planShowsRow, planStoryTurn } from '../tavern-plugin/lib/domain/transcript-row-plan.js'
-import { createSessionStateView } from '../tavern-plugin/lib/domain/chat-session-state.js'
-import { createScopedMessages } from '../tavern-plugin/lib/domain/scoped-messages.js'
+import { createTranscriptFold, planTranscriptRows, planTranscriptWindow, planShowsRow, planStoryTurn } from '../tavern-plugin/lib/domain/transcript-row-plan.js'
 
 const model = { kind: 'model', provider: 'test', model: 'test' }
-const reply = (seq, turn, text, extra = {}) => ({ seq, type: 'assistant/message', surfaceOp: 'append', data: { turn, step: 1, message: { role: 'assistant', content: [{ type: 'text', text }], source: model, ...extra } } })
+const story = n => ({ source: { ...model, tavernStoryTurn: n } })
+const reply = (seq, turn, text, extra = {}, step = 1) => ({ seq, type: 'assistant/message', surfaceOp: 'append', data: { turn, step, message: { role: 'assistant', content: [{ type: 'text', text }], source: model, ...extra } } })
 const input = (seq, source = { kind: 'user' }) => ({ seq, type: 'user/message', surfaceOp: 'append', data: { role: 'user', content: [{ type: 'text', text: '输入' }], source } })
-const turn = (seq, type, number) => ({ seq, type, data: { turn: number, reason: { kind: 'completed' } } })
-const chat = turns => ({ messages: turns.flatMap(number => [{ role: 'user', text: '输入' }, { role: 'assistant', turn: number, text: '正文' }]) })
+const mark = (seq, type, turn, step = 1) => ({ seq, type, data: { turn, step, reason: { kind: 'completed' } } })
+const floors = turns => turns.flatMap(turn => [{ role: 'user' }, { role: 'assistant', turn }])
+const chat = turns => ({ messages: floors(turns) })
+const plain = plan => Object.fromEntries(Object.keys(plan).map(key => [key, plan[key]]))
+// A round as the log writes it, numbered from `seq`.
+function round(seq, turn, text = '正文') {
+  return [mark(seq, 'turn/start', turn), input(seq + 1), reply(seq + 2, turn, text), mark(seq + 3, 'step/end', turn), mark(seq + 4, 'turn/end', turn)]
+}
 
-test('普通回合：输入和正文都在自己的原生轮', () => {
-  const events = [turn(0, 'turn/start', 1), input(1), reply(2, 1, '正文'), turn(3, 'turn/end', 1)]
-  const plan = planTranscriptRows({ chat: chat([1]), events, nodes: [1, 2] })
-  assert.deepEqual(plan.rounds, [{ story: 1, input: 1, reply: 1 }])
-  assert.equal(plan.open, null)
-  assert.equal(planShowsRow(plan, { turn: 1, kind: 'user' }), true)
-  assert.equal(planShowsRow(plan, { turn: 1, kind: 'assistant-step' }), true)
+test('普通回合：例外表是空的，每个原生轮画自己的输入和正文', () => {
+  const plan = planTranscriptRows({ chat: chat([1, 2]), events: [...round(0, 1), ...round(5, 2)] })
+  assert.deepEqual(plain(plan), {})
+  assert.equal(planShowsRow(plan, { turn: 2, kind: 'user' }), true)
+  assert.equal(planShowsRow(plan, { turn: 2, kind: 'assistant-step' }), true)
 })
 
-test('修复把一轮重写进自己的一步：正文画在那一轮；多轮挤在同一步时各轮仍用原来的行', () => {
-  const story = n => ({ source: { ...model, tavernStoryTurn: n } })
-  const one = [turn(0, 'turn/start', 1), input(1), reply(2, 1, '旧'), turn(3, 'turn/end', 1),
-    turn(4, 'turn/start', 2), reply(5, 2, '新', story(1)), turn(6, 'turn/end', 2)]
-  assert.deepEqual(planTranscriptRows({ chat: chat([1]), events: one, nodes: [1, 5] }).rounds, [{ story: 1, input: 1, reply: 2 }])
-  const many = [turn(0, 'turn/start', 1), input(1), reply(2, 1, 'a'), turn(3, 'turn/end', 1),
-    turn(4, 'turn/start', 2), input(5), reply(6, 2, 'b'), turn(7, 'turn/end', 2),
-    turn(8, 'turn/start', 3), reply(9, 3, 'a', story(1)), reply(10, 3, 'b', story(2)), turn(11, 'turn/end', 3)]
-  const plan = planTranscriptRows({ chat: chat([1, 2]), events: many, nodes: [1, 9, 5, 10] })
-  assert.deepEqual(plan.rounds.map(round => round.reply), [1, 2])
-  assert.equal(planShowsRow(plan, { turn: 3, kind: 'assistant-step' }), false)
-})
-
-test('最后一轮还在跑、或已结束但存档还没收下玩家输入：这一轮原样显示', () => {
-  const running = [turn(0, 'turn/start', 1), input(1), reply(2, 1, '正文'), turn(3, 'turn/end', 1), turn(4, 'turn/start', 2), input(5)]
-  assert.equal(planTranscriptRows({ chat: chat([1]), events: running, nodes: [1, 2, 5] }).open, 2)
-  const settling = [...running, reply(6, 2, '还没入档'), turn(7, 'turn/end', 2)]
-  assert.equal(planTranscriptRows({ chat: chat([1]), events: settling, nodes: [1, 2, 5, 6] }).open, 2)
-  // An unclaimed turn woken by Tavern itself (an abandoned attempt) is not the player's.
-  const attempt = [...running.slice(0, 4), turn(4, 'turn/start', 2), input(5, { kind: 'plugin', plugin: 'dsh-tavern-regen' }), reply(6, 2, '作废'), turn(7, 'turn/end', 2)]
-  assert.equal(planTranscriptRows({ chat: chat([1]), events: attempt, nodes: [1, 2] }).open, null)
-})
-
-test('旧存档的行没有轮次号：开场算第 1 轮，每条玩家输入往后推一轮', () => {
-  const plan = planTranscriptRows({ chat: { messages: [{ role: 'assistant', greeting: true, text: '开场' }, { role: 'user', text: '你好' }, { role: 'assistant', text: '回复' }] }, events: [], nodes: [] })
-  assert.deepEqual(plan.rounds, [{ story: 1, input: null, reply: 1 }, { story: 2, input: 2, reply: 2 }])
+test('修复把一轮重写进自己的一步：正文改画在那一轮；多轮挤在同一步时各轮仍用原来的行', () => {
+  const one = [...round(0, 1, '旧'), mark(5, 'turn/start', 2), reply(6, 2, '新', story(1)), mark(7, 'step/end', 2), mark(8, 'turn/end', 2)]
+  assert.deepEqual(plain(planTranscriptRows({ chat: chat([1]), events: one })), { 1: { input: 1, reply: 0 }, 2: { input: 0, reply: 1, story: 1 } })
+  const many = [...round(0, 1, 'a'), ...round(5, 2, 'b'), mark(10, 'turn/start', 3), reply(11, 3, 'a', story(1)), reply(12, 3, 'b', story(2)), mark(13, 'step/end', 3), mark(14, 'turn/end', 3)]
+  const plan = planTranscriptRows({ chat: chat([1, 2]), events: many })
+  assert.deepEqual(plain(plan), { 3: { input: 0, reply: 0 } })
   assert.equal(planStoryTurn(plan, 2), 2)
 })
 
-test('只读到最近几轮的存档：更早的轮次不由计划判断', () => {
-  const messages = createScopedMessages(6, [[4, { role: 'user', text: '输入' }], [5, { role: 'assistant', turn: 9, text: '正文' }]])
-  const plan = planTranscriptRows({ chat: { messages }, events: [], nodes: [] })
-  assert.equal(plan.from, 9)
-  assert.equal(planShowsRow(plan, { turn: 3, kind: 'assistant-step' }), null)
-  assert.equal(planShowsRow(plan, { turn: 9, kind: 'assistant-step' }), true)
+test('最后一轮还在跑、或失败停在那里：这一轮原样显示；回退掉的和作废的生成期回合藏起来', () => {
+  const running = [...round(0, 1), mark(5, 'turn/start', 2), input(6)]
+  assert.deepEqual(plain(planTranscriptRows({ chat: chat([1]), events: running })), {})
+  const failed = [...running, reply(7, 2, '半截'), mark(8, 'step/end', 2), { seq: 9, type: 'turn/end', data: { turn: 2, reason: { kind: 'error' } } }]
+  assert.deepEqual(plain(planTranscriptRows({ chat: chat([1]), events: failed })), {})
+  // A completed turn the save lacks was rolled back (rounds are saved before the turn ends).
+  const rolledBack = [...running, reply(7, 2, '回退了'), mark(8, 'step/end', 2), mark(9, 'turn/end', 2)]
+  assert.deepEqual(plain(planTranscriptRows({ chat: chat([1]), events: rolledBack })), { 2: { input: 0, reply: 0 } })
+  const attempt = [...round(0, 1), mark(5, 'turn/start', 2), input(6, { kind: 'plugin', plugin: 'dsh-tavern-regen' }), reply(7, 2, '作废'), mark(8, 'step/end', 2), mark(9, 'turn/end', 2)]
+  assert.deepEqual(plain(planTranscriptRows({ chat: chat([1]), events: attempt })), { 2: { input: 0, reply: 0 } })
 })
 
-test('视图随隐藏名单一起下发行计划；非剧情会话不下发', () => {
-  const events = [turn(0, 'turn/start', 1), input(1), reply(2, 1, '正文'), turn(3, 'turn/end', 1)]
-  const session = { id: 's', events, surface: { nodes: [1, 2] } }
-  const fields = createSessionStateView({ activity: () => ({ busy: false }), evidence: () => ({ session, events }) })
-  const story = fields.rollback({ id: 'c', sessionId: 's', mode: 'story', ...chat([1]) }, { session, events })
-  assert.deepEqual(story.transcriptRows.rounds, [{ story: 1, input: 1, reply: 1 }])
-  assert.equal(fields.rollback({ id: 'd', sessionId: 's', mode: 'card', messages: [] }, { session, events }).transcriptRows, null)
+test('旧存档的行没有轮次号：开场算第 1 轮，每条玩家输入往后推一轮', () => {
+  const plan = planTranscriptRows({ chat: { messages: [{ role: 'assistant', greeting: true }, { role: 'user' }, { role: 'assistant' }] }, events: [...round(0, 1), ...round(5, 2)] })
+  assert.deepEqual(plain(plan), {})
+})
+
+// The fold is fed in pieces in the app: one event at a time, the save from the first
+// changed floor on. Any order of feeding must land on the plan fed everything at once.
+test('逐条喂入日志、按变化喂入存档，结果和一次喂完完全相同', () => {
+  const regen = [...round(0, 1, '旧'), mark(5, 'turn/start', 2), input(6, { kind: 'plugin', plugin: 'dsh-tavern-regen' }), reply(7, 2, '新'), mark(8, 'step/end', 2), mark(9, 'turn/end', 2),
+    mark(10, 'turn/start', 3), { seq: 11, type: 'assistant/message', surfaceOp: { op: 'replace', start: 2, end: 7 }, data: { turn: 3, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: '新' }], ...story(1) } } },
+    mark(12, 'step/end', 3), mark(13, 'turn/end', 3), ...round(14, 4)]
+  const save = floors([1, 4])
+  const whole = plain(planTranscriptRows({ chat: { messages: save }, events: regen }))
+  const fold = createTranscriptFold()
+  fold.setFloors(0, save.slice(0, 2))
+  for (let index = 0; index < regen.length; index++) {
+    fold.addEvents(regen.slice(0, index + 1))
+    if (index === 15) fold.setFloors(2, save.slice(2))
+    fold.result()
+  }
+  assert.deepEqual(plain(fold.result()), whole)
+  // A rollback of the last round, then the round played again.
+  fold.setFloors(2, [])
+  fold.setFloors(2, save.slice(2))
+  assert.deepEqual(plain(fold.result()), whole)
+})
+
+// A long game, every 5th round regenerated once (attempt turn + projection edit turn).
+function longGame(rounds) {
+  const events = [], save = []
+  let turn = 0
+  for (let index = 1; index <= rounds; index++) {
+    const own = ++turn, seq = events.length
+    events.push(...round(seq, own, '第 ' + index + ' 轮'))
+    save.push(...floors([own]))
+    if (index % 5 === 0) {
+      const attempt = ++turn, edit = ++turn, at = events.length
+      events.push(mark(at, 'turn/start', attempt), input(at + 1, { kind: 'plugin', plugin: 'dsh-tavern-regen' }), reply(at + 2, attempt, '新'), mark(at + 3, 'step/end', attempt), mark(at + 4, 'turn/end', attempt),
+        mark(at + 5, 'turn/start', edit), { seq: at + 6, type: 'assistant/message', surfaceOp: { op: 'replace', start: seq + 2, end: at + 2 }, data: { turn: edit, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: '新' }], ...story(own) } } },
+        mark(at + 7, 'step/end', edit), mark(at + 8, 'turn/end', edit))
+    }
+  }
+  return { events, save }
+}
+
+test('按窗口算：窗口内每个原生轮的结论与全量计算相同，窗口之前不判断', () => {
+  const { events, save } = longGame(60)
+  const whole = planTranscriptRows({ chat: { messages: save }, events })
+  const window = planTranscriptWindow({ messages: save.slice(-48), events, partial: true })
+  assert.ok(window.from > 1)
+  for (let turn = 1; turn <= events.filter(event => event.type === 'turn/start').length + 5; turn++) {
+    for (const kind of ['user', 'turn-trigger', 'assistant-step', 'turn-tail']) {
+      const planned = planShowsRow(window.turns, { turn, kind }, window.from)
+      if (turn < window.from) assert.equal(planned, null)
+      else assert.equal(planned, planShowsRow(whole, { turn, kind }), `原生轮 ${turn} ${kind}`)
+    }
+  }
+})
+
+// Count the log events the window plan touches: it must not grow with the game.
+test('按窗口算，访问的日志事件数只和窗口有关，与游戏长度无关', () => {
+  function touched(rounds) {
+    const { events, save } = longGame(rounds)
+    let reads = 0
+    const counted = new Proxy(events, { get(target, key, receiver) { if (typeof key === 'string' && /^\d+$/.test(key)) reads++; return Reflect.get(target, key, receiver) } })
+    planTranscriptWindow({ messages: save.slice(-48), events: counted, partial: true })
+    return reads
+  }
+  const short = touched(300), long = touched(3000)
+  assert.ok(short > 0)
+  assert.equal(long, short, `300 轮访问 ${short} 个事件，3000 轮访问 ${long} 个`)
 })

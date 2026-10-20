@@ -1378,13 +1378,14 @@
 			const supersededDshTurns = suppressionState.view && Array.isArray(suppressionState.view.supersededDshTurns) ? suppressionState.view.supersededDshTurns : [];
 			const supersededDshTurnsRevision = supersededDshTurns.join(",");
 			// 行计划只做对照，不改显示（docs/design/transcript-row-plan.md 第 2 步）。
-			const transcriptRows = suppressionState.view && suppressionState.view.transcriptRows || null;
-			const transcriptRowsRevision = JSON.stringify(transcriptRows);
+			// Immutable and keyed by turn: a changed plan is a new object, never serialized here.
+			const transcriptTurns = suppressionState.view && suppressionState.view.transcriptTurns || null;
+			const transcriptFrom = suppressionState.view ? suppressionState.view.transcriptFrom : null;
 			React.useEffect(function () {
 				let frame = null;
 				function applyProjectionState() {
 					frame = null;
-					historyProjection.apply(props.sessionId, suppressedDshTurns, regeneratedDshTurns, replacingDshTurns, supersededDshTurns, transcriptRows);
+					historyProjection.apply(props.sessionId, suppressedDshTurns, regeneratedDshTurns, replacingDshTurns, supersededDshTurns, { turns: transcriptTurns, from: transcriptFrom });
 				}
 				function scheduleProjection() {
 					if (frame === null) frame = window.requestAnimationFrame(applyProjectionState);
@@ -1403,7 +1404,7 @@
 				});
 				observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-chat-flow-kind", "data-chat-turn", "data-turn-tail"] });
 				return function () { observer.disconnect(); if (frame !== null) window.cancelAnimationFrame(frame); };
-			}, [props.sessionId, latestMessageId, running, suppressedDshTurnsRevision, regeneratedDshTurnsRevision, replacingDshTurnsRevision, supersededDshTurnsRevision, transcriptRowsRevision]);
+			}, [props.sessionId, latestMessageId, running, suppressedDshTurnsRevision, regeneratedDshTurnsRevision, replacingDshTurnsRevision, supersededDshTurnsRevision, transcriptTurns, transcriptFrom]);
 			return null;
 		}
 		function CandidateQuestion(props) {

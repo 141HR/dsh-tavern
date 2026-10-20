@@ -42,6 +42,7 @@ import { worldBookDisplayName } from './domain/worldbook-resource.js'
 import { createSaveUpgrade, detachSaveSessions, prepareSaveUpgrade, saveSessionIds, unreadySaveSessions } from './domain/save-upgrade.js'
 import { storedSessionVersion } from './domain/session-upgrade.js'
 import { exportSessionDiagnostics } from './domain/session-diagnostics.js'
+import { planTranscriptWindow } from './domain/transcript-row-plan.js'
 import { createTaskStateReader, taskStateFields } from './domain/task-state-reader.js'
 import { installHostProjectionReplay } from './domain/host-projection-replay.js'
 import { createBoundedHistory, readRecentWindow, readRowsAt } from './domain/bounded-history.js'
@@ -2302,6 +2303,12 @@ export async function apply(ctx) {
       : null
     const rollbackEvidence = sessionDebugEvidence(chat.sessionId, true)
     const rollbackFields = rollbackViewFields(chat, rollbackEvidence, options.inputChanges)
+    // The row plan (docs/design/transcript-row-plan.md) over what this view already
+    // holds — the window of floors and the log since its first round — sent as
+    // turn-keyed exceptions; the client only compares it with the hiding lists for now.
+    const transcriptPlan = rollbackEvidence.loaded && ['story', 'script'].includes(chat.mode || 'story') && Array.isArray(chat.messages) && !isScopedMessages(chat.messages)
+      ? await requestPerformance.stage('transcriptRowPlan', async () => planTranscriptWindow({ messages: chat.messages, events: rollbackEvidence.events, partial: chat.windowRevision !== undefined }))
+      : null
     return {
       chatId: chat.id,
       contextCompaction: chat.contextCompaction || null,
@@ -2334,6 +2341,8 @@ export async function apply(ctx) {
       inputSources,
       inputTemplateDisplays,
       ...rollbackFields,
+      transcriptTurns: transcriptPlan ? transcriptPlan.turns : null,
+      transcriptFrom: transcriptPlan ? transcriptPlan.from : null,
       presentation: null,
       replyProjections: replyDisplay.projections,
       // tavernStatusView duplicated tavernStatusViews[0] in every read; clients use the list.

@@ -10,7 +10,7 @@ import { readFile } from 'node:fs/promises'
 import { chromium } from 'playwright'
 import { createSessionStateView } from '../../tavern-plugin/lib/domain/chat-session-state.js'
 import { sessionEvents } from '../../tavern-plugin/lib/domain/session-events.js'
-import { planTranscriptRows, planShowsRow, planStoryTurn } from '../../tavern-plugin/lib/domain/transcript-row-plan.js'
+import { createTranscriptFold, planShowsRow, planStoryTurn } from '../../tavern-plugin/lib/domain/transcript-row-plan.js'
 
 const SEED_REPLY = /^tavern-seed-trajectory:v1:.+:2$/
 const isRegenerationInput = source => source?.plugin === 'dsh-tavern-regen' || source?.kind === 'plugin:dsh-tavern-regen'
@@ -116,7 +116,7 @@ export async function visibleRows(rows, view) {
       const reported = []
       const debug = console.debug
       console.debug = (message, detail) => { if (String(message).includes('行计划对照')) reported.push(...detail.rows) }
-      try { projection.apply('replay', view.suppressedDshTurns, view.regeneratedDshTurns, view.replacingDshTurns, view.supersededDshTurns, view.transcriptRows) }
+      try { projection.apply('replay', view.suppressedDshTurns, view.regeneratedDshTurns, view.replacingDshTurns, view.supersededDshTurns, { turns: view.transcriptTurns, from: view.transcriptFrom ?? null }) }
       finally { console.debug = debug }
       return { visible: Array.from(root.children, node => getComputedStyle(node).display !== 'none'), reported }
     }, { rows, view })
@@ -193,9 +193,13 @@ export function transcriptReport(chat, rows, view, storyTurn = turn => storyTurn
  */
 export async function replayTranscript(chat, session) {
   const events = sessionEvents(session)
-  const view = serverView(chat, session)
+  const fold = createTranscriptFold()
+  fold.setFloors(0, (chat.messages || []).map(message => ({ role: message?.role, turn: message?.turn, greeting: message?.greeting })))
+  fold.addEvents(events, 0)
+  const plan = fold.result()
+  const view = { ...serverView(chat, session), transcriptTurns: plan }
   const rows = await visibleRows(hostRows(events), view)
-  const plan = planTranscriptRows({ chat, events, nodes: session.surface?.nodes || [] })
   const planned = rows.map(row => ({ ...row, visible: planShowsRow(plan, row) }))
-  return { view, rows, clientPlanDiffs: rows.planDiffsReported, ...transcriptReport(chat, rows, view), plan: { plan, rows: planned, ...transcriptReport(chat, planned, view, turn => planStoryTurn(plan, turn), plan.open) } }
+  return { view, rows, clientPlanDiffs: rows.planDiffsReported, ...transcriptReport(chat, rows, view),
+    plan: { plan, open: fold.open, rows: planned, ...transcriptReport(chat, planned, view, turn => planStoryTurn(plan, turn), fold.open) } }
 }

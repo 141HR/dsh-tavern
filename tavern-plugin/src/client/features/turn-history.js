@@ -301,19 +301,19 @@
 		}
 		// Row plan comparison (docs/design/transcript-row-plan.md, step 2): the page still
 		// follows the hiding lists; this only reports rows the plan would show differently.
-		// Same rule as planShowsRow in lib/domain/transcript-row-plan.js.
+		// The plan holds exceptions only, keyed by native turn: an absent turn shows its own
+		// input and reply. Same rule as planShowsRow in lib/domain/transcript-row-plan.js.
 		function tavernPlanShowsRow(plan, turnValue, kind) {
-			if (!plan || !Array.isArray(plan.rounds) || turnValue === null || turnValue === "") return true;
-			const turn = Number(turnValue);
-			if (plan.from !== null && plan.from !== undefined && turn < plan.from) return null;
-			if (plan.open !== null && plan.open !== undefined && turn === Number(plan.open)) return true;
-			const asInput = plan.rounds.some(function (round) { return round.input === turn; });
-			const asReply = plan.rounds.some(function (round) { return round.reply === turn; });
-			return kind === "user" || kind === "turn-trigger" ? asInput : asReply;
+			if (!plan || !plan.turns || turnValue === null || turnValue === "") return true;
+			// Before a windowed plan's first round: not judged.
+			if (plan.from !== null && plan.from !== undefined && Number(turnValue) < plan.from) return null;
+			const entry = plan.turns[String(turnValue)];
+			if (!entry) return true;
+			return kind === "user" || kind === "turn-trigger" ? entry.input === 1 : entry.reply === 1;
 		}
 		const reportedPlanDiffs = new Map();
 		function compareRowPlan(sessionId, plan) {
-			if (!plan) return;
+			if (!plan || !plan.turns) return;
 			const diffs = [];
 			for (const row of root().querySelectorAll('[data-chat-flow-kind][data-chat-turn]')) {
 				const kind = row.getAttribute("data-chat-flow-kind");
@@ -325,7 +325,7 @@
 			const key = diffs.join(",");
 			if (reportedPlanDiffs.get(sessionId) === key) return;
 			reportedPlanDiffs.set(sessionId, key);
-			if (diffs.length) console.debug("dsh-tavern 行计划对照：与现行隐藏不同的行", { sessionId: sessionId, rows: diffs, plan: plan });
+			if (diffs.length) console.debug("dsh-tavern 行计划对照：与现行隐藏不同的行", { sessionId: sessionId, rows: diffs });
 		}
 			function apply(sessionId, turns, regeneratedDshTurns, replacingTurns, supersededTurns, rowPlan) {
                 // Reconcile both directions: an older observer may have hidden a
@@ -366,7 +366,7 @@
 				const adopted = view && view.adopted;
 				if (adopted && Number(adopted.hiddenTurn) > 0) forgetHiddenTurn(HIDDEN_TURNS_KEY, sessionId, Number(adopted.hiddenTurn));
 				if (adopted && Number(adopted.syntheticTurn) > 0) forgetHiddenTurn(HIDDEN_REGEN_USER_TURNS_KEY, sessionId, Number(adopted.syntheticTurn));
-				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && view.transcriptRows);
+				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom });
 			}
             function restored(sessionId, view) {
                 const turn = Number(view && view.undoneRollback && view.undoneRollback.turn);
@@ -381,10 +381,10 @@
                     tail.style.display = "";
                     turnRowsBefore(tail, tail.getAttribute("data-chat-turn")).forEach(function (row) { row.style.display = ""; });
                 }
-                apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && view.transcriptRows);
+                apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom });
             }
 			function rolledBack(sessionId, view) {
-				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && view.transcriptRows);
+				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom });
 			}
 			return Object.freeze({ apply: apply, regenerated: regenerated, rolledBack: rolledBack, restored: restored });
 		}

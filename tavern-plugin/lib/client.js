@@ -1075,7 +1075,7 @@ window.__ModuleLoader__.load({
 		              && projectionEdits.every(([path]) => path[1] === "length" || Number.isSafeInteger(path[1]));
 
 		            const fieldUpdates = new Map();
-		            for (const field of ["inputSources", "inputTemplateDisplays", "regeneratedDshTurns"]) {
+		            for (const field of ["inputSources", "inputTemplateDisplays", "regeneratedDshTurns", "transcriptTurns"]) {
 		              const source = base.view?.[field];
 		              const sets = delta.set.filter(([path]) => path[0] === field);
 		              const removes = delta.remove.filter(path => path[0] === field);
@@ -1164,7 +1164,7 @@ window.__ModuleLoader__.load({
 		          if (!index.info(view.replyProjections)) view = {...view,replyProjections:index.from(view.replyProjections)};
 		          projectionLookup.remember(view.replyProjections);
 		        }
-		        if (turnFields) for (const field of ["inputSources", "inputTemplateDisplays", "regeneratedDshTurns"]) {
+		        if (turnFields) for (const field of ["inputSources", "inputTemplateDisplays", "regeneratedDshTurns", "transcriptTurns"]) {
 		          const value = turnFields.from(view?.[field]);
 		          if (value !== view?.[field]) view = {...view, [field]: value};
 		        }
@@ -20473,19 +20473,19 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 		}
 		// Row plan comparison (docs/design/transcript-row-plan.md, step 2): the page still
 		// follows the hiding lists; this only reports rows the plan would show differently.
-		// Same rule as planShowsRow in lib/domain/transcript-row-plan.js.
+		// The plan holds exceptions only, keyed by native turn: an absent turn shows its own
+		// input and reply. Same rule as planShowsRow in lib/domain/transcript-row-plan.js.
 		function tavernPlanShowsRow(plan, turnValue, kind) {
-			if (!plan || !Array.isArray(plan.rounds) || turnValue === null || turnValue === "") return true;
-			const turn = Number(turnValue);
-			if (plan.from !== null && plan.from !== undefined && turn < plan.from) return null;
-			if (plan.open !== null && plan.open !== undefined && turn === Number(plan.open)) return true;
-			const asInput = plan.rounds.some(function (round) { return round.input === turn; });
-			const asReply = plan.rounds.some(function (round) { return round.reply === turn; });
-			return kind === "user" || kind === "turn-trigger" ? asInput : asReply;
+			if (!plan || !plan.turns || turnValue === null || turnValue === "") return true;
+			// Before a windowed plan's first round: not judged.
+			if (plan.from !== null && plan.from !== undefined && Number(turnValue) < plan.from) return null;
+			const entry = plan.turns[String(turnValue)];
+			if (!entry) return true;
+			return kind === "user" || kind === "turn-trigger" ? entry.input === 1 : entry.reply === 1;
 		}
 		const reportedPlanDiffs = new Map();
 		function compareRowPlan(sessionId, plan) {
-			if (!plan) return;
+			if (!plan || !plan.turns) return;
 			const diffs = [];
 			for (const row of root().querySelectorAll('[data-chat-flow-kind][data-chat-turn]')) {
 				const kind = row.getAttribute("data-chat-flow-kind");
@@ -20497,7 +20497,7 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 			const key = diffs.join(",");
 			if (reportedPlanDiffs.get(sessionId) === key) return;
 			reportedPlanDiffs.set(sessionId, key);
-			if (diffs.length) console.debug("dsh-tavern 行计划对照：与现行隐藏不同的行", { sessionId: sessionId, rows: diffs, plan: plan });
+			if (diffs.length) console.debug("dsh-tavern 行计划对照：与现行隐藏不同的行", { sessionId: sessionId, rows: diffs });
 		}
 			function apply(sessionId, turns, regeneratedDshTurns, replacingTurns, supersededTurns, rowPlan) {
                 // Reconcile both directions: an older observer may have hidden a
@@ -20538,7 +20538,7 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 				const adopted = view && view.adopted;
 				if (adopted && Number(adopted.hiddenTurn) > 0) forgetHiddenTurn(HIDDEN_TURNS_KEY, sessionId, Number(adopted.hiddenTurn));
 				if (adopted && Number(adopted.syntheticTurn) > 0) forgetHiddenTurn(HIDDEN_REGEN_USER_TURNS_KEY, sessionId, Number(adopted.syntheticTurn));
-				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && view.transcriptRows);
+				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom });
 			}
             function restored(sessionId, view) {
                 const turn = Number(view && view.undoneRollback && view.undoneRollback.turn);
@@ -20553,10 +20553,10 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
                     tail.style.display = "";
                     turnRowsBefore(tail, tail.getAttribute("data-chat-turn")).forEach(function (row) { row.style.display = ""; });
                 }
-                apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && view.transcriptRows);
+                apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom });
             }
 			function rolledBack(sessionId, view) {
-				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && view.transcriptRows);
+				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom });
 			}
 			return Object.freeze({ apply: apply, regenerated: regenerated, rolledBack: rolledBack, restored: restored });
 		}
@@ -22544,13 +22544,14 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 			const supersededDshTurns = suppressionState.view && Array.isArray(suppressionState.view.supersededDshTurns) ? suppressionState.view.supersededDshTurns : [];
 			const supersededDshTurnsRevision = supersededDshTurns.join(",");
 			// 行计划只做对照，不改显示（docs/design/transcript-row-plan.md 第 2 步）。
-			const transcriptRows = suppressionState.view && suppressionState.view.transcriptRows || null;
-			const transcriptRowsRevision = JSON.stringify(transcriptRows);
+			// Immutable and keyed by turn: a changed plan is a new object, never serialized here.
+			const transcriptTurns = suppressionState.view && suppressionState.view.transcriptTurns || null;
+			const transcriptFrom = suppressionState.view ? suppressionState.view.transcriptFrom : null;
 			React.useEffect(function () {
 				let frame = null;
 				function applyProjectionState() {
 					frame = null;
-					historyProjection.apply(props.sessionId, suppressedDshTurns, regeneratedDshTurns, replacingDshTurns, supersededDshTurns, transcriptRows);
+					historyProjection.apply(props.sessionId, suppressedDshTurns, regeneratedDshTurns, replacingDshTurns, supersededDshTurns, { turns: transcriptTurns, from: transcriptFrom });
 				}
 				function scheduleProjection() {
 					if (frame === null) frame = window.requestAnimationFrame(applyProjectionState);
@@ -22569,7 +22570,7 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 				});
 				observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-chat-flow-kind", "data-chat-turn", "data-turn-tail"] });
 				return function () { observer.disconnect(); if (frame !== null) window.cancelAnimationFrame(frame); };
-			}, [props.sessionId, latestMessageId, running, suppressedDshTurnsRevision, regeneratedDshTurnsRevision, replacingDshTurnsRevision, supersededDshTurnsRevision, transcriptRowsRevision]);
+			}, [props.sessionId, latestMessageId, running, suppressedDshTurnsRevision, regeneratedDshTurnsRevision, replacingDshTurnsRevision, supersededDshTurnsRevision, transcriptTurns, transcriptFrom]);
 			return null;
 		}
 		function CandidateQuestion(props) {
