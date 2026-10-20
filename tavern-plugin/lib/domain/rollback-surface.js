@@ -118,10 +118,10 @@ export function regenerationAttemptTurns(input) {
 export function supersededRegenerationTurns({ events = [], nodes = [], keepTurns = [] } = {}) {
   const visible = new Set(nodes.map(Number))
   const turns = new Set()
-  // The bodies of the replacements that still own the page. The transcript draws
-  // append-origin events only, so these tell us which rows are the ones left to
-  // show this round.
-  const bodies = new Set()
+  // The replacements that still own the page, one per regenerated round: its body and
+  // the turns it hides. The transcript draws append-origin events only, so the body
+  // tells us which rows are the ones left to show that round.
+  const rounds = []
   for (const event of events) {
     if (event?.type !== 'assistant/message' || event.surfaceOp?.op !== 'replace') continue
     // Only the replacement that is still the current node speaks for the page;
@@ -130,8 +130,7 @@ export function supersededRegenerationTurns({ events = [], nodes = [], keepTurns
     // Only a regeneration writes a body for round N into a later turn; a seed or
     // repair rewrite carries no story turn and leaves the opening alone.
     if (!(Number(event.data?.message?.source?.tavernStoryTurn) > 0)) continue
-    const body = contentText(event.data?.message)
-    if (body !== '') bodies.add(body)
+    const round = { body: contentText(event.data?.message), turns: new Set() }
     for (const seq of event.sourceEventSeqs || []) {
       const original = eventAt(events, seq)
       if (!original || original.type !== 'assistant/message') continue
@@ -140,31 +139,39 @@ export function supersededRegenerationTurns({ events = [], nodes = [], keepTurns
       if (contentText(original.data?.message) === '') continue
       const turn = Number(original.data?.turn)
       // A row for the turn that now carries the replacement stays as it is.
-      if (Number.isSafeInteger(turn) && turn > 0 && turn !== Number(event.data?.turn)) turns.add(turn)
+      if (Number.isSafeInteger(turn) && turn > 0 && turn !== Number(event.data?.turn)) { turns.add(turn); round.turns.add(turn) }
     }
+    if (round.body !== '' && round.turns.size) rounds.push(round)
   }
-  if (turns.size === 0 || bodies.size === 0) return [...turns].sort((left, right) => left - right)
+  if (turns.size === 0 || rounds.length === 0) return [...turns].sort((left, right) => left - right)
   // A round whose body only ever existed as a fold copy has that copy inside the
   // turn we are about to hide. Hiding it as well erases the only row the
   // transcript can draw, and the replacement itself stays model-only: the page
   // then shows the player's input with no reply at all. Keep such a turn unless
-  // another drawable copy survives somewhere outside the hidden set.
-  const drawable = new Set()
+  // another drawable copy survives somewhere outside the hidden set. Judged per
+  // round: another round's surviving copy says nothing about this one, and judging
+  // them together blanked every regenerated round but the earliest.
+  const drawable = new Map()
   for (const event of events) {
     if (event?.type !== 'assistant/message' || event.surfaceOp !== 'append') continue
-    if (!bodies.has(contentText(event.data?.message))) continue
     const turn = Number(event.data?.turn)
-    if (Number.isSafeInteger(turn) && turn > 0) drawable.add(turn)
+    if (!Number.isSafeInteger(turn) || turn <= 0) continue
+    const body = contentText(event.data?.message)
+    if (!drawable.has(body)) drawable.set(body, new Set())
+    drawable.get(body).add(turn)
   }
-  if (![...drawable].some(turn => !turns.has(turn))) {
-    // The row the view maps this round to is the one it will render: an old
-    // tool submission's fold copy carries the previous text, so it never matches
-    // the replacement body, yet it is the only row the page can draw. Keep it
-    // when no drawable copy of the new body survives outside the hidden set.
-    const mapped = new Set((Array.isArray(keepTurns) ? keepTurns : []).map(Number))
-    const keep = [...mapped].find(turn => turns.has(turn)) ?? [...drawable].find(turn => turns.has(turn))
-    if (keep !== undefined) turns.delete(keep)
+  // The row the view maps a round to is the one it will render: an old tool
+  // submission's fold copy carries the previous text, so it never matches the
+  // replacement body, yet it is the only row the page can draw.
+  const mapped = (Array.isArray(keepTurns) ? keepTurns : []).map(Number)
+  const keep = []
+  for (const round of rounds) {
+    const copies = [...(drawable.get(round.body) || [])]
+    if (copies.some(turn => !turns.has(turn))) continue
+    const turn = mapped.find(value => round.turns.has(value)) ?? copies.find(value => round.turns.has(value))
+    if (turn !== undefined) keep.push(turn)
   }
+  for (const turn of keep) turns.delete(turn)
   return [...turns].sort((left, right) => left - right)
 }
 
