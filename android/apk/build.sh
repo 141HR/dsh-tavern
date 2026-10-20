@@ -9,7 +9,8 @@ if [ ! -d "$WORK/dsha/.git" ]; then
   git clone --depth 1 --branch "$VERSION" https://github.com/DSH-APP/DSHA.git "$WORK/dsha"
 fi
 [ "$(git -C "$WORK/dsha" rev-parse HEAD)" = "$COMMIT" ] || { echo 'DSHA 版本不匹配' >&2; exit 1; }
-APK="$WORK/dsha-0.2.0-rc2.apk"
+# 官方 DSHA 只是构建输入，和可安装的酒馆交付包分开放，避免点错。
+APK="$WORK/inputs/dsha-0.2.0-rc2.apk"
 if [ ! -f "$APK" ]; then
   curl -fL --retry 2 "https://github.com/DSH-APP/DSHA/releases/download/${VERSION}/dsha-0.2.0-rc2.apk" -o "$APK.part"
   mv "$APK.part" "$APK"
