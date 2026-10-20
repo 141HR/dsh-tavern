@@ -1,5 +1,5 @@
 // Settings owns its initial snapshot; each editor saves only its own resource.
-function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernDefaultModelSetting, TavernConversationWritingSkills, DisplayPreferencesSettings, HeaderItemsSettings, CandidatePreferencesSettings, PromptTemplateSettingsEntry, ContextCompactionSettings }) {
+function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernDefaultModelSetting, TavernConversationWritingSkills, DisplayPreferencesSettings, HeaderItemsSettings, CandidatePreferencesSettings, PromptTemplateSettingsEntry, ContextCompactionSettings, TavernUserPluginsSettings }) {
     function GlobalPlayDefaults({ settings }) {
         const h = React.createElement;
         const [data, setData] = React.useState(null), [busy, setBusy] = React.useState(false), [message, setMessage] = React.useState("");
@@ -115,6 +115,7 @@ function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernD
                     description: "后台结算时顺带标注每句台词的说话人和情绪，台词显示成带头像的一行。主角用人物卡头像，其他人物用首字头像。" }) : null,
                 h(DisplayPreferencesSettings),
                 h(CandidatePreferencesSettings)),
+            group("插件", "给酒馆加功能：粘贴插件作者的 GitHub 地址即可安装。", h(TavernUserPluginsSettings)),
             group("高级", "",
                 state.settings ? h(SettingSwitch, { settings: state.settings, name: "storyToolCall", title: "正文走工具调用",
                     description: "让模型通过工具调用提交正文，历史里的正文和玩家消息也以工具参数的形式回放；可缓解 Gemini 等模型在正文中途截断或拒答。需要模型支持工具调用；正文生成完成后一次性显示，存档和界面不变。" }) : null,

@@ -101,6 +101,8 @@
 
 以上均为社区作者开发，更多插件见[讨论区的 Show and tell](https://github.com/flizzywine/dsh-tavern/discussions/categories/show-and-tell)。
 
+**安装酒馆插件**：设置 → DSH Tavern → 插件，粘贴插件的 GitHub 地址，点「安装」，刷新页面即可；连不上 GitHub 时，下载插件 ZIP 后在同一处上传。插件作者见[插件接口文档](docs/plugin-api.md)的「发布：让用户一键安装」。
+
 ## 看看实际效果
 
 **MVU 状态栏**：人物状态随剧情变化，正文下方可查看本轮更新了什么。

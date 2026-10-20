@@ -7,6 +7,8 @@ import { parseDocument, YAMLSeq } from 'yaml'
 const ID_PREFIX = 'tavern-user-plugin-'
 // Loaded in place of the plugin's own entry, beside its package.json so its browser half is still found.
 export const GUARD_FILE = '.tavern-entry.mjs'
+// The guard records whether the plugin loaded, so the settings list can say why one is missing.
+export const STATUS_FILE = '.tavern-status.json'
 
 /**
  * A plugin that fails to import or to apply must not stop DSH from starting:
@@ -15,7 +17,12 @@ export const GUARD_FILE = '.tavern-entry.mjs'
 export function guardSource({ folder, name, main }) {
   const label = JSON.stringify('[Tavern 插件] plugins/' + folder)
   return `// Tavern 自动生成，请勿修改：插件加载或启动出错时只记日志，不影响 DSH 启动。
-const report = (stage, error) => console.warn(${label} + ' ' + stage + '失败：' + (error && error.stack || error))
+import { writeFileSync } from 'node:fs'
+const record = status => { try { writeFileSync(new URL(${JSON.stringify('./' + STATUS_FILE)}, import.meta.url), JSON.stringify({ ...status, at: new Date().toISOString() })) } catch {} }
+const report = (stage, error) => {
+  console.warn(${label} + ' ' + stage + '失败：' + (error && error.stack || error))
+  record({ ok: false, stage, message: String(error && error.message || error).slice(0, 500) })
+}
 let plugin = null
 try {
   const mod = await import(new URL(${JSON.stringify(main)}, import.meta.url).href)
@@ -34,6 +41,7 @@ export async function apply(ctx, config) {
     // on failure. The guard remains alive so one broken plugin cannot stop DSH.
     child = ctx.plugin({ name, apply: childContext => plugin.apply(childContext, config) })
     await child.await()
+    record({ ok: true })
   } catch (error) {
     if (child) await child.dispose()
     report('启动', error)
