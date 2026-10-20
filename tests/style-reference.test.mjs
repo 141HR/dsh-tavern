@@ -3,11 +3,13 @@ import test from 'node:test'
 
 import { createStyleReferenceRecall, latestStyleReference, readStyleReference, rememberStyleReference, styleReferenceFor } from '../tavern-plugin/lib/domain/style-reference.js'
 import { createContextPlanner } from '../tavern-plugin/lib/domain/context-planner.js'
-import { normalizeBackgroundTasks } from '../tavern-plugin/lib/domain/tavern-settings.js'
+import { normalizeBackgroundTasks, normalizePlayDefaults } from '../tavern-plugin/lib/domain/tavern-settings.js'
 
 const ref = (afterTurn, book = '边城') => ({ book, author: '沈从文', quote: '小溪流下去，绕山岨流。', afterTurn })
 
-test('文风参考默认关闭，只有手动开启才生效', () => {
+test('新游戏默认开启文风联想（全局默认可关）；没有这项的旧存档保持关闭', () => {
+  assert.equal(normalizePlayDefaults({}).backgroundTasks.styleReference, true)
+  assert.equal(normalizePlayDefaults({ backgroundTasks: { styleReference: false } }).backgroundTasks.styleReference, false)
   assert.equal(normalizeBackgroundTasks({}).styleReference, false)
   assert.equal(normalizeBackgroundTasks({ styleReference: true }).styleReference, true)
   assert.equal(styleReferenceFor({ messages: [{ role: 'assistant', turn: 1 }], styleReferences: [ref(1)] }), null)
@@ -61,12 +63,12 @@ test('后台回忆提交后写入本局，供下一轮使用', async () => {
   assert.deepEqual(saved.styleReferences, [{ book: '边城', author: '沈从文', quote: '小溪流下去，绕山岨流。', afterTurn: 4 }])
 })
 
-test('正文上下文带上文风参考与借鉴规则', async () => {
+test('正文上下文带上文风联想与借鉴规则', async () => {
   const planner = createContextPlanner({ prompt: name => '〈' + name + '〉' })
   const plan = await planner.plan({ purpose: 'body', card: { name: '阿青' }, chat: {}, worldBookContext: '',
     styleReference: { book: '边城', author: '沈从文', quote: '小溪流下去。' } })
   const style = plan.sections.filter(section => section.kind === 'style-reference').map(section => section.text)
-  assert.deepEqual(style, ['【文风参考 · 《边城》沈从文】\n小溪流下去。', '〈style-reference〉'])
+  assert.deepEqual(style, ['【文风联想 · 《边城》沈从文】\n小溪流下去。', '〈style-reference〉'])
   const without = await planner.plan({ purpose: 'body', card: { name: '阿青' }, chat: {}, worldBookContext: '', styleReference: null })
   assert.equal(without.sections.some(section => section.kind === 'style-reference'), false)
 })

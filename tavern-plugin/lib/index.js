@@ -2943,7 +2943,7 @@ export async function apply(ctx) {
       if ((chat.mode || 'story') !== 'story' || chat.backgroundTasks?.styleReference !== true) return
       signal.throwIfAborted()
       await styleReferenceRecall({ chat: await storyContext({ chatId }), signal })
-        .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 文风参考失败，下一轮不带参考:', str(error?.message || error)) })
+        .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 文风联想失败，下一轮不带参考:', str(error?.message || error)) })
     }
   })
   ctx.effect(() => () => worldbookPrefilter.dispose())
@@ -2952,8 +2952,8 @@ export async function apply(ctx) {
   // just before that turn is regenerated.
   async function retryStyleReference(sessionId, { target = 'next', guidance = '' } = {}) {
     const header = await chatForSession(str(sessionId))
-    if (!header || (header.mode || 'story') !== 'story') throw new Error('文风参考只用于自由模式')
-    if (header.backgroundTasks?.styleReference !== true) throw new Error('请先在本局设置里开启文风参考')
+    if (!header || (header.mode || 'story') !== 'story') throw new Error('文风联想只用于自由模式')
+    if (header.backgroundTasks?.styleReference !== true) throw new Error('请先在本局设置里开启文风联想')
     if (agentRegistry.get(header.sessionId)?.phase?.kind === 'running' || header.regenInProgress) throw new Error('前台正在生成，请完成后再换参考')
     await worldbookPrefilter.cancel(header.id)
     if (target === 'regenerate') await cancelSettlement(header.id)

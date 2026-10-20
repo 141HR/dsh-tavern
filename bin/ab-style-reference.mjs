@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 文风参考 A/B（逐轮对照）：同一存档导入一局，A 为不参考的主线。每轮先开启文风参考生成 B，
+// 文风联想 A/B（逐轮对照）：同一存档导入一局，A 为不参考的主线。每轮先开启文风联想生成 B，
 // 再关闭参考对这一轮重新生成得到 A，主线沿 A 继续。于是每轮的 A 与 B 前文完全相同，只差本轮是否注入参考。
 //   node bin/ab-style-reference.mjs --import 吞噬星空-前60轮.jsonl --card 吞噬星空 --inputs 输入.json --out 输出目录 [--home ~/.dsh-tavern]
 // 输入文件是字符串数组，第一条是热身轮（只走主线，不对照）。对局保留不删；结果写入 <输出目录>/ab.json 与 ab.html（两栏并排）。
@@ -58,10 +58,10 @@ const escape = text => String(text ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp
 const paragraphs = text => String(text ?? '').split(/\n+/).filter(line => line.trim()).map(line => '<p>' + escape(line) + '</p>').join('')
 function renderHtml({ card: name, sessionId, rows }) {
   const reference = row => row.B.injected
-    ? `<div class="ref"><span class="src">B 本轮注入的文风参考 · ${escape(row.B.injected.source)}</span><blockquote>${paragraphs(row.B.injected.quote)}</blockquote></div>`
+    ? `<div class="ref"><span class="src">B 本轮注入的文风联想 · ${escape(row.B.injected.source)}</span><blockquote>${paragraphs(row.B.injected.quote)}</blockquote></div>`
     : '<div class="ref none">B 本轮没有注入参考</div>'
   return `<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>文风参考 A/B</title><style>
+<title>文风联想 A/B</title><style>
 :root{--bg:#faf8f4;--fg:#222;--muted:#777;--card:#fff;--line:#e4dfd6;--accent:#8a5a2b;--refbg:#f3ece1}
 @media (prefers-color-scheme:dark){:root{--bg:#1b1a18;--fg:#e6e2da;--muted:#9a948a;--card:#242320;--line:#3a3732;--accent:#d7a46c;--refbg:#2d2a25}}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.85 "Songti SC","Noto Serif SC",serif}
@@ -78,8 +78,8 @@ section{margin-bottom:40px}h2{font:600 18px/1.4 system-ui,sans-serif;margin:0 0 
 .col h3{font:600 14px system-ui,sans-serif;margin:0 0 6px;color:var(--muted)}.col p{margin:0 0 .8em;text-indent:2em}
 @media (max-width:760px){.cols{grid-template-columns:1fr}}
 </style></head><body><main>
-<h1>文风参考 A/B · ${escape(name)}</h1>
-<div class="meta">逐轮对照：每轮 A 与 B 的前文完全相同（主线沿 A 发展），只差 B 本轮注入了文风参考。<br>对局：${escape(sessionId)}</div>
+<h1>文风联想 A/B · ${escape(name)}</h1>
+<div class="meta">逐轮对照：每轮 A 与 B 的前文完全相同（主线沿 A 发展），只差 B 本轮注入了文风联想。<br>对局：${escape(sessionId)}</div>
 <nav>${rows.map(row => `<a href="#t${row.index}">第 ${row.index} 轮</a>`).join('')}</nav>
 ${rows.map(row => `<section id="t${row.index}"><h2>第 ${row.index} 轮</h2>
 <div class="input"><b>输入</b>　${escape(row.input)}</div>${reference(row)}
@@ -110,7 +110,7 @@ async function waitIdle(sessionId, label) {
 
 async function setStyle(sessionId, on) {
   const config = await rpc('setConversationBackgroundConfig', { sessionId, backgroundTasks: { styleReference: on } })
-  if (config.backgroundTasks.styleReference !== on) throw new Error('文风参考开关未生效')
+  if (config.backgroundTasks.styleReference !== on) throw new Error('文风联想开关未生效')
 }
 
 // Turning the switch on recalls from the latest reply at once; wait for that operation to finish.
@@ -120,11 +120,11 @@ async function enableAndRecall(sessionId) {
   await setStyle(sessionId, true)
   const began = Date.now()
   for (;;) {
-    if (Date.now() - began > 600000) throw new Error('等待文风参考超时')
+    if (Date.now() - began > 600000) throw new Error('等待文风联想超时')
     await sleep(2000)
     const now = await activity(sessionId)
     if (now.role === 'style-reference' && !now.busy && now.operationId !== before) {
-      if (now.phase === 'failed') throw new Error('文风参考摘取失败')
+      if (now.phase === 'failed') throw new Error('文风联想摘取失败')
       return
     }
   }
@@ -140,7 +140,7 @@ async function finishTurn(sessionId, start, label) {
     if (end < 0) continue
     const turn = all.slice(start, end + 1)
     const reply = turn.filter(event => event.type === 'assistant/message').map(event => textOf(event.data.message?.content)).join('\n').trim()
-    const injected = JSON.stringify(turn).match(/【文风参考 · ([^】]*)】\\n(.*?)\\n\\n/)
+    const injected = JSON.stringify(turn).match(/【文风联想 · ([^】]*)】\\n(.*?)\\n\\n/)
     return { reply, seconds: Math.round((Date.now() - began) / 1000), injected: injected ? { source: injected[1], quote: JSON.parse('"' + injected[2] + '"') } : null }
   }
 }
@@ -174,7 +174,7 @@ for (const [index, input] of turns.entries()) {
   start = sessionEvents(sessionId).length
   await rpc('regenBody', { sessionId, guidance: '' })
   const A = await finishTurn(sessionId, start, 'A')
-  if (A.injected) throw new Error('A 不应带文风参考')
+  if (A.injected) throw new Error('A 不应带文风联想')
   rows.push({ index: index + 1, input, A, B })
   save()
   console.log(`第 ${index + 1} 轮  B ${B.seconds}s ${B.reply.length}字  A ${A.seconds}s ${A.reply.length}字  参考：${B.injected ? B.injected.source + '「' + B.injected.quote.slice(0, 40) + '…」' : '无'}`)
