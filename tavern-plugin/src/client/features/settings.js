@@ -422,7 +422,7 @@
                     h("button", { type: "button", className: "dsh-tavern-btn", disabled: busy, onClick: function () { if (zipInput.current) zipInput.current.click(); } }, "上传 ZIP"),
                     h("input", { ref: zipInput, type: "file", accept: ".zip,application/zip", style: { display: "none" }, onChange: installZip })),
                 h("p", { className: "dsh-tavern-settings-desc" }, "插件会运行在你的电脑上，只装信任的作者发布的插件。有 Release 时安装最新 Release，否则安装默认分支；连不上 GitHub 时，可以在仓库页面下载 ZIP 后上传。"),
-                notice ? h("p", { className: "dsh-tavern-settings-desc", role: "status" }, notice) : null,
+                notice ? h("p", { className: "dsh-tavern-user-plugins-notice", role: "status" }, notice) : null,
                 error ? h("p", { className: "dsh-tavern-settings-error", role: "alert" }, error) : null,
                 data && plugins.length === 0 ? h("p", { className: "dsh-tavern-settings-desc" }, "还没有装插件。") : null,
                 plugins.length ? h("ul", { className: "dsh-tavern-user-plugins-list" }, plugins.map(function (plugin) {
