@@ -9,7 +9,7 @@ Tavern 为第三方 DSH 插件开放了一套稳定的接口。插件只通过�
 
 ## 先读接口
 
-动手前通过 `tavern_read_skill_reference` 读取 [插件接口](references/plugin-api.md)（name 为 `tavern-plugin`，path 为 `references/plugin-api.md`）。按要做的插件找写法时读取 [常见用法](references/plugin-recipes.md)（path 为 `references/plugin-recipes.md`）。需要起步代码时再读取 [示例插件](references/example-plugin.md)（path 为 `references/example-plugin.md`）。
+动手前通过 `tavern_read_skill_reference` 读取 [接口总览](references/plugin-api.md)（name 为 `tavern-plugin`，path 为 `references/plugin-api.md`），再按要用的接口读对应分页：[读取游戏](references/plugin-api-game.md)、[正文、结算与任务](references/plugin-api-prompt.md)、[媒体与数据](references/plugin-api-data.md)、[人物卡、Skill 与演出](references/plugin-api-cards.md)、[浏览器侧 tavernUi](references/plugin-api-ui.md)（path 均为 `references/` 下的文件名）。按要做的插件找写法时读取 [常见用法](references/plugin-recipes.md)（path 为 `references/plugin-recipes.md`）。需要起步代码时再读取 [示例插件](references/example-plugin.md)（path 为 `references/example-plugin.md`）。
 
 ## 硬性要求
 

@@ -32,7 +32,7 @@ dsh-tavern-hello/
 ## 要求
 
 - **不写 `dependencies`**：不会安装 npm 包，用到的库请打包进仓库。
-- **设置用 `savePluginData` 存**：更新会整体替换插件文件夹。密钥用 DSH 的 `credentials`。见[接口参考](plugin-api.md)。
+- **设置用 `savePluginData` 存**：更新会整体替换插件文件夹。密钥用 DSH 的 `credentials`。见[媒体与数据](plugin-api-data.md)。
 
 ## 版本
 
