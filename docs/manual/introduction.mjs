@@ -585,9 +585,11 @@ export const pluginInstallation = `
 
 需要 Git。在终端运行：
 
-` + code('bash', 'dsh plugin --profile tavern add github:flizzywine/dsh-tavern') + `
+` + code('bash', 'dsh plugin --profile tavern add @deepseek-ai/dsh-web-app github:flizzywine/dsh-tavern') + `
 
-DSH 会创建 Profile、安装完整运行包并启用酒馆。运行包包含 Web 配置、侧栏、人物卡功能、预设和 Skill，无需自行构建。酒馆使用当前 DSH，启动时检查适配版本，不会另装或升级宿主。
+DSH 会创建 Profile，装上网页组件和完整运行包并启用酒馆。新建的 \`tavern\` Profile 默认不带网页组件，所以要在同一条命令里一起加上。运行包包含侧栏、人物卡功能、预设和 Skill，无需自行构建。酒馆使用当前 DSH，启动时检查适配版本，不会另装或升级宿主。
+
+> **暂不可用：** DSH 0.2.1-rc.2 解析依赖时有缺陷，这条路线启动会报 \`createRequire.resolve.paths is not a function\`（[#300](https://github.com/flizzywine/dsh-tavern/issues/300)），需等 DSH 修复。在此之前请用[命令行安装方式](#a02)。
 
 ## 启动与更新
 

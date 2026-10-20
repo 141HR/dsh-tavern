@@ -239,8 +239,9 @@ dsh-tavern open</code></pre></div>
 <p>已通过专用安装器安装的 CLI、Desktop 或 Android 酒馆，请继续使用各自原有的更新方式，不要向同一个 Profile 叠装。其他安装方式见<a href="#a02">安装与启动</a>。</p>
 <h2 id="plugin-installation--section-2">从 GitHub 安装</h2>
 <p>需要 Git。在终端运行：</p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh plugin --profile tavern add github:flizzywine/dsh-tavern</code></pre></div>
-<p>DSH 会创建 Profile、安装完整运行包并启用酒馆。运行包包含 Web 配置、侧栏、人物卡功能、预设和 Skill，无需自行构建。酒馆使用当前 DSH，启动时检查适配版本，不会另装或升级宿主。</p>
+<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh plugin --profile tavern add @deepseek-ai/dsh-web-app github:flizzywine/dsh-tavern</code></pre></div>
+<p>DSH 会创建 Profile，装上网页组件和完整运行包并启用酒馆。新建的 <code>tavern</code> Profile 默认不带网页组件，所以要在同一条命令里一起加上。运行包包含侧栏、人物卡功能、预设和 Skill，无需自行构建。酒馆使用当前 DSH，启动时检查适配版本，不会另装或升级宿主。</p>
+<blockquote><p><strong>暂不可用：</strong> DSH 0.2.1-rc.2 解析依赖时有缺陷，这条路线启动会报 <code>createRequire.resolve.paths is not a function</code>（<a href="https://github.com/flizzywine/dsh-tavern/issues/300">#300</a>），需等 DSH 修复。在此之前请用<a href="#a02">命令行安装方式</a>。</p></blockquote>
 <h2 id="plugin-installation--section-3">启动与更新</h2>
 <p>安装完成后运行：</p>
 <div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh --profile tavern</code></pre></div>
