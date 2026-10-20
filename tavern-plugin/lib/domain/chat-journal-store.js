@@ -621,12 +621,16 @@ export function createChatJournalStore(options = {}) {
   }
   /** Detached metadata and selected native rows, never an editable full-chat snapshot. */
   async function readSlice(chatId, indices=[], fields) {
-    const cached=readCache.get(chatId)
-    if(!cached||cached.stamp!==await version(chatId)){
+    // A cached state at the current stamp answers directly. Otherwise read the selected rows:
+    // re-checking the stamp in cachedState would load the whole Chat whenever a write lands
+    // between the two checks.
+    const stamp=await version(chatId),cached=readCache.get(chatId)
+    const fresh=stamp&&cached?.stamp===stamp
+    if(!fresh){
       const selected=await native.readSlice(chatId,indices,fields)
       if(selected!==null)return selected
     }
-    const state=await cachedState(chatId)
+    const state=fresh?cached.state:await cachedState(chatId)
     return state && !indices.some(i=>i>=(state.chat.messages?.length||0)) ? slice(state.chat,indices,fields) : undefined
   }
   // Trusted settlement input: immutable revision-bound index, detached header,
