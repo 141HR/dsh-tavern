@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "0e3026e0e82fa9e52831b7018bcbd88b5934f3c8",
-  "releaseSequence": 783,
+  "revision": "cf85bbd8f040b165ecf03e452bf5f0f38b898029",
+  "releaseSequence": 784,
   "version": "3.0.1",
   "files": [
     {
@@ -76,8 +76,8 @@
     },
     {
       "path": "android/install.sh",
-      "sha256": "c1642ca05604010c28e6b2dafb8cc543f2212cb06d7ec669659b33046dc8558d",
-      "size": 12120
+      "sha256": "326a129a33080951aea6ebd388f64774aa7515ce462d04a03c233a673fb9a2d5",
+      "size": 13401
     },
     {
       "path": "android/LICENSE",
@@ -91,8 +91,8 @@
     },
     {
       "path": "android/setup.sh",
-      "sha256": "928f74a61d2b403666278b434a427d0d2a0a6d3c3f61f9ce1b3e62c729249afa",
-      "size": 16256
+      "sha256": "048b793bc618b1e1a8c526ce09aa099ddebad7743570ea843309e7f9911ec860",
+      "size": 17396
     },
     {
       "path": "android/update.sh",
@@ -101,8 +101,8 @@
     },
     {
       "path": "bin/application-update.mjs",
-      "sha256": "029381a01bbc475d51b1e982b443cd1b36e4363abb98a276b68e40d94d351584",
-      "size": 18880
+      "sha256": "5af75fbc72a80d0c2dd300d99ef2942949a899f096883b8888066838f02aa107",
+      "size": 19329
     },
     {
       "path": "bin/benchmark-chat-snapshots.mjs",
