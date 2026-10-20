@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "96b921ab6bb117e071a61ece632807301a3b2b09",
-  "releaseSequence": 768,
+  "revision": "d3887adc424dba51cf70b3ca07c64aae5342dd5c",
+  "releaseSequence": 769,
   "version": "3.0.0",
   "files": [
     {
@@ -336,12 +336,12 @@
     },
     {
       "path": "patches/dsh-web-mobile@3.1.0.patch",
-      "sha256": "b151174b09138f5a19067f2593383b1cd6586547748ab6848e3e3e061d0a270b",
-      "size": 858
+      "sha256": "f4e306c03ef6fb2ffca172bcac2f1f72debff28a56bdc2b966a304ccd7fb5fa5",
+      "size": 2173
     },
     {
       "path": "pnpm-lock.yaml",
-      "sha256": "4b9439b33ed19f0291be48dc523725c4de378948a54c02dae7113f6caeda2e75",
+      "sha256": "f4fa84e87e5d9bac969a55a10aa87053da176dc3b3315529bf0ae0afa1665fca",
       "size": 87189
     },
     {
