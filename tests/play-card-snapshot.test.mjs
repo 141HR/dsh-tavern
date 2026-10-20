@@ -173,3 +173,39 @@ test('世界书自动更新：读取失败保留本局快照，卡片工作台�
   readable = true
   assert.equal(await snapshots.autoSync({ ...chat, mode: 'card' }, card), null, '卡片工作台读的是实时卡，不需要快照')
 })
+
+test('没有本局副本的游戏，常驻条目改动在下一轮读到时重建人物卡前缀', async () => {
+  const { createWorldBookLibrary } = await import('../tavern-plugin/lib/domain/worldbook-library.js')
+  const card = { name: '跟随库', character_book: { entries: [] } }
+  const cardPath = 'cards/follow.json', bookPath = 'worldbooks/follow.json'
+  const book = constant => JSON.stringify({ name: '书', entries: [
+    { uid: 0, comment: '常驻', content: constant, constant: true, disable: false, key: [] }
+  ] })
+  let text = book('旧常驻')
+  const worldBooks = createWorldBookLibrary({ normalizePath: p => p, removeStandalone: async () => {},
+    cards: { read: async () => card },
+    resources: { bindingForCard: async () => ({ kind: 'standalone', path: bookPath, available: true }), readText: async () => text } })
+  let stored = null
+  const writes = []
+  const api = createPlayCardSnapshots({ worldBooks,
+    planner: { plan: async ({ worldBookContext }) => ({ text: worldBookContext.includes('新常驻') ? '前缀-新' : '前缀-旧' }) },
+    readCard: async () => card, writeChat: async () => { throw new Error('自动更新不能整份覆盖存档') },
+    updateChat: async (id, mutate, metadata) => { writes.push(metadata.source); stored = mutate(stored); return stored },
+    settings: async () => ({ worldbookAutoSync: true }) })
+  const chat = { id: 'follow', sessionId: 'session-follow', mode: 'story', cardPath, messages: [{ role: 'assistant', text: '开场' }] }
+  await api.prepare(chat, card, await worldBooks.bound(cardPath, card, {}))
+  // A new game keeps no copy: only the fixed prefix is frozen.
+  assert.equal(chat.openingWorldbookSnapshot, undefined)
+  assert.equal(chat.cardContextSnapshot, '前缀-旧')
+  stored = structuredClone(chat)
+  assert.equal((await api.autoSync(chat, card)).applied, false, '库没变就不写')
+  assert.deepEqual(writes, [])
+  text = book('新常驻')
+  assert.equal((await api.autoSync(chat, card)).applied, true)
+  assert.deepEqual(writes, ['card-context.constants'])
+  assert.equal(stored.cardContextSnapshot, '前缀-新')
+  assert.equal(stored.openingWorldbookSnapshot, undefined, '仍然不复制世界书')
+  assert.equal(stored.cardContextRevision, 1)
+  assert.equal((await api.autoSync(chat, card)).applied, false, '应用一次后保持安静')
+  assert.equal(writes.length, 1)
+})

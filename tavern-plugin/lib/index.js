@@ -2181,12 +2181,13 @@ export async function apply(ctx) {
   // lets a library edit enter this game without the explicit reload button.
   async function cardUpdateStatus(chat, context = {}) {
     try {
-      // A snapshot taken in this request, or a game that keeps no copy at all,
-      // cannot have a world book update to offer: the game already follows it.
-      if (context.fresh === true || chat.openingWorldbookSnapshot?.version !== 1) return playCardSnapshots.libraryBoundStatus(chat, context.card)
+      if (context.fresh === true) return playCardSnapshots.libraryBoundStatus(chat, context.card)
       const card = context.card ?? await readCard(chat.cardPath)
+      // A game that keeps no copy has no world book to offer as an update, but the
+      // constant prefix still has to follow an edited book on the next read.
       const synced = context.busy === true ? null
         : await playCardSnapshots.autoSync(chat, card, { settings: context.settings })
+      if (chat.openingWorldbookSnapshot?.version !== 1) return playCardSnapshots.libraryBoundStatus(chat, card)
       // One library read now serves both the automatic refresh and the badge.
       return await playCardSnapshots.updateStatus(chat, card, synced?.observed)
     } catch (error) { return {available:true,error:String(error.message || error)} }
