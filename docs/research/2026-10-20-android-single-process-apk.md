@@ -28,11 +28,21 @@ Profile，因此手机上只有一个 DSH 常驻进程。构建、签名和静�
 
 ## 已做的验证
 
-- APK 清单：包名、`versionCode 30000`、`versionName 3.0.0`、minSdk 30 正确。
+- APK 清单：包名、`versionCode 30000`、`versionName 3.0.0`、minSdk 30、`application-label` 为
+  「DSH Tavern」，且没有 `application-debuggable`。
 - `apksigner verify`：v1/v2/v3 签名有效，证书为酒馆长期密钥（非 DSHA 的 E7E3）。
+- `zipalign -c -p 4` 通过，native 仅 `arm64-v8a`。
 - 资产：`assets/tavern-apk-setup.sh`、`offline-rootfs.bin`、`dsh-runtime.bin`、
-  `runtime-descriptor.json`、`recovery-*`、`es-compat.js` 均在包内；setup 脚本来自
-  `main`，末尾追加“停掉安装器临时 3088 服务”。
+  `runtime-descriptor.json`、`recovery-*`、`es-compat.js` 均在包内；setup 脚本与构建时的
+  `android/setup.sh` 逐字节一致（仅追加“停掉安装器临时 3088 服务”三行）。
+- `es-compat.js` 的 SHA-256 与包内 `es-compat.inputs.json` 一致，且包含 `structuredClone`
+  兼容层；`Constants.DSH_VERSION` 与内置 DSH 0.2.0-rc.2 一致，浏览器补丁会实际生效。
+- DEX 中可检索到 `DSH_TAVERN_ANDROID_STANDALONE`、`tavern-apk-installed`、新包名和
+  `exec dsh --profile`，确认补丁进入 Release 包。
+- 单进程路径：生产代码只有 `WebLifecycleController.startWeb` → `StartupPipeline` 这一条启动链，
+  返回 `tavern`；`HarnessController.runCoreCommand()` 只被 debug / deviceAudit 源集引用。
+  `android/configure-profiles.mjs` 清空 tavern Profile 的 web 插件，`dsh-tavern-entry` 只加入
+  web Profile，APK 不会拉起 3088 入口插件。
 - 单测：`StartupPipelineTest`、`TavernWebProcessTest` 通过；新增的启动 shell 识别断言覆盖
   `exec dsh --profile 'tavern'` 与 `node /usr/local/bin/dsh --profile tavern`。
 - 文档测试与新客户端提示测试通过。
