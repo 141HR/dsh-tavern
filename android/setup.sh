@@ -16,6 +16,10 @@ SOURCE_CDN="${DSH_TAVERN_SOURCE_CDN:-1}"
 SOURCE_MARKER=".dsh-tavern-tarball-source"
 OFFLINE_TARBALL="/root/tavern-offline.tar"
 OFFLINE_DIR="${DSH_ROOT}/tavern-offline"
+# 独立 APK 升级时由原生层传入：用本次 APK 自带快照离线替换源码与依赖，
+# 并带上期望提交，避免复用上一个 APK 留下的解包目录。
+APK_BUNDLE_UPDATE="${DSH_TAVERN_APK_BUNDLE_UPDATE:-0}"
+APK_BUNDLE_REVISION="${DSH_TAVERN_APK_BUNDLE_REVISION:-}"
 TEMP_ROOT=""
 SOURCE_BACKUP=""
 SOURCE_SWAPPED=0
@@ -64,6 +68,12 @@ verify_source() {
 OFFLINE_READY=0
 prepare_offline_bundle() {
   [ "${OFFLINE_READY}" -eq 1 ] && return 0
+  # APK 升级时以本次 APK 的提交为准：旧 APK 失败后留下的解包目录不能复用。
+  if [ -n "${APK_BUNDLE_REVISION}" ] && [ -f "${OFFLINE_DIR}/revision" ] \
+    && [ "$(cat "${OFFLINE_DIR}/revision" 2>/dev/null || true)" != "${APK_BUNDLE_REVISION}" ]; then
+    info "内置快照版本变化（$(cat "${OFFLINE_DIR}/revision" 2>/dev/null || echo 未知) → ${APK_BUNDLE_REVISION}），重新解包"
+    rm -rf -- "${OFFLINE_DIR}" 2>/dev/null || true
+  fi
   if [ -f "${OFFLINE_DIR}/revision" ] && [ -d "${OFFLINE_DIR}/store" ] && [ -d "${OFFLINE_DIR}/source" ]; then
     # 新 APK 可能带更新的源码/缓存；只按目录存在复用会把旧 store 和缺失的
     # metadata 缓存一直留着，首装继续退回联网。比对包内 revision，不同就重解。
@@ -252,6 +262,17 @@ is_disposable_upgrade_residue() {
 }
 
 update_source() {
+  # APK 升级：新 APK 自带比已装源码更新的快照时，直接离线换源码 + 依赖。
+  # 原生层已经确认“用户没在应用内更新过”，所以这里不需要再比较版本。
+  if [ "${APK_BUNDLE_UPDATE}" = 1 ]; then
+    if [ -f "${OFFLINE_TARBALL}" ] || [ -d "${OFFLINE_DIR}/source" ]; then
+      if install_from_offline; then
+        info '已用 APK 内置快照完成离线升级'
+        return
+      fi
+      info '内置快照不可用，改为常规方式更新。'
+    fi
+  fi
   if [ -d "${APP_DIR}/.git" ]; then
     require_command git
     if ! git -C "${APP_DIR}" diff --quiet || ! git -C "${APP_DIR}" diff --cached --quiet; then

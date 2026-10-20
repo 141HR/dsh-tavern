@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """从锁定 DSHA 源码及官方 APK 的已验证资产生成独立酒馆构建目录。"""
 import argparse
+import datetime
 import hashlib
+import json
 from pathlib import Path
 import re
 import shutil
@@ -72,6 +74,21 @@ def prepare(source, apk, destination, offline=None):
     if offline is None or not Path(offline).is_file():
         raise ValueError('缺少首装离线包，请先运行 android/apk/build-offline-bundle.sh')
     shutil.copyfile(offline, assets / 'tavern-offline.bin')
+    # 原生层靠这份小清单判断“新 APK 的内置快照是否值得离线替换已装源码”；
+    # 不能让它去解 128 MB 的离线包，所以单独写一个 JSON。
+    revision = ''
+    sidecar = Path(str(offline) + '.revision')
+    if sidecar.is_file():
+        revision = sidecar.read_text().strip()
+    if not revision:
+        revision = subprocess.check_output(
+            ['git', '-C', str(HERE.parent.parent), 'rev-parse', 'HEAD'], text=True).strip()
+    repo_version = json.loads((HERE.parent.parent / 'package.json').read_text())['version']
+    built_at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    (assets / 'tavern-offline-meta.json').write_text(
+        json.dumps({'revision': revision, 'version': repo_version, 'builtAt': built_at}, ensure_ascii=False) + '\n',
+        encoding='utf-8')
+    print(f'内置快照：{revision[:12]}（v{repo_version}，{built_at}）')
     print(f'离线包：{Path(offline).name} ({Path(offline).stat().st_size / 1048576:.1f} MB)')
     java = app / 'src/main/java/com/deepseekharness/app'
     shutil.copyfile(HERE / 'TavernBootstrap.java', java / 'core/TavernBootstrap.java')
@@ -129,6 +146,8 @@ tasks.configureEach {
         message -> {
           if (message.startsWith("首次安装："))
             stage.accept(com.deepseekharness.app.util.UiText.text("下载并安装最新版酒馆"));
+          else if (message.startsWith("升级："))
+            stage.accept(com.deepseekharness.app.util.UiText.text("正在用应用内置版本升级酒馆"));
           status.accept(message);
         });
   }
