@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "9f2fbe78445746541ddbe96b3e38267d7ae5a843",
-  "releaseSequence": 785,
+  "revision": "3b56ad0aa5f6ef2390d6170c59f2c1ca42638a5c",
+  "releaseSequence": 786,
   "version": "3.0.1",
   "files": [
     {
@@ -21,7 +21,7 @@
     },
     {
       "path": "android/apk/prepare.py",
-      "sha256": "69e90502f4239aa57fd9317b4ece2088a3bc451d4d1490ab76e6588ee9358e0a",
+      "sha256": "9696df3e70626d59b9e30a8eebb9fba88006490835ff31f2723759bcb82925d8",
       "size": 15175
     },
     {
