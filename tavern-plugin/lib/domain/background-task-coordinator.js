@@ -119,6 +119,7 @@ export function createBackgroundTaskCoordinator(options = {}) {
       let fast = (input.reuseSnapshot === true && requestId === '' || role === 'candidate' && store.readRecoveryState) && store.patchChat && Number.isSafeInteger(chat?._storageRevision)
         && chat.timeline?.schemaVersion === 1 && !Object.values(chat.timeline.operations || {}).some(op => op?.kind === 'body' && op.status === 'foreground-completed')
       let source = fast ? chat : (await store.readChat(chatId) ?? chat)
+      let refreshes = 0
       while (true) {
         const requestedRole = str(role)
         if (blocked(source)) {
@@ -174,8 +175,15 @@ export function createBackgroundTaskCoordinator(options = {}) {
             { source: 'background.' + requestedRole + '.begin', operationId: next.value.operationId, requestId, returnProjection: taskStateFields })
           if (saved) return { ...next, chat: { ...source, ...saved,
             timeline: { ...next.chat.timeline, checkpoints: source.timeline.checkpoints }, messages: source.messages } }
-          // A concurrent writer invalidated our snapshot. Revalidate all guards
-          // against authoritative state using the established compatibility path.
+          // A concurrent writer invalidated our snapshot. agent.begin only reads and writes
+          // task state: re-read those header fields and revalidate every guard against them.
+          // The compatibility path (whole Chat) remains for legacy stories and lasting races.
+          const state = ++refreshes <= 3 && store.readRecoveryState ? await store.readRecoveryState(chatId) : undefined
+          if (state?.timeline?.schemaVersion === 1 && Number.isSafeInteger(state._storageRevision)
+            && !Object.values(state.timeline.operations || {}).some(op => op?.kind === 'body' && op.status === 'foreground-completed')) {
+            source = { ...source, ...state, timeline: { ...state.timeline, checkpoints: source.timeline.checkpoints } }
+            continue
+          }
           fast = false
           source = await store.readChat(chatId) ?? chat
           continue
@@ -206,7 +214,8 @@ export function createBackgroundTaskCoordinator(options = {}) {
         return serialize(chatId, async () => {
           const intent = { kind: 'agent.bind', operationId: begun.value.operationId, sessionId }
           const metadata = { source: 'background.' + str(role) + '.bind', operationId: begun.value.operationId }
-          if (store.readState && store.patchChat) {
+          // A concurrent write between reading and patching retries with fresh task state.
+          for (let attempt = 0; store.readState && store.patchChat && attempt < 3; attempt++) {
             const state = await (store.readRecoveryState || store.readState)(chatId)
             const legacy = Object.values(state?.timeline?.operations || {}).some(op => op?.kind === 'body' && op.status === 'foreground-completed')
             if (state?.timeline?.schemaVersion === 1 && !legacy) {
@@ -222,8 +231,9 @@ export function createBackgroundTaskCoordinator(options = {}) {
               }
               const saved = await store.patchChat(chatId, state._storageRevision,
                 diffJson(before,next), {...metadata,returnProjection:taskStateFields})
-              if (saved) return stateOnly ? (role === 'candidate' ? saved : store.readState(chatId)) : store.readChat(chatId)
-            }
+              // Callers that bind state-only ignore the result: the task-state receipt suffices.
+              if (saved) return stateOnly ? saved : store.readChat(chatId)
+            } else break
           }
           return store.updateChat(chatId, source => timeline.apply({ chat: source, intent }).chat, metadata)
         })

@@ -10,6 +10,7 @@ import { registerTavernHttpRoutes } from './http/routes.js'
 import { installChatAnswerBootPatch } from './domain/chat-answer-boot-patch.js'
 import { registerRequestHooks } from './hooks/request.js'
 import { createWholeReadGuard, scopeTurnHooks } from './domain/whole-read-guard.js'
+import { diffJson } from './domain/json-mutation.js'
 import { syncUserPlugins, watchUserPlugins, userPluginPaths } from './domain/user-plugins.js'
 import { createUserPluginInstaller } from './domain/user-plugin-install.js'
 import { listLegacyPlugins } from './domain/legacy-plugins.js'
@@ -1066,6 +1067,22 @@ export async function apply(ctx) {
       queueAutoCompaction(saved.sessionId)
     }
     return saved
+  }
+  // Header fields only: `mutate` gets and returns those fields; the difference is patched,
+  // never the history. A concurrent write retries; storage without slices, a write outside
+  // `fields` or a lasting race falls back to the whole-Chat update.
+  async function updateChatHeader(chatId, fields, mutate, metadata) {
+    const pick = chat => Object.fromEntries(fields.filter(field => Object.hasOwn(chat, field)).map(field => [field, chat[field]]))
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const head = (await chatPersistence.readSlice(chatId, [], ['_storageRevision', ...fields]))?.chat
+      if (!head || !Number.isSafeInteger(head._storageRevision)) break
+      const before = pick(head), changes = diffJson(before, await mutate(structuredClone(before)))
+      if (!changes.length) return head
+      if (changes.some(change => !fields.includes(String(change.path[0])))) break
+      const saved = await patchChat(chatId, head._storageRevision, changes, { ...metadata, returnProjection: fields })
+      if (saved) return saved
+    }
+    return updateChat(chatId, async current => Object.assign(current, await mutate(structuredClone(pick(current)))), metadata)
   }
   async function persistClearedBodyEdits(chat, cleared) {
     const drop = new Set(cleared || [])
@@ -3572,9 +3589,9 @@ export async function apply(ctx) {
           // A provider-confirmed overflow still has its own bounded recovery.
           const warning = compactionFailureMessage(error)
           console.warn('dsh-tavern: 自动容量压缩未完成:', warning)
-          if (chat) await updateChat(chat.id, current => {
-            current.contextCompaction = { ...current.contextCompaction, warning }
-            return current
+          if (chat) await updateChatHeader(chat.id, ['contextCompaction'], header => {
+            header.contextCompaction = { ...header.contextCompaction, warning }
+            return header
           }, { source: 'compaction.pressure-failed' })
         }
         return await next()
@@ -4213,7 +4230,7 @@ export async function apply(ctx) {
   }
   async function onSettlementSettled(chatId, signal) {
     try {
-      const latest = await chatPersistence.readSessionState(chatId)
+      const latest = (await chatPersistence.readSlice(chatId, [], ['_storageRevision', 'sessionId', 'cardName']))?.chat
       if (!signal.aborted && latest) {
         saveMaintenance.noteWrite(chatId, Number(latest._storageRevision))
         void mvuSettlementReconciler.wake(latest.sessionId)
