@@ -248,7 +248,7 @@ export async function settlementPerformanceChecks({ page, step, savedChat, outpu
     }
   })
   const samples = []
-  report.settlementPerformance = { scope: 'isolated full DSH + native Session + official MVU + active storage + React; synthetic history, fixed model; tracing disabled', requireCompact, size, samples, firstWindow }
+  report.settlementPerformance = { scope: 'isolated full DSH + native Session + official MVU + active storage + React; synthetic history, fixed model; tracing disabled', requireCompact, size, samples, firstWindow, historyRequests }
   if(process.argv.includes('--opening-only')) {report.settlementPerformance.scope+='; opening only: settlement and second restart not exercised';return}
   for (let run = 0; run < runs; run++) await step(`长档结算采样 ${run + 1}/${runs}`, async () => {
     const gold = 100 + run
