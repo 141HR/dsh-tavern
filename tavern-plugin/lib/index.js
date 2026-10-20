@@ -10,6 +10,7 @@ import { registerTavernHttpRoutes } from './http/routes.js'
 import { installChatAnswerBootPatch } from './domain/chat-answer-boot-patch.js'
 import { registerRequestHooks } from './hooks/request.js'
 import { createWholeReadGuard, scopeTurnHooks } from './domain/whole-read-guard.js'
+import { createChatReads } from './domain/chat-reads.js'
 import { diffJson } from './domain/json-mutation.js'
 import { syncUserPlugins, watchUserPlugins, userPluginPaths } from './domain/user-plugins.js'
 import { createUserPluginInstaller } from './domain/user-plugin-install.js'
@@ -63,7 +64,7 @@ import { projectCardSummary } from './domain/card-preparation.js'
 import { createCardSummaryCache } from './domain/card-summary-cache.js'
 import { openingPreviewPayload, openingInitializationPayload } from './domain/opening-transport.js'
 import { createLiveCardUpdate } from './domain/live-card-update.js'
-import { createSessionViewReader, createSessionChatReader, createSessionSliceReader } from './domain/session-view-reader.js'
+import { createSessionViewReader, createSessionChatReader } from './domain/session-view-reader.js'
 import { createSessionStateView, settlementTurn, pendingMvuSettlementState, projectDisplayRuntimeState } from './domain/chat-session-state.js'
 import { createSettlementProgressGuard } from './domain/settlement-progress-guard.js'
 import { createSettlementJobs } from './domain/settlement-jobs.js'
@@ -1134,39 +1135,9 @@ export async function apply(ctx) {
     return requestPerformance.stage('readSessionState', () => sessionChats.readState(sessionId))
   }
   function backgroundConfigForSession(sessionId) { return sessionChats.readBackgroundConfig(sessionId) }
-  async function chatHeaderForSession(sessionId, fields) {
-    const chatId = (await readSessionMap())[str(sessionId)]
-    const selected = chatId && await chatPersistence.readSlice(chatId, [], [
-      'id','sessionId','mode','backgroundConfigVersion','conversationFeaturesVersion', ...fields
-    ])
-    const chat = selected?.chat
-    // Alias recovery and configuration adoption still require the original reader.
-    if (chat && chat.sessionId === sessionId && chat.backgroundConfigVersion === 1 && chat.conversationFeaturesVersion === 1) return chat
-    return wholeReads.allow('存档配置升级', () => chatForSession(sessionId))
-  }
-  // The header's identity fields and the latest `count` floors' summaries (role, turn,
-  // greeting, MVU flags); `messagesFrom` is the first one's absolute index. Null where
-  // storage cannot read the latest floors alone (callers use the session state then).
-  async function recentStateForSession(sessionId, count) {
-    const chatId = (await readSessionMap())[str(sessionId)]
-    const recent = chatId && await chatPersistence.readRecentSummaries(chatId, count)
-    if (!recent) return null
-    const head = (await chatPersistence.readSlice(chatId, [], ['id', 'sessionId', 'mode', 'requestMode']))?.chat
-    if (!head || head.sessionId !== str(sessionId)) return null
-    return { ...head, messages: recent.messages, messagesFrom: recent.from, messageCount: recent.messageCount }
-  }
-  // The complete header and the latest `count` floors; the complete Chat only for
-  // storage without floor reads (legacy saves, small by construction).
-  async function chatHeaderWithLatestFloors(sessionId, count = 1) {
-    const chatId = (await readSessionMap())[str(sessionId)]
-    const head = chatId && await chatPersistence.readSlice(chatId, [])
-    if (!head?.chat || head.chat.sessionId !== sessionId || !Number.isSafeInteger(head.messageCount)) return chatForSession(sessionId)
-    if (head.messageCount === 0) return head.chat
-    const from = Math.max(0, head.messageCount - count)
-    const latest = await chatPersistence.readSlice(chatId, Array.from({ length: head.messageCount - from }, (_, index) => from + index))
-    return latest?.chat ? latest.chat : chatForSession(sessionId)
-  }
-  const chatSliceForSession = createSessionSliceReader({ links: readSessionMap, readSlice: chatPersistence.readSlice })
+  // By what the caller needs; see chat-reads.js for which reader a path should use.
+  const chatReads = createChatReads({ links: readSessionMap, persistence: chatPersistence, whole: chatForSession, allow: wholeReads.allow })
+  const { header: chatHeaderForSession, recentSummaries: recentStateForSession, latestFloors: chatHeaderWithLatestFloors, floors: chatSliceForSession } = chatReads
   // Header plus floor count; null keeps the complete reader for legacy stories.
   async function openingStateForSession(sessionId) {
     const selected = await chatSliceForSession(sessionId, [], [...taskStateFields, 'preparedWorldBook'])
@@ -2135,7 +2106,7 @@ export async function apply(ctx) {
       return selected
     },
     resolveTemplateWindow: createTemplateWindowReader({ links: readSessionMap, readWindow: chatPersistence.readWindow, access: { issue: input => helperHistoryAccess.issue(input) }, historyFrom: sessionId => templateHistoryFrom.get(sessionId) }),
-    resolveChatSlice: createSessionSliceReader({links:readSessionMap, readSlice:chatPersistence.readSlice}),
+    resolveChatSlice: chatSliceForSession,
     resolveChatSliceAt: async (sessionId,revision,indices) => {
       const chatId=(await readSessionMap())[sessionId]
       const selected=chatId && await readRowsAt(chatPersistence.readWindow,chatId,revision,indices)
