@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "c579b88bd8aec1556a20a8e4f21b7f8a0e3ae72d",
-  "releaseSequence": 781,
+  "revision": "a1fad651a92148f9a7e7a66f36541443020906ad",
+  "releaseSequence": 782,
   "version": "3.0.1",
   "files": [
     {
@@ -16,18 +16,18 @@
     },
     {
       "path": "android/apk/build.sh",
-      "sha256": "62d9a04dbe3fb99676d447a4e74747658854f0db8793598bee8e4a18bca4f943",
-      "size": 4474
+      "sha256": "d9ed4df610534705c49e32650a726ee09b9c48963f83e42ff7a8c1ec0d87d016",
+      "size": 4574
     },
     {
       "path": "android/apk/prepare.py",
-      "sha256": "a54a2a4133ce6bbffc68c8ef2480c8131868721dc5385462211eaec98450ccf8",
+      "sha256": "38d258fdf658364d736c5395c36d31f43c24a7aafeec9f966f395587f49c3df3",
       "size": 15175
     },
     {
       "path": "android/apk/README.md",
-      "sha256": "1d6aa435d1b4cccca60953a1bb9a549b61eed1bccfeb27eec09f8f5bb46eaa1e",
-      "size": 5283
+      "sha256": "8d22e63c4a5fcf8749dba3d067ddcd00323b2d0b31ae1e9999e1b430a292686f",
+      "size": 5322
     },
     {
       "path": "android/apk/render-tavern-profile.mjs",
@@ -36,8 +36,8 @@
     },
     {
       "path": "android/apk/TavernBootstrap.java",
-      "sha256": "50108cf7f049521cadde08e3377800818842a8af2a13729537963e64e66e16d3",
-      "size": 16974
+      "sha256": "cacfe85d609af4336eb510979faeae9516f66f2a0f6f656d054710d0ab2ed99d",
+      "size": 13707
     },
     {
       "path": "android/apk/TavernWebProcessTest.java",
