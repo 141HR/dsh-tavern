@@ -87,6 +87,7 @@ import { createServerTemplateRuntime } from './domain/server-template-runtime.js
 import { estimateWorldBookTokens, historyScanDepth } from './domain/worldbook-activation.js'
 import { createWorldbookFilter, WORLD_BOOK_FILTER_TOOLS } from './domain/worldbook-filter.js'
 import { createWorldbookPrefilter } from './domain/worldbook-prefilter.js'
+import { createStyleReferenceRecall, STYLE_REFERENCE_SUBMIT_TOOL, latestStyleReference } from './domain/style-reference.js'
 import { adoptConversationFeatures, adoptConversationBackground, patchConversationBackground } from './domain/conversation-background.js'
 import { clearLegacyTavernDefault } from './domain/legacy-agent-default.js'
 import { conversationStateAtTurn, conversationForkBoundary } from './domain/conversation-fork-point.js'
@@ -2305,6 +2306,7 @@ export async function apply(ctx) {
       cardUpdate,
       statusBarPlacement: chat.statusBarPlacement === 'body' ? 'body' : 'sidebar',
       posture: chat.posture || '',
+      styleReference: latestStyleReference(chat),
       ledger: readLedger(chat.ledger),
       ledgerTask: manualLedger.project(chat),
       characterDesigns: projectCharacterDesignDocument(chat.characterDesignDocument),
@@ -2498,6 +2500,7 @@ export async function apply(ctx) {
     const changes = {baseRevision:previous.tavernHelper.stateRevision,indices:[...dirtyMessageIndices],layoutChanged,changedHeaderFields}
     const next = Object.assign({}, previous, volatileSessionViewFields(chat, activity, changes), {
       posture: chat.posture || '',
+      styleReference: latestStyleReference(chat),
       guides: Array.isArray(chat.guides) ? chat.guides : [],
       // Header state a background task rewrites without touching any message.
       ledger: readLedger(chat.ledger),
@@ -2835,7 +2838,7 @@ export async function apply(ctx) {
   const backgroundCatalog = createBackgroundCatalogBackfill({ agents: agentRegistry, sessionQuery: ctx.get('sessionQuery'),
     onListed: parentId => sessionSignals.publish(parentId, { kind: 'subagents', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) }) })
   const runtimePresetSnapshots = new Map()
-  const BACKGROUND_TOOLS = [...WORLD_BOOK_FILTER_TOOLS, POSTURE_SUBMIT_TOOL, CHARACTER_DESIGN_READ_TOOL, CHARACTER_DESIGN_SAVE_TOOL, CHARACTER_DESIGN_REUSE_TOOL, MVU_SUBMIT_UPDATE_TOOL, CANDIDATE_SUBMIT_TOOL, SCRIPT_READ_TOOL, SCRIPT_POINT_TOOL, LEDGER_SUBMIT_TOOL]
+  const BACKGROUND_TOOLS = [...WORLD_BOOK_FILTER_TOOLS, POSTURE_SUBMIT_TOOL, CHARACTER_DESIGN_READ_TOOL, CHARACTER_DESIGN_SAVE_TOOL, CHARACTER_DESIGN_REUSE_TOOL, MVU_SUBMIT_UPDATE_TOOL, CANDIDATE_SUBMIT_TOOL, SCRIPT_READ_TOOL, SCRIPT_POINT_TOOL, LEDGER_SUBMIT_TOOL, STYLE_REFERENCE_SUBMIT_TOOL]
   const backgroundAgentRunner = createBackgroundAgentRunner({
     retirement: backgroundRetirement,
     // The browser's session list keeps a disposed subagent as an idle row until the list is
@@ -2917,8 +2920,13 @@ export async function apply(ctx) {
     runAgent: input => backgroundAgentRunner.run(input), selection: backgroundModelSelection,
     beginTask: chat => backgroundTasks.begin(chat, 'worldbook-filter')
   })
-  // After each reply, judge the worldbook pool that reply brings into the next turn, so
-  // sending never waits for a model. Usually below the threshold: no request at all.
+  const styleReferenceRecall = createStyleReferenceRecall({
+    runAgent: input => backgroundAgentRunner.run(input), selection: backgroundModelSelection,
+    beginTask: chat => backgroundTasks.begin(chat, 'style-reference')
+  })
+  // After each reply, prepare what that reply brings into the next turn, so sending never
+  // waits for a model: the worldbook pool (usually below the threshold, no request at all),
+  // then the experimental style reference. A new send cancels both.
   const worldbookPrefilter = createWorldbookPrefilter({
     async run(chatId, signal) {
       const chat = await storyContext({ chatId })
@@ -2929,6 +2937,11 @@ export async function apply(ctx) {
       const card = await readChatCard(chat)
       signal.throwIfAborted()
       await projectForegroundWorldbook({ chat, card, userText: '', purpose: 'prefilter', signal })
+        .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 世界书预筛失败，下一轮按关键词与预算注入:', str(error?.message || error)) })
+      if ((chat.mode || 'story') !== 'story' || chat.backgroundTasks?.styleReference !== true) return
+      signal.throwIfAborted()
+      await styleReferenceRecall({ chat: await storyContext({ chatId }), signal })
+        .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 文风参考失败，下一轮不带参考:', str(error?.message || error)) })
     }
   })
   ctx.effect(() => () => worldbookPrefilter.dispose())
@@ -3315,7 +3328,7 @@ export async function apply(ctx) {
     store: { readChat, writeChat, updateChat, patchChat, readState: chatPersistence.readSessionState, readRecoveryState: taskStateReader.read, readSlice: chatPersistence.readSlice, readSettlementCheckpoint: chatPersistence.readSettlementCheckpoint },
     timeline: storyTimeline,
     blocked: function (chat) { return Boolean(autoCompaction?.blocked(chat)) },
-    preempt: async (chatId, role) => { if (role !== 'worldbook-filter') await worldbookPrefilter.cancel(chatId) }
+    preempt: async (chatId, role) => { if (role !== 'worldbook-filter' && role !== 'style-reference') await worldbookPrefilter.cancel(chatId) }
   })
   const configuredCompactionEngines = new WeakSet()
   const overflowingCompactions = new Set()

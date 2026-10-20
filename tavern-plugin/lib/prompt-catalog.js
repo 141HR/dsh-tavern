@@ -5,6 +5,7 @@ export const SYSTEM_PROMPT_DEFINITIONS = Object.freeze([
   ['card-system', '卡片 Agent 系统指令', '默认空白；从 card-system.md 读取，非空时仅注入卡片 Agent。'],
   ['story', '正文 Agent 核心提示词', '控制普通游玩正文的续写规则。'],
   ['script-story', '剧本模式正文补充', '控制绑定剧本时追加给正文 Agent 的规则。'],
+  ['style-reference', '文风参考正文补充', '测试功能：开启「文风参考」后，追加在后台摘来的经典小说原句之后，告诉正文 Agent 怎样借鉴。'],
   ['candidate-story', '普通剧情候选项', '控制普通剧情候选项的数量、类型和输出格式。'],
   ['candidate-script', '剧本候选项', '控制剧本模式候选项及剧本推进规则。'],
   ['posture-settlement', '姿势状态结算', '控制后台姿势结算的工具提交。'],

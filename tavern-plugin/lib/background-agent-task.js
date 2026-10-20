@@ -39,7 +39,7 @@ function backgroundPrompt(messages, turnContext, task, taskProtocol, input = {})
       : (message && message.role === 'assistant' ? '正文' : '用户')
     return '[' + role + ']\n' + messageText(message)
   }).filter(function (text) { return text.trim() !== '' }).join('\n\n')
-  const taskName = task === 'worldbook-filter' ? '世界书筛选' : task === 'image' ? '场景生图' : task === 'settlement' ? '状态结算' : task === 'phone' ? '手机私聊' : task === 'character-design' ? '人物设计' : task === 'ledger' ? '台账整理' : task === 'plugin' ? '插件任务' : '候选生成'
+  const taskName = task === 'worldbook-filter' ? '世界书筛选' : task === 'style-reference' ? '文风参考' : task === 'image' ? '场景生图' : task === 'settlement' ? '状态结算' : task === 'phone' ? '手机私聊' : task === 'character-design' ? '人物设计' : task === 'ledger' ? '台账整理' : task === 'plugin' ? '插件任务' : '候选生成'
   sections.push('【最近剧情与本次任务】\n任务类型：' + taskName + '\n' + recent)
   const protocol = str(taskProtocol).trim()
   if (protocol !== '') sections.push('【任务要求】\n' + protocol)
@@ -425,11 +425,12 @@ export function createBackgroundAgentTask(options) {
       }
       // The filter reuses the last projection (or makes the first one after a restart) so the
       // shared system prefix stays byte-identical and the filter reads settlement's cache.
-      const projectsWorldbook = input.task !== 'worldbook-filter' || state.currentWorldbook === undefined
+      const nextTurnPreparation = input.task === 'worldbook-filter' || input.task === 'style-reference'
+      const projectsWorldbook = !nextTurnPreparation || state.currentWorldbook === undefined
       const worldbook = projectsWorldbook && typeof options.resolveCurrentWorldbook === 'function'
         ? await options.resolveCurrentWorldbook(input) : undefined
       if (projectsWorldbook) state.currentWorldbook = worldbook && typeof worldbook === 'object' ? worldbook.prefixContext : worldbook
-      const turnWorldbookSource = input.task === 'worldbook-filter' ? undefined : worldbook
+      const turnWorldbookSource = nextTurnPreparation ? undefined : worldbook
       const turnWorldbook = turnWorldbookSource && typeof turnWorldbookSource === 'object' ? str(turnWorldbookSource.foregroundContext).trim() : ''
       const eventStart = sessionEvents(agent.session).length
       const filterContext = projectWorldbookFilterContext(agent.session, input)

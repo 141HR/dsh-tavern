@@ -355,6 +355,10 @@
                         sessionId: props.sessionId, cursor: view.scriptProgress.cursor, total: view.scriptProgress.totalChunks, chunkSize: view.scriptProgress.chunkSize,
                         busy: running || view.activity?.busy || view.regenInProgress
                     }) : null,
+                    view.styleReference ? h("section", { className: "dsh-tavern-status-section" },
+                        h("div", { className: "dsh-tavern-status-label" }, "下一轮文风参考（测试）"),
+                        h("p", { className: "dsh-tavern-settings-desc" }, "《" + view.styleReference.book + "》" + view.styleReference.author),
+                        h("blockquote", { className: "dsh-tavern-style-reference" }, view.styleReference.quote)) : null,
 					h("section", { className: "dsh-tavern-status-section dsh-tavern-guide-section" },
 						h("div", { className: "dsh-tavern-status-label" }, "Guide", h("span", { className: "dsh-tavern-guide-caption" }, (view.guides || []).length + " 条")),
                         h("p", { className: "dsh-tavern-settings-desc" }, "Guide 是本局持续生效的要求，会同时注入前台（正文）和后台（候选、变量结算），可用来引导剧情走向、文风和数值尺度。"),
@@ -1136,6 +1140,7 @@
                 h("section", { className: "dsh-local-section" }, h("h3", null, "功能"),
                     features.mvuCard ? toggle("variables", "变量结算", "关闭后变量和状态栏不再更新。", tasks.variables, checked => ({ backgroundTasks: { variables: checked } })) : null,
                     toggle("posture", "人物姿势", "每轮总结人物的位置、动作和姿势，供前台保持一致。", tasks.posture, checked => ({ backgroundTasks: { posture: checked } })),
+                    toggle("styleReference", "文风参考（测试）", "仅自由模式。每轮后台凭记忆摘一两句风格相近的经典小说原文，供下一轮正文借鉴笔调。多一次后台请求。", tasks.styleReference === true, checked => ({ backgroundTasks: { styleReference: checked } })),
                     toggle("webSearchEnabled", "联网搜索", "前台和后台可按需搜索。", features.webSearchEnabled, checked => ({ webSearchEnabled: checked }))),
                 error || key && reasoning.key === key && reasoning.error ? h("p", { role: "alert", className: "dsh-tavern-prompt-error" }, error || reasoning.error) : null,
                 notice ? h("p", { role: "status" }, notice) : null,

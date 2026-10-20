@@ -697,8 +697,8 @@ window.__ModuleLoader__.load({
 		function describeTavernActivity(value) {
 			const activity = value && typeof value === "object" ? value : {};
 			const role = String(activity.role || "");
-			// The worldbook prefilter yields to any other task, so it never blocks the player.
-			const busy = activity.busy === true && role !== "worldbook-filter";
+			// Next-turn preparation (worldbook prefilter, style reference) yields to any other task, so it never blocks the player.
+			const busy = activity.busy === true && role !== "worldbook-filter" && role !== "style-reference";
 			let label = "生成候选项";
 			let blockReason = "";
 			if (busy && role === "candidate") { label = "生成中…"; blockReason = "正在生成候选项，请稍候…"; }

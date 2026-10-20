@@ -757,6 +757,7 @@ body.dsh-tavern-shell-active span:has(.dsh-tavern-hero-lockup) + span { display:
 .dsh-tavern-guide-list { display: flex; flex-direction: column; gap: 6px; }
 .dsh-tavern-guide-item { display: flex; align-items: flex-start; gap: 6px; padding: 7px 8px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-interactive-bg-hover); }
 .dsh-tavern-guide-text { flex: 1; min-width: 0; font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
+.dsh-tavern-style-reference { margin: 4px 0 0; padding-left: 8px; border-left: 2px solid currentColor; opacity: .8; font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
 .dsh-tavern-guide-add { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .dsh-tavern-guide-add textarea { box-sizing: border-box; width: 100%; resize: vertical; min-height: 54px; padding: 7px 8px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-specific-input-major); color: inherit; font: inherit; font-size: 12px; line-height: 1.5; }
 .dsh-tavern-script-preview { display: flex; flex-direction: column; gap: 7px; }
