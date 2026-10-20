@@ -9,6 +9,7 @@ import { createCompatibilityTurnCompiler } from './domain/compatibility-turn.js'
 import { registerTavernHttpRoutes } from './http/routes.js'
 import { installChatAnswerBootPatch } from './domain/chat-answer-boot-patch.js'
 import { registerRequestHooks } from './hooks/request.js'
+import { createWholeReadGuard, scopeTurnHooks } from './domain/whole-read-guard.js'
 import { syncUserPlugins, watchUserPlugins, userPluginPaths } from './domain/user-plugins.js'
 import { createUserPluginInstaller } from './domain/user-plugin-install.js'
 import { listLegacyPlugins } from './domain/legacy-plugins.js'
@@ -264,6 +265,9 @@ import { prompt as promptFile, SYSTEM_PROMPT_DEFINITIONS, SYSTEM_PROMPT_NAMES } 
 // DSH 生命周期负责回合状态；模型工具只处理按需读取和明确修改。
 
 export async function apply(ctx) {
+  // Per-turn paths must not load a whole save; see whole-read-guard.js.
+  const wholeReads = createWholeReadGuard({ mode: process.env.DSH_TAVERN_WHOLE_READ_GUARD || 'warn' })
+  ctx = scopeTurnHooks(ctx, wholeReads)
   const persistence = ctx.get('sessionPersistence')
   try {
     const restoreSubprocess = await installHostSubprocessPatch({ persistence })
@@ -640,7 +644,7 @@ export async function apply(ctx) {
     return result.renderedText
   }
 
-  const settlementJobs = createSettlementJobs({ run: runSettlementCycle, onSettled: onSettlementSettled })
+  const settlementJobs = createSettlementJobs({ run: (...args) => wholeReads.scope('结算', () => runSettlementCycle(...args)), onSettled: onSettlementSettled })
   const scriptContinuity = createScriptContinuity()
   const storyTimeline = createStoryTimeline({ id: uid, now: Date.now })
   const cardPreparation = createCardPreparation({ id: function () { return uid('card') }, now: Date.now })
@@ -992,7 +996,7 @@ export async function apply(ctx) {
     }
     return chat
   }
-  const chatJournalStore = createChatJournalStore({ dataRoot, legacyData: profileData, now: Date.now, logger: console, backgroundSnapshots: true, newConversations: true, migrateLegacy: process.env.DSH_TAVERN_COMPATIBLE_STORAGE === '1' })
+  const chatJournalStore = createChatJournalStore({ dataRoot, legacyData: profileData, now: Date.now, logger: console, backgroundSnapshots: true, newConversations: true, wholeReadGuard: wholeReads, migrateLegacy: process.env.DSH_TAVERN_COMPATIBLE_STORAGE === '1' })
   ctx.effect(() => () => chatJournalStore.flushMaintenance(), 'dsh-tavern: finish queued Chat snapshots')
   const chatPersistence = createChatPersistence({ store: chatJournalStore, normalize: normalizeChat, now: Date.now })
   async function readChat(chatId) {
@@ -1121,7 +1125,7 @@ export async function apply(ctx) {
     const chat = selected?.chat
     // Alias recovery and configuration adoption still require the original reader.
     if (chat && chat.sessionId === sessionId && chat.backgroundConfigVersion === 1 && chat.conversationFeaturesVersion === 1) return chat
-    return chatForSession(sessionId)
+    return wholeReads.allow('存档配置升级', () => chatForSession(sessionId))
   }
   // The header's identity fields and the latest `count` floors' summaries (role, turn,
   // greeting, MVU flags); `messagesFrom` is the first one's absolute index. Null where
@@ -2979,22 +2983,23 @@ export async function apply(ctx) {
   // waits for a model: the worldbook pool (usually below the threshold, no request at all),
   // then the experimental style reference. A new send cancels both.
   const worldbookPrefilter = createWorldbookPrefilter({
-    async run(chatId, signal) {
-      const chat = await storyContext({ chatId })
-      if (!chat || !['story', 'script'].includes(chat.mode || 'story') || chat.requestMode === 'sillytavern' || chat.regenInProgress) return
-      const latest = chat.messages?.at(-1)
-      if (latest?.role !== 'assistant' || latest.greeting === true || backgroundTasks.activity(chat).busy) return
-      if (backgroundModelSelection(chat) === null) return
-      const card = await readChatCard(chat)
-      signal.throwIfAborted()
-      await projectForegroundWorldbook({ chat, card, userText: '', purpose: 'prefilter', signal })
-        .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 世界书预筛失败，下一轮按关键词与预算注入:', str(error?.message || error)) })
-      if ((chat.mode || 'story') !== 'story' || chat.backgroundTasks?.styleReference !== true) return
-      signal.throwIfAborted()
-      await styleReferenceRecall({ chat: await storyContext({ chatId }), signal })
-        .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 文风联想失败，下一轮不带参考:', str(error?.message || error)) })
-    }
+    run: (chatId, signal) => wholeReads.scope('回复后预备', () => prepareAfterReply(chatId, signal))
   })
+  async function prepareAfterReply(chatId, signal) {
+    const chat = await storyContext({ chatId })
+    if (!chat || !['story', 'script'].includes(chat.mode || 'story') || chat.requestMode === 'sillytavern' || chat.regenInProgress) return
+    const latest = chat.messages?.at(-1)
+    if (latest?.role !== 'assistant' || latest.greeting === true || backgroundTasks.activity(chat).busy) return
+    if (backgroundModelSelection(chat) === null) return
+    const card = await readChatCard(chat)
+    signal.throwIfAborted()
+    await projectForegroundWorldbook({ chat, card, userText: '', purpose: 'prefilter', signal })
+      .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 世界书预筛失败，下一轮按关键词与预算注入:', str(error?.message || error)) })
+    if ((chat.mode || 'story') !== 'story' || chat.backgroundTasks?.styleReference !== true) return
+    signal.throwIfAborted()
+    await styleReferenceRecall({ chat: await storyContext({ chatId }), signal })
+      .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 文风联想失败，下一轮不带参考:', str(error?.message || error)) })
+  }
   // What the prefilter prepares (worldbook pool, style reference) serves the reply the player
   // has just answered: abort it the moment their message lands, not when the new turn's
   // preparation reaches its cancel. Tavern's own edit turns carry no player message.
@@ -3809,7 +3814,8 @@ export async function apply(ctx) {
       selected = await boundedHistory.read(chatId, str(sessionId), { lastAssistant: true, lastVariables: true, enough: mvuReplies, include: changed.indices, revision: changed.revision })
     }
     const chat = selected && ['story', 'script'].includes(selected.chat.mode || 'story') && selected.chat.requestMode !== 'sillytavern'
-      ? normalizeChat(selected.chat) : await chatForSession(sessionId)
+      ? normalizeChat(selected.chat)
+      : synced === undefined ? await wholeReads.allow('本进程首次同步', () => chatForSession(sessionId)) : await chatForSession(sessionId)
     if (chat?._storageRevision !== undefined) surfaceSyncedRevisions.set(str(sessionId), chat._storageRevision)
     return chat
   }

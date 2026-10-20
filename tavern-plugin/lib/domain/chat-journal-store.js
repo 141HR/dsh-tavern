@@ -505,8 +505,10 @@ export function createChatJournalStore(options = {}) {
       return entry.state
     }
     forgetState(chatId)
+    // Native saves can read floors alone: building one whole on a per-turn path is reported.
+    const built = state => { if (state?.native) reportWhole(chatId, state); return state }
     const pending = pendingReads.get(chatId)
-    if (pending?.stamp === stamp) return pending.promise
+    if (pending?.stamp === stamp) return pending.promise.then(built)
     const load = { stamp }
     load.promise = (async () => {
       try {
@@ -520,11 +522,13 @@ export function createChatJournalStore(options = {}) {
       }
     })()
     pendingReads.set(chatId, load)
-    return load.promise
+    return load.promise.then(built)
   }
+  function reportWhole(chatId, state, site) { options.wholeReadGuard?.report(chatId, state.chat?.messages?.length, site) }
   async function read(chatId) {
     if(options.migrateLegacy === true && compatible && !mutationTails.has(safeChatId(chatId)))await migrateCompatibility(chatId)
     const state = await cachedState(chatId)
+    if (state?.native) reportWhole(chatId, state)
     return state ? copyJsonTree(state.chat) : undefined
   }
   // Native-only opt-in. Null keeps legacy readers on their complete contract.
@@ -549,6 +553,7 @@ export function createChatJournalStore(options = {}) {
     // Internal readers opt into lazy, detached rows. Default callers retain
     // ordinary arrays (including structuredClone compatibility).
     const state = await cachedState(chatId)
+    if (state?.native) reportWhole(chatId, state)
     return state ? projectChatSessionState(state.chat, options.scoped === true ? sessionMessages.project(state.chat) : {}) : undefined
   }
   async function readSettlementCheckpoint(chatId, messageId, operationId) {
@@ -837,9 +842,12 @@ export function createChatJournalStore(options = {}) {
 
   async function update(chatId, updater, metadata = {}) {
     if (typeof updater !== 'function') throw new Error('Chat Journal Store 缺少 updater')
+    const site = options.wholeReadGuard?.site()
     return await serialize(chatId, async function () {
       const paths = layout(chatId)
       const currentState = await cachedState(paths.id)
+      // The updater gets a copy of the whole Chat and the result is diffed against it.
+      if (currentState?.native) reportWhole(chatId, currentState, site)
       const current = currentState == null ? undefined : currentState.chat
       const produced = await updater(copyJsonTree(current))
       if (produced === undefined) return copyJsonTree(current)
