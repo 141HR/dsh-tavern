@@ -8,6 +8,7 @@ import {
   BUNDLED_SCENE_IMAGE_FOLDER,
   comparePluginVersions,
   installBundledSceneImagePlugin,
+  LEGACY_SCENE_IMAGE_PACKAGE_NAME,
   readBundledSceneImage,
   SCENE_IMAGE_PACKAGE_NAME,
 } from '../bin/bundled-scene-image-plugin.mjs'
@@ -23,12 +24,12 @@ function makeSource(t, version = '2.8.0') {
   const dir = path.join(root, 'tavern-plugin', 'packages', 'dsh-tavern-image-bundled')
   mkdirSync(path.join(dir, 'lib'), { recursive: true })
   writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
-    name: 'dsh-tavern-comfy', version, main: './lib/index.js', dsh: CONTRACT,
+    name: SCENE_IMAGE_PACKAGE_NAME, version, main: './lib/index.js', dsh: CONTRACT,
   }))
   writeFileSync(path.join(dir, 'cordis.patch.yml'), '[]\n')
   writeFileSync(path.join(dir, 'lib', 'index.js'), 'export const bundled = true\n')
   writeFileSync(path.join(dir, 'client.js'), '// client\n')
-  writeFileSync(path.join(dir, 'BUNDLED-VERSION.json'), JSON.stringify({ name: 'dsh-tavern-comfy', version }))
+  writeFileSync(path.join(dir, 'BUNDLED-VERSION.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version }))
   return { root, dir }
 }
 
@@ -92,7 +93,7 @@ test('已存在的较新插件目录：完整保留', t => {
   const data = makeData(t)
   const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
   mkdirSync(target, { recursive: true })
-  writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: 'dsh-tavern-comfy', version: '9.0.0', main: './lib/index.js', dsh: CONTRACT }))
+  writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '9.0.0', main: './lib/index.js', dsh: CONTRACT }))
   const r = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet })
   assert.equal(r.action, 'skipped')
   assert.equal(r.installedVersion, '9.0.0')
@@ -104,7 +105,7 @@ test('已存在的旧版插件目录：不升级、不覆盖用户数据', t => 
   const data = makeData(t)
   const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
   mkdirSync(target, { recursive: true })
-  writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: 'dsh-tavern-comfy', version: '2.7.0', main: './lib/index.js', dsh: CONTRACT }))
+  writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '2.7.0', main: './lib/index.js', dsh: CONTRACT }))
   // 用户的私人数据：升级必须保留
   const userFiles = {
     'config.json': '{"apiKey":"user-own"}',
@@ -122,13 +123,27 @@ test('已存在的旧版插件目录：不升级、不覆盖用户数据', t => 
   }
 })
 
-test('profile 已装同名包：跳过，避免同一包两个来源', t => {
+test('profile 已装旧名包：跳过，避免同一插件出现第三份来源', t => {
+  const source = makeSource(t)
+  const data = makeData(t)
+  const profile = path.join(data, 'profile')
+  const installed = path.join(profile, 'node_modules', LEGACY_SCENE_IMAGE_PACKAGE_NAME)
+  mkdirSync(installed, { recursive: true })
+  writeFileSync(path.join(installed, 'package.json'), JSON.stringify({ name: LEGACY_SCENE_IMAGE_PACKAGE_NAME, version: '2.8.0' }))
+
+  const r = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, profileDir: profile, logger: quiet })
+  assert.equal(r.action, 'skipped')
+  assert.match(r.reason, /单一来源/)
+  assert.equal(existsSync(path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)), false)
+})
+
+test('profile 已装 canonical 包：跳过，避免同一插件重复来源', t => {
   const source = makeSource(t)
   const data = makeData(t)
   const profile = path.join(data, 'profile')
   const installed = path.join(profile, 'node_modules', SCENE_IMAGE_PACKAGE_NAME)
   mkdirSync(installed, { recursive: true })
-  writeFileSync(path.join(installed, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '2.8.0' }))
+  writeFileSync(path.join(installed, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '2.9.1' }))
 
   const r = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, profileDir: profile, logger: quiet })
   assert.equal(r.action, 'skipped')
@@ -142,12 +157,12 @@ test('readBundledSceneImage 校验版本标记、包名和委派契约', t => {
   assert.equal(info.ok, true)
   assert.equal(info.version, '2.8.3')
   assert.equal(info.contract, 'delegate')
-  writeFileSync(path.join(source.dir, 'BUNDLED-VERSION.json'), JSON.stringify({ name: 'dsh-tavern-comfy', version: '9.0.0' }))
+  writeFileSync(path.join(source.dir, 'BUNDLED-VERSION.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '9.0.0' }))
   assert.equal(readBundledSceneImage(source.root).ok, false)
   writeFileSync(path.join(source.dir, 'BUNDLED-VERSION.json'), JSON.stringify({ name: 'wrong-name', version: '2.8.3' }))
   assert.equal(readBundledSceneImage(source.root).ok, false)
-  writeFileSync(path.join(source.dir, 'BUNDLED-VERSION.json'), JSON.stringify({ name: 'dsh-tavern-comfy', version: '2.8.3' }))
-  writeFileSync(path.join(source.dir, 'package.json'), JSON.stringify({ name: 'dsh-tavern-comfy', version: '2.8.3', main: './lib/index.js' }))
+  writeFileSync(path.join(source.dir, 'BUNDLED-VERSION.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '2.8.3' }))
+  writeFileSync(path.join(source.dir, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '2.8.3', main: './lib/index.js' }))
   assert.equal(readBundledSceneImage(source.root).ok, false)
 })
 

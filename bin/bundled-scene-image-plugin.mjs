@@ -17,7 +17,9 @@ import path from 'node:path'
 export const BUNDLED_SCENE_IMAGE_FOLDER = 'dsh-tavern-image'
 export const BUNDLED_SCENE_IMAGE_DIR = ['tavern-plugin', 'packages', 'dsh-tavern-image-bundled']
 /** profile 侧那个包名（插件真正的 npm 包名，与目录名不同） */
-export const SCENE_IMAGE_PACKAGE_NAME = 'dsh-tavern-comfy'
+export const SCENE_IMAGE_PACKAGE_NAME = 'dsh-tavern-image'
+/** 旧版 profile 包名：识别既有来源，避免新旧包并存。 */
+export const LEGACY_SCENE_IMAGE_PACKAGE_NAME = 'dsh-tavern-comfy'
 
 /** 内置副本必须齐备的文件；缺一个就当"这份发行版没内置插件"，不去猜。 */
 const REQUIRED = ['package.json', 'lib/index.js', 'client.js', 'cordis.patch.yml']
@@ -131,7 +133,9 @@ export function installBundledSceneImagePlugin({ sourceRoot, dataRoot, profileDi
   }
 
   // profile 侧已装同名包：让它做唯一来源，别再放一份永不加载的副本
-  if (profileDir && existsSync(path.join(profileDir, 'node_modules', SCENE_IMAGE_PACKAGE_NAME, 'package.json'))) {
+  const profileHasSceneImagePackage = profileDir && [SCENE_IMAGE_PACKAGE_NAME, LEGACY_SCENE_IMAGE_PACKAGE_NAME]
+    .some(name => existsSync(path.join(profileDir, 'node_modules', name, 'package.json')))
+  if (profileHasSceneImagePackage) {
     return {
       action: 'skipped', reason: 'profile 已安装同名插件包，保持单一来源',
       version: bundled.version, installedVersion, target,
