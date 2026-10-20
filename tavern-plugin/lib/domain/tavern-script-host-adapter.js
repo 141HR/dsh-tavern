@@ -27,6 +27,9 @@ import {
 import { createMvuSettlementEffect } from './mvu-settlement-effect.js'
 import { REPLY_PROSE_FIELDS } from './reply-prose.js'
 
+// The fast template patch lost its revision race to another write: worth retrying.
+const TEMPLATE_PATCH_CONFLICT = Symbol('template patch conflict')
+
 function str(value) {
   return typeof value === 'string' ? value : (value === undefined || value === null ? '' : String(value))
 }
@@ -664,14 +667,19 @@ export function createTavernScriptHostAdapter(options = {}) {
     // No body rewrites on this path: native message history needs no resynchronization.
     const changes=diffJson(latest,next).map(c=>c.path[0]==='messages'?{...c,path:['messages',storedIndices[c.path[1]],...c.path.slice(2)]}:c)
     const saved=await options.patchChat(latest.id,revision,changes,{source:'prompt-template.state',assertCurrent:()=>{if(settlementTransactions.has(str(sessionId)))throw new Error('MVU 结算进行中，模板存档不能覆盖结算事务')}})
-    if(!saved)return undefined
+    if(!saved)return TEMPLATE_PATCH_CONFLICT
     const receipt=diffJson(expanded,{...projectFullPromptTemplateState(next),stateRevision:saved._storageRevision})
     return {updated:true,statePatch:receipt.map(c=>c.path[0]==='chat'?{...c,path:['chat',projectedIndices[c.path[1]],...c.path.slice(2)]}:c)}
   }
 
   async function saveFullPromptTemplateState(sessionId, request) {
-    const fast=await saveTemplatePatch(sessionId,request)
-    if(fast)return fast
+    // A background write landing between the fast path's read and its patch only moves the
+    // revision: the fast path merges from the reader's revision, so retry it before falling
+    // back to the complete merge, which reads the whole history.
+    for(let attempt=0;attempt<3;attempt++){
+      const fast=await saveTemplatePatch(sessionId,request)
+      if(fast!==TEMPLATE_PATCH_CONFLICT){if(fast)return fast;break}
+    }
     const patch = Array.isArray(request?.changes)
     if (!patch) validateFullPromptTemplateSave(request)
     const chat = await resolveChat(sessionId)
