@@ -4604,6 +4604,7 @@ export async function apply(ctx) {
           sessionIds: saveSessionIds(chat),
           errorOf: id => preparedSaveSessions.get(id)?.error,
           tavernVersion: TAVERN_PACKAGE_VERSION,
+          chat,
         })
         return { filename: '酒馆诊断-' + chat.id.slice(0, 8) + '.json', text: JSON.stringify(report) }
       }
