@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "0205b4d8bfe86484865d1aca988702d5495992c4",
-  "releaseSequence": 778,
+  "revision": "477d7977de29132662594d471ca805159b68d685",
+  "releaseSequence": 779,
   "version": "3.0.1",
   "files": [
     {
@@ -901,8 +901,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-initialization.js",
-      "sha256": "e5689afc627da7a1b74287368c1a5b4a0efe0ccb274f3a193de1c20a4d81f0b1",
-      "size": 21243
+      "sha256": "e7b893f486610b47291f0055080c0b436d8687c321784c917bc823b86b8efae2",
+      "size": 22319
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-page-store.js",
@@ -1226,8 +1226,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/live-card-update.js",
-      "sha256": "1b69d3a340c0458e7d24159d5aea9ad95dd4dba7ef1e5fafdfa6640f1fc1d69c",
-      "size": 17474
+      "sha256": "44a707614a88474aa357bdcbb53ef5a606053624deb572475b47d5f0857b2ed7",
+      "size": 17917
     },
     {
       "path": "tavern-plugin/lib/domain/manual-character-design.js",
@@ -1341,8 +1341,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/opening-preparation.js",
-      "sha256": "0e976ba4a34e56eb90dabea2e4b475a965bcf7e25d42aa1e09804864adde523e",
-      "size": 14323
+      "sha256": "0bd2bc0f247a43cba74c15ee45e5e5d8bc4825eed4befa1cd7683ff5293495e6",
+      "size": 15214
     },
     {
       "path": "tavern-plugin/lib/domain/opening-transport.js",
@@ -1371,8 +1371,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/play-card-snapshots.js",
-      "sha256": "cdd0012bfc32d421e5071f1b56550e7f1ce810ebae8b1cc27fd6a6c20dc11821",
-      "size": 16537
+      "sha256": "805c021959913dc94e6ddd1aa8d42ecc24ac11af7c99ffa5818ddc5e6780ffed",
+      "size": 19041
     },
     {
       "path": "tavern-plugin/lib/domain/play-chat-debug.js",
@@ -2221,8 +2221,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/worldbook-library.js",
-      "sha256": "c3168295a5e2bd67a6d29978d4e2ad924e82ba5b0b1f16aeaa98dddcda95ddef",
-      "size": 20712
+      "sha256": "d0df3719d8f068738df997d1efd00512268c99c8d0dbdefd2ad58f3d0a62a6c2",
+      "size": 23654
     },
     {
       "path": "tavern-plugin/lib/domain/worldbook-merge.js",
@@ -2326,8 +2326,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "45d01f5aa2440ca0b4c00e5cc4699ba7e5f4c4dde8468133b0553c65e0e49e8c",
-      "size": 380376
+      "sha256": "2289db17ea34900b6d3ef42f38db9e588b8300f64de922edec47b5f8ae18cff2",
+      "size": 381606
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
