@@ -33,12 +33,18 @@ export function decodeUpdateOutput(value) {
 // install.ps1, bin/download.cjs) into the stage the user sees.
 const INSTALL_STEP_LINE = /^==\s*\[步骤\s*(\d+)\]\s*(.*?)\s*==$/
 const STEP_ELAPSED = /\s*（已用\s*\d+s）\s*$/
+const PACKAGE_PROGRESS = /^Progress: resolved (\d+), reused (\d+), downloaded (\d+), added (\d+)/
 export function installStageFromLine(line) {
   const text = String(line ?? '').trim()
   const step = INSTALL_STEP_LINE.exec(text)
   if (step) return `第 ${step[1]} 步 · ${step[2].replace(STEP_ELAPSED, '')}`
   const status = /^DSH_STATUS\s+(.+)$/.exec(text)
-  return status ? status[1].trim() : ''
+  if (status) return status[1].trim()
+  // 依赖安装往往是最慢的一步：把 pnpm 的计数写进阶段，用户能看出是在下载还是
+  // 从本地 store 复制，而不是只有一个不动的步骤名。
+  const progress = PACKAGE_PROGRESS.exec(text)
+  if (progress) return `安装依赖：已装 ${progress[4]}，复用 ${progress[2]}，下载 ${progress[3]}`
+  return ''
 }
 
 // Decode chunk boundaries safely (a Chinese character may be split across two

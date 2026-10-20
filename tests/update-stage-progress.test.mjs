@@ -13,6 +13,9 @@ test('安装器步骤与 DSH_STATUS 转成用户能看懂的阶段', () => {
     '下载代码（jsDelivr）：2/8 文件，复用 1，已下载 1.2 MB')
   assert.equal(installStageFromLine('   '), '')
   assert.equal(installStageFromLine('Progress: resolved 12, reused 3'), '')
+  assert.equal(
+    installStageFromLine('Progress: resolved 0, reused 120, downloaded 3, added 118'),
+    '安装依赖：已装 118，复用 120，下载 3')
   assert.equal(installStageFromLine('DSH_STATUS'), '')
 })
 
