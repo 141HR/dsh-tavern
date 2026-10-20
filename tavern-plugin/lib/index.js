@@ -2614,6 +2614,9 @@ export async function apply(ctx) {
   async function readOpeningWindow(sessionId, historyFrom) {
     const chatId = (await readSessionMap())[str(sessionId)]
     if (!chatId) return null
+    // Scrolled back to the first floor: the window would be the whole history, read page by
+    // page only to be refused. The complete view refreshes from changed floors instead.
+    if (historyFrom === 0) return null
     const window = await readRecentWindow(chatPersistence.readWindow,chatId,{limit:HELPER_MESSAGE_COLD_WINDOW,from:historyFrom,requirePartial:true})
     if (!window || window.from===0 || window.chat.sessionId!==sessionId
       || window.chat.backgroundConfigVersion!==1 || window.chat.conversationFeaturesVersion!==1
