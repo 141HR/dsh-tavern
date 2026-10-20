@@ -309,10 +309,19 @@ export async function settlementPerformanceChecks({ page, step, savedChat, outpu
       submitToCommitMs: round(commitAt - submitted), submitToVisibleMs: round(visibleAt - submitted), runtimeToCommitMs: round(commitAt - runtime),
       runtimeToVisibleMs: round(visibleAt - runtime), commitMs: round(commitAt - commitStart), commitToVisibleMs: round(visibleAt - commitAt),
       diskReadMs: round(diskReadMs), events, browserEvents }
+    // Whole-history reads during this round, cache hits included: a hit still copies the
+    // complete Chat. The round after reopening may read once (the first request hook of a
+    // session in a process); every later round must read none.
+    const historyReads = events.filter(event => ['full-read', 'full-read-miss', 'summary-history-read'].includes(event.stage))
+    sample.historyReads = historyReads.map(event => ({ stage: event.stage, caller: event.caller?.filter(line => line.includes('tavern-plugin/')).slice(0, 6) }))
     samples.push(sample)
     delete report.settlementPerformance.activeSample
-    console.log('PERF ' + JSON.stringify({ ...size, ...Object.fromEntries(Object.entries(sample).filter(([key]) => key.endsWith('Ms'))) }))
+    console.log('PERF ' + JSON.stringify({ ...size, ...Object.fromEntries(Object.entries(sample).filter(([key]) => key.endsWith('Ms'))), historyReads: historyReads.length }))
     await writeFile(join(output, 'settlement-performance.json'), JSON.stringify(report.settlementPerformance, null, 2))
+    // Baseline comparisons against older builds record the reads instead of failing.
+    if (append && run > 0 && process.env.TAVERN_PERF_ALLOW_FULL_READS !== '1') {
+      assert.equal(historyReads.length, 0, 'an ordinary round must not read the complete history: ' + JSON.stringify(sample.historyReads))
+    }
     if (process.env.TAVERN_PERF_REQUIRE_LAZY === '1') {
       assert.ok(!events.some(event => event.stage === 'full-read-miss'), 'settlement must not read the complete Chat')
       const loads = events.filter(event => event.stage === 'settlement-history-load')

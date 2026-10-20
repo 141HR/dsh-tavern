@@ -6,6 +6,7 @@
 在隔离 Profile 中生成匹配的 Chat 与原生 Session，使用真实官方 MVU、浏览器和日志存储，只有模型输出固定。
 默认 1000 轮、20 个合成字段加金币、连续 5 次重新结算；可用 `TAVERN_PERF_ROUNDS`、`TAVERN_PERF_FIELDS`、`TAVERN_PERF_RUNS` 调整。
 设置 `TAVERN_PERF_APPEND=1` 改为实际继续游玩、追加新一轮；此模式与重新结算分别统计。阶段事件同时记录执行上下文是否为增量及包含的消息数量。
+继续游玩时，每轮记录这段时间里读取完整历史的次数（`historyReads`，命中缓存的也算，因为命中时仍会复制整份存档）。重开后的第一轮允许读一次（进程内会话的第一次请求钩子），之后每轮必须为零，否则失败；对比旧版本时设 `TAVERN_PERF_ALLOW_FULL_READS=1` 只记录不失败。
 合成字段从人物卡初始变量正常进入 MVU，每次独立读档验证所有字段和结算回执。
 
 `settlement-performance.json` 区分浏览器 MVU 事件完成、服务端 runtime 返回、结算日志 append 完成、commit 返回和状态栏显示。
