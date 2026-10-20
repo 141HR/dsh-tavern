@@ -43,8 +43,11 @@ public final class TavernBootstrap {
 
     private static int run(ProotBootstrap boot, String extraEnvironment, boolean append,
                            BooleanSupplier cancelled, Consumer<String> status) throws Exception {
+        // pnpm 默认单请求 60 秒超时，慢速移动网络下载大包会批量报 error (23)；
+        // 提到 10 分钟，且 install.sh 的 pnpm 包装也会显式传同一个上限。
         String command = "set -o pipefail; export DSH_TAVERN_ANDROID_STANDALONE=1"
-                + extraEnvironment + "; mkdir -p /root/.dsh/logs; "
+                + " pnpm_config_fetch_timeout=600000" + extraEnvironment
+                + "; mkdir -p /root/.dsh/logs; "
                 + "bash /root/tavern-apk-setup.sh 2>&1 | tee "
                 + (append ? "-a " : "") + "/root/.dsh/logs/tavern-install.log";
         return InstallProcess.read(boot.execRootfsForInstall(command), 3600000L,

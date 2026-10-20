@@ -18,7 +18,7 @@ Profile，因此手机上只有一个 DSH 常驻进程。构建、签名和静�
 | 酒馆版本 | 3.0.0（`versionCode` 30000） |
 | 包名 | `io.github.flizzywine.dshtavern.standalone` |
 | 构建产物 | `output/android-apk-020/dsh-tavern-android-release.apk` |
-| 产物 SHA-256 | `e4f5dd5708f05dc0f16241cfdc6fa378490ec60fe5e8e9c1c82d06b8d8521e71` |
+| 产物 SHA-256 | `cf7a04b53a691767d96805cb89ce142f8f7e65003c3585eaa89f40a1e6cba014` |
 | 签名证书 SHA-256 | `D6:B8:B0:C7:25:BE:51:41:58:AF:97:4B:04:27:92:26:2E:CD:6E:97:47:06:89:95:24:2F:EE:30:55:59:E4:8D` |
 
 产物由 `TAVERN_APK_MODE=Release TAVERN_APK_SKIP_TESTS=1 bash android/apk/build.sh` 生成。
@@ -53,9 +53,14 @@ Profile，因此手机上只有一个 DSH 常驻进程。构建、签名和静�
 Tavern 专用 pnpm 11.25.0，随后核心依赖从 `registry.npmmirror.com` 批量超时
 （`UND_ERR_CONNECT_TIMEOUT` / `error (23)`，单请求 20–70 秒），安装停在依赖阶段。
 
-APK 内无法设置 `DSH_TAVERN_NPM_REGISTRY`，因此 `TavernBootstrap` 增加一次自动重试：首次失败后用
-`https://registry.npmjs.org` 重跑 setup，日志以 `tee -a` 追加。仍失败才报错并提示检查网络。
-本次重建后的产物 SHA-256 已更新为上表的值；版本号未变（30000 / 3.0.0）。
+根因不只是镜像：pnpm 的单请求 `fetchTimeout` 默认 60000ms，慢速网络下载大包时 undici 以
+code 23 中止（日志里的 `error (23)`）。pnpm 11 支持用 `pnpm_config_fetch_timeout` 覆盖，因此
+APK 的安装命令固定导出 `pnpm_config_fetch_timeout=600000`；`android/install.sh` 的 pnpm 包装
+也显式传 `--config.fetchTimeout=600000`，让 DSHA 路线在推送后同样受益。
+
+另保留一次自动重试：首次失败后用 `https://registry.npmjs.org` 重跑 setup，日志以 `tee -a`
+追加；两次都失败才报错并提示检查网络。本次重建后的产物 SHA-256 为上表的值；版本号未变
+（30000 / 3.0.0）。
 
 ## 待验收（需要设备）
 
