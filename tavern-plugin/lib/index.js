@@ -2994,6 +2994,14 @@ export async function apply(ctx) {
         .catch(error => { if (signal.aborted) throw error; console.warn('dsh-tavern: 文风联想失败，下一轮不带参考:', str(error?.message || error)) })
     }
   })
+  // What the prefilter prepares (worldbook pool, style reference) serves the reply the player
+  // has just answered: abort it the moment their message lands, not when the new turn's
+  // preparation reaches its cancel. Tavern's own edit turns carry no player message.
+  ctx.on('session/event', function (session, event) {
+    if (event?.type !== 'user/message' || event.surfaceOp !== 'append' || event.data?.source?.kind !== 'user' || event.data.source.repair) return
+    if (!session?.id || backgroundAgentRunner.owns(session.id)) return
+    void readSessionMap().then(links => { const chatId = links[str(session.id)]; if (chatId) return worldbookPrefilter.cancel(chatId) }).catch(() => {})
+  })
   ctx.effect(() => () => worldbookPrefilter.dispose())
   // A player asking for another passage, optionally saying what they want. 'next' replaces the
   // reference waiting for the next turn; 'regenerate' re-recalls the one the latest turn used,
