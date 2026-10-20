@@ -167,19 +167,27 @@ else
 fi
 
 stage "整理 pnpm 运行时并打包"
-# pnpm 本体连其自身依赖一起打：容器内 `npm install pnpm-<ver>.tgz` 仍会联网拉 @pnpm/*。
+# pnpm 本体连其自身依赖一起打：容器内 `npm install pnpm-tgz` 仍会联网拉 @pnpm/*。
+# 注意：pnpm-runtime 自身的 node_modules 绝不能排除，否则 bin/pnpm 变断链，
+# 首装会回落到联网 npm 安装（实测多花 18 秒且离线环境下直接失败）。
 rm -rf -- "${WORK}/pnpm-runtime" 2>/dev/null || true
 cp -R "${WORK}/pnpm-tool" "${WORK}/pnpm-runtime" 2>/dev/null || true
 if [ -d "${WORK}/pnpm-runtime" ]; then rm -rf -- "${WORK}/pnpm-runtime/.cache" 2>/dev/null || true; fi
-log "pnpm 运行时：$(du -sh "${WORK}/pnpm-runtime" 2>/dev/null | cut -f1)"
+PNPM_CJS="${WORK}/pnpm-runtime/lib/node_modules/pnpm/bin/pnpm.cjs"
+[ -f "${PNPM_CJS}" ] || { echo '内置 pnpm 运行时缺少主体文件，禁止打包。' >&2; exit 1; }
+chmod +x "${PNPM_CJS}" 2>/dev/null || true
+[ "$("$(command -v node)" "${PNPM_CJS}" --version 2>/dev/null)" = "${PNPM_VERSION}" ] \
+  || { echo '内置 pnpm 运行时不可执行，禁止打包。' >&2; exit 1; }
+log "pnpm 运行时：$(du -sh "${WORK}/pnpm-runtime" 2>/dev/null | cut -f1)（已验证可执行）"
 printf '%s\n' "${COMMIT}" >"${WORK}/revision"
 # 去掉快照里的内部标记，再以 source/ 名字入包。
 rm -f -- "${SNAPSHOT}/.snapshot-revision" 2>/dev/null || true
 log "打包中（源码 + store + metadata 缓存 + pnpm 运行时，gzip 压缩，约 1-2 分钟）……"
+# 排除规则必须限定在源码快照内：写成 */node_modules 会连带删掉 pnpm-runtime 的依赖。
 tar -czf "${OUT}.tmp" -C "${WORK}" \
   --transform="s|^$(basename "${SNAPSHOT}")|source|" \
-  --exclude='*/node_modules' \
-  --exclude='*/.pnpm-store' \
+  --exclude="$(basename "${SNAPSHOT}")/node_modules" \
+  --exclude="source/node_modules" \
   revision pnpm-runtime store cache registry "$(basename "${SNAPSHOT}")"
 mv -f "${OUT}.tmp" "${OUT}"
 printf '%s\n' "${COMMIT}" >"${SNAPSHOT}/.snapshot-revision"
