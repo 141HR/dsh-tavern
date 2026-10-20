@@ -14,8 +14,10 @@ import { helperGenerationHistory } from './helper-generation-prompts.js'
 
 const copy = value => structuredClone(value)
 
+const untraced = { stage: (_name, run) => run() }
+
 /** Private pre-game state; explicit plugin-setting saves use the profile store. */
-export function createOpeningPreparation({ readCard, worldBooks, generate, generateRaw, readRuntimeExtensions, extensionSettings, now = Date.now }) {
+export function createOpeningPreparation({ readCard, worldBooks, generate, generateRaw, readRuntimeExtensions, extensionSettings, now = Date.now, trace = untraced }) {
   const drafts = new Map()
   const generations = createHelperGenerationTasks()
   const lifetime = 2 * 60 * 60 * 1000
@@ -41,39 +43,47 @@ export function createOpeningPreparation({ readCard, worldBooks, generate, gener
       runtime: draft.runtimeEnabled ? { context: runtimeContext(draft), scripts: (draft.chat.mvu.enabled ? [{ id: '__dsh_official_mvu__', name: 'MVU', system: 'official-mvu', assetUrl: OFFICIAL_MVU_VERSION.assetUrl }] : []).concat(draft.helperScripts || []) } : null,
       worldbook: draft.document ? projectTavernHelperWorldbook(inspectWorldBookDocument(draft.document)) : null })
   }
+  async function createDraft(cardPath, settings = {}) {
+    for (const [id, draft] of drafts) if (now() - draft.touchedAt > lifetime) { generations.stopAll('opening:' + id); drafts.delete(id) }
+    if (drafts.size >= 64) throw new Error('打开的游戏准备页过多，请稍后重试')
+    const card = settings.card || await trace.stage('prepCard', () => readCard(cardPath))
+    if (!card) throw new Error('人物卡不存在')
+    const record = await trace.stage('prepWorldbook', () => worldBooks.bound(cardPath, card, settings.sourceChat))
+    const draft = { id: randomUUID(), cardPath, openings: cardOpeningChoices(card),
+      document: record ? copy(record.view.raw) : null, source: record ? copy(record.source) : null, touchedAt: now() }
+    draft.libraryDigest = settings.sourceChat?.worldbookLibraryDigest ?? settings.sourceChat?.openingWorldbookSnapshot?.libraryDigest
+      ?? (settings.sourceChat?.openingWorldbookSnapshot ? undefined : worldbookContentDigest(record))
+    draft.sourceSessionId = settings.sourceChat?.sessionId || ''
+    draft.presetSnapshot = settings.sourceChat ? copy(settings.sourceChat.runtimePresetSnapshot || null) : undefined
+    draft.sourceLifecycleRevision = Number(settings.sourceChat?.tavernHelperLifecycleRevision) || 0
+    draft.card = copy(card)
+    draft.userName = settings.userName || settings.sourceChat?.macroState?.userName || '你'
+    const swipes = draft.openings.map(opening => opening.text)
+    draft.chat = { id: draft.id, cardPath, mode: 'story', mvu: { enabled: settings.runtime === true }, _storageRevision: 0,
+      macroState: { userName: draft.userName, local: {}, global: {} },
+      variables: {}, messages: [{ role: 'assistant', text: swipes[0], sourceText: swipes[0], greeting: true, turn: 1, swipeId: 0, swipes, variables: swipes.map(() => ({})) }] }
+    const extensions = settings.extensions || (readRuntimeExtensions ? await trace.stage('prepExtensions', () => readRuntimeExtensions(cardPath)) : {})
+    draft.characterVariables = copy(extensions.variables || {})
+    const projected = projectTavernHelperScripts(extensions.helperScripts)
+    draft.helperScripts = projected.scripts
+    draft.regexScripts = { global: extensions.globalRegexScripts || [], character: extensions.characterRegexScripts || extensions.regexScripts || [] }
+    draft.diagnostics = projected.diagnostics.concat(extensions.diagnostics || [])
+    draft.runtimeEnabled = projected.scripts.length > 0
+    draft.extensionSettings = extensionSettings ? await trace.stage('prepSettings', () => extensionSettings.read()) : {}
+    // Starting MVU must not replace another plugin's settings or its save baseline.
+    if (settings.runtime === true) draft.runtimeEnabled = true
+    draft.chat.sessionId = 'opening:' + draft.id
+    drafts.set(draft.id, draft)
+    return draft
+  }
   return {
+    // Plain greetings start from the draft id alone; projecting the card and the
+    // whole worldbook for a presentation nobody reads would run twice per start.
+    async begin(cardPath, settings = {}) {
+      return { id: (await createDraft(cardPath, settings)).id }
+    },
     async create(cardPath, settings = {}) {
-      for (const [id, draft] of drafts) if (now() - draft.touchedAt > lifetime) { generations.stopAll('opening:' + id); drafts.delete(id) }
-      if (drafts.size >= 64) throw new Error('打开的游戏准备页过多，请稍后重试')
-      const card = settings.card || await readCard(cardPath)
-      if (!card) throw new Error('人物卡不存在')
-      const record = await worldBooks.bound(cardPath, card, settings.sourceChat)
-      const draft = { id: randomUUID(), cardPath, openings: cardOpeningChoices(card),
-        document: record ? copy(record.view.raw) : null, source: record ? copy(record.source) : null, touchedAt: now() }
-      draft.libraryDigest = settings.sourceChat?.worldbookLibraryDigest ?? settings.sourceChat?.openingWorldbookSnapshot?.libraryDigest
-        ?? (settings.sourceChat?.openingWorldbookSnapshot ? undefined : worldbookContentDigest(record))
-      draft.sourceSessionId = settings.sourceChat?.sessionId || ''
-      draft.presetSnapshot = settings.sourceChat ? copy(settings.sourceChat.runtimePresetSnapshot || null) : undefined
-      draft.sourceLifecycleRevision = Number(settings.sourceChat?.tavernHelperLifecycleRevision) || 0
-      draft.card = copy(card)
-      draft.userName = settings.userName || settings.sourceChat?.macroState?.userName || '你'
-      const swipes = draft.openings.map(opening => opening.text)
-      draft.chat = { id: draft.id, cardPath, mode: 'story', mvu: { enabled: settings.runtime === true }, _storageRevision: 0,
-        macroState: { userName: draft.userName, local: {}, global: {} },
-        variables: {}, messages: [{ role: 'assistant', text: swipes[0], sourceText: swipes[0], greeting: true, turn: 1, swipeId: 0, swipes, variables: swipes.map(() => ({})) }] }
-      const extensions = settings.extensions || (readRuntimeExtensions ? await readRuntimeExtensions(cardPath) : {})
-      draft.characterVariables = copy(extensions.variables || {})
-      const projected = projectTavernHelperScripts(extensions.helperScripts)
-      draft.helperScripts = projected.scripts
-      draft.regexScripts = { global: extensions.globalRegexScripts || [], character: extensions.characterRegexScripts || extensions.regexScripts || [] }
-      draft.diagnostics = projected.diagnostics.concat(extensions.diagnostics || [])
-      draft.runtimeEnabled = projected.scripts.length > 0
-      draft.extensionSettings = extensionSettings ? await extensionSettings.read() : {}
-      // Starting MVU must not replace another plugin's settings or its save baseline.
-      if (settings.runtime === true) draft.runtimeEnabled = true
-      draft.chat.sessionId = 'opening:' + draft.id
-      drafts.set(draft.id, draft)
-      return present(draft)
+      return present(await createDraft(cardPath, settings))
     },
     templateState(id) {
       const draft = requireDraft(id), world = draft.card.name || 'opening'

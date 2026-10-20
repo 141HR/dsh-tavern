@@ -1396,7 +1396,7 @@ export async function apply(ctx) {
   const helperGenerationPreset = (name, snapshot) => resolveHelperGenerationPreset(name, snapshot, {
     catalog: () => presetLibrary.catalog(), read: readPreset, readDocument: readPresetDocument, selected: () => runtimePresets.state()
   })
-  const openingPreparation = createOpeningPreparation({ readCard, worldBooks, extensionSettings: tavernExtensionSettings,
+  const openingPreparation = createOpeningPreparation({ readCard, worldBooks, extensionSettings: tavernExtensionSettings, trace: requestPerformance,
     readRuntimeExtensions: async cardPath => tavernRemoteAssets.pinExtensions(await readCardExtensions(cardPath)),
     generateRaw: (config, context) => defaultOrderedRawConfig(config) ? openingGenerate(defaultOrderedRawConfig(config), context)
       : generateHelperRaw(config, { ...context, callModel: opts => callModel({ ...opts, background: true, signal: context.signal }) }),
@@ -2410,7 +2410,7 @@ export async function apply(ctx) {
     // Plain greetings have no interactive preview draft, but need the same
     // game-local worldbook snapshot as scripted openings.
     if (!preparationId && groupOfMode(mode || 'story') === 'play') {
-      preparationId = (await requestPerformance.stage('openingDraft', () => openingPreparation.create(cardPath, { userName }))).id
+      preparationId = (await requestPerformance.stage('openingDraft', () => openingPreparation.begin(cardPath, { userName }))).id
     }
     const preparation = preparationId ? openingPreparation.resolve(preparationId, cardPath, openingId) : undefined
     if (preparation?.sourceSessionId) {
@@ -2633,6 +2633,7 @@ export async function apply(ctx) {
     cards: { read: readCard, readChat: readChatCard, script: readScript, extensions: readCardExtensions,
       startDefaults: async cardPath => (await castAssets.read(normalizeResourcePath(cardPath, 'card'))).startDefaults || null },
     chats: { resolve: chatForSession, publish: conversationRegistry.publish, write: writeChat },
+    trace: requestPerformance,
     timeline: storyTimeline,
     snapshots: playCardSnapshots,
     userPreferenceProfile,

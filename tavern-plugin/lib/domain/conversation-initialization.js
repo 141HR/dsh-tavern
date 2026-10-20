@@ -18,6 +18,7 @@ function groupOfMode(mode) { return !mode || mode === 'story' || mode === 'scrip
 export function createConversationInitialization(options) {
   const { cards, chats, snapshots, native, presets, settings, emptyCardWorkspace, present, timeline } = options
   if (!timeline || typeof timeline.apply !== 'function') throw new Error('Conversation Initialization 缺少 Story Timeline')
+  const trace = options.trace || { stage: (_name, run) => run() }
   const id = options.id
   const now = options.now || Date.now
   const logger = options.logger || console
@@ -85,38 +86,40 @@ export function createConversationInitialization(options) {
 
   async function initialize({ cardPath, sessionId, mode, openingId, userName, requestMode, preparation, cardTask, importDraft = false }) {
     if (requestMode === 'sillytavern') throw new Error('silly 模式已停用')
-    const currentSettings = await settings()
+    const currentSettings = await trace.stage('settings', () => settings())
     let defaults = normalizePlayDefaults(currentSettings.defaultPlaySettings)
     const effectiveRequestMode = requestMode === 'sillytavern' ? 'sillytavern' : 'dsh'
     const requestedMode = mode === 'card' || mode === 'revision' || mode === 'extract' ? 'card' : (mode === 'script' ? 'script' : (mode === 'story' ? 'story' : null))
-    const card = str(cardPath) === '' && requestedMode === 'card' ? null : await cards.read(cardPath)
+    const card = str(cardPath) === '' && requestedMode === 'card' ? null : await trace.stage('card', () => cards.read(cardPath))
     if (card === undefined) throw new Error('人物卡不存在: ' + cardPath)
     // A DSH card may suggest a preset and a few settings for its new games; the player's global defaults fill the rest.
-    const cardDefaults = card !== null && typeof cards.startDefaults === 'function' ? await cards.startDefaults(cardPath).catch(() => null) : null
+    const cardDefaults = card !== null && typeof cards.startDefaults === 'function' ? await trace.stage('cardDefaults', () => cards.startDefaults(cardPath).catch(() => null)) : null
     if (cardDefaults?.settings) defaults = normalizePlayDefaults({ ...defaults, ...cardDefaults.settings, backgroundTasks: { ...defaults.backgroundTasks, ...(cardDefaults.settings.backgroundTasks || {}) } })
     // 游玩模式内部仍是 story/script 两类：人物卡已绑定剧本时必须走剧本（script）。
-    const script = card === null ? undefined : await cards.script(cardPath)
+    const script = card === null ? undefined : await trace.stage('script', () => cards.script(cardPath))
     const hasScript = script !== undefined && Array.isArray(script.chunks) && script.chunks.length > 0
     let chatMode = requestedMode
     if (chatMode === null || mode === 'play') chatMode = hasScript ? 'script' : 'story'
     if (chatMode === 'script' && !hasScript) throw new Error('该人物卡尚未绑定剧本文件，请先在卡片模式绑定剧本')
     if (chatMode === 'story' && hasScript) chatMode = 'script'
     if (typeof sessionId === 'string' && sessionId !== '') {
-      const current = await chats.resolve(sessionId)
+      const current = await trace.stage('session', () => chats.resolve(sessionId))
       if (current?.requestMode === 'sillytavern') throw new Error('silly 模式已停用')
       // 同一大模式（游玩/卡片）内复用当前会话；旧的自由故事会话不会被强行切换成剧本。
       if (current !== undefined && current.cardPath === str(cardPath) && groupOfMode(current.mode) === groupOfMode(chatMode)) {
-        if (groupOfMode(current.mode) === 'play') await snapshots.ensure(current, card)
-        await appendNativeOpening(sessionId, current, card, undefined, true)
-        return await present(current, card)
+        return await trace.stage('reopen', async () => {
+          if (groupOfMode(current.mode) === 'play') await snapshots.ensure(current, card)
+          await appendNativeOpening(sessionId, current, card, undefined, true)
+          return await present(current, card)
+        })
       }
     }
     const macroState = { userName: str(userName).trim().slice(0, 80) || defaults.playerName, local: {}, global: {} }
     const runtimePresetSnapshot = groupOfMode(chatMode) !== 'play' ? null
-      : cardDefaults?.presetPath ? await presets.fullSnapshot(cardDefaults.presetPath).catch(() => playPresetSnapshot()) : await playPresetSnapshot()
+      : cardDefaults?.presetPath ? await trace.stage('preset', () => presets.fullSnapshot(cardDefaults.presetPath).catch(() => playPresetSnapshot())) : await trace.stage('preset', () => playPresetSnapshot())
     // The card workbench opens empty: no greeting is shown or sent to the model.
     let openingSourceText = chatMode === 'card' ? '' : resolveCardOpening(card, openingId)
-    const openingExtensions = chatMode === 'card' ? null : await cards.extensions(cardPath)
+    const openingExtensions = chatMode === 'card' ? null : await trace.stage('extensions', () => cards.extensions(cardPath))
     const openingChoices = chatMode === 'card' ? [] : cardOpeningChoices(card)
     const selectedOpeningIndex = str(openingId) === '' ? 0 : Math.max(0, openingChoices.findIndex(function (choice) { return choice.id === str(openingId) }))
     const usesMvu = chatMode !== 'card' && (
@@ -149,7 +152,7 @@ export function createConversationInitialization(options) {
     const greeting = openingProjection.sessionText
     // connectWorkspace 返回时，Agent 注册偶尔仍在异步完成。先等到原生会话可写，
     // 再落盘 Tavern 对话，避免失败时留下只有映射、没有原生开场白的半初始化记录。
-    const openingTarget = typeof sessionId === 'string' && sessionId !== '' ? await native.wait(sessionId) : undefined
+    const openingTarget = typeof sessionId === 'string' && sessionId !== '' ? await trace.stage('waitSession', () => native.wait(sessionId)) : undefined
     const chat = newChat(card, chatMode || 'story', effectiveRequestMode)
     chat.bypassPlanId = runtimePresetSnapshot && runtimePresetSnapshot.planId || ''
     chat.runtimePresetSnapshot = runtimePresetSnapshot
@@ -188,7 +191,7 @@ export function createConversationInitialization(options) {
         status: 'pending'
       }
     } : { enabled: false }
-    await snapshots.prepare(chat, card)
+    await trace.stage('snapshot', () => snapshots.prepare(chat, card))
     chat.openingText = greeting
     chat.presentationWarnings = openingProjection.warnings
     if (chat.mode === 'script') {
@@ -244,10 +247,10 @@ export function createConversationInitialization(options) {
     const group = groupOfMode(chat.mode)
     const defaultModel = group === 'play' ? currentSettings.defaultForegroundModel
       : group === 'card' ? currentSettings.defaultWorkbenchModel || currentSettings.defaultForegroundModel : null
-    if (openingTarget && defaultModel) await native.selectModel(openingTarget, defaultModel)
-    await chats.publish(chat)
-    if (hasSession) await appendNativeOpening(sessionId, chat, card, openingTarget)
-    return await present(chat, card)
+    if (openingTarget && defaultModel) await trace.stage('selectModel', () => native.selectModel(openingTarget, defaultModel))
+    await trace.stage('publish', () => chats.publish(chat))
+    if (hasSession) await trace.stage('nativeAppend', () => appendNativeOpening(sessionId, chat, card, openingTarget))
+    return await trace.stage('present', () => present(chat, card))
   }
 
 
