@@ -2918,7 +2918,8 @@ export async function apply(ctx) {
     },
     resolveForegroundWorldbookReads: async input => {
       if (!['settlement', 'candidate', 'character-design'].includes(input.task)) return ''
-      const chat = await sessionStateForSession(input.sessionId)
+      // The latest reply's turn and the regeneration map: the header and the latest floors.
+      const chat = await chatHeaderWithLatestFloors(input.sessionId, 3)
       const session = agentRegistry.get(input.sessionId)?.session || sessionStore.get(input.sessionId)
       return foregroundWorldbookReads(chat, session)
     },
@@ -3519,7 +3520,7 @@ export async function apply(ctx) {
           })
         })
       }
-      const chat = await sessionStateForSession(target.session.id)
+      const chat = await chatHeaderForSession(target.session.id, ['mode'])
       if (!chat || !['story', 'script'].includes(chat.mode)) return fallback()
       const pendingMessages = pendingCompactionMessages.get(target) || []
       return compactForegroundIfNeeded({
@@ -3535,7 +3536,7 @@ export async function apply(ctx) {
     async function compactionRegionGuard(target) {
       const background = backgroundAgentRunner.requestContext(target.session.id)
       if (!background || ['image', 'phone'].includes(background.task)) return
-      const chat = await sessionStateForSession(background.parentSessionId)
+      const chat = await chatHeaderForSession(background.parentSessionId, [])
       if (!chat) throw new Error('后台压缩找不到所属对话')
       await updateChat(chat.id, current => {
         const participant = current.timeline?.participants?.background
@@ -3551,7 +3552,8 @@ export async function apply(ctx) {
   }
   ctx.on('agent/pre-step', async (payload, next) => {
     const id = payload.agent.session.id, background = backgroundAgentRunner.requestContext(id)
-    const chat = background ? null : await sessionStateForSession(id)
+    // Every model step asks: the header's mode answers it.
+    const chat = background ? null : await chatHeaderForSession(id, [])
     if (chat && ['story', 'script'].includes(chat.mode)) await retireOldForegroundFrames(payload.agent, payload.turn)
     if (background && ['image', 'phone'].includes(background.task)) return next()
     if (background || chat && ['story', 'script'].includes(chat.mode)) {
@@ -4412,6 +4414,7 @@ export async function apply(ctx) {
       chatForSession,
       storyContextForSession: sessionId => storyContext({ sessionId }),
       stateForSession: sessionStateForSession,
+      headerForSession: chatHeaderForSession,
       readCard,
       readCardExtensions,
       readScript,
@@ -5685,7 +5688,7 @@ export async function apply(ctx) {
     owns: async function (agent) {
       const sessionId = agent && agent.session ? agent.session.id : ''
       if (sessionId === '') return false
-      return backgroundAgentRunner.owns(sessionId) || await sessionStateForSession(sessionId) !== undefined
+      return backgroundAgentRunner.owns(sessionId) || Boolean(await chatHeaderForSession(sessionId, []))
     }
   })
 

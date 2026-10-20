@@ -902,8 +902,10 @@ export function createTurnOrchestrator(options) {
   }
 
   async function visibleTools(sessionId) {
-    const chat = await (store.stateForSession || store.chatForSession)(sessionId)
-    if (chat === undefined) return []
+    // Every model call asks: mode and the web-search switch live in the header.
+    const chat = store.headerForSession ? await store.headerForSession(sessionId, ['mode', 'webSearchEnabled'])
+      : await (store.stateForSession || store.chatForSession)(sessionId)
+    if (chat === undefined || chat === null) return []
     const mode = chat.mode || 'story'
     const webTools = chat.webSearchEnabled === true ? ['web_search'] : []
     const storyTools = storyToolCallEnabled(chat, await options.storyToolCall?.()) ? [STORY_SUBMIT_TOOL_NAME] : []
@@ -912,9 +914,11 @@ export function createTurnOrchestrator(options) {
     return ['tavern_read_variables', 'skill', 'tavern_read_skill_reference', 'tavern_recall_history', 'worldbook_search', ...webTools, ...storyTools]
   }
 
+  // Asked by request hooks on every model call: the header answers it, not the history.
   async function modeFor(sessionId) {
-    const chat = await (store.stateForSession || store.chatForSession)(sessionId)
-    return chat === undefined ? null : (chat.mode || 'story')
+    const chat = store.headerForSession ? await store.headerForSession(sessionId, ['mode'])
+      : await (store.stateForSession || store.chatForSession)(sessionId)
+    return chat === undefined || chat === null ? null : (chat.mode || 'story')
   }
 
   return Object.freeze({ prepare, beginCompatibility, saveChanges, stageChanges, finalize, recordFailure, discard, visibleTools, modeFor })
