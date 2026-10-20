@@ -716,6 +716,22 @@
 				const sceneAnchors = (illustration && sceneAnchor ? [{ id: "scene-illustration", anchor: sceneAnchor, render: function () { return illustration; } }] : [])
 					.concat(extraPictures.filter(function (picture) { return picture.anchor; }).map(function (picture) { return { id: picture.id, anchor: picture.anchor, render: function () { return picture.node; } }; }));
 				const pluginText = playView ? createTavernPluginTextContext({ items: pluginMedia.items, extras: sceneAnchors, sessionId: props.sessionId, turn: storyTurn, streaming: data.status === "running" }) : null;
+
+                // 正文走工具调用时整段正文一次性落地：宿主把提交折叠成一条普通回复，
+                // 消息 ID 带 tavern-tool-reply: 前缀。普通逐字流式的回复没有这个前缀，
+                // 生成完仍停在末尾，读者不会被打断。只有页面看着这一回合跑完、读者
+                // 本来就在跟随底部时，才把正文开头放回视口顶部。
+                const replyMessageId = data.finalNode && typeof data.finalNode.messageId === "string" ? data.finalNode.messageId : "";
+                const replyText = (Array.isArray(data.blocks) ? data.blocks : []).filter(function (block) { return block && block.kind === "text"; })
+                    .map(function (block) { return String(block.text || ""); }).join("\n");
+                React.useLayoutEffect(function () {
+                    if (!playView || !settled || replyText.trim() === "") return;
+                    if (!replyMessageId.startsWith("tavern-tool-reply:")) return;
+                    if (!tavernReplyRunWatch || !tavernReplyRunWatch.watching(props.sessionId)) return;
+                    if (tavernReplyRunWatch.seen(props.sessionId, replyMessageId)) return;
+                    tavernReplyRunWatch.mark(props.sessionId, replyMessageId);
+                    if (historyNode.current) tavernReplyReveal(historyNode.current, { host: window });
+                }, [props.sessionId, replyMessageId, replyText, playView, settled]);
                 const rendered = sessionTransitioning ? [React.createElement("div", { key: "switching", className: "dsh-tavern-session-switching", role: "status" }, "正在完成游戏初始化…")] : waitingForHistory ? [React.createElement("div", {key:"history",role:"status"}, "正在读取历史内容…")] : renderTavernAssistantBlocks({
 					blocks: data.blocks,
 					groupPart: props.groupPart,
@@ -815,6 +831,10 @@
 			}
 			function register(input) {
 				// uiWorkspace 由 dsh-client-ui-workspace 提供；缺失时（老宿主/未加载）退化为 sessions.retain。
+				input.ctx.effect(function () {
+					installTavernReplyRuns(input.ctx.sessions);
+					return function () { disposeTavernReplyRuns(); };
+				}, "dsh-tavern: reply reveal runs");
 				function resolveUiWorkspace() {
 					try { return input.ctx.get("uiWorkspace") || null; } catch (_) { return null; }
 				}
