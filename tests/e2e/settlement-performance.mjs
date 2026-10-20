@@ -12,8 +12,15 @@ import { currentSessionLogs, dropOtherGenerations } from './session-files.mjs'
 // the very performance this probe measures. Still inspect the real status DOM.
 async function statusFrame(page) {
   // The right panel no longer opens by itself when a game opens (#213): open 酒馆状态 when it is not shown.
-  if (!await page.evaluate(() => Boolean(document.querySelector('.dsh-tavern-status-runtime')))) {
-    await page.getByRole('button', { name: '酒馆状态', exact: true }).filter({ visible: true }).first().click()
+  // DSH may also bring another right-panel tab forward (Tasks, when background agents run):
+  // the status is mounted but hidden then, so select its tab rather than reopening the panel.
+  const status = () => page.evaluate(() => { const node = document.querySelector('.dsh-tavern-status-runtime'); return node ? (node.getClientRects().length ? 'shown' : 'hidden') : 'absent' })
+  const state = await status()
+  if (state === 'absent') await page.getByRole('button', { name: '酒馆状态', exact: true }).filter({ visible: true }).first().click()
+  else if (state === 'hidden') {
+    const tab = page.getByRole('tab', { name: '酒馆状态' }).filter({ visible: true })
+    if (await tab.count()) await tab.first().click()
+    else await page.getByText('酒馆状态', { exact: true }).filter({ visible: true }).last().click()
   }
   const handle = await page.waitForFunction(() => document.querySelector('.dsh-tavern-status-runtime iframe.dsh-tavern-message-frame:not([aria-hidden="true"])'), null, {timeout:120000})
   const frame = await handle.asElement().contentFrame(); await handle.dispose()
