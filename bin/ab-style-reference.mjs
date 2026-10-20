@@ -2,7 +2,7 @@
 // 文风参考 A/B（逐轮对照）：同一存档导入一局，A 为不参考的主线。每轮先开启文风参考生成 B，
 // 再关闭参考对这一轮重新生成得到 A，主线沿 A 继续。于是每轮的 A 与 B 前文完全相同，只差本轮是否注入参考。
 //   node bin/ab-style-reference.mjs --import 吞噬星空-前60轮.jsonl --card 吞噬星空 --inputs 输入.json --out 输出目录 [--home ~/.dsh-tavern]
-// 输入文件是字符串数组。对局保留不删；结果写入 <输出目录>/ab.json 与 ab.html（两栏并排）。
+// 输入文件是字符串数组，第一条是热身轮（只走主线，不对照）。对局保留不删；结果写入 <输出目录>/ab.json 与 ab.html（两栏并排）。
 // 只按 ab.json 重新生成网页：node bin/ab-style-reference.mjs --render-only --out 输出目录
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
@@ -154,8 +154,16 @@ const save = () => {
   writeFileSync(path.join(outDir, 'ab.json'), JSON.stringify(result, null, 2))
   writeFileSync(path.join(outDir, 'ab.html'), renderHtml(result))
 }
+// A freshly imported game has no loaded session, so switching the reference on cannot recall yet.
+// The first input is a warm-up on the mainline only; it opens the session and gives a reply to recall from.
+const [warmup, ...turns] = inputs
+const warmupStart = sessionEvents(sessionId).length
+await rpc('sendPlayerInput', { sessionId, text: warmup })
+const warm = await finishTurn(sessionId, warmupStart, '热身')
+if (!warm.reply) throw new Error('热身轮没有正文')
+console.log('热身轮完成')
 await enableAndRecall(sessionId)
-for (const [index, input] of inputs.entries()) {
+for (const [index, input] of turns.entries()) {
   // B: this turn with the reference recalled from the mainline's previous reply.
   let start = sessionEvents(sessionId).length
   await rpc('sendPlayerInput', { sessionId, text: input })
@@ -170,6 +178,6 @@ for (const [index, input] of inputs.entries()) {
   rows.push({ index: index + 1, input, A, B })
   save()
   console.log(`第 ${index + 1} 轮  B ${B.seconds}s ${B.reply.length}字  A ${A.seconds}s ${A.reply.length}字  参考：${B.injected ? B.injected.source + '「' + B.injected.quote.slice(0, 40) + '…」' : '无'}`)
-  if (index + 1 < inputs.length) await enableAndRecall(sessionId)
+  if (index + 1 < turns.length) await enableAndRecall(sessionId)
 }
 console.log('结果：' + path.join(outDir, 'ab.html'))
