@@ -50,7 +50,6 @@ export const sections = [
   ] },
   { id: 'plugins', title: '插件', intro: '给酒馆加功能：在设置里粘贴插件的 GitHub 地址就能装。想自己写插件，看后面两篇开发文档。', chapters: [
     ['安装与管理', 'M07'],
-    ['自己写工具和插件', 'M06'],
   ] },
   { id: 'dshcard', title: 'DSH 人物卡', intro: 'DSH 人物卡（.dshcard）把人物卡、素材、卡内插件和推荐预设装进一个文件，导入即用。这里讲怎么做一张。', chapters: [] },
 ]
@@ -291,7 +290,6 @@ export const overview = {
 - [插件开发：常见用法](#plugin-recipes)：按要做的插件找写法，配图、记忆、读变量、后台推演、接管结算。
 - [插件开发：发布与一键安装](#plugin-publishing)：怎样发布，别人才能在设置里粘贴地址一键安装。
 - [插件开发：接口总览](#plugin-api)：插件怎么写、怎么拿到接口，以及分页的接口说明。
-- 只想在卡片工作台里加一个临时能力，可以让 Agent [写自定义工具](#m06)。
 `,
   dshcard: `
 ## DSH 人物卡是什么
