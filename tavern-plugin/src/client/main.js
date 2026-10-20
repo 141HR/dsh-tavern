@@ -472,6 +472,7 @@ window.__ModuleLoader__.load({
 					throw error;
 				}
 				const accepted = viewRead ? viewRead.accept(result) : result;
+				if (viewRead) rememberHistoryWindow(payload.sessionId, accepted.view);
                 if (accepted.contextWindow) return {...accepted,context:expandTavernOpeningWindow(accepted.contextWindow).tavernHelper};
                 return accepted.view && accepted.view.historyWindow ? {...accepted,view:expandTavernOpeningWindow(accepted.view)} : accepted;
 			}).catch(function (error) {
@@ -726,6 +727,31 @@ window.__ModuleLoader__.load({
         const TAVERN_HISTORY_PAGE = 120;
         const historyFromSessions = new Map();
         const historyLoads = new Map();
+        // The first window's start stays: later syncs keep every floor already on the page and
+        // only append new rounds. A window that slid forward with each reply dropped floors the
+        // page still showed, which then asked for older history again and again, down to the
+        // first floor, turning every later view into the complete history.
+        function rememberHistoryWindow(sessionId, view) {
+            const from = view && view.historyWindow && view.historyWindow.from;
+            if (sessionId && Number.isSafeInteger(from) && from > 0 && !historyFromSessions.has(sessionId)) historyFromSessions.set(sessionId, from);
+        }
+        // Older floors load because the player scrolls up to them, not because a layout change
+        // brought one into view on its own.
+        let lastScrollIntentAt = 0;
+        const scrollIntentWaiters = new Set();
+        const scrollKeys = new Set(["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown"]);
+        for (const type of ["wheel", "touchmove", "keydown", "pointerdown"]) window.addEventListener(type, function (event) {
+            // Typing in the composer is not scrolling.
+            if (type === "keydown" && (!scrollKeys.has(event.key) || event.target && event.target.closest && event.target.closest("input, textarea, [contenteditable]:not([contenteditable=\"false\"])"))) return;
+            lastScrollIntentAt = Date.now();
+            for (const waiter of [...scrollIntentWaiters]) waiter();
+        }, { capture: true, passive: true });
+        function whenScrolledByPlayer(callback) {
+            if (Date.now() - lastScrollIntentAt < 3000) { callback(); return function () {}; }
+            const waiter = function () { scrollIntentWaiters.delete(waiter); callback(); };
+            scrollIntentWaiters.add(waiter);
+            return function () { scrollIntentWaiters.delete(waiter); };
+        }
         function requestOlderHistory(sessionId, windowFrom) {
             if(historyLoads.has(sessionId))return historyLoads.get(sessionId);
             const current=historyFromSessions.get(sessionId);

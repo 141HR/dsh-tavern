@@ -223,7 +223,8 @@ export async function settlementPerformanceChecks({ page, step, savedChat, outpu
       const record=request=>{if(request.url().endsWith('/api/dsh-tavern/getSession'))try{sessionRequests.push(request.postDataJSON())}catch{}}
       page.on('request',record)
       for(let step=0;step<8;step++){
-        await page.evaluate(()=>{const scroller=[...document.querySelectorAll('*')].filter(node=>node.scrollHeight>node.clientHeight+200).sort((a,b)=>b.scrollHeight-a.scrollHeight)[0];scroller.scrollTop=0})
+        // Older floors load on the player's scrolling (a wheel), not on a jump the page made itself.
+        await page.evaluate(()=>{const scroller=[...document.querySelectorAll('*')].filter(node=>node.scrollHeight>node.clientHeight+200).sort((a,b)=>b.scrollHeight-a.scrollHeight)[0];scroller.dispatchEvent(new WheelEvent('wheel',{deltaY:-2000,bubbles:true}));scroller.scrollTop=0})
         await page.waitForTimeout(1500)
       }
       page.off('request',record)

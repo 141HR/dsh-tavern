@@ -661,14 +661,21 @@
 				const deferHtml = !renderRound && renderDepth > 0 && storyTurn > 0 && latestProjectionTurn - storyTurn >= renderDepth ? function () { setRenderRound(true); } : null;
                 React.useEffect(function () {
                     if(!historyNode.current || !currentView?.historyWindow || !ownsTurn || projection || storyTurn<=0 || storyTurn>=tavernLatestProjectionTurn(currentView))return;
+                    let cancelWait = null;
+                    const node = historyNode.current;
+                    const inView = () => { const box = node.getBoundingClientRect(); return box.bottom > 0 && box.top < window.innerHeight; };
                     const observer = new IntersectionObserver(entries=>{
-                        if(entries.some(entry=>entry.isIntersecting)) {
+                        if(!entries.some(entry=>entry.isIntersecting) || cancelWait) return;
+                        // Only when the player scrolled here; a floor a layout change showed waits.
+                        cancelWait = whenScrolledByPlayer(()=>{
+                            cancelWait = null;
+                            if (!inView()) return;
                             observer.disconnect();
                             void requestOlderHistory(props.sessionId,currentView.historyWindow.from).catch(error=>tavernErrorHub.report("读取历史",error));
-                        }
+                        });
                     });
-                    observer.observe(historyNode.current);
-                    return ()=>observer.disconnect();
+                    observer.observe(node);
+                    return ()=>{ observer.disconnect(); if (cancelWait) cancelWait(); };
                 },[props.sessionId,storyTurn,projection,currentView?.historyWindow?.revision,currentView?.historyWindow?.from]);
 				const owner = React.useMemo(function () {
 					if (!turnRef || turnRef.status !== "closed" || !data.finalNode || !tail || !tail.closing || tail.closing.finalNode.seq !== data.finalNode.seq) return undefined;
