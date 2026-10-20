@@ -931,11 +931,33 @@ const path = require('node:path');
 const OFFICIAL = '@deepseek-ai/dsh-desktop', COMMUNITY = 'dsh-plugin-desktop';
 // Discovery order: official first, then the community app (NEXT replaced Desktop after 2.0.18).
 const APP_NAMES = ['DeepSeek Harness', 'DSH NEXT', 'DSH Desktop'];
+// The app's package name decides the layout. Plain Node cannot open app.asar (only
+// Electron's fs can), and the community app runs this check with its bundled Node,
+// so read package.json out of the archive directly: an 8-byte size pickle, then a
+// header pickle whose JSON lists each file's offset from the end of the header.
+function asarPackageName(archive) {
+  const fd = fs.openSync(archive, 'r');
+  try {
+    const sizes = Buffer.alloc(16);
+    fs.readSync(fd, sizes, 0, 16, 0);
+    const headerSize = sizes.readUInt32LE(4), jsonSize = sizes.readUInt32LE(12);
+    const json = Buffer.alloc(jsonSize);
+    fs.readSync(fd, json, 0, jsonSize, 16);
+    const entry = JSON.parse(json.toString('utf8')).files?.['package.json'];
+    if (!entry || entry.unpacked || !Number.isSafeInteger(Number(entry.offset))) return '';
+    const data = Buffer.alloc(entry.size);
+    fs.readSync(fd, data, 0, entry.size, 8 + headerSize + Number(entry.offset));
+    return String(JSON.parse(data.toString('utf8')).name || '');
+  } finally { fs.closeSync(fd); }
+}
+function packageName(app) {
+  try { return JSON.parse(fs.readFileSync(path.join(app, 'package.json'), 'utf8')).name || ''; } catch {}
+  try { return app.endsWith('.asar') ? asarPackageName(app) : ''; } catch { return ''; }
+}
 function layout(executable, platform = process.platform, arch = process.arch) {
   const resources = platform === 'darwin' ? path.resolve(path.dirname(executable), '../Resources') : path.join(path.dirname(executable), 'resources');
   const app = fs.existsSync(path.join(resources, 'app', 'package.json')) ? path.join(resources, 'app') : path.join(resources, 'app.asar');
-  let name = '';
-  try { name = JSON.parse(fs.readFileSync(path.join(app, 'package.json'), 'utf8')).name; } catch {}
+  const name = packageName(app);
   if (name === COMMUNITY) {
     // The community app ships its own unpacked DSH and one runtime per architecture, including a real
     // Node. Run tools with that Node: under the app's Electron, pnpm lingers for minutes after "Done".
@@ -951,7 +973,8 @@ function layout(executable, platform = process.platform, arch = process.arch) {
 function prepare({ executable, home, env = process.env, platform = process.platform }) {
   if (!executable || !home) throw Error('请先安装 DeepSeek Harness 或 DSH NEXT，并指定安装目录');
   const paths = layout(executable, platform);
-  if (paths.name !== OFFICIAL && paths.name !== COMMUNITY) throw Error('Desktop 宿主必须是官方 DeepSeek Harness 或社区 DSH NEXT / DSH Desktop：' + executable);
+  if (paths.name !== OFFICIAL && paths.name !== COMMUNITY) throw Error('Desktop 宿主必须是官方 DeepSeek Harness 或社区 DSH NEXT / DSH Desktop：' + executable
+    + '（读到的应用包名：' + (paths.name || '无法读取') + '，应用目录：' + paths.app + '）');
   const bootstrap = paths.bootstrap;
   for (const file of [bootstrap, paths.pnpm]) if (!fs.existsSync(file)) throw Error('桌面运行时不完整：' + file);
   const runner = paths.node || executable;

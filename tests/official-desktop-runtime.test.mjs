@@ -69,3 +69,22 @@ test('本机官方 Electron 可从中文目录运行 DSH 和 pnpm', async t => {
     assert.equal(result.stdout.trim(), expected)
   }
 })
+
+// 社区版用自带的真 Node 跑校验，而真 Node 打不开 app.asar：包名读成空，DSH NEXT 被拒绝。
+// 包名要直接从 asar 的目录里读出来；仍读不到时，报错带上读到的包名与应用目录。
+test('应用打包成 app.asar 时，不用 Electron 也能读出包名；读不到时报错写明原因', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-asar-'))
+  t.after(() => rm(root, {recursive: true, force: true}))
+  const executable = path.join(root, 'DSH NEXT.exe')
+  const archive = path.join(root, 'resources', 'app.asar')
+  await mkdir(path.dirname(archive), {recursive: true})
+  const body = Buffer.from(JSON.stringify({name: 'dsh-plugin-desktop'}))
+  const json = Buffer.from(JSON.stringify({files: {'package.json': {size: body.length, offset: '0'}}}))
+  const padded = Buffer.concat([json, Buffer.alloc((4 - json.length % 4) % 4)])
+  const header = Buffer.alloc(8); header.writeUInt32LE(4 + padded.length, 0); header.writeUInt32LE(json.length, 4)
+  const sizes = Buffer.alloc(8); sizes.writeUInt32LE(4, 0); sizes.writeUInt32LE(header.length + padded.length, 4)
+  await writeFile(archive, Buffer.concat([sizes, header, padded, body]))
+  assert.equal(runtime.layout(executable, 'win32').name, 'dsh-plugin-desktop')
+  await writeFile(archive, Buffer.from('not an archive'))
+  assert.throws(() => runtime.prepare({executable, home: path.join(root, 'home'), platform: 'win32'}), /读到的应用包名：无法读取，应用目录：.*app\.asar/)
+})
