@@ -178,3 +178,22 @@ test('折叠副本落在被替换的回合里时，投影仍要补一份新的�
   assert.equal(sessionEvents(session).filter(event => event.type === 'assistant/message' &&
     event.surfaceOp === 'append' && event.seq > foldReplace && textOf(event.data) === '新正文').length, 1)
 })
+
+// #304：宿主在生成期回合里写的 developer 消息属于这一轮。认不出它时，生成期被切成两段，
+// 主替换停在玩家输入上、不补可画副本，生成期自己的正文又被清成空标记，整楼空白。
+test('生成期回合里的宿主 developer 消息不切开重新生成，替换收尾在新正文上', async () => {
+  const { planRegenerationSurface } = await import('../tavern-plugin/lib/domain/rollback-surface.js')
+  const session = Session.create('regen-developer-note')
+  appendSessionEvent(session, 'turn/start', { turn: 1 })
+  appendSessionEvent(session, 'user/message', user('input-1'), { surfaceOp: 'append' })
+  const old = appendSessionEvent(session, 'assistant/message', body('old-body', 1), { surfaceOp: 'append' })
+  appendSessionEvent(session, 'turn/end', { turn: 1, reason: { kind: 'completed' } })
+  const start = appendSessionEvent(session, 'turn/start', { turn: 2 })
+  appendSessionEvent(session, 'user/message', user('regen', 'dsh-tavern-regen'), { surfaceOp: 'append' })
+  appendSessionEvent(session, 'developer/message', { turn: 2, step: 1, message: { id: 'host-note', role: 'developer', content: [{ type: 'text', text: '宿主提示' }] } }, { surfaceOp: 'append' })
+  const reply = appendSessionEvent(session, 'assistant/message', body('new-body', 2), { surfaceOp: 'append' })
+  appendSessionEvent(session, 'turn/end', { turn: 2, reason: { kind: 'completed' } })
+  const plan = planRegenerationSurface({ events: sessionEvents(session), nodes: session.surface.nodes, oldAssistantSeq: old.seq, eventStart: start.seq })
+  assert.equal(plan.cleanups.length, 0)
+  assert.equal(plan.shadowedSeqs.at(-1), reply.seq)
+})
