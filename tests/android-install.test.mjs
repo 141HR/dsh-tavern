@@ -295,7 +295,7 @@ test('Android setup 通过同一命令完成首次安装和后续更新', async 
   await writeFile(path.join(source, 'package.json'), JSON.stringify({ name: 'dsh-profile-tavern' }), 'utf8')
   await writeFile(path.join(source, 'bin', 'dsh-tavern.mjs'), '', 'utf8')
   await writeFile(path.join(source, 'android', 'install.sh'), '#!/usr/bin/env bash\nset -euo pipefail\nprintf "installed\\n" >> "${DSH_HOME}/setup-runs"\n', 'utf8')
-  const documentImages = ['docs/images/readme/overview.png', 'tavern-plugin/packages/dsh-image-gen/docs/assets/demo.png']
+  const documentImages = ['docs/images/readme/overview.png', 'tavern-plugin/packages/dsh-dream-skin/docs/assets/demo.png']
   for (const file of documentImages) {
     await mkdir(path.dirname(path.join(source, file)), { recursive: true })
     await writeFile(path.join(source, file), 'documentation image')
@@ -392,7 +392,7 @@ test('Git 下载失败时通过 tarball 安装更新，保留旧数据并在安�
     await writeFile(path.join(source, 'version.txt'), version + '\n', 'utf8')
     await writeFile(path.join(source, 'bin', 'dsh-tavern.mjs'), '', 'utf8')
     await writeFile(path.join(source, 'android', 'install.sh'), `#!/usr/bin/env bash\nprintf "${version}\\n" >> "\${DSH_HOME}/setup-runs"\nexit ${installExit}\n`, 'utf8')
-    for (const file of ['docs/images/readme/demo.png', 'tavern-plugin/packages/dsh-image-gen/docs/assets/demo.png']) {
+    for (const file of ['docs/images/readme/demo.png', 'tavern-plugin/packages/dsh-dream-skin/docs/assets/demo.png']) {
       await mkdir(path.dirname(path.join(source, file)), { recursive: true })
       await writeFile(path.join(source, file), 'documentation image')
     }
@@ -415,7 +415,7 @@ test('Git 下载失败时通过 tarball 安装更新，保留旧数据并在安�
   assert.equal(first.status, 0, first.stderr)
   assert.match(first.stdout, /改用 GitHub 压缩包/)
   await assert.rejects(access(path.join(appDir, 'docs')))
-  await assert.rejects(access(path.join(appDir, 'tavern-plugin/packages/dsh-image-gen/docs')))
+  await assert.rejects(access(path.join(appDir, 'tavern-plugin/packages/dsh-dream-skin/docs')))
   assert.equal(await readFile(path.join(appDir, 'version.txt'), 'utf8'), 'v1\n')
   await mkdir(path.join(appDir, 'data'), { recursive: true })
   await writeFile(path.join(appDir, 'data', 'legacy.txt'), '用户数据\n', 'utf8')

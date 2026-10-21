@@ -22,7 +22,6 @@ required.push('tavern-plugin/lib/domain/server-template-runtime.js', 'tavern-plu
 required.push('tavern-plugin/lib/domain/tavern-client-assets.js', 'tavern-plugin/lib/client-assets/tavern.css')
 required.push('bin/build-tavern-client.mjs', 'tavern-plugin/src/client/main.js',
   ...['runtime-generation-monitor', 'library-refresh', 'live-tavern-view'].map(name => `tavern-plugin/src/client/modules/${name}.js`))
-required.push('bin/bundled-image-plugin.mjs', ...['package.json', 'cordis.patch.yml', 'LICENSE', 'src/index.ts', 'lib/index.js', 'lib/client.js'].map(file => `tavern-plugin/packages/dsh-image-gen/${file}`))
 
 // Git emits USTAR/PAX UTF-8 names; Windows tar's listing and extraction depend on locale.
 function gitTarFiles(archive) {

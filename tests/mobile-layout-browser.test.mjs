@@ -193,30 +193,6 @@ test('移动端实际样式：顶栏、键盘、候选、面板、编辑器与�
     await assertNoOverflow('面板与弹窗无页面溢出')
   })
 
-  await t.test('生图预览、提示词表单、图库与批量工具在手机中不溢出', async () => {
-    await page.setViewportSize({ width: 320, height: 720 }); await install(page)
-    const imageSource = await readFile(new URL('../tavern-plugin/packages/dsh-image-gen/src/client/index.tsx', import.meta.url), 'utf8')
-    const base = imageSource.slice(imageSource.indexOf('const STYLE = `') + 'const STYLE = `'.length, imageSource.indexOf('`', imageSource.indexOf('const STYLE = `') + 'const STYLE = `'.length))
-    const studio = await readFile(new URL('../tavern-plugin/packages/dsh-image-gen/src/client/studio-style.ts', import.meta.url), 'utf8')
-    await page.addStyleTag({ content: base + studio.slice(studio.indexOf('`') + 1, studio.lastIndexOf('`')) })
-    await page.locator('#center').evaluate(el => { el.innerHTML = `<div class="dsh-ig-gallery-page"><div class="dsh-ig-studio-tabs-bar"><button class="dsh-ig-studio-tab-btn">生图工作台</button><button class="dsh-ig-studio-tab-btn">图片资料库</button><button class="dsh-ig-studio-tab-btn">收藏图片</button></div><div class="dsh-ig-gallery-page-body is-workbench"><div class="dsh-ig-workbench"><div class="dsh-ig-workbench-grid"><div class="dsh-ig-recent-panel"><div class="dsh-ig-recent-scroll"><button class="dsh-ig-recent-item">最近图片 1</button><button class="dsh-ig-recent-item">最近图片 2</button></div></div><div class="dsh-ig-canvas-column"><div class="dsh-ig-canvas-toolbar"><div class="dsh-ig-canvas-toolbar-left"><button>适合窗口</button><button>放大</button><button>缩小</button></div><div class="dsh-ig-canvas-toolbar-right"><button>生成状态</button></div></div><div class="dsh-ig-canvas">图片预览</div></div><div class="dsh-ig-generate-panel"><div class="dsh-ig-panel-tabs"><button>生成图片</button><button>模型配置</button></div><div class="dsh-ig-generator-form"><label class="dsh-ig-field">提示词<textarea>雨后的旧城区</textarea></label><button>生成</button></div></div></div></div></div></div>` })
-    for (const width of [320, 390, 768, 1023]) {
-      await page.setViewportSize({ width, height: 720 }); await settle()
-      assert.equal(await page.locator('.dsh-ig-workbench').evaluate(el => el.scrollWidth <= el.clientWidth), true, `${width}: 生图不横向溢出`)
-      assert.equal(await page.locator('.dsh-ig-workbench-grid').evaluate(el => getComputedStyle(el).display), 'flex')
-      assert.ok((await box('.dsh-ig-canvas-column')).height < 500, '预览不保留桌面固定最小高度')
-      assert.ok((await box('.dsh-ig-generator-form')).height >= 160, '移除桌面占位后表单仍完整展开')
-      assert.ok((await box('.dsh-ig-recent-panel')).height >= 40, '最近图片列表仍可见')
-      assert.equal(await page.locator('.dsh-ig-field textarea').evaluate(el => getComputedStyle(el).fontSize), '16px')
-    }
-    await page.setViewportSize({ width: 320, height: 720 }); await settle()
-    await page.screenshot({ path: 'output/playwright/mobile/images-320.png' })
-    await page.locator('#center').evaluate(el => { el.innerHTML = '<div class="dsh-ig-gallery-grid"><article class="dsh-ig-gallery-card"><div class="dsh-ig-card-toolbar"><button>下载</button><button>重绘</button></div></article></div><div class="dsh-ig-batch-bar"><div class="dsh-ig-batch-bar-left"><span>已选 12 张</span><button class="dsh-ig-batch-btn">全选</button></div><div class="dsh-ig-batch-bar-right"><button class="dsh-ig-batch-btn">下载</button><button class="dsh-ig-batch-btn">批量删除</button><button class="dsh-ig-batch-btn">退出</button></div></div>' })
-    const batch = await box('.dsh-ig-batch-bar')
-    assert.ok(batch.x >= 0 && batch.x + batch.width <= 320)
-    assert.equal(await page.locator('.dsh-ig-card-toolbar').evaluate(el => getComputedStyle(el).opacity), '1', '触屏无需悬停即可操作图片')
-  })
-
   // 真实挂载入口组件再断言渲染结果：极简 React 只需要 useState/useRef/useEffect，
   // 这样测的是「窗口里到底有没有控件、返回时会不会关掉」，不是源码里写了什么。
   await t.test('Android 内嵌外壳零控件、全屏铺满 iframe，返回键关闭窗口', async () => {
