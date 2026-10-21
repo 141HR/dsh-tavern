@@ -19811,33 +19811,6 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 				message ? h("p", { role: "status", className: "dsh-tavern-settings-desc" }, message) : null);
 		}
 
-		/** The card's stage switch in the card library: off for ordinary cards, so their games show no stage. */
-		function TavernCardStageBox(props) {
-			const h = React.createElement;
-			const [enabled, setEnabled] = React.useState(null);
-			const [busy, setBusy] = React.useState(false);
-			React.useEffect(function () {
-				let active = true;
-				setEnabled(null);
-				rpc("cardStage", { path: props.path }).then(function (reply) { if (active) setEnabled(reply.enabled === true); }, function () { if (active) setEnabled(false); });
-				return function () { active = false; };
-			}, [props.path]);
-			if (enabled === null) return null;
-			async function toggle(next) {
-				setBusy(true);
-				try {
-					const reply = await rpc("setCardStage", { path: props.path, enabled: next });
-					setEnabled(reply.enabled === true);
-					window.dispatchEvent(new CustomEvent("dsh-tavern-card-stage-changed", { detail: { path: props.path } }));
-				} catch (error) { tavernErrorHub.report("人物卡舞台", error); }
-				finally { setBusy(false); }
-			}
-			return h("label", { className: "dsh-tavern-card-plugins dsh-tavern-card-stage" },
-				h("span", { className: "dsh-tavern-settings-copy" }, h("strong", null, "舞台"),
-					h("span", { className: "dsh-tavern-settings-desc" }, enabled ? "这张卡的游戏在酒馆状态顶部显示舞台：立绘、背景和逐句演出。" : "开启后，这张卡的游戏在酒馆状态顶部显示舞台。普通人物卡不需要。")),
-				h("input", { type: "checkbox", role: "switch", "aria-label": "舞台", checked: enabled, disabled: busy, onChange: function (event) { void toggle(event.target.checked); } }));
-		}
-
 		function createCardLibraryFeatureModule() {
 		function CardLibraryTab(props) {
             const askConfirm = useTavernConfirm(props.sessionId || props.scope?.sessionId);
@@ -19982,7 +19955,7 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 			const h = React.createElement;
 			if (selectedPath) {
 				if (!card) return h("div", { className: "dsh-tavern-library dsh-tavern-card-library" }, h("div", { className: "dsh-tavern-status-head" }, h("button", { className: "dsh-tavern-btn", onClick: clearCard }, "← 返回人物卡库")), loading ? h("div", { className: "dsh-tavern-empty" }, "正在读取人物卡…") : error ? h("div", { className: "dsh-tavern-dock-error" }, error, h("button", { className: "dsh-tavern-btn", onClick: function () { loadCard(selectedPath); } }, "重新读取")) : h("div", { className: "dsh-tavern-empty" }, "人物卡读取失败", h("button", { className: "dsh-tavern-btn", onClick: function () { loadCard(selectedPath); } }, "重新读取")));
-				return h(React.Fragment, null, h(TavernCardStageBox, { path: selectedPath }), h(TavernCardPluginsBox, { path: selectedPath }), h(CardFieldsPanel, { view: { card: card }, library: true, organizationSettings: organization.detailSettings(cards.find(item => item.path === selectedPath)), busy: busy, onBack: clearCard, onAttach: sessionMode === "card" ? function () { props.appendMention(card.path, card.name); } : null, onOpenWorldBook: props.openWorldBook, onRename: renameCard, onExport: exportCardFile, onDelete: deleteCardFile, onSaved: function (saved) { setCard(Object.assign({}, saved, { path: selectedPath })); refreshCards(); } }));
+				return h(React.Fragment, null, h(TavernCardPluginsBox, { path: selectedPath }), h(CardFieldsPanel, { view: { card: card }, library: true, organizationSettings: organization.detailSettings(cards.find(item => item.path === selectedPath)), busy: busy, onBack: clearCard, onAttach: sessionMode === "card" ? function () { props.appendMention(card.path, card.name); } : null, onOpenWorldBook: props.openWorldBook, onRename: renameCard, onExport: exportCardFile, onDelete: deleteCardFile, onSaved: function (saved) { setCard(Object.assign({}, saved, { path: selectedPath })); refreshCards(); } }));
 			}
 			const visible = organization.visible;
 			// "@" quotes a card into the card workspace conversation; only there does it mean anything.
