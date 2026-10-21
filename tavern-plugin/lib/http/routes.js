@@ -132,9 +132,13 @@ export function registerTavernHttpRoutes({
           if (readsFullTemplate) {
             const asset = await readFullPromptTemplateAsset(pathname)
             if (!asset) { res.writeHead(404, { 'X-Content-Type-Options': 'nosniff' }); res.end('not found'); return }
-            res.writeHead(200, { 'Content-Type': asset.mediaType, 'Content-Length': asset.body.length,
+            const headers = { 'Content-Type': asset.mediaType,
               'ETag': asset.etag, 'Cache-Control': 'no-cache', 'Access-Control-Allow-Origin': '*',
-              'Cross-Origin-Resource-Policy': 'cross-origin', 'X-Content-Type-Options': 'nosniff' })
+              'Cross-Origin-Resource-Policy': 'cross-origin', 'X-Content-Type-Options': 'nosniff' }
+            if (String(req.headers['if-none-match'] || '').split(',').some(tag => tag.trim().replace(/^W\//, '') === asset.etag || tag.trim() === '*')) {
+              res.writeHead(304, headers); res.end(); return
+            }
+            res.writeHead(200, { ...headers, 'Content-Length': asset.body.length })
             res.end(asset.body)
             return
           }
