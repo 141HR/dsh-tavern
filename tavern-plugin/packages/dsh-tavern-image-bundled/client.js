@@ -2304,18 +2304,28 @@ function versionsOf(jobId) {
       // 从卡导入：卡列表 + 当前选中的卡
       const [importCards, setImportCards] = React.useState([])
       const [importCard, setImportCard] = React.useState('')
+      // 正在玩的卡（cards/x.json）；人物库默认只看这张卡
+      const [currentCardPath, setCurrentCardPath] = React.useState('')
+      // 人物库按卡筛选：'' = 跟随当前卡，'all' = 全部，'__unbound' = 只看未绑定，否则是卡路径
+      const [peopleCardFilter, setPeopleCardFilter] = React.useState('')
+      // 导入预览：{ card, cardName, items: [{ action, person, pick }] }
+      const [importPreview, setImportPreview] = React.useState(null)
+      const [peopleOverviewOpen, setPeopleOverviewOpen] = React.useState(false)
+      const [peopleTidyOpen, setPeopleTidyOpen] = React.useState(false)
       React.useEffect(() => {
         let alive = true
         ;(async () => {
           try {
-            const r = await post('/cards', {})
+            const r = await post('/cards', { sessionId: String(lastSessionId || '') })
             if (!alive) return
             const list = (r?.cards || []).map(item => ({
               path: item.path,
               label: item.title || item.name,
             }))
             setImportCards(list)
-            setImportCard(current => current || (list[0]?.path ?? ''))
+            const current = typeof r?.current === 'string' && list.some(item => item.path === r.current) ? r.current : ''
+            setCurrentCardPath(current)
+            setImportCard(existing => existing || current || (list[0]?.path ?? ''))
           } catch {}
         })()
         return () => { alive = false }
@@ -2342,6 +2352,12 @@ function versionsOf(jobId) {
       const [designDone, setDesignDone] = React.useState('')
       // 用稳定 id 保存改进草稿；删除前面的角色不会让草稿移到另一位身上。
       const [improveDraft, setImproveDraft] = React.useState({})
+      // 从别的角色复制服装：{ target: 目标角色 id, source: 来源角色 id, picked: 选中的服装 id }
+      const [outfitCopy, setOutfitCopy] = React.useState({ target: '', source: '', picked: [] })
+      // 通用服装库当前选中哪一套（只编辑这一套，不再全部铺开）
+      const [libraryActive, setLibraryActive] = React.useState('')
+      // 角色服装：每个角色记住当前编辑的是哪一套（角色 id → 服装 id）
+      const [outfitPick, setOutfitPick] = React.useState({})
       // 正在跑的改进任务（按角色 id 去重，不妨碍连续生成别的）
       const improveInFlight = React.useRef({})
       // 保存状态：'' 空闲 / 'saving' / 'saved' / 'failed:原因'
@@ -3149,9 +3165,29 @@ function versionsOf(jobId) {
         const characters = (data.definitions && data.definitions.characters) || []
         const picked = characters.filter(character => peoplePicked[character.id])
         const search = peopleSearch.trim().toLocaleLowerCase()
-        const filteredCharacters = (search
-          ? characters.filter(character => [character.name, character.match, character.group].some(value => String(value || '').toLocaleLowerCase().includes(search)))
-          : characters).slice().sort((a, b) => {
+        // —— 按卡归类 ——
+        const bareCard = value => String(value || '').replace(/^.*[\\/]/, '').replace(/\.json$/i, '')
+        const cardTitle = path => (importCards.find(item => bareCard(item.path) === bareCard(path))?.label) || bareCard(path)
+        const boundTo = (person, path) => (person.cards || []).some(entry => bareCard(entry) === bareCard(path))
+        const cardFilter = peopleCardFilter || (currentCardPath ? currentCardPath : 'all')
+        const onFilter = person => cardFilter === 'all' ? true
+          : cardFilter === '__unbound' ? !(person.cards || []).length
+          : (!(person.cards || []).length || boundTo(person, cardFilter))
+        const sectionOf = person => {
+          const cards = person.cards || []
+          if (!cards.length) return '未绑定（所有卡通用）'
+          if (cardFilter !== 'all' && cardFilter !== '__unbound') return '「' + cardTitle(cardFilter) + '」的人物'
+          return cards.length === 1 ? '「' + cardTitle(cards[0]) + '」的人物' : '多张卡共用'
+        }
+        // 「绑定到当前卡」用的目标：筛选选中的卡，其次正在玩的卡
+        const bindTarget = cardFilter !== 'all' && cardFilter !== '__unbound' ? cardFilter : currentCardPath
+        const filteredCharacters = characters.filter(onFilter).filter(character => !search || [character.name, character.match, character.group].some(value => String(value || '').toLocaleLowerCase().includes(search)))
+          .slice().sort((a, b) => {
+            const sa = sectionOf(a), sb = sectionOf(b)
+            if (sa !== sb) {
+              const rank = name => name.startsWith('未绑定') ? 2 : name === '多张卡共用' ? 1 : 0
+              return (rank(sa) - rank(sb)) || sa.localeCompare(sb, 'zh-CN')
+            }
             const ga = String(a.group || '').trim()
             const gb = String(b.group || '').trim()
             if (ga !== gb) {
@@ -3325,19 +3361,62 @@ function versionsOf(jobId) {
         }
 
         /** 从当前会话的世界书导入成年角色 */
+        /** 从选定的卡导入：先预览候选，勾选确认后才写入人物库 */
         async function importFromCard() {
           try {
             setNote('正在读取这张卡里的角色…')
-            const result = await post('/import-characters', { sessionId: String(lastSessionId || ''), card: importCard })
+            const result = await post('/import-characters', { sessionId: String(lastSessionId || ''), card: importCard, dryRun: true })
+            if (!result?.ok) throw new Error(result?.error || '读取失败')
+            const items = (result.candidates || []).map(item => ({ action: item.action, person: item.person, pick: item.action !== 'same' }))
+            setImportPreview({ card: importCard, cardName: result.cardName || cardTitleOf(importCard), items })
+            setNote(items.length ? '先看一下要导入的人，勾选后点「确认导入」' : ('这张卡里没有可导入的角色' + (result?.llmError ? '（' + String(result.llmError).slice(0, 140) + '）' : '')))
+            return result
+            const added = result?.added || []
+            const updated = result?.updated || []
+            const parts = []
+            if (added.length) parts.push('新增 ' + added.join('、'))
+            if (updated.length) parts.push('补全 ' + updated.join('、'))
+            const why = result?.llmError ? ('（' + String(result.llmError).slice(0, 140) + '）') : ''
+            const message = parts.length ? ('从选定的卡导入：' + parts.join('；')) : ('这张卡里没有可导入的角色' + why)
+            setNote(message)
+            if (typeof showToast === 'function') showToast(message)
+            return result
+          } catch (error) {
+            const message = '导入失败：' + (error?.message ?? error)
+            setNote(message)
+            if (typeof showToast === 'function') showToast(message)
+            return null
+          }
+        }
+
+        /** 卡文件 → 显示名（预览面板标题用） */
+        function cardTitleOf(path) {
+          return (importCards.find(item => item.path === path)?.label)
+            || String(path || '').replace(/^.*[\/\\]/, '').replace(/\.json$/i, '')
+        }
+
+        /** 预览面板点「确认导入」：把勾选的人原样送回去，后端不再重新抽取 */
+        async function confirmImport() {
+          const preview = importPreview
+          if (!preview) return null
+          const picked = preview.items.filter(item => item.pick).map(item => item.person)
+          if (!picked.length) { setNote('没有勾选要导入的人'); return null }
+          try {
+            setNote('正在导入…')
+            const result = await post('/import-characters', { sessionId: String(lastSessionId || ''), card: preview.card, apply: picked })
+            if (!result?.ok) throw new Error(result?.error || '导入失败')
+            setImportPreview(null)
             if (result?.state) receiveState(result.state)
             const added = result?.added || []
             const updated = result?.updated || []
             const parts = []
             if (added.length) parts.push('新增 ' + added.join('、'))
             if (updated.length) parts.push('补全 ' + updated.join('、'))
-            const message = parts.length ? ('从选定的卡导入：' + parts.join('；')) : '这张卡里没有可导入的角色'
+            const message = parts.length ? ('从选定的卡导入：' + parts.join('；')) : '勾选的人和人物库里已有的一样，没有变化'
             setNote(message)
             if (typeof showToast === 'function') showToast(message)
+            const fresh = await post('/state', {}).catch(() => null)
+            if (fresh) receiveState(fresh)
             return result
           } catch (error) {
             const message = '导入失败：' + (error?.message ?? error)
@@ -3590,11 +3669,109 @@ function versionsOf(jobId) {
           )
         }
 
+        /** 把人物按「属于哪张卡」分段，段内保持原排序 */
+        function sectionsOf(list) {
+          const out = []
+          for (const person of list) {
+            const key = sectionOf(person)
+            const hit = out.find(([name]) => name === key)
+            if (hit) hit[1].push(person); else out.push([key, [person]])
+          }
+          return out
+        }
+        function bindToCard(person, path) {
+          if (!person || !path) return
+          setCharacters(current => current.map(item => item.id === person.id ? Object.assign({}, item, { cards: [...new Set([...(item.cards || []), path])] }) : item))
+          setNote('已把「' + (person.name || '未命名角色') + '」绑定到「' + cardTitle(path) + '」，记得点「保存人物库」')
+        }
+        function traitCount(person) {
+          const traits = person.traits || {}
+          return ["feature","face","faceBack","bodySFW","bodySFWBack","lowerSFW","lowerSFWBack","bodyNSFW","bodyNSFWBack","lowerNSFW","lowerNSFWBack","negative"].filter(k => String(traits[k] || '').trim()).length
+        }
+        function jumpTo(person) {
+          setPeopleSearch('')
+          if (!onFilter(person)) setPeopleCardFilter('all')
+          setPeopleActiveId(person.id)
+          setPeopleEditorOpen(true)
+        }
+
+        function importPreviewPanel() {
+          const preview = importPreview
+          if (!preview) return null
+          const label = { add: '新增', update: '补全空白项', same: '已有，无变化' }
+          const toggle = (index, pick) => setImportPreview(current => current && Object.assign({}, current, { items: current.items.map((item, k) => k === index ? Object.assign({}, item, { pick }) : item) }))
+          const count = preview.items.filter(item => item.pick).length
+          return h('div', { 'aria-label': '导入预览', style: Object.assign({}, S.card, { margin: '8px 0 12px', background: 'rgba(106,168,255,.05)' }) },
+            h('div', { style: { fontSize: '13px', fontWeight: 600, marginBottom: '6px' } }, '从「' + preview.cardName + '」导入：先确认要哪些人'),
+            h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '6px' } }, '新增的人会自动绑定到这张卡；「补全」只填人物库里空着的项，不覆盖你改过的内容。'),
+            preview.items.length ? preview.items.map((item, index) => h('label', { key: index, style: { display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', padding: '4px 0', borderTop: index ? '1px solid #2c3240' : 'none' } },
+              h('input', { type: 'checkbox', 'aria-label': '导入 ' + item.person.name, checked: item.pick, onChange: event => toggle(index, event.target.checked) }),
+              h('span', { style: { minWidth: '72px', color: item.action === 'add' ? '#7fd17f' : item.action === 'update' ? '#f5c078' : '#9aa3b2' } }, label[item.action] || item.action),
+              h('span', { style: { fontWeight: 600, minWidth: '70px' } }, item.person.name),
+              h('span', { style: { color: '#9aa3b2' } }, String(item.person?.traits?.feature || item.person?.traits?.face || '').slice(0, 80)),
+            )) : h('div', { style: { fontSize: '12px', color: '#9aa3b2' } }, '这张卡里没有认出可导入的人物。'),
+            h('div', { style: S.row },
+              h('button', { style: buttonStyle, disabled: !count, onClick: confirmImport }, count ? '确认导入 ' + count + ' 位' : '没有勾选'),
+              h('button', { style: buttonStyle, onClick: () => { setImportPreview(null); setNote('已取消导入') } }, '取消'),
+            ),
+          )
+        }
+
+        function overviewPanel() {
+          const list = filteredCharacters
+          return h('div', { 'aria-label': '人物概览', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '8px', margin: '8px 0 12px' } },
+            list.length ? list.map(person => {
+              const n = traitCount(person)
+              const outfits = (person.outfits || []).length
+              const cards = person.cards || []
+              const active = activeCharacter && activeCharacter.id === person.id
+              return h('button', { key: person.id, 'aria-label': '概览 ' + (person.name || '未命名角色'), onClick: () => { jumpTo(person); setPeopleOverviewOpen(false) },
+                style: { textAlign: 'left', padding: '8px 10px', borderRadius: '10px', cursor: 'pointer', color: 'inherit', background: active ? 'rgba(106,168,255,.14)' : 'rgba(255,255,255,.03)', border: '1px solid ' + (cards.length ? 'rgba(120,140,170,.25)' : 'rgba(240,166,60,.55)'), opacity: person.enabled === false ? 0.55 : 1 } },
+                h('div', { style: { fontSize: '13px', fontWeight: 600 } }, (person.name || '（未命名角色）') + (person.enabled === false ? '（停用）' : '')),
+                h('div', { style: { fontSize: '11px', color: n >= 6 ? '#9aa3b2' : '#f5c078', marginTop: '3px' } }, '外貌 ' + n + '/12 块 · ' + (outfits ? outfits + ' 套服装' : '没有服装')),
+                h('div', { style: { fontSize: '11px', color: cards.length ? '#9aa3b2' : '#f5c078', marginTop: '2px' } }, cards.length ? '绑定：' + cards.map(cardTitle).join('、').slice(0, 40) : '未绑定卡：所有卡都会用到'),
+              )
+            }) : h('div', { style: { fontSize: '12px', color: '#9aa3b2' } }, '当前筛选下没有人物'),
+          )
+        }
+
+        /** 整理：列出可能出问题的人物，可直接跳过去改或一键处理 */
+        function tidyPanel() {
+          const PLAYER = /^(你|我|玩家|主角|男主|女主|主人公|user|\{\{user\}\})$/i
+          const issues = []
+          const byName = new Map()
+          for (const person of characters) {
+            const name = String(person.name || '').trim()
+            if (name) byName.set(name, (byName.get(name) || 0) + 1)
+          }
+          for (const person of characters) {
+            const name = String(person.name || '').trim()
+            if (!name || PLAYER.test(name) || name.includes('{{user}}')) issues.push({ person, kind: 'player', text: name ? '像是玩家角色，不需要建生图设定' : '没有名字' })
+            if (!(person.cards || []).length) issues.push({ person, kind: 'unbound', text: '没绑定卡：所有卡的图里都可能出现' })
+            if (name && byName.get(name) > 1) issues.push({ person, kind: 'dup', text: '和另一位重名，生图时可能互相顶替' })
+            if (traitCount(person) < 3) issues.push({ person, kind: 'sparse', text: '外貌只填了 ' + traitCount(person) + ' 块，出图会不稳定' })
+          }
+          const remove = person => {
+            if (typeof confirm === 'function' && !confirm('删掉「' + (person.name || '未命名') + '」？')) return
+            setCharacters(current => current.filter(item => item.id !== person.id))
+          }
+          return h('div', { 'aria-label': '整理人物库', style: Object.assign({}, S.card, { margin: '8px 0 12px' }) },
+            h('div', { style: { fontSize: '13px', fontWeight: 600, marginBottom: '6px' } }, issues.length ? '发现 ' + issues.length + ' 处可以整理的地方（看全部卡）' : '人物库很整齐，没有发现问题'),
+            issues.map((issue, index) => h('div', { key: issue.person.id + issue.kind, style: Object.assign({}, S.row, { borderTop: index ? '1px solid #2c3240' : 'none', paddingTop: '4px' }) },
+              h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px', minWidth: '90px' }), onClick: () => jumpTo(issue.person) }, issue.person.name || '（未命名角色）'),
+              h('span', { style: { fontSize: '12px', color: '#9aa3b2', flex: 1 } }, issue.text),
+              issue.kind === 'unbound' && bindTarget ? h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px' }), onClick: () => bindToCard(issue.person, bindTarget) }, '绑定到「' + cardTitle(bindTarget) + '」') : null,
+              issue.kind === 'player' ? h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px', borderColor: 'rgba(242,104,107,.65)', color: '#f2686b' }), onClick: () => remove(issue.person) }, '删除') : null,
+            )),
+            issues.length ? h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginTop: '6px' } }, '处理完记得点「保存人物库」') : null,
+          )
+        }
+
         function characterBlock(c, i) {
           const traits = c.traits || {}
           const outfits = c.outfits || []
           const filled = ["feature","face","faceBack","bodySFW","bodySFWBack","lowerSFW","lowerSFWBack","bodyNSFW","bodyNSFWBack","lowerNSFW","lowerNSFWBack","negative"].filter(k => String(traits[k] || '').trim()).length
-          const title = (c.name || '（未命名角色）') + '　' + filled + '/12 块　' + (outfits.length ? outfits.length + ' 套服装' : '没有服装')
+          const title = (c.name || '（未命名角色）') + '　' + filled + '/12 块　' + (outfits.length ? outfits.length + ' 套服装' : '没有服装') + ((c.cards || []).length ? '' : '　⚠ 未绑定卡（所有卡都会用到）')
           const grouped = (list) => list.map(([key, label, why, rows, folded]) => area(label, why, traits[key], v => patchTraits(i, key, v), rows))
           return h('details', { key: c.id, open: peopleEditorOpen, onToggle: event => {
             const open = event.currentTarget.open
@@ -3689,26 +3866,200 @@ function versionsOf(jobId) {
               area('形态线索', '同一角色有多个形态时（名字互为前缀，如「阿梅」与「阿梅（狐形）」）填在形态条目上，逗号分隔，如 fox ears, fox tail, 狐耳。画面写着这些时，规划写的基础名字会自动换成这个形态', c.formCues || '', v => patch(i, { formCues: v }), 1),
             ),
             h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '12px', fontWeight: 600 } }, '服装库'),
-            outfits.map((o, j) => h('div', { key: o.id || j, style: { borderTop: '1px solid var(--dsw-alias-border-l2)', marginTop: '8px', paddingTop: '6px' } },
-              h('div', { style: S.row },
-                h('input', { type: 'text', placeholder: '服装名（常服 / 居家 / 内衣…）', value: o.name || '', style: Object.assign({}, S.input, { width: '170px' }), onChange: e => patchOutfit(i, j, { name: e.target.value }) }),
-                h('label', { style: S.row }, h('input', { type: 'radio', name: 'default-outfit-' + i, checked: o.default === true, onChange: () => patch(i, { outfits: outfits.map((x, k) => Object.assign({}, x, { default: k === j })) }) }), h('span', { style: { fontSize: '12px' } }, '常穿')),
-                h('label', { style: S.row }, h('input', { type: 'checkbox', checked: o.enabled !== false, onChange: e => patchOutfit(i, j, { enabled: e.target.checked }) }), h('span', { style: { fontSize: '12px' } }, '启用')),
-                h('button', { style: buttonStyle, onClick: () => { const next = outfits.slice(); next.splice(j, 1); patch(i, { outfits: next }) } }, '删'),
-              ),
-              area('上衣', '', o.upper, v => patchOutfit(i, j, { upper: v }), 2),
-              area('下装', '', o.lower, v => patchOutfit(i, j, { lower: v }), 2),
-              h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' } },
-                h('input', { type: 'text', placeholder: '鞋袜', value: o.shoes || '', style: S.input, onChange: e => patchOutfit(i, j, { shoes: e.target.value }) }),
-                h('input', { type: 'text', placeholder: '配饰', value: o.accessory || '', style: S.input, onChange: e => patchOutfit(i, j, { accessory: e.target.value }) }),
-                h('input', { type: 'text', placeholder: '整体印象（formal / casual…）', value: o.full || '', style: S.input, onChange: e => patchOutfit(i, j, { full: e.target.value }) }),
-                h('input', { type: 'text', placeholder: '背面细节', value: o.back || '', style: S.input, onChange: e => patchOutfit(i, j, { back: e.target.value }) }),
-              ),
-              area('负面', '', o.negative, v => patchOutfit(i, j, { negative: v }), 2),
-            )),
+            // 下拉选一套来编辑：服装多时不再每套铺一张卡
+            (() => {
+              if (!outfits.length) return h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', margin: '8px 0' } }, '还没添加服装，点下面「新增服装」。')
+              const activeId = outfitPick[c.id] && outfits.some((o, j) => String(o.id || j) === outfitPick[c.id]) ? outfitPick[c.id] : String(outfits[0].id || 0)
+              const j = outfits.findIndex((o, k) => String(o.id || k) === activeId)
+              const o = outfits[j] || outfits[0]
+              return h('div', null,
+                h('div', { style: Object.assign({}, S.row, { marginTop: '6px' }) },
+                  h('select', {
+                    'aria-label': '选择服装',
+                    title: '选一套来编辑；字段只在下面显示',
+                    value: activeId,
+                    style: Object.assign({}, S.input, { maxWidth: '220px' }),
+                    onChange: e => setOutfitPick(cur => Object.assign({}, cur, { [c.id]: e.target.value })),
+                  }, outfits.map((item, k) => h('option', { key: item.id || k, value: String(item.id || k), style: { color: 'CanvasText', backgroundColor: 'Canvas' } },
+                    (item.name || '（未命名服装）') + (item.default === true ? '（常穿）' : '') + (item.enabled === false ? '（已停用）' : '')))),
+                  h('label', { style: S.row }, h('input', { type: 'radio', name: 'default-outfit-' + i, checked: o.default === true, onChange: () => patch(i, { outfits: outfits.map((x, k) => Object.assign({}, x, { default: k === j })) }) }), h('span', { style: { fontSize: '12px' } }, '常穿')),
+                  h('label', { style: S.row }, h('input', { type: 'checkbox', checked: o.enabled !== false, onChange: e => patchOutfit(i, j, { enabled: e.target.checked }) }), h('span', { style: { fontSize: '12px' } }, '启用')),
+                  h('button', { style: buttonStyle, onClick: () => { const next = outfits.slice(); next.splice(j, 1); setOutfitPick(cur => Object.assign({}, cur, { [c.id]: '' })); patch(i, { outfits: next }) } }, '删除这一套'),
+                ),
+                h('div', { style: { marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--dsw-alias-border-l2)' } },
+                  h('input', { type: 'text', placeholder: '服装名（常服 / 居家 / 内衣…）', value: o.name || '', style: Object.assign({}, S.input, { width: '220px' }), onChange: e => patchOutfit(i, j, { name: e.target.value }) }),
+                  area('上衣', '', o.upper, v => patchOutfit(i, j, { upper: v }), 2),
+                  area('下装', '', o.lower, v => patchOutfit(i, j, { lower: v }), 2),
+                  h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' } },
+                    h('input', { type: 'text', placeholder: '鞋袜', value: o.shoes || '', style: S.input, onChange: e => patchOutfit(i, j, { shoes: e.target.value }) }),
+                    h('input', { type: 'text', placeholder: '配饰', value: o.accessory || '', style: S.input, onChange: e => patchOutfit(i, j, { accessory: e.target.value }) }),
+                    h('input', { type: 'text', placeholder: '整体印象（formal / casual…）', value: o.full || '', style: S.input, onChange: e => patchOutfit(i, j, { full: e.target.value }) }),
+                    h('input', { type: 'text', placeholder: '背面细节', value: o.back || '', style: S.input, onChange: e => patchOutfit(i, j, { back: e.target.value }) }),
+                  ),
+                  area('负面', '', o.negative, v => patchOutfit(i, j, { negative: v }), 2),
+                ),
+              )
+            })(),
             h('div', { style: S.row },
               h('button', { style: buttonStyle, onClick: () => patch(i, { outfits: outfits.concat([{ id: 'o' + Date.now(), name: '新服装', upper: '', lower: '', shoes: '', accessory: '', full: '', back: '', negative: '', enabled: true, default: outfits.length === 0 }]) }) }, '新增服装'),
+              h('button', { style: buttonStyle, onClick: () => setOutfitCopy(current => current.target === c.id ? { target: '', source: '', picked: [] } : { target: c.id, source: '', picked: [], mode: 'whole', parts: {} }) }, outfitCopy.target === c.id ? '收起复制' : '从其他角色复制服装'),
             ),
+            outfitCopy.target === c.id ? outfitCopyPanel(c, i) : null,
+          )
+        }
+        /**
+         * 从另一位角色复制服装到当前角色，两种方式：
+         * - 整套：勾一套、几套或全选，复制成新服装（新编号、不抢常穿，同名加「（复制）」）。
+         * - 按部位：从一套或几套里勾上衣/下装/鞋袜等部位，拼成一套新服装，或放进当前角色已有的某一套（覆盖或追加）。
+         * 复制品都是独立的一份；改完要点「保存人物库」。
+         */
+        function outfitCopyPanel(c, i) {
+          const PARTS = [['upper', '上衣'], ['lower', '下装'], ['shoes', '鞋袜'], ['accessory', '配饰'], ['full', '整体'], ['back', '背面'], ['negative', '负面']]
+          const cp = outfitCopy
+          const sources = characters.filter(person => person.id !== c.id && (person.outfits || []).length)
+          const source = sources.find(person => person.id === cp.source) || null
+          const list = source ? (source.outfits || []) : []
+          const mode = cp.mode === 'parts' ? 'parts' : 'whole'
+          const set = changes => setOutfitCopy(current => Object.assign({}, current, changes))
+          const close = () => setOutfitCopy({ target: '', source: '', picked: [] })
+          const own = c.outfits || []
+          const small = Object.assign({}, buttonStyle, { fontSize: '12px' })
+          const valueOf = (o, key) => String((key === 'upper' ? (o.upper || o.body) : o[key]) || '').trim()
+
+          // —— 整套 ——
+          const picked = new Set(cp.picked || [])
+          const chosen = list.filter(o => picked.has(o.id))
+          const copyWhole = () => {
+            if (!chosen.length) return
+            patch(i, person => {
+              const mine = person.outfits || []
+              const names = new Set(mine.map(o => String(o.name || '')))
+              const stamp = Date.now()
+              const added = chosen.map((o, k) => {
+                let name = String(o.name || '服装')
+                while (names.has(name)) name += '（复制）'
+                names.add(name)
+                return Object.assign({}, o, { id: 'o' + stamp + k + Math.random().toString(36).slice(2, 6), name, default: mine.length === 0 && k === 0 })
+              })
+              return { outfits: mine.concat(added) }
+            })
+            close()
+          }
+
+          // —— 按部位 ——
+          const parts = cp.parts || {}
+          const partOn = (oid, key) => (parts[oid] || []).includes(key)
+          const togglePart = (oid, key, on) => {
+            const next = new Set(parts[oid] || [])
+            if (on) next.add(key); else next.delete(key)
+            set({ parts: Object.assign({}, parts, { [oid]: PARTS.map(([k]) => k).filter(k => next.has(k)) }) })
+          }
+          const setOutfitParts = (o, on) => set({ parts: Object.assign({}, parts, { [o.id]: on ? PARTS.map(([k]) => k).filter(k => valueOf(o, k)) : [] }) })
+          // 收集选中的部位：同一部位从几套里都勾了，就按套的顺序用逗号拼起来
+          const gathered = {}
+          for (const o of list) for (const [key] of PARTS) if (partOn(o.id, key) && valueOf(o, key)) (gathered[key] = gathered[key] || []).push(valueOf(o, key))
+          const gatheredKeys = PARTS.map(([k]) => k).filter(k => gathered[k])
+          const dest = own.some(o => o.id === cp.dest) ? cp.dest : 'new'
+          const merge = cp.merge === 'append' ? 'append' : 'replace'
+          const copyParts = () => {
+            if (!gatheredKeys.length) return
+            const values = {}
+            for (const key of gatheredKeys) values[key] = gathered[key].join(', ')
+            patch(i, person => {
+              const mine = person.outfits || []
+              if (dest === 'new') {
+                const names = new Set(mine.map(o => String(o.name || '')))
+                let name = String(cp.newName || '').trim() || '拼搭服装'
+                while (names.has(name)) name += '（复制）'
+                const blank = { name, upper: '', lower: '', shoes: '', accessory: '', full: '', back: '', negative: '', enabled: true, default: mine.length === 0 }
+                return { outfits: mine.concat([Object.assign(blank, values, { id: 'o' + Date.now() + Math.random().toString(36).slice(2, 6) })]) }
+              }
+              return { outfits: mine.map(o => {
+                if (o.id !== dest) return o
+                const next = Object.assign({}, o)
+                for (const key of gatheredKeys) {
+                  const old = valueOf(o, key)
+                  next[key] = merge === 'append' && old ? old + ', ' + values[key] : values[key]
+                }
+                return next
+              }) }
+            })
+            close()
+          }
+
+          const tab = (value, label) => h('button', { style: Object.assign({}, small, mode === value ? { borderColor: '#6aa8ff', color: '#cfe1ff' } : {}), 'aria-pressed': mode === value, onClick: () => set({ mode: value }) }, label)
+          return h('div', { 'aria-label': '复制服装', style: { marginTop: '8px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(255,255,255,.03)', border: '1px solid rgba(120,140,170,.2)' } },
+            h('div', { style: S.row },
+              h('span', { style: S.label }, '从谁那里复制'),
+              h('select', {
+                'aria-label': '复制服装的来源角色',
+                value: cp.source,
+                style: Object.assign({}, S.input, { maxWidth: '220px' }),
+                onChange: e => set({ source: e.target.value, picked: [], parts: {} }),
+              }, [h('option', { key: '', value: '', style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, sources.length ? '选择角色' : '没有其他带服装的角色')].concat(
+                sources.map(person => h('option', { key: person.id, value: person.id, style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, (person.name || '未命名角色') + '（' + (person.outfits || []).length + ' 套）')))),
+              tab('whole', '整套复制'),
+              tab('parts', '按部位复制'),
+            ),
+            source && mode === 'whole' ? h('div', null,
+              h('div', { style: S.row },
+                h('button', { style: small, onClick: () => set({ picked: list.map(o => o.id) }) }, '全选'),
+                h('button', { style: small, onClick: () => set({ picked: [] }) }, '全不选'),
+              ),
+              h('div', { style: { maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '6px' } },
+                list.map(o => h('label', { key: o.id, style: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', padding: '4px 6px', borderRadius: '6px', cursor: 'pointer', background: picked.has(o.id) ? 'rgba(106,168,255,.14)' : 'transparent' } },
+                  h('input', { type: 'checkbox', checked: picked.has(o.id), onChange: e => {
+                    const next = new Set(picked)
+                    if (e.target.checked) next.add(o.id); else next.delete(o.id)
+                    set({ picked: list.filter(x => next.has(x.id)).map(x => x.id) })
+                  } }),
+                  h('span', null, o.name || '未命名服装'),
+                  h('span', { style: { color: '#9aa3b2' } }, [valueOf(o, 'upper'), valueOf(o, 'lower')].filter(Boolean).join(' / ').slice(0, 60)),
+                )),
+              ),
+              h('div', { style: S.row },
+                h('button', { style: buttonStyle, disabled: !chosen.length, onClick: copyWhole }, chosen.length ? '复制这 ' + chosen.length + ' 套到「' + (c.name || '当前角色') + '」' : '先勾选要复制的服装'),
+              ),
+            ) : null,
+            source && mode === 'parts' ? h('div', null,
+              h('div', { style: { maxHeight: '320px', overflowY: 'auto', marginTop: '6px' } },
+                list.map(o => {
+                  const filled = PARTS.filter(([k]) => valueOf(o, k))
+                  const all = filled.length && filled.every(([k]) => partOn(o.id, k))
+                  return h('div', { key: o.id, 'aria-label': '部位-' + (o.name || o.id), style: { padding: '6px', borderTop: '1px solid #3a4150' } },
+                    h('label', { style: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 600 } },
+                      h('input', { type: 'checkbox', 'aria-label': '整套部位-' + (o.name || o.id), checked: Boolean(all), onChange: e => setOutfitParts(o, e.target.checked) }),
+                      h('span', null, o.name || '未命名服装'),
+                    ),
+                    filled.map(([key, label]) => h('label', { key, style: { display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', padding: '2px 0 2px 22px' } },
+                      h('input', { type: 'checkbox', 'aria-label': (o.name || o.id) + '-' + label, checked: partOn(o.id, key), onChange: e => togglePart(o.id, key, e.target.checked) }),
+                      h('span', { style: { minWidth: '34px', color: '#9aa3b2' } }, label),
+                      h('span', null, valueOf(o, key).slice(0, 90)),
+                    )),
+                  )
+                }),
+              ),
+              h('div', { style: S.row },
+                h('span', { style: S.label }, '放到哪里'),
+                h('select', {
+                  'aria-label': '部位复制的目标服装',
+                  value: dest,
+                  style: Object.assign({}, S.input, { maxWidth: '220px' }),
+                  onChange: e => set({ dest: e.target.value }),
+                }, [h('option', { key: 'new', value: 'new', style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, '新建一套')].concat(
+                  own.map(o => h('option', { key: o.id, value: o.id, style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, '放进「' + (o.name || '未命名服装') + '」')))),
+                dest === 'new'
+                  ? h('input', { type: 'text', 'aria-label': '新服装名', placeholder: '新服装名（默认：拼搭服装）', value: cp.newName || '', style: Object.assign({}, S.input, { width: '180px' }), onChange: e => set({ newName: e.target.value }) })
+                  : h('select', { 'aria-label': '部位合并方式', value: merge, style: Object.assign({}, S.input, { maxWidth: '200px' }), onChange: e => set({ merge: e.target.value }) },
+                      h('option', { value: 'replace', style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, '覆盖这些部位'),
+                      h('option', { value: 'append', style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, '追加在原内容后面')),
+              ),
+              h('div', { style: S.row },
+                h('button', { style: buttonStyle, disabled: !gatheredKeys.length, onClick: copyParts },
+                  gatheredKeys.length ? '复制 ' + gatheredKeys.length + ' 个部位' + (dest === 'new' ? '为新服装' : '到这套') : '先勾选要复制的部位'),
+              ),
+            ) : null,
+            h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginTop: '6px' } }, '复制后是各自独立的一份，改这边不影响原来那位；记得点「保存人物库」'),
           )
         }
         return h('div', null,
@@ -3728,7 +4079,14 @@ function versionsOf(jobId) {
           h('div', { style: Object.assign({}, S.row, { alignItems: 'stretch' }) },
             h('input', { type: 'search', 'aria-label': '搜索角色', value: peopleSearch, placeholder: '搜索中文名或英文触发名', style: Object.assign({}, S.input, { flex: '1 1 220px', minWidth: '180px' }), onChange: event => setPeopleSearch(event.target.value) }),
             h('select', { 'aria-label': '当前角色', value: activeCharacter?.id || '', style: Object.assign({}, S.input, { flex: '1 1 220px', minWidth: '180px' }), onChange: event => { setPeopleActiveId(event.target.value); setPeopleEditorOpen(true) } },
-              activeCharacter ? filteredCharacters.map(character => h('option', { key: character.id, value: character.id, style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, (character.group ? '[' + character.group + '] ' : '') + (character.name || '（未命名角色）') + (character.match ? ' · ' + character.match : ''))) : h('option', { value: '', style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, '没有匹配的角色'),
+              activeCharacter ? sectionsOf(filteredCharacters).map(([section, list]) => h('optgroup', { key: section, label: section },
+                list.map(character => h('option', { key: character.id, value: character.id, style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, (character.group ? '[' + character.group + '] ' : '') + (character.name || '（未命名角色）') + (character.match ? ' · ' + character.match : ''))))) : h('option', { value: '', style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, '没有匹配的角色'),
+            ),
+            h('select', { 'aria-label': '按卡筛选人物', title: '只看某张卡能用到的人物（未绑定卡的人对所有卡都生效，总会列出来）', value: cardFilter, style: Object.assign({}, S.input, { flex: '0 1 200px', minWidth: '150px' }), onChange: event => setPeopleCardFilter(event.target.value) },
+              h('option', { value: 'all', style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, '全部卡'),
+              currentCardPath ? h('option', { value: currentCardPath, style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, '当前卡：' + cardTitle(currentCardPath)) : null,
+              importCards.filter(item => item.path !== currentCardPath).map(item => h('option', { key: item.path, value: item.path, style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, item.label)),
+              h('option', { value: '__unbound', style: { color: 'CanvasText', backgroundColor: 'Canvas' } }, '只看未绑定的'),
             ),
             h('button', { style: buttonStyle, onClick: () => setPeopleEditorOpen(open => !open) }, peopleEditorOpen ? '收起编辑' : '展开编辑'),
           ),
@@ -3745,10 +4103,15 @@ function versionsOf(jobId) {
             h('button', { style: buttonStyle, disabled: !activeCharacter, onClick: () => copyCharacter(activeCharacter) }, '复制当前角色'),
             h('button', { style: buttonStyle, disabled: !activeCharacter, onClick: () => activeCharacter && pickPhoto(activeCharacter) }, '从照片识别'),
             h('button', { style: buttonStyle, onClick: designPeople }, '让 agent 设计角色'),
+            h('button', { style: buttonStyle, onClick: () => setPeopleOverviewOpen(open => !open) }, peopleOverviewOpen ? '收起概览' : '概览'),
+            h('button', { style: buttonStyle, onClick: () => setPeopleTidyOpen(open => !open) }, peopleTidyOpen ? '收起整理' : '整理'),
             h('button', { style: buttonStyle, disabled: saveState === 'saving', onClick: () => commit(false) }, saveState === 'saving' ? '正在保存…' : '保存人物库'),
             h('button', { style: buttonStyle, onClick: () => setPeopleBatchOpen(current => !current) }, peopleBatchOpen ? '收起批量编辑' : '批量编辑'),
             h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '已选 ' + picked.length + ' / ' + characters.length + ' 位'),
           ),
+          importPreviewPanel(),
+          peopleTidyOpen ? tidyPanel() : null,
+          peopleOverviewOpen ? overviewPanel() : null,
           designPanel(),
           batchPanel(),
           !designOpen && designNote ? h('div', { role: 'status', style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } }, designNote) : null,
@@ -3762,26 +4125,108 @@ function versionsOf(jobId) {
           h('div', { style: S.card },
             h('div', { style: { fontSize: '13px', marginBottom: '4px' } }, '通用服装库（可跨角色复用）'),
             h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } }, '这里放"办公室职业装""居家睡衣"这类通用套装；在角色那边勾上，他就能穿。'),
-            (data.outfits || []).map((o, j) => h('div', { key: o.id || j, style: { borderTop: '1px solid var(--dsw-alias-border-l2)', marginTop: '8px', paddingTop: '6px' } },
-              h('div', { style: S.row },
-                h('input', { type: 'text', placeholder: '套装名', value: o.name || '', style: Object.assign({}, S.input, { width: '190px' }), onChange: e => { const next = (data.outfits || []).slice(); next[j] = Object.assign({}, o, { name: e.target.value }); setLibraryData(Object.assign({}, dataRef.current, { outfits: next })) } }),
-                h('label', { style: S.row }, h('input', { type: 'checkbox', checked: o.enabled !== false, onChange: e => { const next = (data.outfits || []).slice(); next[j] = Object.assign({}, o, { enabled: e.target.checked }); setLibraryData(Object.assign({}, dataRef.current, { outfits: next })) } }), h('span', { style: { fontSize: '12px' } }, '启用')),
-                h('button', { style: buttonStyle, onClick: () => { const next = (data.outfits || []).slice(); next.splice(j, 1); setLibraryData(Object.assign({}, dataRef.current, { outfits: next })) } }, '删除'),
-              ),
-              h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '6px' } },
-                h('input', { type: 'text', placeholder: '上衣', value: o.upper || o.body || '', style: S.input, onChange: e => { const next = (data.outfits || []).slice(); next[j] = Object.assign({}, o, { upper: e.target.value }); setLibraryData(Object.assign({}, dataRef.current, { outfits: next })) } }),
-                h('input', { type: 'text', placeholder: '下装', value: o.lower || '', style: S.input, onChange: e => { const next = (data.outfits || []).slice(); next[j] = Object.assign({}, o, { lower: e.target.value }); setLibraryData(Object.assign({}, dataRef.current, { outfits: next })) } }),
-                h('input', { type: 'text', placeholder: '鞋袜', value: o.shoes || '', style: S.input, onChange: e => { const next = (data.outfits || []).slice(); next[j] = Object.assign({}, o, { shoes: e.target.value }); setLibraryData(Object.assign({}, dataRef.current, { outfits: next })) } }),
-                h('input', { type: 'text', placeholder: '整体', value: o.full || '', style: S.input, onChange: e => { const next = (data.outfits || []).slice(); next[j] = Object.assign({}, o, { full: e.target.value }); setLibraryData(Object.assign({}, dataRef.current, { outfits: next })) } }),
-              ),
-            )),
+            // 下拉选一套来编辑：套装多时不再每套铺一张卡
+            (() => {
+              const list = data.outfits || []
+              if (!list.length) return h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', margin: '8px 0' } }, '还没有套装，点下面「新增套装」。')
+              const activeId = libraryActive && list.some((o, j) => String(o.id || j) === libraryActive) ? libraryActive : String(list[0].id || 0)
+              const idx = list.findIndex((o, j) => String(o.id || j) === activeId)
+              const o = list[idx] || list[0]
+              const patchLib = (changes) => {
+                const next = list.slice()
+                next[idx] = Object.assign({}, o, changes)
+                setLibraryData(Object.assign({}, dataRef.current, { outfits: next }))
+              }
+              return h('div', null,
+                h('div', { style: Object.assign({}, S.row, { marginTop: '8px' }) },
+                  h('select', {
+                    'aria-label': '选择套装',
+                    title: '选一套来编辑；字段只在下面这一块显示',
+                    value: activeId,
+                    style: Object.assign({}, S.input, { maxWidth: '240px' }),
+                    onChange: e => setLibraryActive(e.target.value),
+                  }, list.map((item, k) => h('option', { key: item.id || k, value: String(item.id || k), style: { color: 'CanvasText', backgroundColor: 'Canvas' } },
+                    (item.name || '（未命名套装）') + (item.enabled === false ? '（已停用）' : '')))),
+                  h('label', { style: S.row }, h('input', { type: 'checkbox', checked: o.enabled !== false, onChange: e => patchLib({ enabled: e.target.checked }) }), h('span', { style: { fontSize: '12px' } }, '启用')),
+                  h('button', { style: buttonStyle, onClick: () => { const next = list.slice(); next.splice(idx, 1); setLibraryActive(''); setLibraryData(Object.assign({}, dataRef.current, { outfits: next })) } }, '删除这一套'),
+                ),
+                h('div', { style: { marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--dsw-alias-border-l2)' } },
+                  h('input', { type: 'text', placeholder: '套装名（办公室职业装 / 居家睡衣…）', value: o.name || '', style: Object.assign({}, S.input, { width: '240px' }), onChange: e => patchLib({ name: e.target.value }) }),
+                  h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '6px' } },
+                    h('input', { type: 'text', placeholder: '上衣', value: o.upper || o.body || '', style: S.input, onChange: e => patchLib({ upper: e.target.value }) }),
+                    h('input', { type: 'text', placeholder: '下装', value: o.lower || '', style: S.input, onChange: e => patchLib({ lower: e.target.value }) }),
+                    h('input', { type: 'text', placeholder: '鞋袜', value: o.shoes || '', style: S.input, onChange: e => patchLib({ shoes: e.target.value }) }),
+                    h('input', { type: 'text', placeholder: '整体（formal / casual…）', value: o.full || '', style: S.input, onChange: e => patchLib({ full: e.target.value }) }),
+                    h('input', { type: 'text', placeholder: '配饰', value: o.accessory || '', style: S.input, onChange: e => patchLib({ accessory: e.target.value }) }),
+                    h('input', { type: 'text', placeholder: '背面细节', value: o.back || '', style: S.input, onChange: e => patchLib({ back: e.target.value }) }),
+                  ),
+                ),
+              )
+            })(),
             h('div', { style: S.row },
               h('button', { style: buttonStyle, onClick: () => setLibraryData(Object.assign({}, dataRef.current, { outfits: (data.outfits || []).concat([{ id: 'of' + Date.now(), name: '新套装', upper: '', lower: '', shoes: '', accessory: '', full: '', back: '', negative: '', enabled: true }]) })) }, '新增套装'),
               h('button', { style: buttonStyle, onClick: () => commit() }, '保存服装库'),
+              h('button', { style: buttonStyle, title: '把角色库、两本世界书、渠道配置、历史记录打包成一个 JSON', onClick: exportAllData }, '导出全部数据'),
+              h('button', { style: buttonStyle, title: '从备份 JSON 恢复；会先自动备份当前数据', onClick: importAllData }, '导入全部数据'),
             ),
           ),
         )
       }
+      /** 把全部数据导出成一个 JSON 文件（六份数据，含渠道配置） */
+      async function exportAllData() {
+        try {
+          setNote('正在打包数据…')
+          const r = await post('/export-all', {})
+          if (!r?.ok || !r.bundle) throw new Error(r?.error || '导出失败')
+          const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+          const url = URL.createObjectURL(new Blob([JSON.stringify(r.bundle, null, 2)], { type: 'application/json' }))
+          const link = document.createElement('a')
+          link.href = url
+          link.download = 'dsh-tavern-image-' + stamp + '.json'
+          link.click()
+          URL.revokeObjectURL(url)
+          const c = r.bundle.counts || {}
+          const msg = '已导出：角色 ' + (c.characters || 0) + ' 个、服装 ' + (c.outfits || 0) + ' 套、规则 ' + (c.worldbook || 0) + ' 条、服装规则 ' + (c.worldbookOutfits || 0) + ' 条'
+          setNote(msg + '（图片本体不在包里）')
+          if (typeof showToast === 'function') showToast(msg)
+        } catch (error) {
+          const msg = '导出失败：' + (error?.message ?? error)
+          setNote(msg)
+          if (typeof showToast === 'function') showToast(msg, 'fail')
+        }
+      }
+
+      /** 选一个备份 JSON 导入，写回六份数据（不碰任何代码） */
+      async function importAllData() {
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = 'application/json,.json'
+        input.onchange = async () => {
+          const file = input.files && input.files[0]
+          if (!file) return
+          if (!confirm('导入会用备份里的数据覆盖当前的角色库、两本世界书、渠道配置与历史记录。\n当前数据会先自动备份一份。要继续吗？')) return
+          try {
+            setNote('正在导入…')
+            const text = await file.text()
+            let bundle = null
+            try { bundle = JSON.parse(text) } catch { throw new Error('文件不是合法 JSON') }
+            const r = await post('/import-all', { bundle })
+            if (!r?.ok) throw new Error(r?.error || r?.refused || '导入失败')
+            if (r?.state) receiveState(r.state)
+            const msg = '已导入：' + (r.written || []).join('、') + (r.skipped && r.skipped.length ? '（跳过：' + r.skipped.join('、') + '）' : '')
+            setNote(msg + (r.note ? '。' + r.note : ''))
+            if (typeof showToast === 'function') showToast(msg)
+            const fresh = await post('/state', {}).catch(() => null)
+            if (fresh) receiveState(fresh)
+          } catch (error) {
+            const msg = '导入失败：' + (error?.message ?? error)
+            setNote(msg)
+            if (typeof showToast === 'function') showToast(msg, 'fail')
+          }
+        }
+        input.click()
+      }
+
       /** 批量删除历史图。 */
       async function deleteJobBatch(ids) {
         const list = (Array.isArray(ids) ? ids : []).filter(Boolean)
@@ -5192,9 +5637,6 @@ function versionsOf(jobId) {
         tab === 'gallery' ? galleryTab() : null,
         tab === 'worldbook' ? worldbookTab() : null,
         tab === 'people' ? h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '14px' } }, '人物与服装修改后请点「保存人物库」。') : null,
-        h('details', { style: { marginTop: '22px', fontSize: '12px' }, onToggle: event => setUpdateOpen(event.currentTarget.open) },
-          h('summary', { style: { cursor: 'pointer', color: 'var(--dsw-alias-label-tertiary)' } }, '插件版本与更新' + (pluginUpdateLocal?.currentVersion ? '（当前 ' + pluginUpdateLocal.currentVersion + '）' : '')),
-          updateOpen ? pluginUpdateTab() : null),
         // 注意：openWorkflow 定义在 workflow 标签页函数内部，这里跨作用域调用会 ReferenceError。
         // 保存后只做本层能做的收尾：关掉编辑器、清掉旧详情，让用户重新点开时读到新数据。
         wfGraphFile ? h(WorkflowGraphEditor, {

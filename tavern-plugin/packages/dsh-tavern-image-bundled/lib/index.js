@@ -1,5 +1,5 @@
 import { resolveCharacterForms } from './character-forms.js'
-import { charactersFromWorldbookText, charactersFromCardBook, charactersFromExtraction, mergeCharacters } from './character-import.js'
+import { charactersFromWorldbookText, charactersFromCardBookBody, charactersFromCardBook, charactersFromExtraction, mergeCharacters } from './character-import.js'
 import { buildMinorBatchPrompt, scrubMinorNegatives } from './character-import.js'
 import { parseCharacters } from './character-generator.js'
 import { buildOutfitPrompt, clampBatchCount, mergeOutfits, parseOutfits } from './outfit-generator.js'
@@ -631,6 +631,8 @@ export function apply(ctx, config = {}) {
   route(`${BASE}/workflow`, (request, response, url, engine) => engine.handleConsole('workflow', request, response, url))
   route(`${BASE}/reload`, (request, response, url, engine) => engine.handleConsole('reload', request, response, url))
   route(`${BASE}/definitions`, (request, response, url, engine) => engine.handleConsole('definitions', request, response, url))
+  route(`${BASE}/export-all`, (request, response, url, engine) => engine.handleConsole('export-all', request, response, url))
+  route(`${BASE}/import-all`, (request, response, url, engine) => engine.handleConsole('import-all', request, response, url))
   route(`${BASE}/import-characters`, (request, response, url, engine) => engine.handleConsole('import-characters', request, response, url))
   route(`${BASE}/generate`, (request, response, url, engine) => engine.handleConsole('generate', request, response, url))
   route(`${BASE}/history`, (request, response, url, engine) => engine.handleConsole('history', request, response, url))
@@ -3057,7 +3059,7 @@ let worldbookCache = null
         }
         return
       }
-      const body = await readBody(request)
+  const body = await readBody(request, 64 * 1024 * 1024)
 
         // ---- 列出可用的 LLM provider / model（给设置页做下拉框，不用手打）----
         if (action === 'llm-models') {
@@ -3772,6 +3774,100 @@ let worldbookCache = null
     }
   }
 
+  // ── 整包导出 / 导入 ──
+  // 导出成一个 JSON，含六份数据；config 里的密钥默认带上，因为这是给自己迁移用的。
+  if (action === 'export-all') {
+    const [defs, wbMain, wbOutfits, cfg] = await Promise.all([
+      readJson(DEFS_PATH, null),
+      readJson(join(ROOT, BOOK_KEYS.main), null),
+      readJson(join(ROOT, BOOK_KEYS.outfits), null),
+      readJson(CONFIG_PATH, null),
+    ])
+    const jobs = await readJson(join(ROOT, 'jobs-store.json'), null)
+    const plans = await readJson(join(ROOT, 'plans-store.json'), null)
+    const pkg = await readJson(join(ROOT, 'package.json'), {}).catch(() => ({}))
+    const bundle = {
+      kind: 'dsh-tavern-image/backup',
+      version: 1,
+      pluginVersion: String(pkg?.version ?? ''),
+      exportedAt: new Date().toISOString(),
+      counts: {
+        characters: Array.isArray(defs?.characters) ? defs.characters.length : 0,
+        outfits: Array.isArray(defs?.outfits) ? defs.outfits.length : 0,
+        worldbook: Array.isArray(wbMain?.entries) ? wbMain.entries.length : 0,
+        worldbookOutfits: Array.isArray(wbOutfits?.entries) ? wbOutfits.entries.length : 0,
+        jobs: Array.isArray(jobs?.jobs) ? jobs.jobs.length : (Array.isArray(jobs) ? jobs.length : 0),
+      },
+      data: { definitions: defs, worldbook: wbMain, worldbookOutfits: wbOutfits, config: cfg, jobsStore: jobs, plansStore: plans },
+    }
+    sendJson(response, 200, { ok: true, bundle })
+    return
+  }
+
+  // 导入整包：只写用户数据，绝不碰代码；任何一份导致「有→空」都整包拒绝。
+  if (action === 'import-all') {
+    const bundle = body?.bundle && typeof body.bundle === 'object' ? body.bundle : body
+    const data = bundle?.data && typeof bundle.data === 'object' ? bundle.data : null
+    if (!data) return sendJson(response, 400, { ok: false, error: '包里没有 data 字段，不像是本插件导出的备份' })
+    if (bundle?.kind && bundle.kind !== 'dsh-tavern-image/backup') {
+      return sendJson(response, 400, { ok: false, error: '备份类型不对：' + String(bundle.kind) })
+    }
+    const cur = await readJson(DEFS_PATH, null)
+    const nextChars = Array.isArray(data.definitions?.characters) ? data.definitions.characters.length : null
+    const curChars = Array.isArray(cur?.characters) ? cur.characters.length : 0
+    if (curChars > 0 && nextChars === 0) {
+      return sendJson(response, 400, {
+        ok: false,
+        refused: 'would-empty-characters',
+        error: '包里的角色是 0 个，而你现在有 ' + curChars + ' 个。为防止清空，已拒绝导入。',
+      })
+    }
+    const backupDir = join(ROOT, 'backups')
+    const written = []
+    const skipped = []
+    try {
+      if (data.definitions && typeof data.definitions === 'object') {
+        await writeJsonSafe(DEFS_PATH, data.definitions, backupDir)
+        written.push('角色库')
+      } else skipped.push('角色库')
+      if (data.worldbook && typeof data.worldbook === 'object') {
+        await writeJsonSafe(join(ROOT, BOOK_KEYS.main), data.worldbook, backupDir)
+        written.push('生图规则世界书')
+      } else skipped.push('生图规则世界书')
+      if (data.worldbookOutfits && typeof data.worldbookOutfits === 'object') {
+        await writeJsonSafe(join(ROOT, BOOK_KEYS.outfits), data.worldbookOutfits, backupDir)
+        written.push('角色与服装库世界书')
+      } else skipped.push('角色与服装库世界书')
+      if (data.config && typeof data.config === 'object') {
+        await writeJsonSafe(CONFIG_PATH, data.config, backupDir)
+        written.push('渠道配置')
+      } else skipped.push('渠道配置')
+      if (data.jobsStore) {
+        await writeJsonSafe(join(ROOT, 'jobs-store.json'), data.jobsStore, backupDir)
+        written.push('出图记录')
+      } else skipped.push('出图记录')
+      if (data.plansStore) {
+        await writeJsonSafe(join(ROOT, 'plans-store.json'), data.plansStore, backupDir)
+        written.push('规划记录')
+      } else skipped.push('规划记录')
+      worldbookCache = null
+    } catch (error) {
+      return sendJson(response, 500, { ok: false, error: '写入失败：' + String(error?.message ?? error) })
+    }
+    sendJson(response, 200, {
+      ok: true,
+      written,
+      skipped,
+      counts: {
+        characters: nextChars ?? 0,
+        worldbook: Array.isArray(data.worldbook?.entries) ? data.worldbook.entries.length : 0,
+      },
+      note: '图片本体不在包里，历史图要显示需要另外复制 cache/ 目录。',
+      state: await consoleState().catch(() => null),
+    })
+    return
+  }
+
   if (action === 'definitions') {
         const next = body?.definitions ?? {}
         // ⚠ 防护（2026-10-07）：曾经有一次前端/脚本带着空数组调用这个接口，
@@ -3814,6 +3910,8 @@ let worldbookCache = null
           // 扫会话数据，收集世界书正文（模型请求优先，聊天分块兜底）
           const texts = []
           const seen = new Set()
+          // 收集门槛：解析器认「姓名」「名字」，英文卡用 name:，三者都算
+          const NAME_HINT = /(?:姓名|名字|\bname\s*[:：])/i
           const reqFiles = []
           const chatFiles = []
           const walkJson = async (dir, bucket, depth = 0) => {
@@ -3843,7 +3941,7 @@ let worldbookCache = null
               if (depth > 8 || !node || typeof node !== 'object') return
               for (const value of Object.values(node)) {
                 if (typeof value === 'string') {
-                  if (value.length > 400 && (value.includes('常驻世界书') || (value.includes('姓名') && value.includes('年龄')))) {
+                  if (value.length > 400 && (value.includes('常驻世界书') || (NAME_HINT.test(value) && value.includes('年龄')))) {
                     const key = value.slice(0, 64)
                     if (!seen.has(key)) { seen.add(key); texts.push(value) }
                   }
@@ -3872,7 +3970,7 @@ let worldbookCache = null
               String(raw?.description ?? ''), String(raw?.scenario ?? ''),
               String(raw?.first_mes ?? ''), String(raw?.mes_example ?? ''),
             ].join('\n')
-            loadedCards.push({ file: name, name: String(raw?.name ?? ''), entries, blob, mtimeMs: (await stat(join(cardDir, name)).catch(() => null))?.mtimeMs ?? 0 })
+            loadedCards.push({ file: name, name: String(raw?.name ?? ''), raw, entries, blob, mtimeMs: (await stat(join(cardDir, name)).catch(() => null))?.mtimeMs ?? 0 })
           }
 
           // 当前会话最近一轮的正文，用来判定这张卡
@@ -3952,6 +4050,10 @@ let worldbookCache = null
             const base = wantCard.split(/[\\/]/).pop() || ''
             chosen = loadedCards.find(card => card.file === base || card.name === wantCard || card.file === wantCard + '.json') || null
           }
+          // 使用者明确选了卡：只读这张卡。前面从最近的模型请求、聊天里扫到的世界书正文
+          // 可能来自别的卡（最近玩过的卡），一并丢掉，否则会把别的卡的人导进来。
+          const explicitCard = Boolean(chosen)
+          if (explicitCard) { texts.length = 0; seen.clear() }
           if (!chosen && probeBlob) {
             // 卡名出现在聊天内容里 → 精确命中；同时用角色名打分兜底
             const byName = loadedCards.filter(card => {
@@ -3980,7 +4082,9 @@ let worldbookCache = null
             cardScanned = 1
             for (const entry of chosen.entries) {
               const content = String(entry?.content ?? entry?.text ?? '')
-              if (content.length > 200 && content.includes('姓名')) {
+              // #27：用 NAME_HINT 统一认「姓名 / 名字 / name:」；
+              // #29：明确选定的卡再放宽到「名称/名字 + 年龄/外貌」，两种都留下。
+              if (content.length > 200 && (NAME_HINT.test(content) || (explicitCard && /名称|名字/.test(content) && /年龄|外貌|外表|长相/.test(content)))) {
                 const key = content.slice(0, 64)
                 if (!seen.has(key)) { seen.add(key); texts.push(content) }
               }
@@ -3988,10 +4092,32 @@ let worldbookCache = null
           }
 
           const worldbookText = texts.join('\n')
-          let found = charactersFromWorldbookText(worldbookText)
+          // 预览后确认：界面把勾选的候选原样送回来，不再重新抽取（模型每次抽的结果可能不一样）
+          const applyList = Array.isArray(body?.apply)
+            ? body.apply.filter(item => item && typeof item === 'object' && String(item.name ?? '').trim()).slice(0, 60)
+            : null
+          let found = applyList
+            ? applyList.map(item => Object.assign({}, item, { name: String(item.name).trim().slice(0, 40) }))
+            : charactersFromWorldbookText(worldbookText)
+          // 再从卡内条目的「正文」抠一遍：很多卡用 YAML 的 name:/age:/gender:，
+          // 真名只在正文里、标题只是「母后」这类称谓。
+          if (chosen && chosen.entries.length) {
+            const fromBody = charactersFromCardBookBody({ character_book: { entries: chosen.entries } })
+            if (fromBody.length) {
+              const known = new Set(found.map(item => String(item?.name ?? '').trim()).filter(Boolean))
+              found = [...fromBody.filter(item => !known.has(String(item.name).trim())), ...found]
+            }
+          }
 
           // 规则抽不到时让规划模型读一遍世界书
-          if (found.length < 3 && worldbookText.trim()) {
+          let llmError = ''
+          if (found.length < 3 && worldbookText.trim() && !(deps.llm && config.plannerProvider && config.plannerModel)) {
+            llmError = '没有配置规划模型（设置 → 本地生图 → 生图规划），规则也没抽出角色'
+          }
+          if (found.length < 3 && !worldbookText.trim()) {
+            llmError = '这张卡里没收集到可解析的条目：角色条目需要 >200 字，且含「姓名 / 名字 / name:」'
+          }
+          if (!applyList && found.length < 3 && worldbookText.trim()) {
             try {
               const provider = config.plannerProvider || ''
               const model = config.plannerModel || ''
@@ -4014,11 +4140,29 @@ let worldbookCache = null
                 const rawText = typeof output === 'string' ? output : String(output?.text ?? '')
                 const extracted = charactersFromExtraction(rawText)
                 if (extracted.length) found = [...extracted, ...found]
+                else llmError = '模型返回了内容，但没解析出角色（可能不是合法 JSON）'
               }
-            } catch { /* 模型不可用就用规则结果 */ }
+            } catch (error) { llmError = '模型抽取失败：' + String(error?.message ?? error).slice(0, 160) }
           }
 
+          // 选定的卡用规则和模型都没抽到人时，按卡世界书的条目名再认一遍
+          if (!applyList && explicitCard && !found.length && chosen?.raw) found = charactersFromCardBook(chosen.raw)
+          // 从选定的卡导入的新人物绑定到这张卡，只在这张卡里生效，不串到别的卡
+          if (explicitCard) found = found.map(person => Object.assign({}, person, { cards: (person.cards || []).length ? person.cards : ['cards/' + chosen.file] }))
           const existing = Array.isArray(definitions?.characters) ? definitions.characters : []
+          if (body?.dryRun === true) {
+            // 只预览：算出会新增 / 补全 / 不变的人，不写人物库
+            const trial = mergeCharacters(JSON.parse(JSON.stringify(existing)), JSON.parse(JSON.stringify(found)))
+            const verdict = name => trial.report.added.includes(name) ? 'add' : trial.report.updated.includes(name) ? 'update' : 'same'
+            sendJson(response, 200, {
+              ok: true,
+              preview: true,
+              cardName: chosen ? (chosen.name || chosen.file) : '',
+              cardPath: chosen ? 'cards/' + chosen.file : '',
+              candidates: found.map(person => ({ action: verdict(person.name), person })),
+            })
+            return
+          }
           const merged = mergeCharacters(existing, found)
           definitions = Object.assign({}, definitions, { characters: merged.characters })
           await saveDefinitions(definitions)
@@ -4027,7 +4171,7 @@ let worldbookCache = null
             added: merged.report.added,
             updated: merged.report.updated,
             skipped: merged.report.skipped,
-            scanned: scannedFiles,
+            scanned: explicitCard ? 0 : scannedFiles,
             cards: cardScanned,
             cardName: chosen ? (chosen.name || chosen.file) : '',
             session: activeGame,
@@ -4039,6 +4183,7 @@ let worldbookCache = null
             candidates: loadedCards.slice(0, 5).map(card => ({ name: card.name || card.file, entries: card.entries.length })),
 
             texts: texts.length,
+            llmError,
             state: await consoleState(),
           })
           return
@@ -4074,10 +4219,23 @@ let worldbookCache = null
             const payload = await readJson(join(dir, name), null).catch(() => null)
             const raw = payload?.raw ?? payload ?? null
             const title = String(raw?.name ?? '').trim()
-            cards.push({ path: 'cards/' + name, name: name.replace(/\.json$/i, ''), title: title || name.replace(/\.json$/i, '') })
+            cards.push({ path: 'cards/' + name, name: name.replace(/\.json$/i, ''), title: title || name.replace(/\.json$/i, ''), id: String(payload?.meta?.id ?? '') })
           }
           cards.sort((a, b) => a.title.localeCompare(b.title, 'zh'))
-          sendJson(response, 200, { ok: true, cards })
+          // 当前正在玩的卡：用会话里的卡号/卡名对上卡文件，人物库默认只看这张卡
+          let current = ''
+          try {
+            const session = String(body?.sessionId ?? _url?.searchParams?.get('sessionId') ?? '') || lastSessionId
+            const card = session ? await currentCard(session) : null
+            if (card) {
+              const cid = String(card.path ?? ''), cname = String(card.name ?? '').trim()
+              const hit = cards.find(item => item.id && item.id === cid)
+                || cards.find(item => cname && (item.title === cname || item.name === cname))
+                || cards.find(item => cid && (item.path.endsWith(cid) || cid.endsWith(item.name + '.json')))
+              current = hit ? hit.path : ''
+            }
+          } catch { current = '' }
+          sendJson(response, 200, { ok: true, cards: cards.map(({ id, ...item }) => item), current })
         } catch (error) {
           sendJson(response, 400, { ok: false, error: String(error?.message ?? error) })
         }

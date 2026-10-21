@@ -1,9 +1,6 @@
 {
   "name": "dsh-tavern-image",
-  "note": "固定正式 Release 制品；仅首次安装，后续由插件自身更新。",
-  "releaseUrl": "https://github.com/weixinlll/dsh-tavern-image/releases/tag/v2.9.1",
-  "builtFrom": "weixinlll/dsh-tavern-image",
-  "version": "2.9.1",
-  "revision": "49b5000e4ae3d67f0040f5b8e85d888403b0e5b9",
-  "sourceArchiveSha256": "a52cbc8f6f874db16b4bbc50494b81382e9611e9ea5fd7ce626e5907528bffe7"
+  "version": "3.0.2",
+  "note": "由 bin/bundled-scene-image-plugin.mjs 在 Tavern 首装时安装到 data/plugins/dsh-tavern-image/。此文件本身不安装。",
+  "builtFrom": "weixinlll/dsh-tavern-image"
 }
