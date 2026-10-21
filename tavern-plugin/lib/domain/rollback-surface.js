@@ -130,17 +130,35 @@ export function supersededRegenerationTurns({ events = [], nodes = [], keepTurns
     // Only a regeneration writes a body for round N into a later turn; a seed or
     // repair rewrite carries no story turn and leaves the opening alone.
     if (!(Number(event.data?.message?.source?.tavernStoryTurn) > 0)) continue
+    const story = Number(event.data?.message?.source?.tavernStoryTurn)
+    const currentTurn = Number(event.data?.turn)
     const round = { body: contentText(event.data?.message), turns: new Set() }
-    for (const seq of event.sourceEventSeqs || []) {
-      const original = eventAt(events, seq)
-      if (!original || original.type !== 'assistant/message') continue
-      // Only a turn that actually showed a body leaves a visible row behind; the
-      // empty markers of earlier attempts never drew anything.
-      if (contentText(original.data?.message) === '') continue
-      const turn = Number(original.data?.turn)
-      // A row for the turn that now carries the replacement stays as it is.
-      if (Number.isSafeInteger(turn) && turn > 0 && turn !== Number(event.data?.turn)) { turns.add(turn); round.turns.add(turn) }
+    const seen = new Set()
+    // A regeneration can leave an append copy in an edit turn and later replace
+    // that copy with another edit turn. The visible replacement names only the
+    // last attempt; follow the projections it superseded, or the copies from two
+    // or three rerolls back stay on the page next to the newest body.
+    function collect(sourceSeqs) {
+      for (const seq of sourceSeqs || []) {
+        if (seen.has(seq)) continue
+        seen.add(seq)
+        const original = eventAt(events, seq)
+        if (!original || original.type !== 'assistant/message') continue
+        const turn = Number(original.data?.turn)
+        if (!Number.isSafeInteger(turn) || turn <= 0 || turn === currentTurn) continue
+        // An earlier projection of the same round carries the next link of the chain.
+        if (original.surfaceOp?.op === 'replace') {
+          if (contentText(original.data?.message) !== '') { turns.add(turn); round.turns.add(turn) }
+          if (Number(original.data?.message?.source?.tavernStoryTurn) === story) collect(original.sourceEventSeqs)
+          continue
+        }
+        // Only a turn that actually showed a body leaves a visible row behind; the
+        // empty markers of earlier attempts never drew anything.
+        if (contentText(original.data?.message) === '') continue
+        turns.add(turn); round.turns.add(turn)
+      }
     }
+    collect(event.sourceEventSeqs)
     if (round.body !== '' && round.turns.size) rounds.push(round)
   }
   if (turns.size === 0 || rounds.length === 0) return [...turns].sort((left, right) => left - right)
