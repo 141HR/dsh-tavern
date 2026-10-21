@@ -2243,6 +2243,7 @@ function versionsOf(jobId) {
         setSaveState('')
       }
       const [tab, setTab] = React.useState('plan')
+      const [updateOpen, setUpdateOpen] = React.useState(false)
       const [pluginUpdateLocal, setPluginUpdateLocal] = React.useState(null)
       const [pluginUpdateCheck, setPluginUpdateCheck] = React.useState(null)
       const [pluginUpdateNote, setPluginUpdateNote] = React.useState('')
@@ -2251,9 +2252,9 @@ function versionsOf(jobId) {
       const pluginUpdateLocalInFlight = React.useRef(false)
       const pluginUpdatePendingRef = React.useRef('')
       const pluginUpdateView = React.useRef(0)
-      const pluginUpdateTabRef = React.useRef(tab)
+      const pluginUpdateTabRef = React.useRef(updateOpen)
       const pluginUpdateMounted = React.useRef(true)
-      pluginUpdateTabRef.current = tab
+      pluginUpdateTabRef.current = updateOpen
       const [note, setNote] = React.useState('')
       // 正文图片显示大小：输入过程只改草稿（绝不边输边发请求），点「保存」才发一次 /config。
       // null = 跟随已保存的配置；保存成功后回到 null，输入框显示服务端确认过的值。
@@ -2405,14 +2406,14 @@ function versionsOf(jobId) {
       const channelTestsInFlight = React.useRef({})
       React.useEffect(() => {
         const view = ++pluginUpdateView.current
-        if (tab === 'plugin-update' && !pluginUpdateLocalAttempted.current) {
+        if (updateOpen && !pluginUpdateLocalAttempted.current) {
           pluginUpdateLocalAttempted.current = true
           void loadPluginUpdateLocal()
         }
         return () => {
           if (pluginUpdateView.current === view) pluginUpdateView.current += 1
         }
-      }, [tab])
+      }, [updateOpen])
       React.useEffect(() => {
         pluginUpdateMounted.current = true
         return () => { pluginUpdateMounted.current = false; pluginUpdateView.current += 1 }
@@ -2476,7 +2477,7 @@ function versionsOf(jobId) {
         const view = pluginUpdateView.current
         try {
           const status = await jsonFetch(BASE + '/plugin-update')
-          if (view !== pluginUpdateView.current || pluginUpdateTabRef.current !== 'plugin-update') return
+          if (view !== pluginUpdateView.current || !pluginUpdateTabRef.current) return
           setPluginUpdateLocal(status)
           setPluginUpdateNote(status?.supported === false
             ? (status.reason || '当前安装方式暂不支持自动更新。')
@@ -2484,7 +2485,7 @@ function versionsOf(jobId) {
               ? '插件需要完整重启 DSH 后生效。'
               : status?.directoryMigrationRequired ? status.directoryMigrationMessage : '')
         } catch (error) {
-          if (view !== pluginUpdateView.current || pluginUpdateTabRef.current !== 'plugin-update') return
+          if (view !== pluginUpdateView.current || !pluginUpdateTabRef.current) return
           setPluginUpdateNote('读取本地插件状态失败：' + (error?.message ?? error))
         } finally {
           pluginUpdateLocalInFlight.current = false
@@ -2502,7 +2503,7 @@ function versionsOf(jobId) {
         const view = pluginUpdateView.current
         try {
           const status = await post('/plugin-update/check', {})
-          if (view !== pluginUpdateView.current || pluginUpdateTabRef.current !== 'plugin-update') return
+          if (view !== pluginUpdateView.current || !pluginUpdateTabRef.current) return
           setPluginUpdateCheck(status)
           mergePluginUpdateLocalStatus(status)
           const supported = status?.supported ?? pluginUpdateLocal?.supported
@@ -2519,7 +2520,7 @@ function versionsOf(jobId) {
                     ? (status?.canUpdate ? '发现可用更新。' : (status?.reason || '发现新版本，但当前无法自动更新。'))
                     : '当前已是最新版本。')
         } catch (error) {
-          if (view !== pluginUpdateView.current || pluginUpdateTabRef.current !== 'plugin-update') return
+          if (view !== pluginUpdateView.current || !pluginUpdateTabRef.current) return
           setPluginUpdateNote('检查更新失败：' + (error?.message ?? error))
         } finally {
           if (pluginUpdatePendingRef.current === 'check') {
@@ -2548,7 +2549,7 @@ function versionsOf(jobId) {
             ? status.message
             : [status?.message, '插件更新完成，请完整重启 DSH 后生效。'].filter(Boolean).join(' '))
         } catch (error) {
-          if (view !== pluginUpdateView.current || pluginUpdateTabRef.current !== 'plugin-update') return
+          if (view !== pluginUpdateView.current || !pluginUpdateTabRef.current) return
           setPluginUpdateNote('更新插件失败：' + (error?.message ?? error))
         } finally {
           if (pluginUpdatePendingRef.current === 'apply') {
@@ -2603,12 +2604,13 @@ function versionsOf(jobId) {
       const backendLabel = imageBackend === 'comfyui'
         ? 'ComfyUI'
         : ((providers.find(item => item.id === imageBackend) || {}).label || imageBackend)
-      const head = h('div', { style: S.card },
-        h('div', { style: { fontSize: '14px', fontWeight: 600, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+      const head = h('div', { style: Object.assign({}, S.card, { marginTop: 0 }) },
+        h('div', { style: { fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
           h('span', { style: imageBackend === 'comfyui' ? S.badge(comfyOnline) : Object.assign({}, S.badge(externalConnected), (!externalStatus || externalStatus.status === 'configured') ? { background: 'var(--dsw-alias-label-tertiary)' } : {}) }),
           h('span', null, imageBackend === 'comfyui'
             ? (comfyOnline ? ('ComfyUI 在线' + (data.comfy.version ? ' ' + data.comfy.version : '') + (data.comfy.device ? '　' + data.comfy.device : '')) : ('ComfyUI 没开' + (data.comfy && data.comfy.error ? '：' + data.comfy.error : '')))
-            : (backendLabel + (selectedChannel ? ' · ' + selectedChannel.name : ' · 尚未选择渠道') + (externalStatus?.checking ? ' · 检测中…' : externalConnected ? ' · 连接可用' : externalStatus?.status === 'configured' ? ' · 已配置，尚未验证' : externalStatus ? ' · 连接失败' : selectedChannel ? ' · 已配置，尚未验证' : ''))),
+            : (selectedChannel ? selectedChannel.name : backendLabel + ' · 尚未选择渠道') + (externalStatus?.checking ? ' · 检测中…' : externalConnected ? ' · 连接可用' : externalStatus?.status === 'configured' ? ' · 已配置，尚未验证' : externalStatus ? ' · 连接失败'
+              : !selectedChannel ? '' : selectedChannel.authMode !== 'none' && !selectedChannel.hasApiKey && !selectedChannel.hasPassword ? ' · 还没填密钥' : ' · 已配置，尚未验证')),
           imageBackend === 'comfyui' ? h('button', {
             style: { fontSize: '11px', padding: '3px 10px', borderRadius: '7px', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 45%, transparent)', background: 'transparent', color: 'var(--dsw-alias-label-tertiary)', cursor: 'pointer' },
             onClick: loadComfyStatus,
@@ -2616,46 +2618,8 @@ function versionsOf(jobId) {
           imageBackend === 'comfyui' && comfyStatus && !comfyStatus.checking ? h('span', { style: { fontSize: '11px', color: comfyStatus.ok ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-error-primary)' } },
             comfyStatus.ok ? ('✓ ' + (comfyStatus.ms || 0) + 'ms') : ('✗ ' + String(comfyStatus.error || '').slice(0, 60))) : null,
         ),
-        imageBackend === 'comfyui' ? h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } },
-          '当前画风：' + (config.comfyMode === 'simple'
-            ? ('简单模式 · ' + ({ checkpoint: 'Checkpoint（SD / SDXL）', flux: 'Flux', anima: 'Anima' }[config.comfySimple?.template] || 'Checkpoint') + ' · ' + (config.comfySimple?.template === 'checkpoint' ? (config.comfySimple?.checkpoint || '未选模型') : (config.comfySimple?.unet || '未选模型')))
-            : ((workflows.find(w => w.id === config.defaultWorkflow) || {}).label || '（没选）'))) : null,
-        h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '4px' } },
-          config.plannerEnabled ? ('规划模型：' + effective.provider + ' / ' + effective.model + (effective.fromTavern ? '（跟随 Tavern）' : '')) : '（规划已关）',
-        ),
         note ? h('div', { style: { fontSize: '12px', marginTop: '6px', color: 'var(--dsw-alias-brand-primary)' } }, note) : null,
       )
-
-      // ---- 手动生图（安全版：只读写自己的数据，不接管宿主渲染）----
-      function ManualCard() {
-        const [busy, setBusy] = React.useState(false)
-        const [note, setNote] = React.useState('')
-        async function run() {
-          if (busy) return
-          setBusy(true)
-          setNote('正在按最新一条回复规划…')
-          try {
-            const r = await post('/plan', { sessionId: lastSessionId, manual: true })
-            const ids = (r.plans || []).map(p => p.jobId).filter(Boolean)
-            if (!ids.length) { setNote('没有产出画面：' + (r.error || '模型没返回 <image> 块')); return }
-            setNote('已提交 ' + ids.length + ' 张，正在画…')
-            if (typeof openImageOverlay === 'function') openImageOverlay({ open: true, jobIds: ids, note: '本轮 ' + ids.length + ' 张', working: false })
-          } catch (error) {
-            setNote('失败：' + (error && error.message ? error.message : error))
-          } finally {
-            setBusy(false)
-          }
-        }
-        return h('div', { style: S.card },
-          h('div', { style: { fontSize: '13px', marginBottom: '4px' } }, '手动生图'),
-          h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } }, '按当前会话最新一条回复的正文生成插图。会弹出全屏看图。'),
-          h('div', { style: S.row },
-            h('button', { style: Object.assign({}, buttonStyle, { padding: '5px 16px', fontSize: '13px' }), disabled: busy, onClick: run },
-              busy ? '🎨 生成中…' : '🎨 给最新一条回复生图'),
-            note ? h('span', { style: { fontSize: '12px', color: note.startsWith('失败') || note.startsWith('没有') ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-label-tertiary)' } }, note) : null,
-          ),
-        )
-      }
 
       // ---- 后台任务（正在跑什么、能不能取消）----
       function taskPanel() {
@@ -2694,7 +2658,7 @@ function versionsOf(jobId) {
         const channel = selectedChannel
         const channelDraft = channel ? (channelSecretDrafts[channel.id] || { apiKey: '', password: '' }) : { apiKey: '', password: '' }
         const localFields = channel ? (channelDraft.fields || channel) : {}
-        const full = (extra) => Object.assign({}, S.input, { width: '100%', boxSizing: 'border-box', colorScheme: 'dark' }, extra || {})
+        const full = (extra) => Object.assign({}, S.input, { width: '100%', boxSizing: 'border-box' }, extra || {})
         const label = (text, hint) => h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '5px' } },
           text, hint ? h('span', { style: { color: 'var(--dsw-alias-label-tertiary)', marginLeft: '6px' } }, hint) : null)
         const setCfg = (patch) => setData(current => Object.assign({}, current, { config: Object.assign({}, current?.config || {}, patch) }))
@@ -2819,20 +2783,35 @@ function versionsOf(jobId) {
           if (saved) setComfySecretDrafts({ token: '', pass: '' })
           return saved
         }
+        // 先分「在线服务 / 本地部署」，再选具体服务商：本地程序要自己开着，在线服务要 Key，填的东西不一样。
+        const LOCAL_PROVIDERS = ['comfyui', 'sdwebui']
+        const isLocal = LOCAL_PROVIDERS.includes(backend)
+        const onlineOptions = providerOptions.filter(item => !LOCAL_PROVIDERS.includes(item.id))
+        const localOptions = [{ id: 'comfyui', label: 'ComfyUI' }].concat(providerOptions.filter(item => item.id === 'sdwebui'))
+        const chooseProvider = provider => {
+          if (provider === 'comfyui') { save({ imageBackend: provider }); setCfg({ imageBackend: provider }); return }
+          let selected = channels.find(item => item.provider === provider)
+          let next = channels
+          if (!selected) { selected = defaultChannel(provider); next = channels.concat(selected) }
+          persistChannelSelection(next, provider, selected.id)
+        }
+        const chooseKind = local => {
+          if (local === isLocal) return
+          if (local) { chooseProvider('comfyui'); return }
+          const used = onlineOptions.find(item => channels.some(channel => channel.provider === item.id))
+          if (used || onlineOptions[0]) chooseProvider((used || onlineOptions[0]).id)
+        }
+        const kindOptions = isLocal ? localOptions : onlineOptions
         return h('div', { style: S.card },
-          h('div', { style: { fontSize: '13px', marginBottom: '10px' } }, '生图后端'),
+          h('div', { style: Object.assign({}, S.row, { margin: '0 0 12px' }) },
+            h('button', { type: 'button', 'aria-pressed': !isLocal, style: S.tab(!isLocal), onClick: () => chooseKind(false) }, '在线服务'),
+            h('button', { type: 'button', 'aria-pressed': isLocal, style: S.tab(isLocal), onClick: () => chooseKind(true) }, '本地部署'),
+            h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, isLocal ? '在自己电脑上运行的出图程序，需要先把它开起来' : '填服务商的 API Key 即可，按张计费'),
+          ),
           h('div', { style: { marginBottom: '12px' } },
-            label('提供商'),
-            h('select', { 'aria-label': '生图提供商', value: backend, style: full(), onChange: e => {
-              const provider = e.target.value
-              if (provider === 'comfyui') { save({ imageBackend: provider }); setCfg({ imageBackend: provider }); return }
-              let selected = channels.find(item => item.provider === provider)
-              let next = channels
-              if (!selected) { selected = defaultChannel(provider); next = channels.concat(selected) }
-              persistChannelSelection(next, provider, selected.id)
-            } },
-              h('option', { value: 'comfyui', style: optStyle }, 'ComfyUI'),
-              providerOptions.map(item => h('option', { key: item.id, value: item.id, style: optStyle }, item.label + (item.id !== item.label ? '（' + item.id + '）' : ''))),
+            label(isLocal ? '本地程序' : '服务商'),
+            h('select', { 'aria-label': '生图提供商', value: backend, style: full(), onChange: e => chooseProvider(e.target.value) },
+              kindOptions.map(item => h('option', { key: item.id, value: item.id, style: optStyle }, item.label)),
             ),
           ),
           backend === 'comfyui' ? h('div', null,
@@ -3067,7 +3046,6 @@ function versionsOf(jobId) {
         const chosen = Array.isArray(config.plannerEntries) ? config.plannerEntries : []
         const active = new Set(chosen.length ? chosen : entries.filter(e => e.index <= 19 || e.index === 142).map(e => e.index))
         return h('div', null,
-          ComfyBackendCard(),
           h('div', { style: S.card },
             h('div', { style: S.row },
               h('label', { style: S.row },
@@ -3090,7 +3068,7 @@ function versionsOf(jobId) {
             h('div', { style: S.row },
               h('span', { style: S.label }, '一轮几张'),
               h('input', { type: 'number', min: 1, max: 8, value: config.plannerCount || 3, style: Object.assign({}, S.input, { width: '78px' }), onChange: e => save({ plannerCount: Number(e.target.value) || 3 }) }),
-              h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '本地出图慢，建议 2-3'),
+              ['comfyui', 'sdwebui'].includes(imageBackend) ? h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '本地出图慢，建议 2-3') : null,
             ),
             h('div', { style: S.row },
               h('span', { style: S.label }, '人物块'),
@@ -3125,8 +3103,8 @@ function versionsOf(jobId) {
               h('button', { style: buttonStyle, onClick: () => { setTab('worldbook'); setWbImportOpen(true) } }, '📥 导入世界书'),
             ),
           ),
-          h('div', { style: S.card },
-            h('div', { style: { fontSize: '13px', marginBottom: '6px' } }, '试规划（贴一段正文，看 agent 产出）'),
+          h('details', { style: S.card },
+            h('summary', { style: { fontSize: '13px', cursor: 'pointer', color: 'var(--dsw-alias-label-secondary)' } }, '试规划（贴一段正文，看 agent 产出）'),
             h('textarea', { value: planText, onChange: e => setPlanText(e.target.value), placeholder: '把一段正文贴在这里…', style: Object.assign({}, S.input, { width: '100%', minHeight: '80px', fontFamily: 'inherit' }) }),
             h('div', { style: S.row },
               h('button', { style: buttonStyle, onClick: async () => {
@@ -4803,48 +4781,6 @@ function versionsOf(jobId) {
        * 首次配置引导：新装的人打开设置页，按三步走就能用。
        * 三件都办好了就自己消失。
        */
-      function SetupGuide() {
-        const external = imageBackend !== 'comfyui'
-        const hasUrl = external ? Boolean(String(selectedChannel?.baseUrl ?? '').trim()) : Boolean(String(config.comfyUrl ?? '').trim())
-        const online = external ? externalConnected : Boolean(comfyStatus?.ok)
-        const simpleMode = !external && config.comfyMode === 'simple'
-        const simple = config.comfySimple || {}
-        const simpleTemplate = String(simple.template || 'checkpoint')
-        const simpleModel = simpleTemplate === 'checkpoint' ? simple.checkpoint : simple.unet
-        const simpleCapability = simpleInfo?.templates?.[simpleTemplate]
-        const simpleReady = Boolean(String(simpleModel || '').trim()) && (!simpleCapability || simpleCapability.available === true)
-        const hasWorkflow = external || (simpleMode ? simpleReady : (data.workflows ?? []).some(w => !w.error))
-        const hasModel = Boolean(config.plannerEnabled !== false)
-        // 前两步没做完才显示
-        if (hasUrl && online && hasWorkflow) return null
-        if (external && hasUrl && hasWorkflow && hasModel && (!externalStatus || externalStatus.status === 'configured' || externalConnected)) return null
-        const step = (n, text, done, hint) => h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '6px' } },
-          h('span', {
-            style: {
-              flexShrink: 0, width: '18px', height: '18px', borderRadius: '50%', fontSize: '11px', lineHeight: '18px', textAlign: 'center',
-              background: done ? 'color-mix(in srgb, var(--dsw-alias-state-success-primary) 20%, transparent)' : 'color-mix(in srgb, var(--dsw-alias-state-warning-primary) 18%, transparent)',
-              color: done ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-warning-primary)',
-            },
-          }, done ? '✓' : String(n)),
-          h('div', null,
-            h('div', { style: { fontSize: '13px', color: done ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-label-primary)' } }, text),
-            hint ? h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '2px' } }, hint) : null,
-          ),
-        )
-        return h('div', { style: Object.assign({}, S.card, { border: '1px solid color-mix(in srgb, var(--dsw-alias-state-warning-primary) 45%, transparent)' }) },
-          h('div', { style: { fontSize: '13px', fontWeight: 600, marginBottom: '8px', color: 'var(--dsw-alias-state-warning-primary)' } }, '还没配置好 —— 三步就能用'),
-          step(1, external ? '配置图像提供商渠道' : '填 ComfyUI 地址并测试连接', external ? hasUrl : hasUrl && online,
-            external ? (online ? '渠道探测成功。' : externalStatus?.checking ? '正在探测渠道…' : externalStatus?.status === 'configured' ? ('已配置但无法安全探测：' + (externalStatus.message || '请在服务商侧确认模型与权限。')) : externalStatus ? ('探测未通过：' + (externalStatus.message || externalStatus.error || '检查地址和鉴权。')) : '在「生图规划」标签页选择提供商，填写 API 地址、模型和鉴权，然后保存并测试。') : (online ? ('已连上 ' + (comfyStatus?.version ? 'ComfyUI ' + comfyStatus.version : 'ComfyUI')) : '在「生图规划」标签页上面的「生图后端」里填，然后点「测试连接与鉴权」')),
-          external ? null : simpleMode
-            ? step(2, '选择简单模式模板和模型', simpleReady,
-                simpleCapability?.reason || '在「画风」标签页打开简单模式、刷新模型列表并选择模型；不需要导入 JSON。')
-            : step(2, '导入一个工作流并设为默认', hasWorkflow,
-                '在「画风」标签页里，点「📥 导入工作流」，选 ComfyUI 用 API 格式导出的 JSON；也可以切换到简单模式而不导入 JSON。'),
-          step(external ? 2 : 3, '选规划模型（不选就跟随 Tavern 后台模型）', hasModel,
-            '在「生图规划」标签页的「规划模型」下拉里选；想画 NSFW 就选自己的渠道模型'),
-        )
-      }
-
       function stylePresetCard() {
         const presets = Array.isArray(config.stylePresets) ? config.stylePresets : []
         const active = String(config.activePreset ?? '')
@@ -5090,14 +5026,6 @@ function versionsOf(jobId) {
       }
 
       // ---- 工作流 ----
-      function flowTab() {
-        return h('div', null,
-          stylePresetCard(),
-          h(PromptPresetCard),
-          workflowCard(),
-        )
-      }
-
       function pluginUpdateTab() {
         const releaseMode = pluginUpdateLocal?.mode === 'release'
         const supported = releaseMode || pluginUpdateLocal?.supported === true
@@ -5190,20 +5118,30 @@ function versionsOf(jobId) {
         )
       }
 
-      const tabs = [['plan', '生图规划'], ['people', '人物库'], ['gallery', '历史图'], ['worldbook', '世界书'], ['flow', '画风'], ['plugin-update', '插件更新']]
+      const tabs = [['plan', '设置'], ['people', '人物库'], ['worldbook', '世界书'], ['gallery', '历史图']]
+      const section = text => h('div', { style: { fontSize: '14px', fontWeight: 600, margin: '18px 0 2px', color: 'var(--dsw-alias-label-primary)' } }, text)
       return h('div', { style: Object.assign({}, S.surface, { padding: '4px 2px 20px', fontSize: '13px' }) },
-        h(SetupGuide),
         head,
-        h(ManualCard),
         taskPanel(),
         h('div', { style: S.row }, tabs.map(([key, label]) => h('button', { key, style: S.tab(tab === key), onClick: () => setTab(key) }, label))),
-        tab === 'plan' ? planTab() : null,
+        // 设置页按第一次配置的顺序排：先接渠道，再定每轮怎么配图，最后是画风。
+        tab === 'plan' ? h('div', null,
+          section('渠道'),
+          ComfyBackendCard(),
+          imageBackend === 'comfyui' ? workflowCard() : null,
+          section('配图规则'),
+          planTab(),
+          section('画风'),
+          stylePresetCard(),
+          h(PromptPresetCard),
+        ) : null,
         tab === 'people' ? peopleTab() : null,
-        tab === 'flow' ? flowTab() : null,
         tab === 'gallery' ? galleryTab() : null,
         tab === 'worldbook' ? worldbookTab() : null,
-        tab === 'plugin-update' ? pluginUpdateTab() : null,
-        h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '14px' } }, '人物与服装修改后请点「保存人物库」。'),
+        tab === 'people' ? h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '14px' } }, '人物与服装修改后请点「保存人物库」。') : null,
+        h('details', { style: { marginTop: '22px', fontSize: '12px' }, onToggle: event => setUpdateOpen(event.currentTarget.open) },
+          h('summary', { style: { cursor: 'pointer', color: 'var(--dsw-alias-label-tertiary)' } }, '插件版本与更新' + (pluginUpdateLocal?.currentVersion ? '（当前 ' + pluginUpdateLocal.currentVersion + '）' : '')),
+          updateOpen ? pluginUpdateTab() : null),
         // 注意：openWorkflow 定义在 workflow 标签页函数内部，这里跨作用域调用会 ReferenceError。
         // 保存后只做本层能做的收尾：关掉编辑器、清掉旧详情，让用户重新点开时读到新数据。
         wfGraphFile ? h(WorkflowGraphEditor, {

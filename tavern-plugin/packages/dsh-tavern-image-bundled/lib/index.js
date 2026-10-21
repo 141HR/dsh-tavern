@@ -1450,7 +1450,7 @@ function createRuntime(ctx, overrides, logger, deps) {
         // Simple mode owns its dimensions. Keep the old default size dropdown from rewriting them.
         params.size = `${simpleBuild.config.width}x${simpleBuild.config.height}`
       }
-      if (!channel && !workflow) throw new Error('没有可用的工作流（检查控制台「画风」页）')
+      if (!channel && !workflow) throw new Error('没有可用的工作流（到 设置 → 配图 的「渠道」里选择工作流或简单模式）')
       const defsForTurn = applyCharacterSnapshot(definitions, rawParams?.characterSnapshot)
       const card = await currentCard(rawParams?.sessionId || lastSessionId, rawParams?.turn)
       const scopedDefs = card
@@ -5310,7 +5310,7 @@ export function compileJob({ workflow, params, config, definitions, onStage = nu
     if (Object.hasOwn(node.inputs ?? {}, 'batch_size') && typeof node.inputs.batch_size === 'number') node.inputs.batch_size = 1
   }
 
-  // 应用 LoRA：按工作流自己的 LoRA 列表（在「画风」页里改）写回节点。
+  // 应用 LoRA：按工作流自己的 LoRA 列表（在 设置 → 配图 的「渠道」里改）写回节点。
   // 停用一条 = 把两个权重都设 0（ComfyUI 里 0 就等于不生效），而不是删节点，保证连线不坏。
   const loraApplied = []
   for (const lora of workflow.bindings.loras ?? []) {
