@@ -878,6 +878,8 @@ window.__ModuleLoader__.load({
 
 // @include modules/conversation-settings.js
 // @include features/conversation-header.js
+// @include-domain play-interaction-flow.js
+// @include features/play-interaction-panels.js
 // @include features/play-controls.js
 
 // @include features/request-context.js
