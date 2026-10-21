@@ -4273,6 +4273,8 @@ export async function apply(ctx) {
       const chat = window ? window.chat : await chatForSession(sessionId)
       if (chat === undefined) throw new Error('当前会话没有绑定人物卡')
       const activity = backgroundTasks.activity(chat)
+      // The next turn's preparation (worldbook pool, style reference) gives way.
+      if (activity.busy && ['worldbook-filter', 'style-reference'].includes(activity.role)) { await worldbookPrefilter.cancel(chat.id); continue }
       if (activity.busy) throw new Error('后台 Agent 正在运行，请稍候')
       if (Object.values(storyTimeline.inspect({ chat }).operations || {}).some(operation => operation.kind === 'body' && operation.status === 'running')) {
         throw new Error('正文正在生成，请等待完成后再重新结算')
@@ -4568,6 +4570,7 @@ export async function apply(ctx) {
     sessions: { get: id => ctx.get('agents')?.get(id), flush: session => sessionStore.flush(session) },
     timeline: storyTimeline,
     activity: chat => backgroundTasks.activity(chat),
+    cancelPreparation: chatId => worldbookPrefilter.cancel(chatId),
     project: async (text, chat) => {
       const extensions = await readCardExtensions(chat.cardPath, chat)
       return projectRuntimeReply(text, { charName: chat.cardName, macroState: chat.macroState,
