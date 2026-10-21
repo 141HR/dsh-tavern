@@ -2,7 +2,7 @@
 // settings panels are supplied explicitly rather than read from play-controls.
 function createConversationSettingsModule({
     React, rpc, useLiveTavernView, useTavernSessionMode, isPlayMode,
-    invalidateView, notifyTavernDataChanged, notifyImageSettingsChanged,
+    invalidateView, notifyTavernDataChanged,
     UserPreferenceProfileTab, TavernConversationWritingSkills, backgroundModelLabel
 }) {
     function TavernConversationPreset(props) {
@@ -193,22 +193,19 @@ function createConversationSettingsModule({
         const [catalog, setCatalog] = React.useState([]);
         const [selection, setSelection] = React.useState(null);
         const [tasks, setTasks] = React.useState({ variables: true, posture: true });
-        const [features, setFeatures] = React.useState({ webSearchEnabled: false, sceneImagesEnabled: false, sceneImagesAvailable: false, mvuCard: false });
+        const [features, setFeatures] = React.useState({ webSearchEnabled: false, mvuCard: false });
         const [loaded, setLoaded] = React.useState(false);
         const [busy, setBusy] = React.useState(false);
         const [error, setError] = React.useState("");
         const [notice, setNotice] = React.useState("");
         const [reasoning, setReasoning] = React.useState({ key: "", value: null, error: "" });
-        const [imageSelection, setImageSelection] = React.useState(null);
-        const [imageReasoning, setImageReasoning] = React.useState({ key: "", value: null });
         const key = selection ? JSON.stringify({ provider: selection.provider, model: selection.model }) : "";
-        const imageKey = imageSelection ? JSON.stringify({ provider: imageSelection.provider, model: imageSelection.model }) : "";
         async function load() {
             setError("");
             try {
                 const result = await rpc("getConversationBackgroundConfig", { sessionId: props.sessionId }, props.sessionId);
-                setCatalog(result.modelCatalog || []); setSelection(result.backgroundModel); setImageSelection(result.imageModel || null);
-                setTasks(result.backgroundTasks); setFeatures({ webSearchEnabled: result.webSearchEnabled === true, sceneImagesEnabled: result.sceneImagesEnabled === true, sceneImagesAvailable: result.sceneImagesAvailable === true, mvuCard: result.mvuCard === true }); setLoaded(true);
+                setCatalog(result.modelCatalog || []); setSelection(result.backgroundModel);
+                setTasks(result.backgroundTasks); setFeatures({ webSearchEnabled: result.webSearchEnabled === true, mvuCard: result.mvuCard === true }); setLoaded(true);
             } catch (err) { setError(String(err.message || err)); }
         }
         React.useEffect(() => { void load(); }, []);
@@ -219,28 +216,18 @@ function createConversationSettingsModule({
             }, err => { if (active) setReasoning({ key, value: null, error: String(err.message || err) }); });
             return () => { active = false; };
         }, [key]);
-        React.useEffect(() => {
-            let active = true;
-            if (imageKey) rpc("getBackgroundModelReasoning", JSON.parse(imageKey), props.sessionId).then(result => {
-                if (active) setImageReasoning({ key: imageKey, value: result.reasoning });
-            }, () => { if (active) setImageReasoning({ key: imageKey, value: null }); });
-            return () => { active = false; };
-        }, [imageKey]);
         async function save(patch) {
             if (busy || !loaded) return;
             setBusy(true); setError(""); setNotice("");
             try {
                 const result = await rpc("setConversationBackgroundConfig", Object.assign({ sessionId: props.sessionId, backgroundModel: selection }, patch), props.sessionId);
-                setSelection(result.backgroundModel); setImageSelection(result.imageModel || null); setTasks(result.backgroundTasks); setFeatures({ ...features, webSearchEnabled: result.webSearchEnabled, sceneImagesEnabled: result.sceneImagesEnabled });
+                setSelection(result.backgroundModel); setTasks(result.backgroundTasks); setFeatures({ ...features, webSearchEnabled: result.webSearchEnabled });
                 setNotice("已保存");
-                notifyImageSettingsChanged();
                 invalidateView(props.sessionId);
             } catch (err) { setError(String(err.message || err)); }
             finally { setBusy(false); }
         }
         const efforts = reasoning.key === key ? reasoning.value?.efforts || [] : [];
-        const imageEfforts = imageReasoning.key === imageKey ? imageReasoning.value?.efforts || [] : [];
-        const imageKnown = !imageSelection || catalog.some(group => group.provider === imageSelection.provider && group.models.some(model => model.id === imageSelection.model));
         const modelOptions = () => catalog.map(group => h("optgroup", { key: group.provider, label: group.providerName || group.provider }, group.models.map(model => h("option", { key: model.id, value: JSON.stringify({ provider: group.provider, model: model.id }) }, model.name || model.id))));
         const known = !selection || catalog.some(group => group.provider === selection.provider && group.models.some(model => model.id === selection.model));
         const toggle = (name, title, description, checked, patch) => h("label", { key: name, className: "dsh-tavern-background-task" },
@@ -254,13 +241,7 @@ function createConversationSettingsModule({
                     !known ? h("option", { value: key }, backgroundModelLabel(selection, catalog) + "（当前不可用）") : null,
                     modelOptions())),
                 h("label", null, "推理强度", h("select", { "aria-label": "本局后台推理强度", className: "dsh-tavern-settings-select", value: selection?.reasoningEffort || "", disabled: !key || !efforts.length || busy, onChange: event => { const next = { ...selection }; if (event.target.value) next.reasoningEffort = event.target.value; else delete next.reasoningEffort; return save({ backgroundModel: next }); } },
-                    h("option", { value: "" }, key ? "模型默认" : "跟随前台"), efforts.map(item => h("option", { key: item.id, value: item.id }, item.name || item.id)))),
-                features.sceneImagesAvailable ? h("label", null, "生图 Agent 模型", h("select", { "aria-label": "本局生图 Agent 模型", className: "dsh-tavern-settings-select", value: imageKey, disabled: !loaded || busy, onChange: event => { return save({ imageModel: event.target.value ? JSON.parse(event.target.value) : null }); } },
-                    h("option", { value: "" }, "跟随前台（最低推理强度）"),
-                    !imageKnown ? h("option", { value: imageKey }, backgroundModelLabel(imageSelection, catalog) + "（当前不可用）") : null,
-                    modelOptions())) : null,
-                features.sceneImagesAvailable && imageKey ? h("label", null, "生图推理强度", h("select", { "aria-label": "本局生图 Agent 推理强度", className: "dsh-tavern-settings-select", value: imageSelection?.reasoningEffort || "", disabled: !imageEfforts.length || busy, onChange: event => { const next = { ...imageSelection }; if (event.target.value) next.reasoningEffort = event.target.value; else delete next.reasoningEffort; return save({ imageModel: next }); } },
-                    h("option", { value: "" }, "模型默认"), imageEfforts.map(item => h("option", { key: item.id, value: item.id }, item.name || item.id)))) : null),
+                    h("option", { value: "" }, key ? "模型默认" : "跟随前台"), efforts.map(item => h("option", { key: item.id, value: item.id }, item.name || item.id))))),
             h("section", { className: "dsh-local-section" }, h("h3", null, "功能"),
                 features.mvuCard ? toggle("variables", "变量结算", "关闭后变量和状态栏不再更新。", tasks.variables, checked => ({ backgroundTasks: { variables: checked } })) : null,
                 toggle("posture", "人物姿势", "每轮总结人物的位置、动作和姿势，供前台保持一致。", tasks.posture, checked => ({ backgroundTasks: { posture: checked } })),

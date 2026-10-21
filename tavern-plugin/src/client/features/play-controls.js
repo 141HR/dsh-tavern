@@ -4,7 +4,6 @@
                 React, rpc, useLiveTavernView, useTavernSessionMode, isPlayMode,
                 invalidateView: sessionId => liveTavernView.invalidate(sessionId),
                 notifyTavernDataChanged,
-                notifyImageSettingsChanged: () => window.dispatchEvent(new CustomEvent("dsh-tavern-image-settings-changed")),
                 UserPreferenceProfileTab, TavernConversationWritingSkills, backgroundModelLabel
             });
 			function TavernConversationExportAction(props) {
@@ -918,8 +917,7 @@
 			const h = React.createElement;
 			if (!sessionMode) return null;
 			if (address) return isPlayMode(sessionMode) ? h("div", { className: "dsh-tavern-dock-actions" },
-				h(TavernStopBackgroundAction, { sessionId: ownerSessionId }),
-				h(TavernImageAgentUndoAction, { parentSessionId: ownerSessionId, agentSessionId: props.sessionId, running })) : null;
+				h(TavernStopBackgroundAction, { sessionId: ownerSessionId })) : null;
 			return h("div", { className: "dsh-tavern-dock-actions" },
 				isPlayMode(sessionMode) && latestMessageId ? React.createElement(CandidateAction, Object.assign({}, props, { messageId: latestMessageId })) : null,
 				isPlayMode(sessionMode) && live.view && !live.view.canClearIncompleteReply ? React.createElement(TavernPluginComposerActions, { sessionId: props.sessionId, turn: imageTurn, running: running }) : null,
@@ -1032,32 +1030,6 @@
 		}
 		// @include background-suppression.js
 		const pollBackgroundSuppression = createBackgroundSuppressionPoller(rpc);
-		// Undo the scene-image agent's latest drawing conversation; pictures stay.
-		function TavernImageAgentUndoAction(props) {
-			const h = React.createElement;
-			const [available, setAvailable] = React.useState(false);
-			const [status, setStatus] = React.useState("");
-			const askConfirm = useTavernConfirm(props.agentSessionId);
-			React.useEffect(function () {
-				setAvailable(false); setStatus("");
-				let active = true;
-				rpc("getImageAgentUndo", { parentSessionId: props.parentSessionId, agentSessionId: props.agentSessionId })
-					.then(function (result) { if (active) setAvailable(result.available === true); }, function () {});
-				return function () { active = false; };
-			}, [props.parentSessionId, props.agentSessionId]);
-			if (!available) return null;
-			async function undo() {
-				if (!await askConfirm("撤销文生图 Agent 最近一轮对话？\n\n已画好的图片会保留，只是 Agent 不再记得那次画图的过程。")) return;
-				setStatus("busy");
-				try {
-					const result = await rpc("undoImageAgentTurn", { parentSessionId: props.parentSessionId, agentSessionId: props.agentSessionId });
-					setStatus(result.undone ? "" : "empty");
-					window.dispatchEvent(new CustomEvent("dsh-tavern-background-history-changed", { detail: { sessionId: props.agentSessionId } }));
-				} catch (err) { setStatus(""); tavernErrorHub.report("撤销文生图对话", err); }
-			}
-			return h("button", { type: "button", className: "dsh-tavern-choice-trigger", disabled: status === "busy" || props.running, title: "撤销最近一轮画图对话；图片保留", onClick: undo },
-				status === "busy" ? "撤销中…" : status === "empty" ? "没有可撤销的对话" : "撤销最近一轮");
-		}
 		function TurnHistoryProjection(props) {
 			const running = props.useSession(function (snapshot) { return snapshot.running; });
 			const latestMessageId = props.useChat(latestTavernAssistantMessageId);

@@ -5,7 +5,7 @@ import { openTavernSettings } from './fixtures/tavern-settings-browser.mjs'
 function fixture() {
   let fail = false
   let settings = { defaultForegroundModel: null, defaultBackgroundModel: null,
-    defaultPlaySettings: { playerName: '你', statusBarPlacement: 'sidebar', backgroundTasks: { variables: true, posture: true }, webSearchEnabled: false, sceneImagesEnabled: false } }
+    defaultPlaySettings: { playerName: '你', statusBarPlacement: 'sidebar', backgroundTasks: { variables: true, posture: true }, webSearchEnabled: false } }
   return {
     setFail(value) { fail = value },
     respond(method, args) {

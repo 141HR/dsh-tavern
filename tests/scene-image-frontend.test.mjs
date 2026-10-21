@@ -153,7 +153,7 @@ test('gallery ignores an old session response and keeps the newest of overlappin
   assert.ok(urls.every(url => !url.includes('stale-')))
 })
 
-test('disabled native illustration remains visible without generation controls; gallery deletes the selected plugin image in its session', async t => {
+test('an old native illustration is shown read-only; gallery deletes the selected plugin image in its session', async t => {
   const calls = []
   const h = componentHarness(declaration(gallerySource, 'SceneImageGallery'), {
     rpc: async (method, args, sessionId) => {
@@ -183,46 +183,18 @@ test('disabled native illustration remains visible without generation controls; 
 
   const Illustration = vm.runInNewContext(`(${declaration(rendererSource, 'SceneIllustration')})`, {
     React: hReact(),
-    useTavernConfirm: () => async () => true,
     useSceneImageRecord: () => null,
-    sceneImageStageLabel: () => '',
-    sceneImageRequestId: () => 'unused',
-    sceneImagePurchaseConfirmation: async () => undefined,
-    recordImageInteraction() {},
-    rpc: async () => { throw new Error('disabled illustration must not invoke generation') },
-    window: { dispatchEvent() {} },
-    CustomEvent: function (type, init) { return { type, ...init } },
+    rpc: async () => { throw new Error('an old illustration must not call the server') },
     URLSearchParams,
-    openSceneImagePreview() {},
-    DshUi: {},
-    SceneImagePending: 'pending'
+    openSceneImagePreview() {}
   })
-  const legacyTree = Illustration({ sessionId: 'session-B', turn: 1, canAdd: false, record: {
-    enabled: false, key: 'legacy-key', status: 'ready', versions: [{ id: 'legacy-v1', description: 'legacy art', createdAt: 1 }],
-    reference: { bindings: [], supported: false, warning: '' }, profile: 'legacy'
+  const legacyTree = Illustration({ sessionId: 'session-B', turn: 1, record: {
+    key: 'legacy-key', versions: [{ id: 'legacy-v1', description: 'legacy art', createdAt: 1 }]
   } })
   const legacyImages = walk(legacyTree, node => node.type === 'img')
   assert.equal(legacyImages.length, 1)
   assert.ok(legacyImages[0].props.src.includes('legacy-v1'))
-  const labels = walk(legacyTree, node => node.type === 'button').map(node => node.children.join(''))
-  assert.ok(labels.includes('删除图片'))
-  assert.ok(!labels.some(label => ['重画', '改提示词', '新增插图', '同方案重画'].includes(label)))
-
-  let generationCalls = 0
-  const NativeAction = vm.runInNewContext(`(${declaration(gallerySource, 'SceneImageAction')})`, {
-    React: hReact(),
-    useTavernConfirm: () => async () => true,
-    useSceneImageRecord: () => ({ enabled: false, key: 'legacy-key', status: 'idle', versions: [] }),
-    sceneImageRequestId: () => 'unused',
-    sceneImagePurchaseConfirmation: async () => undefined,
-    recordImageInteraction() {},
-    rpc: async () => { generationCalls++; return {} },
-    DshUi: { Tooltip: 'tooltip' },
-    window: { dispatchEvent() {} },
-    CustomEvent: function (type, init) { return { type, ...init } }
-  })
-  assert.equal(NativeAction({ sessionId: 'session-B', turn: 1 }), null)
-  assert.equal(generationCalls, 0)
+  assert.deepEqual(walk(legacyTree, node => node.type === 'button'), [], 'no drawing or deleting under the picture')
 })
 
 test('gallery sends selected native and plugin pictures together with their session scope', async t => {

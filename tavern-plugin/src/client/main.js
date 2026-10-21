@@ -435,7 +435,6 @@ window.__ModuleLoader__.load({
 				else request.signal.addEventListener("abort", releaseViewRead, { once: true });
 			}
 			if (requestOptions && requestOptions.keepalive === true) request.keepalive = true;
-			if (method === "generateSceneImage") recordImageInteraction(payload.sessionId, payload.turn, payload.requestId, "sent");
 			const responsePromise = controlChannel
 				? Promise.resolve().then(() => controlChannel.control(method, JSON.parse(requestBody), requestOptions && requestOptions.signal))
 				: fetch("/api/dsh-tavern/" + method, request).then(async function (response) {
@@ -477,7 +476,6 @@ window.__ModuleLoader__.load({
 				const newer = viewRead && viewRead.current();
 				if (newer) return newer.view && newer.view.historyWindow ? {...newer,view:expandTavernOpeningWindow(newer.view)} : newer;
                 if (trace) trace.failed = true;
-				if (method === "generateSceneImage") recordImageInteraction(payload.sessionId, payload.turn, payload.requestId, "failed", "rpc-error");
 				throw error;
 			}).finally(function () {
 				if (viewRead) viewRead.release();
@@ -492,10 +490,6 @@ window.__ModuleLoader__.load({
                 }
                 if (elapsed >= 1000) { pagePerformance.slowRpcCount++; pagePerformance.slowRpcMaxMs = Math.max(pagePerformance.slowRpcMaxMs, elapsed); }
 			});
-		}
-
-		function recordImageInteraction(sessionId, turn, requestId, stage, reason) {
-			void rpc("recordSceneImageInteraction", { turn: turn, requestId: requestId, stage: stage, reason: reason }, sessionId).catch(function () {});
 		}
 
 		function rpcWithTimeout(method, args, sessionId) {
@@ -1051,20 +1045,6 @@ window.__ModuleLoader__.load({
 					label: function () { return "DSH Tavern"; }
 				}, TavernSettingsSection); });
 			}, "dsh-tavern: settings section");
-			ctx.effect(function () {
-				let dispose = null, active = true;
-				// Releases without scene images get no page at all.
-				rpc("getTavernSettings").then(function (result) {
-					if (!active || !(result.releaseCapabilities && result.releaseCapabilities.sceneImages)) return;
-					dispose = slots.inject("settings.section", function () { return slots.register({
-						name: "settings.section",
-						id: "dsh-tavern-scene-images",
-						order: 111,
-						label: function () { return "场景生图"; }
-					}, function () { return React.createElement("div", { className: "dsh-tavern-settings-section dsh-tavern-global-settings" }, React.createElement(SceneImageSettings, null)); }); });
-				}, function () {});
-				return function () { active = false; if (typeof dispose === "function") dispose(); };
-			}, "dsh-tavern: scene image settings section");
 			ctx.effect(function () {
 				return slots.inject("settings.section", function () { return slots.register({
 					name: "settings.section",
