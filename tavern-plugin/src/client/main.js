@@ -1194,6 +1194,7 @@ window.__ModuleLoader__.load({
         exports.tavernProviderRefusalNotice = tavernProviderRefusalNotice;
         exports.tavernModelRefusalNotice = tavernModelRefusalNotice;
         exports.renderTavernProjection = renderTavernProjection;
+		exports.latestTavernUserTurn = latestTavernUserTurn;
 		exports.createConversationLifecycleModule = createConversationLifecycleModule;
 		exports.createConversationHostAdapter = createConversationHostAdapter;
 		exports.createConversationPrewarmModule = createConversationPrewarmModule;

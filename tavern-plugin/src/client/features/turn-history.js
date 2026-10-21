@@ -64,15 +64,19 @@
 			const location = node && node.location;
 			return location && (location.kind === "turn" || location.kind === "step") ? Number(location.turn && location.turn.turn) || 0 : 0;
 		}
-		// The last player input is the only message the quick edit action offers.
-		// The user node has no turn of its own; the next assistant/step node does.
-		function latestTavernUserTurn(snapshot) {
+		// The last player input the page actually shows is the only message the quick
+		// edit action offers. The user node has no turn of its own; the next
+		// assistant/step node does. Rolled back, failed and regenerated turns stay in
+		// the host's node list forever (only their rows are hidden), so the row plan
+		// decides which input is really the visible tail.
+		function latestTavernUserTurn(snapshot, plan) {
 			const nodes = snapshot && snapshot.legacy && snapshot.legacy.nodes || [];
 			let turn = 0;
 			for (let index = nodes.length - 1; index >= 0; index -= 1) {
 				const node = nodes[index];
 				turn = nodeTurn(node) || turn;
-				if (node.kind === "user") return turn;
+				if (node.kind !== "user") continue;
+				if (tavernPlanShowsRow(plan, turn, "user")) return turn;
 			}
 			return 0;
 		}

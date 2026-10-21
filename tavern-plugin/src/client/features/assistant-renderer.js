@@ -324,7 +324,7 @@
 				const location = props.node.location;
 				const turnRef = location && (location.kind === "turn" || location.kind === "step") ? location.turn : null;
 				const turn = turnRef ? Number(turnRef.turn) : 0;
-				const liveState = useScopedLiveTavernView(props.sessionId, String(data.time || ""), [["mode"], ["canEditBody"], ["replayFailedTurn"], ["editableUserInputTurns"], ["failedUserInputTurns"], ["inputSources", String(turn)], ["inputTemplateDisplays", String(turn)], ["userInputEdits", String(turn)]]);
+				const liveState = useScopedLiveTavernView(props.sessionId, String(data.time || ""), [["mode"], ["canEditBody"], ["replayFailedTurn"], ["editableUserInputTurns"], ["failedUserInputTurns"], ["transcriptTurns"], ["transcriptFrom"], ["inputSources", String(turn)], ["inputTemplateDisplays", String(turn)], ["userInputEdits", String(turn)]]);
 				const parts = userContentParts(data.content);
 				// The host keeps rendering the original append node; an edited player
 				// input is carried back by the view instead (see bodyEditor.saveUser).
@@ -341,7 +341,14 @@
 						copyTimer.current = window.setTimeout(function () { copyTimer.current = null; setCopied(false); }, 1000);
 					});
 				}
-				const latestUserTurn = props.useChat(latestTavernUserTurn);
+				// The row plan hides rolled-back and superseded turns, but the host keeps
+				// drawing their nodes forever. Name the last input the page shows, not
+				// the last one the log ever appended.
+				const transcriptTurns = liveState.view?.transcriptTurns;
+				const transcriptFrom = liveState.view?.transcriptFrom;
+				const latestUserTurn = props.useChat(React.useCallback(function (snapshot) {
+					return latestTavernUserTurn(snapshot, transcriptTurns ? { turns: transcriptTurns, from: transcriptFrom } : null);
+				}, [transcriptTurns, transcriptFrom]));
 				const selectAssistantId = React.useCallback(function (snapshot) { return tavernAssistantMessageIdForTurn(snapshot, turn); }, [turn]);
 				const assistantMessageId = props.useChat(selectAssistantId);
 				const forkState = useScopedLiveTavernView(props.sessionId, "user-fork:" + String(assistantMessageId || ""), [["mode"], ["forkTurnsByMessageId", String(assistantMessageId || "")]]);

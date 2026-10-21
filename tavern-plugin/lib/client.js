@@ -14174,7 +14174,7 @@ function bindTavernFontZoom(node, win) {
 				const location = props.node.location;
 				const turnRef = location && (location.kind === "turn" || location.kind === "step") ? location.turn : null;
 				const turn = turnRef ? Number(turnRef.turn) : 0;
-				const liveState = useScopedLiveTavernView(props.sessionId, String(data.time || ""), [["mode"], ["canEditBody"], ["replayFailedTurn"], ["editableUserInputTurns"], ["failedUserInputTurns"], ["inputSources", String(turn)], ["inputTemplateDisplays", String(turn)], ["userInputEdits", String(turn)]]);
+				const liveState = useScopedLiveTavernView(props.sessionId, String(data.time || ""), [["mode"], ["canEditBody"], ["replayFailedTurn"], ["editableUserInputTurns"], ["failedUserInputTurns"], ["transcriptTurns"], ["transcriptFrom"], ["inputSources", String(turn)], ["inputTemplateDisplays", String(turn)], ["userInputEdits", String(turn)]]);
 				const parts = userContentParts(data.content);
 				// The host keeps rendering the original append node; an edited player
 				// input is carried back by the view instead (see bodyEditor.saveUser).
@@ -14191,7 +14191,14 @@ function bindTavernFontZoom(node, win) {
 						copyTimer.current = window.setTimeout(function () { copyTimer.current = null; setCopied(false); }, 1000);
 					});
 				}
-				const latestUserTurn = props.useChat(latestTavernUserTurn);
+				// The row plan hides rolled-back and superseded turns, but the host keeps
+				// drawing their nodes forever. Name the last input the page shows, not
+				// the last one the log ever appended.
+				const transcriptTurns = liveState.view?.transcriptTurns;
+				const transcriptFrom = liveState.view?.transcriptFrom;
+				const latestUserTurn = props.useChat(React.useCallback(function (snapshot) {
+					return latestTavernUserTurn(snapshot, transcriptTurns ? { turns: transcriptTurns, from: transcriptFrom } : null);
+				}, [transcriptTurns, transcriptFrom]));
 				const selectAssistantId = React.useCallback(function (snapshot) { return tavernAssistantMessageIdForTurn(snapshot, turn); }, [turn]);
 				const assistantMessageId = props.useChat(selectAssistantId);
 				const forkState = useScopedLiveTavernView(props.sessionId, "user-fork:" + String(assistantMessageId || ""), [["mode"], ["forkTurnsByMessageId", String(assistantMessageId || "")]]);
@@ -20427,15 +20434,19 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 			const location = node && node.location;
 			return location && (location.kind === "turn" || location.kind === "step") ? Number(location.turn && location.turn.turn) || 0 : 0;
 		}
-		// The last player input is the only message the quick edit action offers.
-		// The user node has no turn of its own; the next assistant/step node does.
-		function latestTavernUserTurn(snapshot) {
+		// The last player input the page actually shows is the only message the quick
+		// edit action offers. The user node has no turn of its own; the next
+		// assistant/step node does. Rolled back, failed and regenerated turns stay in
+		// the host's node list forever (only their rows are hidden), so the row plan
+		// decides which input is really the visible tail.
+		function latestTavernUserTurn(snapshot, plan) {
 			const nodes = snapshot && snapshot.legacy && snapshot.legacy.nodes || [];
 			let turn = 0;
 			for (let index = nodes.length - 1; index >= 0; index -= 1) {
 				const node = nodes[index];
 				turn = nodeTurn(node) || turn;
-				if (node.kind === "user") return turn;
+				if (node.kind !== "user") continue;
+				if (tavernPlanShowsRow(plan, turn, "user")) return turn;
 			}
 			return 0;
 		}
@@ -23915,6 +23926,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
         exports.tavernProviderRefusalNotice = tavernProviderRefusalNotice;
         exports.tavernModelRefusalNotice = tavernModelRefusalNotice;
         exports.renderTavernProjection = renderTavernProjection;
+		exports.latestTavernUserTurn = latestTavernUserTurn;
 		exports.createConversationLifecycleModule = createConversationLifecycleModule;
 		exports.createConversationHostAdapter = createConversationHostAdapter;
 		exports.createConversationPrewarmModule = createConversationPrewarmModule;
