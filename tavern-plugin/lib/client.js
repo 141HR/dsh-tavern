@@ -11970,6 +11970,39 @@ function bindTavernFontZoom(node, win) {
 			return "/api/dsh-tavern/plugin-media?" + new URLSearchParams(query).toString();
 		}
 
+		// What the 配图 button is doing for a turn, shown in that turn's text: a placeholder while the
+		// illustrator plans the pictures, then a short note when it skipped or failed.
+		const tavernIllustrationDrafts = (function () {
+			const states = new Map(), listeners = new Set();
+			function emit() { Array.from(listeners).forEach(function (listener) { listener(); }); }
+			return {
+				get: function (sessionId, turn) { return states.get(sessionId + ":" + turn) || null; },
+				set: function (sessionId, turn, value) { const key = sessionId + ":" + turn; if (value) states.set(key, value); else states.delete(key); emit(); },
+				subscribe: function (listener) { listeners.add(listener); return function () { listeners.delete(listener); }; }
+			};
+		})();
+		const TAVERN_ILLUSTRATION_NOTICE_MS = 8000;
+		async function runTavernIllustrator(illustrator, sessionId, turn) {
+			const planning = { planning: true };
+			tavernIllustrationDrafts.set(sessionId, turn, planning);
+			let draft = null;
+			try {
+				const result = await illustrator.draw({ gameId: sessionId, turn: turn });
+				const notice = result && typeof result.notice === "string" ? result.notice.trim() : "";
+				if (notice) draft = { text: notice.slice(0, 200) };
+			} catch (error) { draft = { text: String(error && error.message || error).slice(0, 200), failed: true }; }
+			if (tavernIllustrationDrafts.get(sessionId, turn) !== planning) return;
+			tavernIllustrationDrafts.set(sessionId, turn, draft);
+			if (draft) setTimeout(function () { if (tavernIllustrationDrafts.get(sessionId, turn) === draft) tavernIllustrationDrafts.set(sessionId, turn, null); }, TAVERN_ILLUSTRATION_NOTICE_MS);
+		}
+		function TavernIllustrationDraft(props) {
+			const subscribe = React.useCallback(function (listener) { return tavernIllustrationDrafts.subscribe(listener); }, []);
+			const draft = React.useSyncExternalStore(subscribe, function () { return tavernIllustrationDrafts.get(props.sessionId, props.turn); });
+			if (!draft) return null;
+			return React.createElement("figure", { className: "dsh-tavern-plugin-media dsh-tavern-illustration" },
+				React.createElement("div", { className: draft.failed ? "dsh-tavern-plugin-media-failed" : "dsh-tavern-plugin-media-pending", role: draft.failed ? "alert" : "status" }, draft.planning ? "正在整理画面…" : draft.text));
+		}
+
 		// Tavern's illustration card around a picture an illustrator plugin drew: earlier versions,
 		// redraw / edit prompt / add, delete, progress and the plugin's own extra buttons.
 		function TavernIllustrationCard(props) {
@@ -14592,7 +14625,8 @@ function bindTavernFontZoom(node, win) {
 					return React.createElement(TavernPluginMediaItem, { key: item.id, item: item, sessionId: props.sessionId, turn: storyTurn });
 				})) : null;
 				const pluginActions = playView && settled ? React.createElement(TavernPluginMessageActions, { sessionId: props.sessionId, turn: storyTurn, settled: settled }) : null;
-				return React.createElement("div", { ref:historyNode, className: "dsh-tavern-assistant", "data-streaming": data.status === "running" || undefined }, body, refusalNode, pendingMessage, pluginMediaNode, trailingIllustration, pluginActions, mvuReceiptNode, inlineStatus);
+				const illustrationDraft = playView && settled ? React.createElement(TavernIllustrationDraft, { sessionId: props.sessionId, turn: storyTurn }) : null;
+				return React.createElement("div", { ref:historyNode, className: "dsh-tavern-assistant", "data-streaming": data.status === "running" || undefined }, body, refusalNode, pendingMessage, pluginMediaNode, illustrationDraft, trailingIllustration, pluginActions, mvuReceiptNode, inlineStatus);
 			}
 			function TavernForkAssistantAction(props) {
 				const liveState = useScopedLiveTavernView(props.sessionId, String(props.messageId || ""), [["mode"], ["forkTurnsByMessageId", String(props.messageId || "")]]);
@@ -14625,11 +14659,11 @@ function bindTavernFontZoom(node, win) {
 			}
 			function TavernPluginIllustrateAction(props) {
 				const [busy, setBusy] = React.useState(false);
+				// Progress and outcome show in the turn's text (TavernIllustrationDraft), not here.
 				async function draw() {
 					if (busy) return;
 					setBusy(true);
-					try { await props.illustrator.draw({ gameId: props.sessionId, turn: props.turn }); }
-					catch (e) { tavernErrorHub.report("配图", e); }
+					try { await runTavernIllustrator(props.illustrator, props.sessionId, props.turn); }
 					finally { setBusy(false); }
 				}
 				const label = busy ? "正在整理画面…" : "为这一轮配图";

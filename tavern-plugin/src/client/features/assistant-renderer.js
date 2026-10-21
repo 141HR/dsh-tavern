@@ -798,7 +798,8 @@
 					return React.createElement(TavernPluginMediaItem, { key: item.id, item: item, sessionId: props.sessionId, turn: storyTurn });
 				})) : null;
 				const pluginActions = playView && settled ? React.createElement(TavernPluginMessageActions, { sessionId: props.sessionId, turn: storyTurn, settled: settled }) : null;
-				return React.createElement("div", { ref:historyNode, className: "dsh-tavern-assistant", "data-streaming": data.status === "running" || undefined }, body, refusalNode, pendingMessage, pluginMediaNode, trailingIllustration, pluginActions, mvuReceiptNode, inlineStatus);
+				const illustrationDraft = playView && settled ? React.createElement(TavernIllustrationDraft, { sessionId: props.sessionId, turn: storyTurn }) : null;
+				return React.createElement("div", { ref:historyNode, className: "dsh-tavern-assistant", "data-streaming": data.status === "running" || undefined }, body, refusalNode, pendingMessage, pluginMediaNode, illustrationDraft, trailingIllustration, pluginActions, mvuReceiptNode, inlineStatus);
 			}
 			function TavernForkAssistantAction(props) {
 				const liveState = useScopedLiveTavernView(props.sessionId, String(props.messageId || ""), [["mode"], ["forkTurnsByMessageId", String(props.messageId || "")]]);
@@ -831,11 +832,11 @@
 			}
 			function TavernPluginIllustrateAction(props) {
 				const [busy, setBusy] = React.useState(false);
+				// Progress and outcome show in the turn's text (TavernIllustrationDraft), not here.
 				async function draw() {
 					if (busy) return;
 					setBusy(true);
-					try { await props.illustrator.draw({ gameId: props.sessionId, turn: props.turn }); }
-					catch (e) { tavernErrorHub.report("配图", e); }
+					try { await runTavernIllustrator(props.illustrator, props.sessionId, props.turn); }
 					finally { setBusy(false); }
 				}
 				const label = busy ? "正在整理画面…" : "为这一轮配图";

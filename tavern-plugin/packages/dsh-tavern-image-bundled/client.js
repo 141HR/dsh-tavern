@@ -5407,7 +5407,7 @@ function versionsOf(jobId) {
             } catch (error) { reportHost('character-history-panel-failed', { error: String(error?.message ?? error).slice(0, 160) }) }
           }
           try {
-            const runMessageDraw = createMessageDrawRunner(async context => {
+            const drawTurn = async context => {
               const r = await jsonFetch(BASE + '/attach-turn', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
@@ -5417,6 +5417,10 @@ function versionsOf(jobId) {
                 gameId: String(context && context.gameId || '').slice(0, 12), turn: context && context.turn,
                 ok: Boolean(r && r.ok), attached: r && r.attached, error: String(r && r.error || '').slice(0, 160),
               })
+              return r
+            }
+            const runMessageDraw = createMessageDrawRunner(async context => {
+              const r = await drawTurn(context)
               if (typeof showToast === 'function') {
                 if (r && r.ok && r.attached) showToast('已提交 ' + r.attached + ' 张，出图后自动插进正文')
                 else if (r && r.ok && r.skipped) showToast('本轮自动跳过配图：' + (r.reason || '没有合适的画面'))
@@ -5437,7 +5441,13 @@ function versionsOf(jobId) {
               }
               const offIllustrator = ui.registerIllustrator({
                 kinds: ['dsh-tavern-image/image', 'dsh-tavern-comfy/image'],
-                draw: context => runMessageDraw({ gameId: context.gameId, turn: context.turn }),
+                // 进度和结果由 Tavern 显示在这一轮正文里：成功不提示，跳过返回说明，失败抛错。
+                draw: createMessageDrawRunner(async context => {
+                  const r = await drawTurn({ gameId: context.gameId, turn: context.turn })
+                  if (r && r.ok && r.attached) return {}
+                  if (r && r.ok && r.skipped) return { notice: '本轮跳过配图：' + (r.reason || '没有合适的画面') }
+                  throw new Error('没出画面：' + ((r && r.error) || '规划没有产出画面'))
+                }),
                 redraw: context => mediaAction('redraw', context),
                 editPrompt: context => mediaAction('redraw', context, { prompt: context.prompt }),
                 cancel: context => mediaAction('cancel', context),
