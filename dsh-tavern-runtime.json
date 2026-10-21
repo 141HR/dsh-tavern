@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "b147e73eac060854b8bdb41ad04e293ea5a9a3b7",
-  "releaseSequence": 810,
+  "revision": "be85d378e4de5b179a99d80c122c58221b905391",
+  "releaseSequence": 811,
   "version": "3.0.1",
   "files": [
     {
@@ -86,8 +86,8 @@
     },
     {
       "path": "android/README.md",
-      "sha256": "96e39588e4c0f81961ebfbeeec275444d07db202dc30259ed52b9a10573a95f6",
-      "size": 2216
+      "sha256": "addb9d68bb95ead327f7026de4d36558ac3753381bc308de0d155015b44a713d",
+      "size": 2116
     },
     {
       "path": "android/setup.sh",
