@@ -442,7 +442,7 @@ export function createTavernScriptHostAdapter(options = {}) {
         this_chid: '0', extension_settings: extensionSettings,
         world_names: worldName ? [worldName] : [], selected_world_info: [],
         worldbooks,
-        dsh: { settling: settlement.has(str(sessionId)) || ['pending', 'running'].includes(chat.settleStatus), cardPath: chat.cardPath, model: options.modelFor ? await options.modelFor(chat) : chat.model?.model || chat.model || '', regexScripts: card.extensions?.regex_scripts || [] } }
+        dsh: { settling: settlement.has(str(sessionId)) || ['pending', 'running'].includes(chat.settleStatus), cardPath: chat.cardPath, model: options.modelFor ? await options.modelFor(chat) : chat.model?.model || chat.model || '', regexScripts: [...(await options.presetRegexScripts?.(chat) || []), ...(card.extensions?.regex_scripts || [])] } }
     }
     if (window) return {...snapshot,historyWindow:window.historyWindow}
     if (changed) {

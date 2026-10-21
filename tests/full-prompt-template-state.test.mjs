@@ -1,3 +1,6 @@
+import { templateStateFields } from '../tavern-plugin/lib/domain/template-window-reader.js'
+import { createTemplateServices } from '../tavern-plugin/lib/vendor/st-prompt-template/host-build/services.js'
+import * as templateHost from '../tavern-plugin/lib/vendor/st-prompt-template/host-build/host.js'
 import { createPromptTemplateGlobalVariables } from '../tavern-plugin/lib/domain/prompt-template-global-variables.js'
 import { createNativeTemplateConnection } from '../tavern-plugin/lib/vendor/st-prompt-template/host-build/native-connection.js'
 import { createProfileDataStore } from '../tavern-plugin/lib/profile-data-store.js'
@@ -19,7 +22,7 @@ async function fixture(t) {
   await persistence.write({id:'chat',sessionId:'session',cardPath:'cards/test.json',mode:'story',mvu:{enabled:true},
     tavernHelperLifecycleRevision:1,variables:{local:1},messages:[{role:'assistant',text:'正文',sourceText:'正文',turn:1,
       variables:[{hp:10}],tavernPluginData:{unrelated:{keep:true}}}],tavernPluginMetadata:{other:true}})
-  const adapter=createTavernScriptHostAdapter({resolveChatSlice:(_id,indices)=>persistence.readSlice('chat',indices),resolveChangedChatSlice:(_id,revision)=>persistence.readChangedSlice('chat',revision),patchChat:persistence.patch,resolveChat:()=>persistence.read('chat'),writeChat:persistence.write,
+  const adapter=createTavernScriptHostAdapter({presetRegexScripts:chat=>chat.runtimePresetSnapshot?.regexScripts || [],resolveChatMetadataSlice:()=>persistence.readSlice('chat',[],templateStateFields),resolveChatSlice:(_id,indices)=>persistence.readSlice('chat',indices),resolveChangedChatSlice:(_id,revision,fields)=>persistence.readChangedSlice('chat',revision,fields),patchChat:persistence.patch,resolveChat:()=>persistence.read('chat'),writeChat:persistence.write,
     updateChat:persistence.update,readChatRevision:persistence.readRevision,readCard:async()=>({name:'角色'}),
     worldBooks:{bound:async()=>null},scriptDispatch:{},isPlayChat:()=>true,
     globalVariables:createPromptTemplateGlobalVariables(createProfileDataStore({dataRoot:root})),
@@ -170,4 +173,29 @@ test('模板保存与后台写入撞车时重试局部合并，不读整份存�
   const stored = await h.persistence.read('chat')
   assert.equal(stored.messages[7].variables[0].hp, 77)
   assert.equal(stored.variables.background, 1)
+})
+
+
+test('template display keeps preset regex through full, unchanged and changed history reads', async t => {
+  const {adapter,persistence}=await fixture(t)
+  const rule = (findRegex, replaceString) => ({findRegex,replaceString,placement:[2],markdownOnly:true,promptOnly:true,enabled:true})
+  await persistence.update('chat', chat => { chat.runtimePresetSnapshot={regexScripts:[rule('/<thinking>[\\s\\S]*?<\\/thinking>/g',''),rule('/GLOBAL/g','PRESET')]}; return chat })
+  const connection=await createNativeTemplateConnection({sessionId:'session',rpc:(_method,args)=>adapter.readFullPromptTemplateState(args.sessionId,args.cursor)})
+  t.after(()=>templateHost.disposeTemplateHost())
+  templateHost.configureTemplateHost(connection.snapshot,{}, {yaml:{}})
+  const previousWindow=globalThis.window
+  globalThis.window={$:{fn:{html(){}}}}
+  t.after(()=>{if(previousWindow === undefined) delete globalThis.window; else globalThis.window=previousWindow})
+  const services=createTemplateServices(()=>connection.snapshot,()=>{})
+  const check = () => {
+    templateHost.refreshTemplateSnapshot({...connection.snapshot,extension_settings:{regex:[rule('/seed/g','GLOBAL'),rule('/!/g','!!')]}})
+    connection.snapshot.dsh.regexScripts.push(rule('/PRESET/g','CARD'))
+    assert.equal(services.getRegexedString('<thinking>secret</thinking>seed!',2,{isMarkdown:true}),'CARD!!')
+  }
+  check()
+  await connection.refresh()
+  check()
+  await persistence.update('chat', chat => {chat.messages.push({role:'assistant',text:'next',turn:2});return chat})
+  await connection.refresh()
+  check()
 })

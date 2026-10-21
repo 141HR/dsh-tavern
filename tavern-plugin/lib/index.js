@@ -1756,6 +1756,7 @@ export async function apply(ctx) {
   const importDrafts = new Map()
   const tavernScriptHostAdapter = createTavernScriptHostAdapter({
     replyRegexScripts,
+    presetRegexScripts,
     recordResourceSave: (sessionId, summary) => apiDiagnostics.recordResourceSave(sessionId, summary),
     publishCreatedMessages: async function (chat, targets) {
       const session = sessionStore.get(chat.sessionId) || agentRegistry.get(chat.sessionId)?.session
