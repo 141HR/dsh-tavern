@@ -28,12 +28,12 @@ function productionGallery({ pluginMedia, pluginTurns, sessionSignals }) {
   return new AsyncFunction('pluginMedia', 'pluginTurns', 'sessionSignals', 'str', `${source.slice(start, end)}\nreturn { pluginGalleryItems, removePluginGalleryItems }`)(pluginMedia, pluginTurns, sessionSignals, str)
 }
 
-function productionRemoveHistoryRpc({ illustrations, removePluginGalleryItems }) {
+function productionRemoveHistoryRpc({ illustrations, removePluginGalleryItems, backgroundConfigForSession = async () => null }) {
   const start = source.indexOf("      case 'removeSceneImageHistory': {")
   const end = source.indexOf("      case 'removeSceneImage':", start)
   assert.ok(start >= 0 && end > start, 'production remove history RPC branch boundaries exist')
   const branch = source.slice(start, end)
-  return new Function('enabledSceneIllustrations', 'removePluginGalleryItems', `return async function(args) { switch ('removeSceneImageHistory') {\n${branch}\n} }`)(() => illustrations, removePluginGalleryItems)
+  return new Function('enabledSceneIllustrations', 'removePluginGalleryItems', 'backgroundConfigForSession', 'str', `return async function(args) { switch ('removeSceneImageHistory') {\n${branch}\n} }`)(() => illustrations, removePluginGalleryItems, backgroundConfigForSession, str)
 }
 
 test('production plugin gallery filters by game, current text version, ready image status, and removes only that game', async () => {
@@ -99,6 +99,35 @@ test('production removeSceneImageHistory validates combined count and parameter 
   assert.equal(nativeDeleteCalls, 0, 'invalid combined input is rejected before any native deletion')
   assert.deepEqual(await rpc({ items: [{ id: 'native-valid' }], pluginItems: [] }), { results: [{ versionId: 'native-valid', ok: true }] })
   assert.equal(nativeDeleteCalls, 1)
+})
+
+test('production removeSceneImageHistory scopes native deletion to a resolved session before deleting either kind', async () => {
+  const nativeCalls = [], pluginCalls = []
+  const illustrations = { async removeStoredImages(items) { nativeCalls.push(items); return items.map(item => ({ versionId: item.versionId, ok: true })) } }
+  const removePluginGalleryItems = async (sessionId, ids) => { pluginCalls.push({ sessionId, ids }); return ids.map(id => ({ versionId: id, ok: true })) }
+  const rpc = productionRemoveHistoryRpc({
+    illustrations, removePluginGalleryItems,
+    backgroundConfigForSession: async sessionId => sessionId === 'session-a' ? { id: 'chat-a' } : null
+  })
+
+  await assert.rejects(rpc({ sessionId: 'unknown', items: [{ chatId: 'chat-a', key: 'key', versionId: 'native-a' }], pluginItems: ['plugin-a'] }), /当前游戏不存在/)
+  await assert.rejects(rpc({ sessionId: 'session-a', items: [{ chatId: 'chat-b', key: 'key', versionId: 'native-b' }], pluginItems: ['plugin-a'] }), /不属于当前游戏/)
+  await assert.rejects(rpc({ sessionId: 'session-a', items: [
+    { chatId: 'chat-a', key: 'key', versionId: 'native-a' },
+    { chatId: 'chat-b', key: 'key', versionId: 'native-b' }
+  ], pluginItems: ['plugin-a'] }), /不属于当前游戏/)
+  assert.deepEqual(nativeCalls, [], 'invalid session batches do not start native deletion')
+  assert.deepEqual(pluginCalls, [], 'invalid session batches do not start plugin deletion')
+
+  const native = { chatId: 'chat-a', key: 'key', versionId: 'native-a' }
+  const scoped = await rpc({ sessionId: 'session-a', items: [native], pluginItems: ['plugin-a'] })
+  assert.deepEqual(scoped.results.map(result => result.versionId), ['native-a', 'plugin-a'])
+  assert.deepEqual(nativeCalls, [[native]], 'the resolved game chat id authorizes native deletion')
+  assert.deepEqual(pluginCalls, [{ sessionId: 'session-a', ids: ['plugin-a'] }])
+
+  const global = { chatId: 'chat-b', key: 'key', versionId: 'native-b' }
+  await rpc({ items: [global] })
+  assert.deepEqual(nativeCalls, [[native], [global]], 'omitting sessionId preserves global history deletion')
 })
 
 test('real HTTP routes serve legacy images with sceneImages disabled, reject hostile origins, and dispatch gallery RPCs', async () => {

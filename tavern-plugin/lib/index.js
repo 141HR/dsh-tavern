@@ -4955,6 +4955,11 @@ export async function apply(ctx) {
         const legacyItems = args && args.items || []
         const pluginItems = args && args.pluginItems || []
         if (!Array.isArray(legacyItems) || !Array.isArray(pluginItems) || legacyItems.length + pluginItems.length > 500) throw new Error('一次最多删除 500 张')
+        if (args && Object.hasOwn(args, 'sessionId')) {
+          const chat = await backgroundConfigForSession(str(args.sessionId))
+          if (!chat?.id) throw new Error('当前游戏不存在，未删除图片')
+          if (legacyItems.some(item => item?.chatId !== chat.id)) throw new Error('图片不属于当前游戏，未删除图片')
+        }
         const results = await enabledSceneIllustrations().removeStoredImages(legacyItems)
         return { results: results.concat(await removePluginGalleryItems(args && args.sessionId, pluginItems)) }
       }
