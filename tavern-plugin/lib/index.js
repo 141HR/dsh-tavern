@@ -233,8 +233,8 @@ import { createTavernSkillProvider } from './domain/tavern-skill-provider.js'
 import { canonicalTavernSkillName, createTavernSkillModule } from './domain/tavern-skills.js'
 import { readZipEntries, writeZipEntries } from './domain/zip-entries.js'
 import { createGameFootprint } from './domain/game-footprint.js'
-import { buildGameSave, collectSaveRevisions, readGameSave } from './domain/game-save.js'
-import { compressSaveImage } from './domain/save-image-compression.js'
+import { readGameSave, sessionTitleOf } from './domain/game-save.js'
+import { createGameSaveExporter } from './domain/game-save-export.js'
 import { readFileSync } from 'node:fs'
 import { mkdir, readdir, readFile, rm } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
@@ -1620,13 +1620,6 @@ export async function apply(ctx) {
       ...pictures.map(image => ({ path: pathOf(image), content: Buffer.from(image.data) }))])
     return { filename: exported.title + '.zip', base64: zip.toString('base64'), images: pictures.length }
   }
-  // Attachment references inside saved JSON (scene image versions, images in messages).
-  function attachmentRefs(value, found = new Map(), skip = new Set()) {
-    if (!value || typeof value !== 'object') return found
-    if (typeof value.attachmentId === 'string' && typeof value.mediaType === 'string' && value.mediaType.startsWith('image/')) found.set(value.attachmentId, value)
-    for (const [key, child] of Object.entries(value)) if (!skip.has(key) && child && typeof child === 'object') attachmentRefs(child, found, skip)
-    return found
-  }
   const gameSaveSnapshot = createGameSaveSnapshot({
     readChat,
     assertIdle: chat => assertConversationForkable(chat, { agentRunning: agentRegistry.get(chat.sessionId)?.phase?.kind === 'running' }),
@@ -1638,80 +1631,15 @@ export async function apply(ctx) {
       finally { await handle.close() }
     }
   })
-  async function exportGameSave(sessionId, options = {}) {
-    const header = await chatForSession(str(sessionId))
-    if (!header) throw new Error('当前 Session 没有绑定 Tavern 对话')
-    return await gameSaveSnapshot(header.id, header.sessionId, async ({ chat, session }) => {
-      const revisions = await collectSaveRevisions(chat, readChatRevision)
-      let cardPayload = null
-      try { cardPayload = await fileResources.originalCardPayload(chat.cardPath) } catch {}
-      if (!cardPayload && chat.cardDefinitionSnapshot?.raw) cardPayload = { kind: 'text', name: str(chat.cardName || 'card') + '.json', text: JSON.stringify(chat.cardDefinitionSnapshot.raw) }
-      let script = null
-      if ((chat.mode || 'story') === 'script') {
-        const scriptPath = await fileResources.scriptForCard(chat.cardPath)
-        const text = scriptPath ? await fileResources.readText(normalizeResourcePath(scriptPath, resourceKind(scriptPath))) : undefined
-        if (text !== undefined) script = { path: scriptPath, text }
-      }
-      let scene = null
-      const media = attachmentRefs(session.events)
-      if (options.images !== false) {
-        const files = await gameFootprint.readSceneFiles(chat.id)
-        for (const file of files) attachmentRefs(JSON.parse(file.content.toString('utf8')), media, new Set(['deletedVersions']))
-        const worldbooks = await sceneWorldbookArchive.exportForSave([chat, ...revisions.map(item => item.state)])
-        scene = { files, worldbooks, attachments: [] }
-      }
-      const attachments = []
-      for (const ref of media.values()) {
-        try {
-          const image = await ctx.get('attachments').readImage(ref)
-          attachments.push(await compressSaveImage({ attachmentId: ref.attachmentId, mediaType: ref.mediaType, data: Buffer.from(image.data) }))
-          await new Promise(resolve => setImmediate(resolve))
-        }
-        catch { /* A missing picture must not block the save; the game keeps its reference. */ }
-      }
-      if (scene) scene.attachments = attachments
-      else if (attachments.length) scene = { files: [], worldbooks: [], attachments }
-      const plugins = await pluginSaveContents(chat)
-      const buffer = buildGameSave({ chat, revisions, session, card: { path: chat.cardPath, payload: cardPayload }, script, scene, plugins,
-        tavernVersion: TAVERN_PACKAGE_VERSION, exportedAt: Date.now() })
-      const name = (sessionTitleOf(session.events) || str(chat.title) || str(chat.cardName) || 'game').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 60)
-      return { filename: name + '.dshsave', base64: buffer.toString('base64'), bytes: buffer.length, revisions: revisions.length, images: attachments.length }
-    })
-  }
-  // Plugin data and media of the story line shown now, with the files the media point at.
-  async function pluginSaveContents(chat) {
-    let state = null
-    try { state = await pluginApi.exportGame(chat.id) } catch (error) { console.warn('dsh-tavern: 读取插件数据失败，存档不含插件数据:', str(error?.message || error)) }
-    if (!state) return null
-    const shown = new Set()
-    for (const message of chat.messages || []) {
-      if (message?.role !== 'assistant') continue
-      const turn = Number(message.turn || (message.greeting ? 1 : 0))
-      try { shown.add(turn + '\u0000' + computeSceneTarget(chat, turn).key) } catch {}
-    }
-    const media = state.media ? { ...state.media, items: state.media.items.filter(item => shown.has(item.turn + '\u0000' + item.key)) } : null
-    const attachments = [], seen = new Set(), store = ctx.get('attachments')
-    for (const item of media?.items || []) {
-      const ref = item.attachment
-      if (!ref || seen.has(ref.attachmentId) || !store) continue
-      seen.add(ref.attachmentId)
-      try {
-        let data
-        if (ref.mediaType) data = Buffer.from((await store.readImage(ref)).data)
-        else {
-          const chunks = []
-          for await (const chunk of store.readFileStream(ref)) chunks.push(Buffer.from(chunk))
-          data = Buffer.concat(chunks)
-        }
-        attachments.push({ attachmentId: ref.attachmentId, mediaType: ref.mediaType, name: ref.name, data })
-      } catch { /* A missing file must not block the save; its item is left out on import. */ }
-    }
-    return { data: state.data, media, attachments }
-  }
+  const exportGameSave = createGameSaveExporter({
+    chatForSession, gameSaveSnapshot, readChatRevision, fileResources, gameFootprint, sceneWorldbookArchive,
+    getAttachments: () => ctx.get('attachments'),
+    exportPluginData: chatId => pluginApi.exportGame(chatId),
+    tavernVersion: TAVERN_PACKAGE_VERSION
+  })
   // Imports always create a new game: new chat and session ids, the native session rebuilt
   // for this install's paths, the history re-numbered, background agents rebuilt on demand.
   const importingGameSaves = new Set()
-  const sessionTitleOf = events => str([...(events || [])].reverse().find(event => event?.type === 'session/title')?.data?.title).trim()
   function assertImportableSave(save) {
     const states = [save.chat, ...save.revisions.map(item => item.state)]
     if (states.some(state => !state || typeof state !== 'object' || !Array.isArray(state.messages))) throw new Error('存档包已损坏：存档内容不完整')
