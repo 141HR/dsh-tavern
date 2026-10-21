@@ -8,7 +8,6 @@ import { scriptPromptFrameInputs, consumeScriptPrompts } from './tavern-script-p
 import { ledgerFrameInputs } from './story-ledger.js'
 import { projectBackgroundInput } from './runtime-content-projection.js'
 import { lastTavernHelperVariables } from './tavern-helper-context.js'
-import { bindSceneWorldbook } from './scene-worldbook.js'
 import { normalizeResourcePath } from './file-resources.js'
 import { diffJson } from './json-mutation.js'
 import { hasTavernCredit, withTavernCredit } from './card-credit.js'
@@ -437,7 +436,6 @@ export function createTurnOrchestrator(options) {
       chat.lastWorldBookRecall = clone(chat.preparedWorldBook)
       chat.worldBookError = foregroundWorldBook.error
     }
-    const sceneWorldbook = typeof options.captureSceneWorldbook === 'function' ? await options.captureSceneWorldbook(chat, card, undefined, turn) : null
     const plan = await planner.plan({ purpose: 'body', card, chat: templateWorldBook?.macroState ? { ...chat, macroState: templateWorldBook.macroState } : chat, userText: runtimeUserText, sessionId: input.sessionId, nativeTurn: turn, scriptReference, styleReference: mode === 'story' ? styleReferenceFor(chat) : null, worldBookContext })
     // Seam to the plugin layer; it never throws and drops a failing plugin's part.
     const pluginSections = typeof options.pluginTurnContext === 'function'
@@ -457,7 +455,7 @@ export function createTurnOrchestrator(options) {
       inputs: foregroundFrameInputs(plan, userText, runtimeUserText,
         Object.hasOwn(input, 'runtimePresetSnapshot') ? input.runtimePresetSnapshot
           : resolveRuntimePresetMacros(chat.runtimePresetSnapshot, { charName: card.name, macroState: chat.macroState }).snapshot, chat, pluginSections),
-      source: { ...source, ...(sceneWorldbook ? { sceneWorldbook } : {}) }
+      source
     }
     let frame = frameBuilder.build(frameInput)
     if (foregroundWorldBook?.log && typeof options.recordWorldbookRecall === 'function') {
@@ -791,7 +789,6 @@ export function createTurnOrchestrator(options) {
           mvu: adopted ? { pending: false, modified: false, diagnostics: [{ message: '这一轮补记自模型上下文，当时的变量变化未结算' }], events: [] }
             : { pending: true, modified: false, diagnostics: [], events: [] }
         })
-        bindSceneWorldbook(assistantMessage, rememberedFrame(chat, operation.id)?.source?.sceneWorldbook || operation.sceneWorldbook)
         draft.messages.push(assistantMessage)
         if (!adopted) {
           draft.settleStatus = 'pending'

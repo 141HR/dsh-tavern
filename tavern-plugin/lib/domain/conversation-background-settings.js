@@ -4,19 +4,18 @@ import { normalizeBackgroundTasks } from './tavern-settings.js'
 
 /** Validate model choices, patch only current configuration and trigger newly enabled work. */
 export function createConversationBackgroundSettings({ readConfig, readChat, updateChat, modelCatalog, modelReasoning,
-  isPlayMode, sceneImagesAvailable, onStyleEnabled = () => {} }) {
+  isPlayMode, onStyleEnabled = () => {} }) {
   function requirePlay(chat) {
     if (!chat || !isPlayMode(chat.mode)) throw new Error('请先打开游玩会话')
     return chat
   }
   function present(chat) {
-    return { backgroundModel: chat.backgroundModelSelection || null, imageModel: chat.imageModelSelection || null,
-      backgroundTasks: normalizeBackgroundTasks(chat.backgroundTasks), webSearchEnabled: chat.webSearchEnabled === true,
-      sceneImagesEnabled: chat.sceneImagesEnabled === true }
+    return { backgroundModel: chat.backgroundModelSelection || null,
+      backgroundTasks: normalizeBackgroundTasks(chat.backgroundTasks), webSearchEnabled: chat.webSearchEnabled === true }
   }
   async function read(sessionId) {
     const chat = requirePlay(await readConfig(String(sessionId || '')))
-    return { ...present(chat), sceneImagesAvailable, mvuCard: chat.mvu?.enabled === true && chat.mvu.owner === 'official', modelCatalog: await modelCatalog() }
+    return { ...present(chat), mvuCard: chat.mvu?.enabled === true && chat.mvu.owner === 'official', modelCatalog: await modelCatalog() }
   }
   async function checkModel(value, label) {
     const selection = normalizeBackgroundModel(value)
@@ -31,7 +30,6 @@ export function createConversationBackgroundSettings({ readConfig, readChat, upd
     const sessionId = String(args.sessionId || '')
     const chat = requirePlay(await readChat(sessionId))
     if (Object.hasOwn(args, 'backgroundModel')) await checkModel(args.backgroundModel, '后台模型')
-    if (Object.hasOwn(args, 'imageModel')) await checkModel(args.imageModel, '生图 Agent 模型')
     const saved = await updateChat(chat.id, current => patchConversationBackground(current, args), { source: 'background-model.switch-conversation' })
     if (args.backgroundTasks?.styleReference === true && chat.backgroundTasks?.styleReference !== true) onStyleEnabled(sessionId, chat.id)
     return present(saved)

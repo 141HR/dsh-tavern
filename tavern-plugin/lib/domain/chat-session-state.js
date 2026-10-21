@@ -291,7 +291,7 @@ export function projectDisplayRuntimeState(chat, requestedTurn) {
 export function projectChatBackgroundConfig(chat) {
   const selected = {}
   for (const key of ['id', 'sessionId', 'mode', 'backgroundConfigVersion', 'conversationFeaturesVersion',
-    'backgroundModelSelection', 'backgroundModelRevision', 'imageModelSelection', 'backgroundTasks', 'webSearchEnabled', 'sceneImagesEnabled', 'cardContextRevision']) {
+    'backgroundModelSelection', 'backgroundModelRevision', 'backgroundTasks', 'webSearchEnabled', 'cardContextRevision']) {
     if (Object.hasOwn(chat, key)) selected[key] = chat[key]
   }
   selected.backgroundSessionStatus = chat.timeline?.participants?.background?.status
@@ -321,7 +321,6 @@ export function projectSceneImageState(chat) {
     id: chat.id, sessionId: chat.sessionId, mode: chat.mode,
     backgroundConfigVersion: chat.backgroundConfigVersion,
     conversationFeaturesVersion: chat.conversationFeaturesVersion,
-    sceneImagesEnabled: chat.sceneImagesEnabled,
     messages: (chat.messages || []).map(message => ({
       role: message.role, turn: message.turn, greeting: message.greeting,
       text: message.text, sourceText: message.sourceText, swipeId: message.swipeId,

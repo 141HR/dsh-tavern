@@ -5,7 +5,6 @@ import { cardOpeningChoices, resolveCardOpening } from './card-openings.js'
 import { projectAgentContent, projectOpeningCommit } from './runtime-content-projection.js'
 import { OFFICIAL_MVU_VERSION } from './official-mvu-assets.js'
 import { createScriptContinuity } from './script-continuity.js'
-import { bindSceneWorldbook } from './scene-worldbook.js'
 import { normalizeBackgroundModel } from './background-model-selection.js'
 import { normalizeBackgroundTasks, normalizePlayDefaults } from './tavern-settings.js'
 import { ensureSessionSeedTrajectory } from './session-seed-trajectory.js'
@@ -60,7 +59,6 @@ export function createConversationInitialization(options) {
       userProfileContextSnapshot: '',
       webSearchEnabled: false,
       backgroundModelSelection: null,
-      imageModelSelection: null,
       macroState: { userName: '你', local: {}, global: {} },
       settleStatus: 'idle',
       settleError: null,
@@ -173,11 +171,9 @@ export function createConversationInitialization(options) {
     chat.userProfileId = profile?.profileId || 'default'
     chat.userProfileEnabled = profile?.hasConfirmed === true && profile.defaultEnabled === true
     chat.webSearchEnabled = groupOfMode(chat.mode) === 'play' && defaults.webSearchEnabled
-    chat.sceneImagesEnabled = groupOfMode(chat.mode) === 'play' && defaults.sceneImagesEnabled
     chat.statusBarPlacement = defaults.statusBarPlacement
     chat.conversationFeaturesVersion = 1
     chat.backgroundModelSelection = groupOfMode(chat.mode) === 'play' ? normalizeBackgroundModel(currentSettings.defaultBackgroundModel) : null
-    chat.imageModelSelection = groupOfMode(chat.mode) === 'play' ? normalizeBackgroundModel(currentSettings.defaultImageModel) : null
     chat.disabledWritingSkills = groupOfMode(chat.mode) === 'play' ? [...(currentSettings.defaultDisabledWritingSkills || [])] : []
     chat.backgroundConfigVersion = 1
     chat.backgroundTasks = normalizeBackgroundTasks(groupOfMode(chat.mode) === 'play' ? defaults.backgroundTasks : {})
@@ -205,7 +201,7 @@ export function createConversationInitialization(options) {
       chat.scriptState = scriptContinuity.startAligned(script, greeting, card.script_start)
     }
     if (typeof sessionId === 'string') chat.sessionId = sessionId
-    if (greeting !== '') chat.messages.push(bindSceneWorldbook(Object.assign({
+    if (greeting !== '') chat.messages.push(Object.assign({
       role: 'assistant',
       ...replyProse(openingSourceText, openingProjection),
       ts: now(),
@@ -220,7 +216,7 @@ export function createConversationInitialization(options) {
         diagnostics: [],
         events: []
       }
-    }), chat.sceneOpeningWorldbook))
+    }))
     if (preparation && groupOfMode(chatMode) === 'play') {
       chat.variables = structuredClone(preparation.variables || {});
       const opening = chat.messages.find(message => message.greeting);

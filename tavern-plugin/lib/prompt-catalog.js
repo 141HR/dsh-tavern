@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from 'node:fs'
 
 export const SYSTEM_PROMPT_DEFINITIONS = Object.freeze([
-  ['system-append', 'system附加指令', '默认开启，可按需关闭。内容会添加到前台、后台、卡片及文生图 Agent 的 system 提示词最前面（位于酒馆预设之前），修改后从下一次请求生效。'],
+  ['system-append', 'system附加指令', '默认开启，可按需关闭。内容会添加到前台、后台及卡片 Agent 的 system 提示词最前面（位于酒馆预设之前），修改后从下一次请求生效。'],
   ['card-system', '卡片 Agent 系统指令', '默认空白；从 card-system.md 读取，非空时仅注入卡片 Agent。'],
   ['story', '正文 Agent 核心提示词', '控制普通游玩正文的续写规则。'],
   ['script-story', '剧本模式正文补充', '控制绑定剧本时追加给正文 Agent 的规则。'],
@@ -12,9 +12,6 @@ export const SYSTEM_PROMPT_DEFINITIONS = Object.freeze([
   ['posture-settlement', '姿势状态结算', '控制后台姿势结算的工具提交。'],
   ['story-compaction', '前台上下文压缩', '用于前台手动和自动压缩：把更早的剧情写成摘要，最近 10 轮原文原样附在摘要后。修改后下次压缩生效；后台仍使用 DSH 内置压缩提示词。'],
   ['card-workspace', '卡片 Agent 工作区说明', '仅注入卡片 Agent 的 system。可编辑完整说明；{{resourceRoot}} 自动替换为当前资源根目录，{{projectionPaths}} 自动替换为当前会话的投影文件路径。保存后下一次请求生效。'],
-  ['scene-image-system', '文生图 Agent 系统指令', '控制生图 Agent 的角色与职责，修改后下一次生图任务生效。'],
-  ['scene-plan', '文生图画面规划', '控制从剧情规划画面的要求，修改后下一次生图任务生效。'],
-  ['scene-image-adjustment', '文生图画面调整', '控制按用户要求调整画面的规则，修改后下一次调整任务生效。'],
 ].map(function (item) { return Object.freeze({ name: item[0], label: item[1], description: item[2] }) }))
 
 export const SYSTEM_PROMPT_NAMES = Object.freeze(SYSTEM_PROMPT_DEFINITIONS.map(function (item) { return item.name }))

@@ -366,7 +366,7 @@ export function createNativeConversationStorage({dataRoot,onIO}){
   const view=await headAtRevision(id,options.revision??Infinity)
   if(!view)return null
   if(!view.state.sceneIndexRef||view.state.sceneIndexRevision!==view.state.chatRevision)return undefined
-  const chat=await selectedHeader(id,view,['id','sessionId','_storageRevision','mode','backgroundConfigVersion','conversationFeaturesVersion','sceneImagesEnabled'])
+  const chat=await selectedHeader(id,view,['id','sessionId','_storageRevision','mode','backgroundConfigVersion','conversationFeaturesVersion'])
   const t=tree(id),targets={},root=view.state.sceneIndexRef
   for(const turn of new Set(options.turns)){
    if(!Number.isSafeInteger(turn)||turn<1)continue
@@ -390,7 +390,7 @@ export function createNativeConversationStorage({dataRoot,onIO}){
   }
   const view=await headAtRevision(id,options?.revision??Infinity)
   if(!view)return null
-  const chat=await selectedHeader(id,view,['id','sessionId','mode','backgroundConfigVersion','conversationFeaturesVersion','sceneImagesEnabled'])
+  const chat=await selectedHeader(id,view,['id','sessionId','mode','backgroundConfigVersion','conversationFeaturesVersion'])
   const t=tree(id),messages=new Array(view.messageCount)
   let cursor=view.snapshotCursor
   while(cursor){

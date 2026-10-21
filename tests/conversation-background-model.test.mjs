@@ -36,7 +36,7 @@ test('configuration read stays narrow and enabling style recall runs only after 
     readConfig: async () => { calls.push('read-config'); return chat },
     readChat: async () => { calls.push('read-chat'); return chat },
     updateChat: async (_id, mutate) => { calls.push('write'); if (fail) throw new Error('write failed'); return chat = mutate(chat) },
-    isPlayMode: mode => mode === 'story', sceneImagesAvailable: true,
+    isPlayMode: mode => mode === 'story',
     modelCatalog: async () => [], modelReasoning: async () => null,
     onStyleEnabled: (sessionId, chatId) => calls.push(['style', sessionId, chatId])
   })

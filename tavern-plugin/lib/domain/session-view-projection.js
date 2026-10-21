@@ -7,7 +7,6 @@ import { rescueHistoryNotice } from './chat-history-rescue.js'
 import { createIncrementalReplyView } from './incremental-reply-view.js'
 import { latestStyleReference } from './style-reference.js'
 import { sessionOpeningDescriptor } from './session-opening.js'
-import { TAVERN_RELEASE_CAPABILITIES } from './release-capabilities.js'
 import { composeTavernRegexScripts } from './card-extension-reading.js'
 import { projectCharacterDesignDocument } from './character-design-document.js'
 import { readLedger } from './story-ledger.js'
@@ -170,7 +169,6 @@ export function createSessionViewProjection({
       tavernRemoteAssetPins: Array.isArray(cardExtensions.remoteAssetPins) ? cardExtensions.remoteAssetPins : [],
       tavernHelperWorldbook: helperWorldbook,
       tavernRuntimePolicy: { trustedCardMode: runtimeSettings.trustedCardMode, frameSizing: cardExtensions.frameSizing },
-      releaseCapabilities: TAVERN_RELEASE_CAPABILITIES,
       presentationWarnings: (Array.isArray(chat.presentationWarnings) ? chat.presentationWarnings : []).concat(
         chat.importHistory?.rescue ? [rescueHistoryNotice(chat.importHistory.rescue)] : [],
         chat.importHistory?.contextPreparation?.status === 'trimmed'

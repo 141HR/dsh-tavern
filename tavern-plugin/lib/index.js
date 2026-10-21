@@ -126,16 +126,13 @@ import { fileURLToPath } from 'node:url'
 import { createBackgroundAgentRunner, executeBackgroundCompaction } from './background-agent-runner.js'
 import { createApplicationUpdater } from './application-updater.js'
 import { CANDIDATE_SUBMIT_TOOL, SCRIPT_POINT_TOOL, SCRIPT_READ_TOOL, createCandidateGenerator } from './domain/candidate-generation.js'
-import { computeSceneTarget, createSceneIllustrations, sceneTarget, projectedSceneText } from './domain/scene-illustration.js'
-import { legacyImageConfigurationReader } from './domain/image-generation-host.js'
+import { computeSceneTarget, createSceneIllustrations, projectedSceneText } from './domain/scene-illustration.js'
 import { createPluginMedia, publicPluginMedia, pluginFileMediaType } from './domain/plugin-media.js'
 import { createPluginData } from './domain/plugin-data.js'
 import { createPluginTurnReader, RECENT_FLOORS } from './domain/plugin-turns.js'
 import { createPluginVariableWriter } from './domain/plugin-variables.js'
 import { createTavernPluginApi } from './plugin-api.js'
-import { createSceneWorldbooks, sceneWorldbookBinding } from './domain/scene-worldbook.js'
-import { createSceneImageDiagnostics, createSceneImageHostLogger, recordSceneImageInteraction } from './domain/scene-image-diagnostics.js'
-import { TAVERN_RELEASE_CAPABILITIES } from './domain/release-capabilities.js'
+import { createSceneWorldbooks } from './domain/scene-worldbook.js'
 import { createSessionStablePrefixStorage, ensureSessionStablePrefix, readSessionStablePrefix } from './domain/session-stable-prefix.js'
 import { waitForWritableSession } from './domain/agent-readiness.js'
 import { createCardDeletion } from './domain/card-deletion.js'
@@ -407,20 +404,8 @@ export async function apply(ctx) {
   const guideLibrary = createGuideLibrary({ store: profileData })
   const regexLibrary = createRegexLibrary({ store: profileData })
   const userPreferenceProfile = createUserPreferenceProfile({ store: profileData })
-  const sceneWorldbooks = TAVERN_RELEASE_CAPABILITIES.sceneImages ? createSceneWorldbooks({ store: profileData }) : null
-  const sceneWorldbookArchive = sceneWorldbooks || createSceneWorldbooks({ store: profileData })
-  const imageHostDiagnostic = createSceneImageHostLogger(ctx.logger)
-  const sceneDiagnostics = TAVERN_RELEASE_CAPABILITIES.sceneImages ? createSceneImageDiagnostics(profileData, { onDiagnostic: imageHostDiagnostic }) : null
-  async function captureSceneWorldbook(chat, card, preparedBook, turn) {
-    if (sceneWorldbooks === null) return null
-    try {
-      const worldBook = preparedBook === undefined ? await worldBooks.bound(chat.cardPath, card, chat) : preparedBook
-      return await sceneWorldbooks.capture({ worldBook, chat, card, turn })
-    } catch (_error) {
-      console.warn('dsh-tavern: 场景世界书快照保存失败，正文继续；不会用后来的世界书补历史。')
-      return null
-    }
-  }
+  // Per-turn worldbook snapshots old saves carry; kept so their export and import round-trip.
+  const sceneWorldbookArchive = createSceneWorldbooks({ store: profileData })
   const tavernExtensionSettings = createTavernExtensionSettings(profileData)
   const mvuDiagnostics = createMvuDiagnosticStore(profileData)
   ctx.effect(() => () => mvuDiagnostics.dispose(), 'dsh-tavern: flush diagnostic logs')
@@ -452,7 +437,7 @@ export async function apply(ctx) {
   }
   async function updateTavernSettings(patch) {
     if (patch && (Object.hasOwn(patch, 'backgroundModel') || Object.hasOwn(patch, 'backgroundTasks') || Object.hasOwn(patch, 'webSearchEnabled'))) throw new Error('后台配置已移至顶栏的本局设置')
-    for (const name of ['defaultForegroundModel', 'defaultBackgroundModel', 'defaultWorkbenchModel', 'defaultImageModel']) {
+    for (const name of ['defaultForegroundModel', 'defaultBackgroundModel', 'defaultWorkbenchModel']) {
       if (patch?.[name] != null) await llm.resolveCallConfig(patch[name])
     }
     tavernSettingsDocument = await profileData.updateJson(settingsPath, function (current) {
@@ -499,7 +484,7 @@ export async function apply(ctx) {
   async function skillRoleFor(agent) {
     const sessionId = agent?.session?.id
     if (!sessionId) return null
-    if (backgroundAgentRunner.owns(sessionId)) return backgroundAgentRunner.requestContext(sessionId)?.task === 'image' ? 'image' : 'background'
+    if (backgroundAgentRunner.owns(sessionId)) return 'background'
     const chat = await backgroundConfigForSession(sessionId)
     return chat ? (chat.mode === 'card' ? 'card' : 'foreground') : null
   }
@@ -659,21 +644,6 @@ export async function apply(ctx) {
       }
     }
     return null
-  }
-  // Turning a passage into drawing tags needs little deliberation: following the
-  // foreground, the scene image Agent keeps its model but thinks at the lightest level.
-  // The story model's high effort spent over a minute before the first tool call.
-  async function sceneImageSelection(sessionId) {
-    // A model chosen for this game (inherited from the global default) is used as set.
-    const chosen = normalizeBackgroundModel((await backgroundConfigForSession(sessionId))?.imageModelSelection)
-    if (chosen) return chosen
-    const selection = modelSelection(sessionId)
-    if (!selection) return selection
-    try {
-      const reasoning = await readBackgroundModelReasoning(llm, selection)
-      if ((reasoning?.efforts || []).some(effort => effort?.id === 'low')) return { ...selection, reasoningEffort: 'low' }
-    } catch { /* Unknown capabilities keep the conversation's own setting. */ }
-    return selection
   }
   function backgroundModelSelection(chat) {
     return resolveChatBackgroundModel(chat, modelSelection(chat && chat.sessionId))
@@ -992,8 +962,7 @@ export async function apply(ctx) {
     needsAdoption: chat => groupOfMode(chat.mode) === 'play'
       && (chat.backgroundConfigVersion !== 1 || chat.conversationFeaturesVersion !== 1),
     adopt: async function (chat) {
-      const legacyImageEnabled = sceneIllustrations ? (await sceneIllustrations.settings()).enabled === true : false
-      return updateChat(chat.id, current => adoptConversationFeatures(adoptConversationBackground(current, tavernSettingsDocument), tavernSettingsDocument, legacyImageEnabled), { source: 'background-config.adopt' })
+      return updateChat(chat.id, current => adoptConversationFeatures(adoptConversationBackground(current, tavernSettingsDocument), tavernSettingsDocument), { source: 'background-config.adopt' })
     }
   })
   function chatForSession(sessionId) { return sessionChats.read(sessionId) }
@@ -1489,7 +1458,7 @@ export async function apply(ctx) {
     await pluginMedia.removeChat(chatId).catch(() => console.warn('dsh-tavern: 插件媒体记录清理失败', chatId))
     await pluginData.removeChat(chatId).catch(() => console.warn('dsh-tavern: 插件数据清理失败', chatId))
     await displayRuntimeStore.remove(chatId).catch(() => {})
-    await sceneWorldbooks?.forgetChat(chatId).catch(() => {})
+    await sceneWorldbookArchive.forgetChat(chatId).catch(() => {})
     pluginApi.gameRemoved(footprint?.foregroundSessionId || chat?.sessionId)
     if (footprint) {
       deletedSessionIds.add(footprint.foregroundSessionId)
@@ -1508,7 +1477,7 @@ export async function apply(ctx) {
     const chat = str(chatId) === '' ? await chatForSession(str(sessionId)) : await readChat(str(chatId))
     if (chat === undefined) throw new Error('当前 Session 没有绑定 Tavern 对话')
     const full = (await readChat(chat.id)) || chat
-    const pictures = sceneIllustrations && chat.sessionId ? await sceneIllustrations.exportImages(chat.sessionId, conversationStoryTurns(full)) : []
+    const pictures = chat.sessionId ? await sceneIllustrations.exportImages(chat.sessionId, conversationStoryTurns(full)) : []
     const extension = { 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }
     // A turn's added pictures follow its first: images/002.png, images/002-2.png, …
     const pathOf = image => 'images/' + String(image.turn).padStart(3, '0') + (image.slot ? '-' + (image.slot + 1) : '') + '.' + (extension[image.mediaType] || 'png')
@@ -1577,9 +1546,6 @@ export async function apply(ctx) {
     if (!chat) throw new Error('当前 Session 没有绑定 Tavern 对话')
     const diagnostic = await mvuDiagnostics.read(sessionId)
     const backgroundSessionIds = [...new Set(diagnostic.records.map(record => record.traceSessionId).filter(Boolean))]
-    let imageDiagnostic
-    try { imageDiagnostic = sceneDiagnostics === null ? { version: 1, records: [] } : await sceneDiagnostics.read(chat.id) }
-    catch { imageDiagnostic = { version: 1, records: [], error: '生图诊断读取失败，仍导出 Session 与 MVU 日志。' } }
     let compatibilityDiagnostic
     try { compatibilityDiagnostic = await compatibilityDiagnostics.read(sessionId) }
     catch { compatibilityDiagnostic = { version: 1, records: [], error: '兼容能力诊断读取失败，仍导出其他日志。' } }
@@ -1601,7 +1567,7 @@ export async function apply(ctx) {
       presetDiagnostics = { ...createPresetDiagnostics(chat, cardDiagnostics.extensions || {}),
         error: '远程正则解析失败，ordered 保留解析前配置。' }
     }
-    const exported = await createMvuDiagnosticExport({ presetDiagnostics, cardDiagnostics, performanceDiagnostics: { ...performanceDiagnostics.read(), requests: requestPerformance.read(), replyProjection: sessionProjection.stats() }, updateDiagnostics: applicationUpdater.diagnostics(), sessionId, backgroundSessionIds, displayDiagnostics: { version: 1, frames: await displayDiagnosticFrames(chat) }, apiDiagnostics: await apiDiagnostics.read(sessionId).catch(() => null), compatibilityDiagnostics: compatibilityDiagnostic, store: mvuDiagnostics, sceneDiagnostics: imageDiagnostic, sessions: sessionStore, persistence: ctx.get('sessionPersistence'), query: ctx.get('sessionQuery'), attachments: ctx.get('attachments'), environment: { templateRuntime: await fullTemplateRuntime.inspect(sessionId), mvu: OFFICIAL_MVU_VERSION, mvuAsset: inspectOfficialMvuAsset(), runtime: { hostCompatibility, sessionPatch: sessionPatch.view(), generation: runtimeGeneration, platform: process.platform, arch: process.arch, nodeVersion: process.version } } })
+    const exported = await createMvuDiagnosticExport({ presetDiagnostics, cardDiagnostics, performanceDiagnostics: { ...performanceDiagnostics.read(), requests: requestPerformance.read(), replyProjection: sessionProjection.stats() }, updateDiagnostics: applicationUpdater.diagnostics(), sessionId, backgroundSessionIds, displayDiagnostics: { version: 1, frames: await displayDiagnosticFrames(chat) }, apiDiagnostics: await apiDiagnostics.read(sessionId).catch(() => null), compatibilityDiagnostics: compatibilityDiagnostic, store: mvuDiagnostics, sessions: sessionStore, persistence: ctx.get('sessionPersistence'), query: ctx.get('sessionQuery'), attachments: ctx.get('attachments'), environment: { templateRuntime: await fullTemplateRuntime.inspect(sessionId), mvu: OFFICIAL_MVU_VERSION, mvuAsset: inspectOfficialMvuAsset(), runtime: { hostCompatibility, sessionPatch: sessionPatch.view(), generation: runtimeGeneration, platform: process.platform, arch: process.arch, nodeVersion: process.version } } })
     return { filename: exported.filename, base64: exported.buffer.toString('base64') }
   }
   // Captures from the diagnostics store, falling back to ones old saves kept inline.
@@ -2034,7 +2000,7 @@ export async function apply(ctx) {
   }
   const contextPlanner = createContextPlanner({ prompt: runtimePrompt, callModel: callModel, now: Date.now, logger: console })
   const playCardSnapshots = createPlayCardSnapshots({ worldBooks, planner: contextPlanner, readCard: readChatCard, writeChat, updateChat,
-    settings: readTavernSettings, captureSceneWorldbook, userPreferenceProfile })
+    settings: readTavernSettings, userPreferenceProfile })
   const ensurePlayCardSnapshot = playCardSnapshots.ensure
   async function ensureNativeSystemPrefix(session, chat) {
     // Rebuilding the snapshot persists the complete Chat; a bounded history cannot.
@@ -2236,7 +2202,7 @@ export async function apply(ctx) {
       stateChatId: state.id, stateRevision: state._storageRevision, turn, atSeq }
     await conversationRegistry.publish(fork)
     await saveMaintenance.recordFork(fork).catch(error => console.warn('dsh-tavern: 记录分叉来源失败', str(error?.message || error)))
-    await sceneWorldbooks?.copyRefs(state.id, fork.id, turn).catch(() => {})
+    await sceneWorldbookArchive.copyRefs(state.id, fork.id, turn).catch(() => {})
     await forkPluginState(source, state, fork, turn)
     return conversationForkReceipt(fork, { lastTurn: turn, messageCount: fork.messages.length })
   }
@@ -2256,7 +2222,6 @@ export async function apply(ctx) {
     // Nor does it learn of a new one; the same signal reloads the list so the header counts it.
     onCreated: (_id, parentId) => sessionSignals.publish(parentId, { kind: 'subagents', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) }),
     systemAppend: () => runtimePrompt('system-append'),
-    imageSystemPrompt: () => runtimePrompt('scene-image-system'),
     resolveModelSelection: async input => backgroundModelSelection(await backgroundConfigForSession(input.sessionId)) || input.selection,
     resolveWebSearch: async input => (await backgroundConfigForSession(input.sessionId))?.webSearchEnabled === true,
     backgroundTools: BACKGROUND_TOOLS,
@@ -2285,7 +2250,6 @@ export async function apply(ctx) {
     },
     resolveCurrentWorldbook: async function (input) {
       if (input.preparedWorldbook !== undefined) return input.preparedWorldbook
-      if (input.task === 'image') return undefined
       // The server template engine owns absolute history and reads old floors
       // on demand. Only its variable scope needs a proven latest snapshot here.
       const recent = await readOpeningWindow(input.sessionId)
@@ -2437,35 +2401,11 @@ export async function apply(ctx) {
     characterDesign: characterDesignDocuments
   })
   ctx.effect(() => () => backgroundAgentRunner.dispose(), 'dsh-tavern: dispose resident background agents')
-  // Always created so old saves keep their illustrations; with sceneImages off it only reads.
+  // Pictures Tavern drew before image plugins took over: shown, exported, listed and deleted, never drawn.
   const sceneIllustrations = createSceneIllustrations({
-    disabled: !TAVERN_RELEASE_CAPABILITIES.sceneImages,
-    prompt: runtimePrompt,
-    onDiagnostic: imageHostDiagnostic,
-    readLegacyConfiguration: legacyImageConfigurationReader(ctx.get('settings')?.documentPath),
-    store: profileData, diagnostics: sceneDiagnostics, chatForSession, chatSummaries: async () => (await readIndex()).chats || [], backgroundConfigForSession, sceneStateForSession: sessionChats.readSceneImageState, selection: sceneImageSelection,
-    worldbookAtTarget: async (chat, target) => {
-      try { return await sceneWorldbooks.read(sceneWorldbookBinding(chat, target)) }
-      catch (_error) { return { unavailable: '历史世界书快照读取失败，未读取当前世界书。' } }
-    },
-    isRunning: sessionId => ctx.get('agents')?.get(sessionId)?.phase?.kind === 'running',
-    stateAtTarget: async (chat, target) => {
-      // The next turn's beforeRevision contains the settled state of this turn.
-      const next = (chat.timeline?.checkpoints || []).find(item => Number(item.turn) > target.turn && Number.isSafeInteger(item.beforeRevision))
-      if (!next) return undefined
-      const historical = await readChatRevision(chat.id, next.beforeRevision)
-      if (!historical) return undefined
-      const last = [...(historical.messages || [])].reverse().find(item => item.role === 'assistant')
-      const lastTurn = Number(last?.turn || (last?.greeting ? 1 : 0))
-      if (lastTurn !== target.turn || historical.settleStatus !== 'done') return undefined
-      const original = sceneTarget(historical, target.turn)
-      return original.key === target.key ? historical : undefined
-    },
-    credentials: () => ctx.get('credentials'), attachments: () => ctx.get('attachments'),
-    runAgent: input => backgroundAgentRunner.run(input),
-    onStorageError: () => console.error('dsh-tavern: 生图状态保存失败，请检查数据目录权限')
+    store: profileData, chatForSession, chatSummaries: async () => (await readIndex()).chats || [], sceneStateForSession: sessionChats.readSceneImageState,
+    attachments: () => ctx.get('attachments')
   })
-  ctx.effect(() => () => sceneIllustrations.dispose(), 'dsh-tavern: dispose scene image agents')
   // Public extension service for third-party DSH plugins (docs/plugin-api.md).
   const pluginMedia = createPluginMedia({ store: profileData })
   const pluginData = createPluginData({ store: profileData })
@@ -2476,8 +2416,7 @@ export async function apply(ctx) {
     header: chatHeaderForSession,
     slice: (sessionId, indices) => chatSliceForSession(sessionId, indices, []),
     fullChat: chatForSession,
-    readChatCard,
-    worldbooks: sceneWorldbooks
+    readChatCard
   })
   const pluginSettlementProgress = createPluginSettlementProgress()
   // Dialogue speakers and emotions, annotated by settlement (docs/design/cast-presentation.md).
@@ -2811,9 +2750,6 @@ export async function apply(ctx) {
     if (game && results.some(row => row.ok)) sessionSignals.publish(game.sessionId, { kind: 'plugin-media', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
     return results
   }
-  function enabledSceneIllustrations() {
-    return sceneIllustrations
-  }
   const backgroundTasks = createBackgroundTaskCoordinator({
     store: { readChat, writeChat, updateChat, patchChat, readState: chatPersistence.readSessionState, readRecoveryState: taskStateReader.read, readSlice: chatPersistence.readSlice, readSettlementCheckpoint: chatPersistence.readSettlementCheckpoint },
     timeline: storyTimeline,
@@ -2923,7 +2859,7 @@ export async function apply(ctx) {
         checkedCompactionPressure.add(target)
       }
       const background = backgroundAgentRunner.requestContext(target.session.id)
-      if (background && !['image', 'phone'].includes(background.task)) {
+      if (background && background.task !== 'phone') {
         return compactBackgroundIfNeeded({
           trigger, forced, native: fallback,
           pressure: () => measureBackgroundBudget({
@@ -2947,7 +2883,7 @@ export async function apply(ctx) {
     }
     async function compactionRegionGuard(target) {
       const background = backgroundAgentRunner.requestContext(target.session.id)
-      if (!background || ['image', 'phone'].includes(background.task)) return
+      if (!background || background.task === 'phone') return
       const chat = await chatHeaderForSession(background.parentSessionId, [])
       if (!chat) throw new Error('后台压缩找不到所属对话')
       await updateChat(chat.id, current => {
@@ -2967,7 +2903,7 @@ export async function apply(ctx) {
     // Every model step asks: the header's mode answers it.
     const chat = background ? null : await chatHeaderForSession(id, [])
     if (chat && ['story', 'script'].includes(chat.mode)) await retireOldForegroundFrames(payload.agent, payload.turn)
-    if (background && ['image', 'phone'].includes(background.task)) return next()
+    if (background && background.task === 'phone') return next()
     if (background || chat && ['story', 'script'].includes(chat.mode)) {
       const engine = await configureAgentCompaction(payload.agent)
       pendingCompactionMessages.set(payload.agent, payload.messages || [])
@@ -3619,7 +3555,6 @@ export async function apply(ctx) {
         void worldbookPrefilter.start(chatId)
         void pluginApi.turnSettled(latest.sessionId).catch(error => console.warn('dsh-tavern: 插件轮次通知失败:', str(error?.message || error)))
         void gameTitles.afterTurn(latest.sessionId, latest.cardName)
-        void sceneIllustrations?.autoGenerate(latest.sessionId).catch(error => console.warn('dsh-tavern: 自动生图未执行:', str(error?.message || error)))
       }
     } catch {
       if (!signal.aborted) void mvuSettlementReconciler.scan()
@@ -3814,7 +3749,6 @@ export async function apply(ctx) {
   const foregroundFrameBuilder = createForegroundFrameBuilder()
   const foregroundFrameSessionAdapter = createForegroundFrameSessionAdapter({ id: randomUUID })
   const turnOrchestrator = createTurnOrchestrator({
-    captureSceneWorldbook,
     storyToolCall: async () => (await readTavernSettings()).storyToolCall,
     store: {
       chatForSession,
@@ -4072,7 +4006,7 @@ export async function apply(ctx) {
   const conversationBackgroundSettings = createConversationBackgroundSettings({
     readConfig: backgroundConfigForSession, readChat: chatForSession, updateChat,
     modelCatalog: tavernModelCatalog, modelReasoning: selection => readBackgroundModelReasoning(llm, selection),
-    isPlayMode: mode => groupOfMode(mode) === 'play', sceneImagesAvailable: TAVERN_RELEASE_CAPABILITIES.sceneImages,
+    isPlayMode: mode => groupOfMode(mode) === 'play',
     // Unloaded sessions recall after their next reply.
     onStyleEnabled: (sessionId, chatId) => { if (agentRegistry.get(sessionId)?.session) void worldbookPrefilter.start(chatId) }
   })
@@ -4326,21 +4260,7 @@ export async function apply(ctx) {
       case 'getBackgroundModelReasoning': return { reasoning: await readBackgroundModelReasoning(llm, args) }
       case 'getDisplayPreferences': { const settings = await readTavernSettings(); return { hideContextAndReasoning: settings.hideContextAndReasoning, renderDepth: settings.renderDepth, headerItems: settings.headerItems } }
       case 'getCandidatePreferences': return { candidateDismissMode: (await readTavernSettings()).candidateDismissMode }
-      case 'getTavernSettings': return { settings: await readTavernSettings(), modelCatalog: await tavernModelCatalog(), releaseCapabilities: TAVERN_RELEASE_CAPABILITIES }
-      case 'getSceneImageSettings': {
-        const settings = await enabledSceneIllustrations().settings(args?.provider)
-        if (args?.conversation === true) {
-          const chat = await backgroundConfigForSession(str(args.sessionId))
-          return { settings: { ...settings, enabled: chat?.sceneImagesEnabled === true } }
-        }
-        return { settings }
-      }
-      case 'saveSceneImageSettings': {
-        return { settings: await enabledSceneIllustrations().configure(args) }
-      }
-      case 'testSceneImageConnection': return await enabledSceneIllustrations().testConnection(args)
-      case 'listSceneImageModels': return await enabledSceneIllustrations().listModels(args)
-      case 'testSceneImageGeneration': return await enabledSceneIllustrations().testGenerate()
+      case 'getTavernSettings': return { settings: await readTavernSettings(), modelCatalog: await tavernModelCatalog() }
       case 'pluginMediaForTurn': return await pluginMediaForTurn(args && args.sessionId, args && args.turn)
       case 'removePluginMediaVersion': return await removePluginMediaVersion(args && args.sessionId, args && args.itemId, args && args.version)
       // The lines come with the cast, so the story shows each speaker's picture for the line's emotion.
@@ -4362,32 +4282,12 @@ export async function apply(ctx) {
       case 'castRemoveCharacter': return await castEdit(args && args.sessionId, cardPath => castAssets.removeCharacter({ cardPath, name: args.name }))
       case 'castImportSpritePack': return await castEdit(args && args.sessionId, (cardPath, card) => castAssets.importSpritePack({ cardPath, name: str(args.name).trim() || card.name || undefined, bytes: Buffer.from(str(args.data), 'base64') }))
       case 'pluginMediaTurns': return await pluginMediaTurns(args && args.sessionId)
-      case 'sceneImageStatus': return { illustration: await enabledSceneIllustrations().status(args.sessionId, args.turn) }
-      case 'recordSceneImageInteraction': {
-        enabledSceneIllustrations()
-        const chat = await backgroundConfigForSession(str(args.sessionId))
-        if (chat) await recordSceneImageInteraction(sceneDiagnostics, chat.id, args).catch(() => {})
-        return { recorded: Boolean(chat) }
-      }
-      case 'generateSceneImage': {
-        const illustrations = enabledSceneIllustrations()
-        const chat = await backgroundConfigForSession(str(args.sessionId))
-        const record = (stage, reason) => recordSceneImageInteraction(sceneDiagnostics, chat?.id, { requestId: args.requestId, turn: args.turn, stage, reason }).catch(() => {})
-        await record('received')
-        try {
-          const illustration = await illustrations.start(args.sessionId, args.turn, args.key, args)
-          await record('returned')
-          return { illustration }
-        } catch (error) { await record('failed', 'start-error'); throw error }
-      }
-      case 'retrySceneImageSave': return { illustration: await enabledSceneIllustrations().retrySave(args.sessionId, args.turn, args.key, args.requestId) }
-      case 'cancelSceneImage': return { illustration: await enabledSceneIllustrations().cancel(args.sessionId, args.turn, args.key, args.requestId) }
+      case 'sceneImageStatus': return { illustration: await sceneIllustrations.status(args.sessionId, args.turn) }
       case 'listSceneImageHistory': {
         // The gallery shows only the session's own game.
-        const illustrations = enabledSceneIllustrations()
-        if (!args?.sessionId) return { items: await illustrations.history() }
+        if (!args?.sessionId) return { items: await sceneIllustrations.history() }
         const chat = await backgroundConfigForSession(str(args.sessionId))
-        return { items: chat?.id ? await illustrations.history(chat.id) : [], pluginItems: await pluginGalleryItems(args.sessionId) }
+        return { items: chat?.id ? await sceneIllustrations.history(chat.id) : [], pluginItems: await pluginGalleryItems(args.sessionId) }
       }
       case 'removeSceneImageHistory': {
         const legacyItems = args && args.items || []
@@ -4398,11 +4298,9 @@ export async function apply(ctx) {
           if (!chat?.id) throw new Error('当前游戏不存在，未删除图片')
           if (legacyItems.some(item => item?.chatId !== chat.id)) throw new Error('图片不属于当前游戏，未删除图片')
         }
-        const results = await enabledSceneIllustrations().removeStoredImages(legacyItems)
+        const results = await sceneIllustrations.removeStoredImages(legacyItems)
         return { results: results.concat(await removePluginGalleryItems(args && args.sessionId, pluginItems)) }
       }
-      case 'removeSceneImage': return { illustration: await enabledSceneIllustrations().removeImage(args.sessionId, args.turn, args.key, args.versionId) }
-      case 'setSceneImageReference': return { illustration: await enabledSceneIllustrations().setReference(args.sessionId, args.turn, args.key, args.versionId, args.consent, args.enabled !== false, args.personId) }
       case 'updateTavernSettings': return { settings: await updateTavernSettings(args && args.patch) }
       case 'getSystemPrompts': return { systemPrompts: presentSystemPrompts(await readTavernSettings()) }
       case 'updateSystemPrompt': {
@@ -4643,14 +4541,6 @@ export async function apply(ctx) {
         const id = str(args && args.sessionId)
         if (!id.startsWith('background-')) return { turns: [] }
         return readBackgroundSuppression(id)
-      }
-      case 'getImageAgentUndo': {
-        const available = sceneIllustrations !== null && await sceneIllustrations.isAgentSession(str(args && args.parentSessionId), str(args && args.agentSessionId))
-        return { available }
-      }
-      case 'undoImageAgentTurn': {
-        if (sceneIllustrations === null) throw new Error('场景生图不可用')
-        return await sceneIllustrations.undoAgentTurn(str(args && args.parentSessionId), str(args && args.agentSessionId))
       }
       case 'applyUpdatedCard': {
         const sessionId = str(args && args.sessionId)

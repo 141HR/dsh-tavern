@@ -23,8 +23,6 @@ required.push('tavern-plugin/lib/domain/tavern-client-assets.js', 'tavern-plugin
 required.push('bin/build-tavern-client.mjs', 'tavern-plugin/src/client/main.js',
   ...['runtime-generation-monitor', 'library-refresh', 'live-tavern-view'].map(name => `tavern-plugin/src/client/modules/${name}.js`))
 required.push('bin/bundled-image-plugin.mjs', ...['package.json', 'cordis.patch.yml', 'LICENSE', 'src/index.ts', 'lib/index.js', 'lib/client.js'].map(file => `tavern-plugin/packages/dsh-image-gen/${file}`))
-required.push('tavern-plugin/lib/domain/scene-image-module-settings.js', 'tavern-plugin/lib/domain/image-generation-host.js', 'tavern-plugin/packages/dsh-image-gen/src/module.js', 'tavern-plugin/packages/dsh-image-gen/src/configuration.js',
-  ...['redact', 'scene-image-reference', 'scene-image-style', 'scene-image-channels', 'scene-image-connection', 'scene-image-comfy-workflow', 'scene-image-zip', 'scene-image-comfy', 'scene-image-provider', 'scene-image-auth', 'scene-image-novelai'].map(name => `tavern-plugin/packages/dsh-image-gen/src/tavern/${name}.js`))
 
 // Git emits USTAR/PAX UTF-8 names; Windows tar's listing and extraction depend on locale.
 function gitTarFiles(archive) {

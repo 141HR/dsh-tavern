@@ -107,7 +107,6 @@ function harness(mode, options = {}) {
       }
     },
     worldBookRecall: options.worldBookRecall,
-    captureSceneWorldbook: options.captureSceneWorldbook,
     scripts,
     timeline,
     frameBuilder: createForegroundFrameBuilder(),

@@ -17,7 +17,7 @@ function cardAgent(chat) { return chat.mode === 'card' && chat.cardEditContext?.
 function preferenceOnly(chat) { return cardAgent(chat) && chat.cardReferenceContext?.version !== 1 }
 
 /** Owns snapshot preparation, migration, persistence and concurrent build sharing. */
-export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeChat, updateChat, settings, captureSceneWorldbook, userPreferenceProfile, logger = console }) {
+export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeChat, updateChat, settings, userPreferenceProfile, logger = console }) {
   const pending = new Map()
   const syncing = new Set()
   const lastSyncWarning = new Map()
@@ -57,10 +57,6 @@ export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeCh
       cardContentDigest: cardContentDigest(card),
       worldbookLibraryDigest: chat.openingWorldbookSnapshot ? chat.openingWorldbookSnapshot.libraryDigest : worldbookContentDigest(worldBook)
     })
-    // Only new, unpublished openings: migration cannot manufacture their past.
-    if (!(chat.messages || []).length && typeof captureSceneWorldbook === 'function') {
-      patch.sceneOpeningWorldbook = await captureSceneWorldbook(chat, card, worldBook, 0)
-    }
     return patch
   }
 

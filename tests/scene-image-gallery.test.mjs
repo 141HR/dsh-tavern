@@ -23,17 +23,17 @@ const str = value => value == null ? '' : String(value)
 
 function productionGallery({ pluginMedia, pluginTurns, sessionSignals }) {
   const start = source.indexOf('  async function pluginGalleryItems(sessionId) {')
-  const end = source.indexOf('  function enabledSceneIllustrations() {', start)
+  const end = source.indexOf('  const backgroundTasks = createBackgroundTaskCoordinator({', start)
   assert.ok(start >= 0 && end > start, 'production gallery function boundaries exist')
   return new AsyncFunction('pluginMedia', 'pluginTurns', 'sessionSignals', 'str', `${source.slice(start, end)}\nreturn { pluginGalleryItems, removePluginGalleryItems }`)(pluginMedia, pluginTurns, sessionSignals, str)
 }
 
 function productionRemoveHistoryRpc({ illustrations, removePluginGalleryItems, backgroundConfigForSession = async () => null }) {
   const start = source.indexOf("      case 'removeSceneImageHistory': {")
-  const end = source.indexOf("      case 'removeSceneImage':", start)
+  const end = source.indexOf("      case 'updateTavernSettings':", start)
   assert.ok(start >= 0 && end > start, 'production remove history RPC branch boundaries exist')
   const branch = source.slice(start, end)
-  return new Function('enabledSceneIllustrations', 'removePluginGalleryItems', 'backgroundConfigForSession', 'str', `return async function(args) { switch ('removeSceneImageHistory') {\n${branch}\n} }`)(() => illustrations, removePluginGalleryItems, backgroundConfigForSession, str)
+  return new Function('sceneIllustrations', 'removePluginGalleryItems', 'backgroundConfigForSession', 'str', `return async function(args) { switch ('removeSceneImageHistory') {\n${branch}\n} }`)(illustrations, removePluginGalleryItems, backgroundConfigForSession, str)
 }
 
 test('production plugin gallery filters by game, current text version, ready image status, and removes only that game', async () => {
@@ -130,7 +130,7 @@ test('production removeSceneImageHistory scopes native deletion to a resolved se
   assert.deepEqual(nativeCalls, [[native], [global]], 'omitting sessionId preserves global history deletion')
 })
 
-test('real HTTP routes serve legacy images with sceneImages disabled, reject hostile origins, and dispatch gallery RPCs', async () => {
+test('real HTTP routes serve legacy images, reject hostile origins, and dispatch gallery RPCs', async () => {
   const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3])
   const calls = [], registered = new Map()
   let handler
