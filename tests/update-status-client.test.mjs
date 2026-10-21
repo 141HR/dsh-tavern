@@ -166,3 +166,25 @@ test('恢复探测不重叠，断线恢复只重载一次并在停止时清理',
   controller.stop()
   assert.equal(intervals.size, 0)
 })
+
+test('空闲时状态轮询放慢到 30 秒一次，更新进行中仍每 2.5 秒一次', async () => {
+  let clock = 0, phase = 'update-available', reads = 0, tickPoll
+  const controller = createUpdateStatusController({ now: () => clock, confirm: async () => true,
+    call: async () => { reads++; return { status: { phase } } },
+    errors: { report() {}, resolve() {} },
+    browser: { setInterval(fn, ms) { if (ms === 2500) tickPoll = fn; return 1 }, clearInterval() {}, setTimeout() { return 1 }, clearTimeout() {},
+      fetch: async () => ({ ok: true }), location: { origin: 'http://localhost', reload() {} } } })
+  controller.start()
+  await tick()
+  assert.equal(reads, 1)
+  for (let i = 0; i < 11; i++) { clock += 2500; await tickPoll() }
+  assert.equal(reads, 1)
+  clock += 2500; await tickPoll()
+  assert.equal(reads, 2)
+  phase = 'running'
+  clock += 30000; await tickPoll()
+  assert.equal(controller.getSnapshot().phase, 'running')
+  for (let i = 0; i < 3; i++) { clock += 2500; await tickPoll() }
+  assert.equal(reads, 6)
+  controller.stop()
+})

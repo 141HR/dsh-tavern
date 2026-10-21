@@ -60,8 +60,16 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
     void probe();
     probeTimer = browser.setInterval(probe, 400);
   }
+  // Poll fast only while an update is in flight; at rest a slow read still notices
+  // updates started elsewhere without asking the server every 2.5 seconds forever.
+  let lastPollAt = 0;
+  function pollUpdateStatus() {
+    if (!isUpdateBusy(statusValue) && now() - lastPollAt < 30000) return;
+    return refreshUpdateStatus();
+  }
   async function refreshUpdateStatus() {
     if (!active || pending || action.pending) return;
+    lastPollAt = now();
     const generation = action.generation;
     pending = true;
     try {
@@ -164,7 +172,7 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
       if (active || disposed) return;
       active = true;
       void refreshUpdateStatus();
-      pollTimer = browser.setInterval(refreshUpdateStatus, 2500);
+      pollTimer = browser.setInterval(pollUpdateStatus, 2500);
       syncProbe();
     },
     stop() {
