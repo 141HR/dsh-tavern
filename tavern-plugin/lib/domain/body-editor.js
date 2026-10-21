@@ -254,41 +254,36 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
     const requested = Number(input?.turn) || 0
     const turn = requested > 0 ? requested : userFallbackTurn(chat)
     if (!Number.isSafeInteger(turn) || turn < 1) throw new Error('找不到这条输入对应的回合')
+    const events = sessionEvents(agent.session)
+    const end = events.findLast(event => event.type === 'turn/end' && Number(event.data?.turn) === turn)
+    const failed = Boolean(end && isFailedTurnEnd(end.data?.reason?.kind))
     const found = userMessageForTurn(chat, turn)
     const record = userRecord(chat, turn)
     const markerSeq = Number(record?.seq) || Number(found?.message?.bodyEdit?.seq) || 0
     let located = markerSeq > 0 ? locateUserEditFloor(agent.session, markerSeq) : null
     if (!located) located = locateUserInputFloor(agent.session, turn)
-    let detached = false
-    if (!located) {
-      // A failed turn's input is removed from the model surface. Locate the
-      // original append event by seq/turn so the editor shows that exact text;
-      // saving this one withdraws the failed turn instead of editing another.
-      const events = sessionEvents(agent.session)
+    if (!located && failed) {
+      // A failed turn may already have been cleaned from the model surface (an
+      // old save or a previous retry). Its input is still in the log; use that
+      // exact text, but save the edit as an overlay instead of touching Surface.
       const seq = Number(input?.seq) || 0
       const original = (seq > 0 ? events.find(event => Number(event.seq) === seq && event.type === 'user/message' && inputKind(event.data) === 'player') : null)
         || inputEventForTurn(agent.session, turn)
-      const latest = events.reduce((highest, event) => event.type === 'turn/start' ? Math.max(highest, Number(event.data?.turn) || 0) : highest, 0)
-      const end = events.findLast(event => event.type === 'turn/end' && Number(event.data?.turn) === turn)
-      if (original && inputKind(original.data) === 'player' && latest === turn && end && isFailedTurnEnd(end.data?.reason?.kind)) {
-        located = { seq: Number(original.seq), event: original, turn, detached: true }
-        detached = true
-      }
+      if (original && inputKind(original.data) === 'player') located = { seq: Number(original.seq), event: original, turn }
     }
-    // Never fall back to "the newest input": that edits another message when the
-    // clicked one was removed from the model context.
+    // Never fall back to "the newest input": that edits another message.
     if (!located) throw new Error('这条输入已不在当前上下文中，无法编辑')
     const text = record ? record.text : found ? String(found.message.text ?? '') : userInputText(located.event)
-    return { chat, agent, message: found?.message || null, index: found?.index ?? -1, turn, located, text, record, detached }
+    return { chat, agent, message: found?.message || null, index: found?.index ?? -1, turn, located, text, record, failed }
   }
   function userToken(chat, context) {
     return createHash('sha256').update(JSON.stringify([chat.id, chat.timeline?.branchId, chat._storageRevision, context.turn, context.text,
-      context.record?.id || '', context.message?.bodyEdit?.id || '', context.detached === true ? 'detached' : ''])).digest('hex')
+      context.record?.id || '', context.message?.bodyEdit?.id || '', context.failed === true ? 'failed' : ''])).digest('hex')
   }
   async function readUser(sessionId, input) {
     const context = await userContext(sessionId, input)
     return { token: userToken(context.chat, context), role: 'user', index: context.index, turn: context.turn, seq: context.located.seq,
-      detached: context.detached === true, parts: [{ kind: 'text', text: context.text }] }
+      failed: context.failed === true, parts: [{ kind: 'text', text: context.text }] }
   }
   async function saveUser(sessionId, input) {
     if (pending.has(sessionId)) throw new Error('正在保存正文，请稍候')
@@ -300,9 +295,20 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
       if (!Array.isArray(texts) || texts.length !== 1 || typeof texts[0] !== 'string') throw new Error('编辑文本格式无效')
       const text = texts[0]
       if (text.trim() === '') throw new Error('输入不能为空')
-      // A failed turn has no surface to edit; the caller withdraws it and puts
-      // the new text into the composer. Return before touching Chat or Session.
-      if (context.detached) return { detached: true, text }
+      // A failed turn is edited as a Chat overlay: the input may already be gone
+      // from the model surface, and the next retry/withdraw will read this text.
+      // Nothing on the Session is changed here.
+      if (context.failed) {
+        if (text === context.text) return present(context.chat)
+        const editId = 'tavern-user-edit:' + randomUUID()
+        const saved = await chats.update(context.chat.id, current => {
+          idle(current, context.agent)
+          current.userInputEdits = { ...(current.userInputEdits && typeof current.userInputEdits === 'object' && !Array.isArray(current.userInputEdits) ? current.userInputEdits : {}),
+            [String(context.turn)]: { text, id: editId, seq: context.located.seq } }
+          return current
+        }, { source: 'foreground.user-edit' })
+        return present(saved)
+      }
       if (text === context.text) return present(context.chat)
       const { chat, agent, turn, located } = context
       const editId = 'tavern-user-edit:' + randomUUID()

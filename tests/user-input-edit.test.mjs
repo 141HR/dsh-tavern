@@ -116,7 +116,7 @@ test('还没进 Chat 的输入只写表头编辑记录，模型上下文同步�
   assert.deepEqual(h.session.deriveMessages().filter(message => message.role === 'user').map(message => message.content[0].text), ['第一条输入', '再改成生成音频'])
 })
 
-test('失败轮输入已移出模型上下文时，只读取原文并交给撤回流程，不写存档', async () => {
+test('失败轮输入即使已移出模型上下文，编辑也只写表头记录，模型上下文不动', async () => {
   const session = Session.create('user-input-failed')
   appendSessionEvent(session, 'turn/start', { turn: 2 })
   appendSessionEvent(session, 'user/message', { id: 'u2', role: 'user', content: [{ type: 'text', text: '第一条输入' }], source: { kind: 'user' } }, { surfaceOp: 'append' })
@@ -134,14 +134,17 @@ test('失败轮输入已移出模型上下文时，只读取原文并交给撤�
     messages: [{ role: 'user', text: '第一条输入' }, { role: 'assistant', turn: 2, native: { turn: 2 }, text: '回复' }] }
   const agent = { get session() { return session }, phase: { kind: 'idle' } }
   const editor = createBodyEditor({
-    chats: { forSession: async () => structuredClone(chat), update: async () => { throw new Error('失败轮不应写存档') } },
+    chats: { forSession: async () => structuredClone(chat), update: async (_id, fn) => { chat = fn(structuredClone(chat)); chat._storageRevision++; return structuredClone(chat) } },
     sessions: { get: () => agent, flush: async () => {} },
     activity: () => ({ busy: false }), project: async () => ({}), present: async value => value
   })
   const edit = await editor.readUser(session.id, { turn: 6, seq: failedInput })
-  assert.equal(edit.detached, true)
+  assert.equal(edit.failed, true)
   assert.deepEqual(edit.parts, [{ kind: 'text', text: '生成视频' }])
   const saved = await editor.saveUser(session.id, { token: edit.token, turn: 6, seq: failedInput, texts: ['改成生成图片'] })
-  assert.deepEqual(saved, { detached: true, text: '改成生成图片' })
+  assert.equal(saved.userInputEdits['6'].text, '改成生成图片')
+  assert.deepEqual(userInputEditsOf(saved), { 6: '改成生成图片' })
   assert.equal(chat.messages.length, 2)
+  const again = await editor.readUser(session.id, { turn: 6, seq: failedInput })
+  assert.deepEqual(again.parts, [{ kind: 'text', text: '改成生成图片' }])
 })

@@ -819,7 +819,7 @@
 			}, [props.sessionId]);
 			if (!panel || panel.sessionId !== props.sessionId) return null;
 			const label = panel.edit.role === "user" ? "编辑这条输入" : "编辑正文";
-			const detached = panel.edit.detached === true;
+			const failed = panel.edit.failed === true;
 			async function save() {
 				setBodyEditPanel(Object.assign({}, panel, { busy: true, error: "" }));
 				try {
@@ -842,8 +842,8 @@
 			let textIndex = 0;
 			return h("div", { className: "dsh-tavern-question", role: "region", "aria-label": label },
 				h("div", { className: "dsh-tavern-question-head" }, h("span", null, label)),
-				panel.edit.role === "user" ? h("div", { className: "dsh-tavern-question-sub" }, detached
-					? "这一轮已失败并从模型上下文移除。保存会撤回这次失败，把修改后的输入放回输入框，不会自动发送。"
+				panel.edit.role === "user" ? h("div", { className: "dsh-tavern-question-sub" }, failed
+					? "这是失败轮的输入。保存只改文字，不会自动重试或撤回；之后点「重新生成本轮」会按新文字重发，点「撤回这条输入」会把它放回输入框。"
 					: "只改这一条输入，不会自动重写已生成的回复；需要新回复时保存后再点「重新生成正文」。") : null,
 				panel.error ? h("div", { className: "dsh-tavern-choice-error", role: "alert" }, panel.error) : null,
 				h("div", { style: { maxHeight: "50vh", overflowY: "auto" } }, panel.edit.parts.map(function (part, index) {
@@ -856,7 +856,7 @@
 					} });
 				})),
 				h("div", { className: "dsh-tavern-question-foot" },
-					h("button", { className: "dsh-tavern-question-primary", disabled: panel.busy || running, onClick: save }, panel.busy ? "保存中…" : detached ? "撤回并放回输入框" : "保存"),
+					h("button", { className: "dsh-tavern-question-primary", disabled: panel.busy || running, onClick: save }, panel.busy ? "保存中…" : "保存"),
 					h("button", { className: "dsh-tavern-question-free", disabled: panel.busy, onClick: function () { setBodyEditPanel(null); } }, "取消")));
 		}
 

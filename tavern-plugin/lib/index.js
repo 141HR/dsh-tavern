@@ -116,7 +116,7 @@ import { createHelperGenerationTasks } from './domain/helper-generation-tasks.js
 import { createBodyEditor } from './domain/body-editor.js'
 import { userInputEditsOf } from './domain/input-floor.js'
 import { appendHelperUserSessionContext } from './domain/helper-user-session-context.js'
-import { inputEventForTurn, inputKind, isFailedTurnEnd, userMessageForTurn, requestIdForTurn, requestIdForMessages } from './domain/session-turn-input.js'
+import { inputEventForTurn, inputKind, isFailedTurnEnd, isNewTurnInput, userMessageForTurn, requestIdForTurn, requestIdForMessages } from './domain/session-turn-input.js'
 import { inspectStoryAlignment, nativeStoryTurns } from './domain/story-alignment.js'
 import { repairNativeSurface, recordNativeSurfaceRepair, planNativeSurfaceRepair } from './domain/native-surface-repair.js'
 import { sessionOpeningDescriptor, prepareSessionOpening } from './domain/session-opening.js'
@@ -2531,18 +2531,26 @@ export async function apply(ctx) {
     }
     return 0
   }
-  // The newest failed turn still has its input in the log but no surface node.
-  // Editing it withdraws that turn and hands the text back to the composer.
+  // The newest failed turn whose input has not been superseded by a new player
+  // message. Its surface is left in place until the player retries, withdraws or
+  // sends a new message, so the input stays available for an in-place edit.
   function failedUserInputTurnsForChat(chat) {
     const session = sessionStore.get(str(chat?.sessionId)) || agentRegistry.get(str(chat?.sessionId))?.session
     if (!session) return []
     const events = sessionEvents(session)
-    const latest = events.reduce((highest, event) => event.type === 'turn/start' ? Math.max(highest, Number(event.data?.turn) || 0) : highest, 0)
-    if (!latest) return []
-    const end = events.findLast(event => event.type === 'turn/end' && Number(event.data?.turn) === latest)
-    if (!end || !isFailedTurnEnd(end.data?.reason?.kind)) return []
-    const input = inputEventForTurn(session, latest)
-    return input && inputKind(input.data) === 'player' ? [latest] : []
+    let failed = 0
+    let endSeq = 0
+    for (const event of events) {
+      if (event.type !== 'turn/end' || !isFailedTurnEnd(event.data?.reason?.kind)) continue
+      const turn = Number(event.data?.turn) || 0
+      if (turn <= failed) continue
+      failed = turn
+      endSeq = Number(event.seq) || 0
+    }
+    if (!failed) return []
+    if (events.some(event => isNewTurnInput(event) && Number(event.seq) > endSeq)) return []
+    const input = inputEventForTurn(session, failed)
+    return input && inputKind(input.data) === 'player' ? [failed] : []
   }
   // Player inputs the page may edit: only those still on the model surface. A
   // failed or withdrawn turn is removed from the surface while its append node
@@ -4579,16 +4587,33 @@ export async function apply(ctx) {
       // A turn the server stopped in the middle never ended, so nothing cleaned it up.
       const turns = new Set([...(availability.unclearedTurns || []), ...interruptedSurfaceTurns({ events: sessionEvents(session), nodes: session.surface?.nodes || [] })])
       for (const turn of turns) cleared += clearFailedTurnSurface({ session, turn })
-      if (cleared) await sessionStore.flush(session)
+      if (cleared) {
+        await sessionStore.flush(session)
+        const clearedTurns = [...turns]
+        await updateChat(chat.id, current => {
+          if (!current || !current.userInputEdits || typeof current.userInputEdits !== 'object') return undefined
+          const next = { ...current.userInputEdits }
+          let changed = false
+          for (const turn of clearedTurns) {
+            if (!Object.hasOwn(next, String(turn))) continue
+            delete next[String(turn)]
+            changed = true
+          }
+          if (!changed) return undefined
+          current.userInputEdits = next
+          return current
+        }, { source: 'failed-turn.cleanup' })
+      }
       else if (!availability.canRollback && availability.reason && /失败回合/.test(availability.reason)) console.warn('dsh-tavern: 上一次失败回合的残留无法清理，本轮请求可能带上它:', availability.reason)
       return cleared
     },
     cleanupFailedTurn: async function (input) {
+      // Keep the failed turn (input and output) on the surface until the player
+      // retries, withdraws or sends a new message. That keeps the input available
+      // for an in-place edit; the next action clears the whole failed turn first.
       const mode = await turnOrchestrator.modeFor(input.sessionId)
       if (mode !== 'story' && mode !== 'script') return 0
-      const liveAgent = agentRegistry.get(input.sessionId)
-      const liveSession = sessionStore.get(input.sessionId) || (liveAgent && liveAgent.session)
-      return clearFailedTurnSurface({ session: liveSession, turn: input.turn })
+      return 0
     },
     logger: console
   })
