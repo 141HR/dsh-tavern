@@ -81,7 +81,6 @@ export function registerTurnLifecycleHooks({
 
   ctx.on('session/event', function (session, event) {
     if (!event || event.type !== 'turn/end') return
-    foregroundStrategies.endTurn(session.id)
     if (backgroundAgentRunner.owns(session.id)) return
     const reason = event.data && event.data.reason ? event.data.reason.kind : ''
     foregroundHandoff.end({ sessionId: session.id, turn: event.data && event.data.turn, reason })

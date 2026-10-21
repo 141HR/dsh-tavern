@@ -1,3 +1,5 @@
+import { setupRealGameplay, realGameplayChecks } from './real-gameplay.mjs'
+import { refactorLifecycleChecks } from './refactor-lifecycle.mjs'
 import { installV3SaveFixture } from './session-upgrade-fixture.mjs'
 import { helperApiChecks, helperApiScript } from './helper-api.mjs'
 import { backgroundFailureChecks } from './background-failure.mjs'
@@ -203,6 +205,7 @@ try {
         ...(process.argv.includes('--regen-template') ? [{ id: 'e2e-input-rule', scriptName: '整理输入', findRegex: '/ZZ(\\d)/g', replaceString: '〔$1〕', placement: [1], disabled: false }] : [])] }
     } }))
   })
+  if (process.argv.includes('--real-gameplay')) { const config = await setupRealGameplay({root,profile,data,runtimeHome:join(homedir(),'.dsh-tavern')}); report.scope='real isolated DSH + Chromium + configured live model'; report.model=config.model; report.card=config.card }
   if(process.argv.includes('--real-variables')) {report.scope='real isolated DSH + Chromium + configured live model';report.model=await setupRealVariables({root,profile,data,runtimeHome:join(homedir(),'.dsh-tavern')})}
   if(process.argv.includes('--real-card-edit')) {report.scope='real isolated DSH + Chromium + configured live model';report.model=await setupRealCardEdit({root,profile,data,runtimeHome:join(homedir(),'.dsh-tavern')})}
   if(process.argv.includes('--real-character-design')) {report.scope='real isolated DSH + Chromium + configured live model';report.model=await setupRealCharacterDesign({root,profile,data,runtimeHome:join(homedir(),'.dsh-tavern')})}
@@ -269,7 +272,7 @@ try {
       current.searchParams.set('token', next.searchParams.get('token'))
       const openStarted = Date.now()
       await page.goto(current.toString(), { waitUntil: 'domcontentloaded' })
-      const history = page.locator('.dsh-tavern-history-group-toggle').filter({ hasText: 'E2E 奖励验收' })
+      const history = page.locator('.dsh-tavern-history-group-toggle').filter({ hasText: report.card || 'E2E 奖励验收' })
       const sidebarToggle = page.getByRole('button', { name: /^(Open|Expand) sidebar$/ })
       await history.filter({visible:true}).or(sidebarToggle.filter({visible:true})).first().waitFor()
       if (!await history.isVisible()) await sidebarToggle.click()
@@ -303,7 +306,7 @@ try {
     await page.getByRole('button', { name: 'Continue', exact: true }).click()
   })
   if (restoredSave) await step('打开存档中的这局游戏', async () => {
-    const history = page.locator('.dsh-tavern-history-group-toggle').filter({ hasText: 'E2E 奖励验收' })
+    const history = page.locator('.dsh-tavern-history-group-toggle').filter({ hasText: report.card || 'E2E 奖励验收' })
     await history.filter({ visible: true }).first().waitFor()
     if (!await page.locator('.dsh-tavern-side-row-name').first().isVisible().catch(() => false)) await history.first().click()
     await page.locator('.dsh-tavern-side-row-name').first().click()
@@ -311,9 +314,10 @@ try {
   })
   else await step('通过界面选择角色卡并新开一局', async () => {
     await page.getByRole('button', { name: /选择人物卡.*新开游玩/ }).click()
-    await page.getByText('E2E 奖励验收', { exact: true }).first().click()
+    await page.getByText(report.card || 'E2E 奖励验收', { exact: true }).first().click()
     await page.getByRole('button', { name: '开始新游戏', exact: true }).click()
     await page.getByRole('textbox', { name: /发消息|Message/ }).waitFor()
+    if (process.argv.includes('--real-gameplay')) return
     await openStatus()
     await page.frameLocator('.dsh-tavern-status-runtime iframe.dsh-tavern-message-frame:not([aria-hidden="true"])')
       .locator('#e2e-gold').filter({ hasText: /^金币：0$/ }).waitFor()
@@ -489,6 +493,8 @@ try {
   } else if (process.argv.includes('--scene-add')) {
     const images = await startSceneImageServer()
     try { await sceneAddChecks({ page, step, output, report, images, savedChat }) } finally { await images.close() }
+  } else if (process.argv.includes('--real-gameplay')) {
+    await realGameplayChecks({page,step,savedChat,output,report,restartServer,root})
   } else if (process.argv.includes('--real-card-edit')) {
     await realCardEditChecks({page,step,root,data,output,report})
   } else if (process.argv.includes('--real-character-design')) {
@@ -644,6 +650,8 @@ try {
       await cpuProfiler.send('Profiler.start')
     }
     await settlementPerformanceChecks({page,step,savedChat,output,report,restartServer,root,data,runtime,readLog:()=>log})
+  } else if (process.argv.includes('--refactor-lifecycle')) {
+    await refactorLifecycleChecks({page,step,savedChat,data,output,report,restartServer})
   } else if (process.argv.includes('--mvu-incremental')) {
     await incrementalMvuChecks({page,step,savedChat,output,report,restartServer})
   } else if (process.argv.includes('--background-lifecycle')) {
@@ -813,7 +821,7 @@ try {
     await pause(5000)
     const started = Date.now()
     await page.goto(origin + '/', { waitUntil: 'domcontentloaded' })
-    const history = page.locator('.dsh-tavern-history-group-toggle').filter({ hasText: 'E2E 奖励验收' })
+    const history = page.locator('.dsh-tavern-history-group-toggle').filter({ hasText: report.card || 'E2E 奖励验收' })
     await history.filter({ visible: true }).first().waitFor()
     if (!await page.locator('.dsh-tavern-side-row-name').first().isVisible().catch(() => false)) await history.first().click()
     await page.locator('.dsh-tavern-side-row-name').first().click()

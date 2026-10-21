@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 
 export const SYSTEM_PROMPT_DEFINITIONS = Object.freeze([
   ['system-append', 'system附加指令', '默认开启，可按需关闭。内容会添加到前台、后台、卡片及文生图 Agent 的 system 提示词最前面（位于酒馆预设之前），修改后从下一次请求生效。'],
@@ -24,11 +24,22 @@ const knownNames = new Set([...SYSTEM_PROMPT_NAMES,
   'card-task-worldbook', 'card-task-preset', 'card-task-debug-play'
 ])
 
-export function createPromptCatalog(directory = new URL('../prompts/', import.meta.url)) {
+function promptVersion(file) {
+  const info = statSync(file, { bigint: true })
+  return [info.dev, info.ino, info.size, info.mtimeNs, info.ctimeNs].join(':')
+}
+
+export function createPromptCatalog(directory = new URL('../prompts/', import.meta.url), { read = readFileSync, version = promptVersion } = {}) {
+  const cache = new Map()
   return function promptFromFile(name) {
     if (!knownNames.has(name)) throw new Error('未知提示词: ' + String(name))
-    const text = readFileSync(new URL(name + '.md', directory), 'utf8').trim()
+    const file = new URL(name + '.md', directory)
+    const stamp = version(file)
+    const previous = cache.get(name)
+    if (previous?.stamp === stamp) return previous.text
+    const text = read(file, 'utf8').trim()
     if (text === '' && name !== 'card-system' && name !== 'system-append') throw new Error('提示词文件不能为空: ' + name + '.md')
+    if (version(file) === stamp) cache.set(name, { stamp, text })
     return text
   }
 }

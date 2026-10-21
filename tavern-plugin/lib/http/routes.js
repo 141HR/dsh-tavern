@@ -95,7 +95,8 @@ export function registerTavernHttpRoutes({
         if (gameplayRoute && origin && origin !== 'http://' + req.headers.host && origin !== 'https://' + req.headers.host) {
           res.writeHead(403); res.end('forbidden'); return
         }
-        const sceneImageRoute = TAVERN_RELEASE_CAPABILITIES.sceneImages && /^\/api\/dsh-tavern\/(?:scene-image|scene-image-artist-preview|scene-image-stored|listSceneImageHistory|removeSceneImageHistory|getSceneImageSettings|saveSceneImageSettings|testSceneImageConnection|listSceneImageModels|testSceneImageGeneration|sceneImageStatus|recordSceneImageInteraction|generateSceneImage|retrySceneImageSave|cancelSceneImage|removeSceneImage|setSceneImageReference)$/.test(pathname)
+        // Reading, deleting and the gallery stay open with generation off: old saves keep their pictures.
+        const sceneImageRoute = /^\/api\/dsh-tavern\/(?:scene-image|scene-image-artist-preview|scene-image-stored|listSceneImageHistory|removeSceneImageHistory|getSceneImageSettings|saveSceneImageSettings|testSceneImageConnection|listSceneImageModels|testSceneImageGeneration|sceneImageStatus|recordSceneImageInteraction|generateSceneImage|retrySceneImageSave|cancelSceneImage|removeSceneImage|setSceneImageReference)$/.test(pathname)
         const pluginMediaRoute = /^\/api\/dsh-tavern\/(?:plugin-media|pluginMediaForTurn|pluginMediaTurns)$/.test(pathname)
         if (pluginMediaRoute && origin && origin !== 'http://' + req.headers.host && origin !== 'https://' + req.headers.host && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
           res.writeHead(403)
@@ -132,9 +133,13 @@ export function registerTavernHttpRoutes({
           if (readsFullTemplate) {
             const asset = await readFullPromptTemplateAsset(pathname)
             if (!asset) { res.writeHead(404, { 'X-Content-Type-Options': 'nosniff' }); res.end('not found'); return }
-            res.writeHead(200, { 'Content-Type': asset.mediaType, 'Content-Length': asset.body.length,
+            const headers = { 'Content-Type': asset.mediaType,
               'ETag': asset.etag, 'Cache-Control': 'no-cache', 'Access-Control-Allow-Origin': '*',
-              'Cross-Origin-Resource-Policy': 'cross-origin', 'X-Content-Type-Options': 'nosniff' })
+              'Cross-Origin-Resource-Policy': 'cross-origin', 'X-Content-Type-Options': 'nosniff' }
+            if (String(req.headers['if-none-match'] || '').split(',').some(tag => tag.trim().replace(/^W\//, '') === asset.etag || tag.trim() === '*')) {
+              res.writeHead(304, headers); res.end(); return
+            }
+            res.writeHead(200, { ...headers, 'Content-Length': asset.body.length })
             res.end(asset.body)
             return
           }
@@ -280,14 +285,14 @@ export function registerTavernHttpRoutes({
             res.end(image.data)
             return
           }
-          if (TAVERN_RELEASE_CAPABILITIES.sceneImages && req.method === 'GET' && pathname === '/api/dsh-tavern/scene-image') {
+          if (req.method === 'GET' && pathname === '/api/dsh-tavern/scene-image') {
             const query = new URL(req.url, 'http://x').searchParams
             const image = await sceneIllustrations.readImage(query.get('sessionId'), Number(query.get('turn')), query.get('key'), query.get('versionId'))
             res.writeHead(200, { 'Content-Type': image.ref.mediaType, 'Content-Length': image.data.byteLength, 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff' })
             res.end(image.data)
             return
           }
-          if (TAVERN_RELEASE_CAPABILITIES.sceneImages && req.method === 'GET' && pathname === '/api/dsh-tavern/scene-image-stored') {
+          if (req.method === 'GET' && pathname === '/api/dsh-tavern/scene-image-stored') {
             const query = new URL(req.url, 'http://x').searchParams
             const image = await sceneIllustrations.readStoredImage(query.get('chatId'), query.get('key'), query.get('versionId'))
             res.writeHead(200, { 'Content-Type': image.ref.mediaType, 'Content-Length': image.data.byteLength, 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff' })
@@ -296,7 +301,7 @@ export function registerTavernHttpRoutes({
           }
           if (req.method === 'GET' && pathname === '/api/dsh-tavern/plugin-media') {
             const query = new URL(req.url, 'http://x').searchParams
-            const file = await readPluginMediaFile(query.get('sessionId'), query.get('id'))
+            const file = await readPluginMediaFile(query.get('sessionId'), query.get('id'), query.get('version'))
             const headers = { 'Content-Type': file.mediaType, 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }
             if (file.mediaType === 'application/octet-stream') headers['Content-Disposition'] = 'attachment; filename*=UTF-8\'\'' + encodeURIComponent(file.name || 'file')
             if (file.data) {

@@ -2,7 +2,7 @@
 // when the selected profiles/<name> is a link ("Next profile path must be a real directory"). So on
 // NEXT a switch writes that selection instead of replacing profiles/desktop with a link. The official
 // app keeps the link: both apps may share one DSH_HOME, and each then follows its own mechanism.
-import { closeSync, openSync, readFileSync, readSync, renameSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, openSync, readFileSync, readSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 
 const NEXT_PACKAGE = 'dsh-desktop-next'
@@ -39,6 +39,18 @@ function asarFile(archive, name) {
 }
 
 function selectionFile(home) { return join(resolve(home), 'desktop-next.json') }
+
+/**
+ * Whether this DSH home is run by DSH NEXT. Finding the app binary is best effort (the host may
+ * not see it), so NEXT's own selection file also counts: once it exists, a linked
+ * profiles/desktop would send NEXT into recovery mode, so the home is never switched by link.
+ * @param {string} home - DSH_HOME.
+ * @param {string | undefined} exe - the desktop app binary, when known.
+ * @returns {boolean} true when profiles are selected by NEXT itself.
+ */
+export function usesDesktopNext(home, exe) {
+  return isDesktopNext(exe) || (typeof home === 'string' && home !== '' && existsSync(selectionFile(home)))
+}
 
 /**
  * The Profile DSH NEXT starts with.

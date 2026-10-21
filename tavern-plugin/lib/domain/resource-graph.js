@@ -100,7 +100,16 @@ export function createResourceGraph(options = {}) {
 
   async function execute(operation) {
     if (operation.kind === 'rename') return await projectRename(operation)
-    if (operation.kind === 'remove') return await projectRemove(operation)
+    if (operation.kind === 'remove') {
+      try { return await projectRemove(operation) }
+      catch (error) {
+        // This rejection happens before any file mutation. Keeping it as a
+        // recoverable operation would block every later rename/remove forever.
+        // I/O failures and partially applied operations must remain recoverable.
+        if (operation.stage === 'prepared' && error.code === 'DSH_TAVERN_RESOURCE_BOUND') await operations.remove()
+        throw error
+      }
+    }
     throw new Error('未知 Resource Graph operation: ' + str(operation.kind))
   }
 

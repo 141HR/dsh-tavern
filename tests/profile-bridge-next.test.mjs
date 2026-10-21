@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { isDesktopNext, readNextProfile, selectNextProfile } from '../tavern-plugin/packages/dsh-profile-bridge/lib/next.mjs'
+import { isDesktopNext, readNextProfile, selectNextProfile, usesDesktopNext } from '../tavern-plugin/packages/dsh-profile-bridge/lib/next.mjs'
 import { beginDesktopProfileInstallation } from '../bin/desktop-profile-installation.mjs'
 import { removeTreeSync } from '../bin/portable-fs.mjs'
 
@@ -55,25 +55,12 @@ function profilesHome(t) {
   return { home, profiles, write }
 }
 
-test('NEXT 下切换器只改选择；切回时先撤掉官方版留下的链接', t => {
-  const { home, profiles, write } = profilesHome(t)
-  write('tavern', { dsh: { profile: { bundles: ['dsh-profile-bridge'] } } })
-  write('desktop.fresh-1', { name: 'original', dsh: { profile: { bundles: ['dsh-profile-bridge'] } } })
-  symlinkSync(path.join(profiles, 'tavern'), path.join(profiles, 'desktop'))
-  const worker = fileURLToPath(new URL('../tavern-plugin/packages/dsh-profile-bridge/lib/worker.mjs', import.meta.url))
-  const run = request => {
-    const lock = path.join(home, 'pending'); mkdirSync(lock)
-    const job = path.join(lock, 'request.json')
-    writeFileSync(job, JSON.stringify({ stateDir: home, pids: [], next: true, home, profilesRoot: profiles, stamp: '2', ...request }))
-    execFileSync(process.execPath, [worker, job], { stdio: 'ignore' })
-  }
-  run({ mode: 'unlink' })
-  assert.equal(lstatSync(path.join(profiles, 'desktop')).isSymbolicLink(), false)
-  assert.equal(JSON.parse(readFileSync(path.join(profiles, 'desktop/package.json'))).name, 'original')
-  assert.equal(readNextProfile(home), 'desktop')
-  run({ mode: 'link', targetDir: path.join(profiles, 'tavern'), targetName: 'tavern' })
-  assert.equal(readNextProfile(home), 'tavern')
-  assert.equal(lstatSync(path.join(profiles, 'desktop')).isSymbolicLink(), false)
+test('认不出 NEXT 程序时，DSH 目录里有 NEXT 的选择文件也按 NEXT 处理', t => {
+  const { home } = profilesHome(t)
+  assert.equal(usesDesktopNext(home, undefined), false)
+  selectNextProfile(home, 'desktop')
+  assert.equal(usesDesktopNext(home, undefined), true)
+  assert.equal(usesDesktopNext('', undefined), false)
 })
 
 test('NEXT 下安装：desktop 保持真实目录并带桥接，选中 tavern；再次安装不要求退出', t => {

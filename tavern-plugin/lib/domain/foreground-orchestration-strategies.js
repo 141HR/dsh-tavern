@@ -1,7 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { inputAttachments, projectPlayerContent } from './player-input-content.js'
+import { projectPlayerContent } from './player-input-content.js'
 import { resolveRuntimePresetMacros } from './runtime-presets.js'
-import { createEphemeralCompatibilityRequest, isCompatibilityConversationRequest } from './compatibility-request.js'
 import { projectRuntimePresetRequest } from './runtime-preset-lifecycle.js'
 import { STORY_SUBMIT_PROMPT, STORY_SUBMIT_TOOL_NAME } from './story-tool-submission.js'
 import { projectHistoryAsToolCalls } from './history-tool-call.js'
@@ -243,59 +242,6 @@ export function projectAnthropicPriorThinking(messages) {
 // Copies made by later hooks (workspace presentation) must still count as projected.
 const PROJECTED = 'foreground-projection'
 
-export function createCompatibilityOrchestrationStrategy(options) {
-  const stagedRequests = new Map()
-
-  async function prepareStep(input) {
-    const sessionId = input.sessionId
-    const payload = input.payload
-    let chat = input.chat
-    const userText = userTextOf(payload.messages)
-    if (Number(payload.step) === 1) {
-      await options.beforeTurn({ sessionId, chat, userText })
-      const begun = await options.beginTurn({ sessionId, turn: payload.turn, requestId: input.requestId, userText })
-      if (begun && begun.duplicate) throw new Error('该消息已由酒馆处理，请勿重复发送')
-      chat = await options.chatForSession(sessionId)
-    }
-    const compiled = await options.compileTurn(chat, chat.runtimeInputs?.[String(payload.turn)]?.text ?? userText, inputAttachments(payload.messages.filter(isTurnInput).flatMap(message => message.content || [])))
-    await options.persistCompiled({ chat, compiled, turn: payload.turn })
-    stagedRequests.set(sessionId, {
-      turn: Number(payload.turn) || 0,
-      step: Number(payload.step) || 0,
-      messages: options.projectMessages(compiled)
-    })
-    return { kind: 'enter', messages: payload.messages }
-  }
-
-  function projectRequest(optionsValue, coordinates) {
-    const sessionId = str(optionsValue && optionsValue.sessionId)
-    const staged = stagedRequests.get(sessionId)
-    if (requestHandledBy(optionsValue, PROJECTED) || !isCompatibilityConversationRequest(optionsValue, staged, coordinates)) return null
-    return markRequestHandled(createEphemeralCompatibilityRequest(optionsValue, staged.messages), PROJECTED)
-  }
-
-  function completeRequest(optionsValue, completed) {
-    if (!completed || !requestHandledBy(optionsValue, PROJECTED)) return false
-    stagedRequests.delete(str(optionsValue && optionsValue.sessionId))
-    return true
-  }
-
-  function endTurn(sessionId) {
-    stagedRequests.delete(str(sessionId))
-  }
-
-  async function assembleSystemPrompt(assembly, input) {
-    assembly.sections = []
-    assembly.contexts = []
-    assembly.tools = input && input.chat && input.chat.webSearchEnabled === true
-      ? assembly.tools.filter(function (tool) { return tool && tool.name === 'web_search' })
-      : []
-    return assembly
-  }
-
-  return Object.freeze({ kind: 'compatibility', prepareStep, projectRequest, completeRequest, endTurn, assembleSystemPrompt })
-}
-
 // The preset front phase is part of the native system prompt, so it is recorded in
 // the session trajectory like the fixed card background. Every replay of that
 // trajectory (manual, scheduled and native compaction) then starts with exactly
@@ -518,12 +464,6 @@ export function createNativePlayOrchestrationStrategy(options) {
 
 export function createForegroundOrchestrationStrategies(options) {
   const nativePlay = createNativePlayOrchestrationStrategy(options.nativePlay)
-  const compatibility = createCompatibilityOrchestrationStrategy(options.compatibility)
-
-  function select(chat) {
-    return chat && chat.requestMode === 'sillytavern' ? compatibility : nativePlay
-  }
-
   async function prepareStep(input) {
     if (input.chat?.requestMode === 'sillytavern') throw new Error('silly 模式已停用')
     if (input.chat?.regenInProgress && Number(input.payload.step) === 1) {
@@ -534,15 +474,14 @@ export function createForegroundOrchestrationStrategies(options) {
         throw new Error('上一次正文重新生成尚未完成：请点「重新生成正文」完成或恢复它，再发送消息')
       }
     }
-    return await select(input.chat).prepareStep(input)
+    return await nativePlay.prepareStep(input)
   }
 
   function projectRequest(optionsValue, coordinates) {
-    return compatibility.projectRequest(optionsValue, coordinates) || nativePlay.projectRequest(optionsValue, coordinates)
+    return nativePlay.projectRequest(optionsValue, coordinates)
   }
 
   function completeRequest(optionsValue, completed) {
-    compatibility.completeRequest(optionsValue, completed)
     nativePlay.completeRequest(optionsValue, completed)
   }
 
@@ -550,13 +489,10 @@ export function createForegroundOrchestrationStrategies(options) {
     nativePlay.clearRequestState(sessionId)
   }
 
-  function endTurn(sessionId) {
-    compatibility.endTurn(sessionId)
-  }
-
   async function assembleSystemPrompt(assembly, input) {
-    return await select(input.chat).assembleSystemPrompt(assembly, input)
+    if (input.chat?.requestMode === 'sillytavern') throw new Error('silly 模式已停用')
+    return await nativePlay.assembleSystemPrompt(assembly, input)
   }
 
-  return Object.freeze({ prepareStep, projectRequest, completeRequest, clearRequestState, endTurn, assembleSystemPrompt })
+  return Object.freeze({ prepareStep, projectRequest, completeRequest, clearRequestState, assembleSystemPrompt })
 }

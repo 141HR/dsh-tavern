@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { Session } from './fixtures/dsh-session-host.mjs'
 import { sessionEvents } from '../tavern-plugin/lib/domain/session-events.js'
-import { createForegroundOrchestrationStrategies, createNativePlayOrchestrationStrategy, createCompatibilityOrchestrationStrategy } from "../tavern-plugin/lib/domain/foreground-orchestration-strategies.js"
+import { createForegroundOrchestrationStrategies, createNativePlayOrchestrationStrategy } from "../tavern-plugin/lib/domain/foreground-orchestration-strategies.js"
 import { ensureSessionStablePrefix, sessionStablePrefixSections } from '../tavern-plugin/lib/domain/session-stable-prefix.js'
 import { ensureSessionSeedTrajectory } from '../tavern-plugin/lib/domain/session-seed-trajectory.js'
 
@@ -19,14 +19,6 @@ function strategies(overrides = {}) {
   const calls = []
   const chats = new Map([['native', { id: 'native', requestMode: 'dsh', mode: 'story' }], ['compat', { id: 'compat', requestMode: 'sillytavern', mode: 'story' }]])
   const options = {
-    compatibility: {
-      async beforeTurn(input) { calls.push(['compat.before', input.userText]) },
-      async beginTurn(input) { calls.push(['compat.begin', input.turn, input.requestId]) },
-      async chatForSession(sessionId) { return chats.get(sessionId) },
-      async compileTurn(_chat, userText) { calls.push(['compat.compile', userText]); return { messages: [{ role: 'system', content: 'compat' }] } },
-      async persistCompiled(input) { calls.push(['compat.persist', input.turn]) },
-      projectMessages(compiled) { return compiled.messages.map(function (message) { return { role: message.role, content: [{ type: 'text', text: message.content }] } }) }
-    },
     nativePlay: {
       async modeFor() { return 'story' },
       filterMessages(messages) { return messages },
@@ -46,8 +38,16 @@ function strategies(overrides = {}) {
     },
     ...overrides
   }
-  return { value: createForegroundOrchestrationStrategies(options), compatibility: createCompatibilityOrchestrationStrategy(options.compatibility), calls, chats }
+  return { value: createForegroundOrchestrationStrategies(options), calls, chats }
 }
+
+test('retired conversation mode is rejected before native preparation or system assembly', async () => {
+  const run = strategies()
+  const input = { chat: run.chats.get('compat'), sessionId: 'compat', payload: { step: 1, turn: 1, messages: [] } }
+  await assert.rejects(run.value.prepareStep(input), /silly 模式已停用/)
+  await assert.rejects(run.value.assembleSystemPrompt({ sections: [], tools: [] }, input), /silly 模式已停用/)
+  assert.deepEqual(run.calls, [])
+})
 
 test('游玩固定背景来自原生系统装配，预设前后段保持顺序，快照不重复发送', async () => {
   const session = Session.create('native')

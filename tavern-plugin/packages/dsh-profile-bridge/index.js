@@ -4,7 +4,7 @@ import { basename } from 'node:path'
 import { relaunchApp, scheduleSwitch } from './lib/helper.mjs'
 import { createTavernShortcut } from './lib/shortcut.mjs'
 import { detectAppExe, fail, resolvePaths, statusPayload, validateTarget } from './lib/state.mjs'
-import { isDesktopNext } from './lib/next.mjs'
+import { usesDesktopNext } from './lib/next.mjs'
 
 /** Shared RPC channel owned by this plugin; the browser half calls it by name. */
 const CHANNEL = '/profile-bridge'
@@ -33,15 +33,15 @@ function runSwitch(mode, paths, payload) {
   }
   const target = mode === 'link' ? validateTarget(paths, request.target) : undefined
   const relaunch = detectAppExe()
+  // DSH NEXT has its own Profile switcher; the page offers no switch there (an older page may still ask).
+  if (usesDesktopNext(paths.home, relaunch)) fail('next', 'DSH NEXT 请用自带的 Profile 切换')
   if (!process.versions.electron || !process.send || process.ppid <= 1) {
     fail('not-desktop', '请在官方桌面中执行切换')
   }
   const result = scheduleSwitch({ mode, profilesRoot: paths.profilesDir, liveDir: paths.activeDir,
     activeName: paths.activeName, targetDir: target?.dir, stateDir: paths.stateDir,
     stamp: new Date().toISOString().replace(/[:.]/g, '-') + '-' + process.pid,
-    pids: [process.pid, process.ppid], relaunch,
-    // DSH NEXT switches by its own Profile selection; see lib/next.mjs.
-    next: isDesktopNext(relaunch), home: paths.home, targetName: target?.name })
+    pids: [process.pid, process.ppid], relaunch })
   // Electron answers SIGTERM like the Quit menu (before-quit, task confirmation), so this is a
   // normal quit, not a kill. Windows has no such signal; there the user quits from the tray.
   const closesApp = process.platform !== 'win32'

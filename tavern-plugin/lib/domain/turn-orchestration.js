@@ -378,7 +378,9 @@ export function createTurnOrchestrator(options) {
       }
       rememberRuntimeInput(chat, turn, userText, runtimeUserText)
       chatChanged = true
-      if (chat.promptTemplateInput?.turn === turn) await savePreparation({source:'prompt-template.input'})
+      // The staged template input must be saved before anything reads the save (the worldbook
+      // projection runs templates); with that projection, its save just below carries it.
+      if (chat.promptTemplateInput?.turn === turn && typeof options.projectForegroundWorldbook !== 'function') await savePreparation({source:'prompt-template.input'})
     }
     let scriptReference = null
 
@@ -471,44 +473,6 @@ export function createTurnOrchestrator(options) {
     chatChanged = true
     if (chatChanged) await savePreparation({ source: 'foreground.prepare' })
     return { ready: true, mode, cardName: card.name, userText: runtimeUserText, frame }
-  }
-
-  async function beginCompatibility(input) {
-    let chat = await store.chatForSession(input.sessionId)
-    if (chat === undefined) throw new Error('当前会话没有绑定人物卡')
-    const mode = chat.mode || 'story'
-    if (mode !== 'story' && mode !== 'script') throw new Error('酒馆兼容模式只适用于游玩对话')
-    const turn = Math.max(0, Number(input.turn) || 0)
-    const requestId = str(input.requestId).trim()
-    const userText = str(input.userText).trim()
-    const requestCommit = commitForRequest(chat, requestId)
-    if (requestCommit !== null) {
-      return {
-        ready: false,
-        duplicate: true,
-        committedTurn: Math.max(0, Number(requestCommit.turn) || 0),
-        mode
-      }
-    }
-    const begun = timeline.apply({ chat, intent: { kind: 'body.begin', turn, userText } })
-    chat = begun.chat
-    const operation = chat.timeline.operations[begun.value.operationId]
-    if (operation && !Object.hasOwn(operation, 'sceneWorldbook') && typeof options.captureSceneWorldbook === 'function') {
-      operation.sceneWorldbook = await options.captureSceneWorldbook(chat, await store.readCard(cardPathOf(chat), chat), undefined, turn)
-    }
-    chat.foregroundError = null
-    let projectedText = runtimeInputFor(chat, turn, userText)
-    if (projectedText === null) {
-      projectedText = userText
-      if (typeof options.projectUserTemplate === 'function' && userText !== '') {
-        const projected = await options.projectUserTemplate({chat,card:await store.readCard(cardPathOf(chat), chat),turn,text:userText})
-        projectedText = projected.message.text
-        stageTemplateInput(chat, turn, userText, projected)
-      }
-      rememberRuntimeInput(chat, turn, userText, projectedText)
-    }
-    await store.writeChat(chat)
-    return { ready: true, mode, userText: projectedText }
   }
 
   // Tool writes are immediate, so a subsequent validation reads these bytes.
@@ -921,5 +885,5 @@ export function createTurnOrchestrator(options) {
     return chat === undefined || chat === null ? null : (chat.mode || 'story')
   }
 
-  return Object.freeze({ prepare, beginCompatibility, saveChanges, stageChanges, finalize, recordFailure, discard, visibleTools, modeFor })
+  return Object.freeze({ prepare, saveChanges, stageChanges, finalize, recordFailure, discard, visibleTools, modeFor })
 }

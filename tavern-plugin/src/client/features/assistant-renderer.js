@@ -514,7 +514,7 @@
 					catch (e) { setError(String(e.message || e)); }
 					finally { setBusy(false); notify(); }
 				}
-				const url = version ? "/api/dsh-tavern/scene-image?" + new URLSearchParams({ sessionId: props.sessionId, turn: String(props.turn), key: state.key, versionId: version.id }).toString() : "";
+				const url = version && state ? "/api/dsh-tavern/scene-image?" + new URLSearchParams({ sessionId: props.sessionId, turn: String(props.turn), key: state.key, versionId: version.id }).toString() : "";
 				if (!state) return null;
 				// Without a picture, generation lives in the turn's action row.
 				if (!version && state.status === "idle") return null;
@@ -739,7 +739,9 @@
 						characterImageUrl: castPath ? "/api/dsh-tavern/card-image?path=" + encodeURIComponent(castPath) : "" } : null;
 				}, [props.sessionId, castLines, castCharacters, castName, castPath]);
 				const sceneImagesEnabled = Boolean(liveState.view && liveState.view.releaseCapabilities && liveState.view.releaseCapabilities.sceneImages);
-				const sceneShown = sceneImagesEnabled && settled && playView;
+				// Old pictures show whenever the turn is settled; only drawing new ones needs the capability.
+				const sceneShown = settled && playView;
+				const sceneGeneratable = sceneImagesEnabled && sceneShown;
 				const sceneRecord = useSceneImageRecord(sceneShown ? props.sessionId : null, storyTurn);
 				const sceneAnchor = (function () {
 					const versions = sceneRecord && sceneRecord.versions || [];
@@ -747,7 +749,7 @@
 					return "";
 				})();
 				const sceneExtras = sceneShown && sceneRecord && sceneRecord.extras || [];
-				const canAddPicture = Boolean(sceneRecord && sceneRecord.maxPictures && sceneExtras.length + 1 < sceneRecord.maxPictures);
+				const canAddPicture = sceneGeneratable && Boolean(sceneRecord && sceneRecord.maxPictures && sceneExtras.length + 1 < sceneRecord.maxPictures);
 				const illustration = sceneShown ? React.createElement(SceneIllustration, { key: props.sessionId + ":" + storyTurn + ":" + JSON.stringify(projection), sessionId: props.sessionId, turn: storyTurn, record: sceneRecord, canAdd: canAddPicture }) : null;
 				// Added pictures sit at their own sentences; unplaced ones follow the text.
 				const extraPictures = sceneExtras.map(function (extra) {
@@ -839,7 +841,8 @@
 					return React.createElement(TavernPluginMediaItem, { key: item.id, item: item, sessionId: props.sessionId, turn: storyTurn });
 				})) : null;
 				const pluginActions = playView && settled ? React.createElement(TavernPluginMessageActions, { sessionId: props.sessionId, turn: storyTurn, settled: settled }) : null;
-				return React.createElement("div", { ref:historyNode, className: "dsh-tavern-assistant", "data-streaming": data.status === "running" || undefined }, body, refusalNode, pendingMessage, pluginMediaNode, trailingIllustration, pluginActions, mvuReceiptNode, inlineStatus);
+				const illustrationDraft = playView && settled ? React.createElement(TavernIllustrationDraft, { sessionId: props.sessionId, turn: storyTurn, items: pluginMedia.items }) : null;
+				return React.createElement("div", { ref:historyNode, className: "dsh-tavern-assistant", "data-streaming": data.status === "running" || undefined }, body, refusalNode, pendingMessage, pluginMediaNode, illustrationDraft, trailingIllustration, pluginActions, mvuReceiptNode, inlineStatus);
 			}
 			function TavernForkAssistantAction(props) {
 				const liveState = useScopedLiveTavernView(props.sessionId, String(props.messageId || ""), [["mode"], ["forkTurnsByMessageId", String(props.messageId || "")]]);
@@ -863,8 +866,33 @@
 				const liveState = useScopedLiveTavernView(props.sessionId, String(props.messageId || ""), [["mode"], ["releaseCapabilities"], ["forkTurnsByMessageId", String(props.messageId || "")]]);
 				const view = liveState.view;
 				const turn = Number(view && view.forkTurnsByMessageId && view.forkTurnsByMessageId[String(props.messageId || "")]) || 0;
-				const shown = Boolean(view && isPlayMode(view.mode) && view.releaseCapabilities && view.releaseCapabilities.sceneImages && turn > 0);
-				return shown ? React.createElement(SceneImageAction, { key: props.sessionId + ":" + turn, sessionId: props.sessionId, turn: turn }) : null;
+				useTavernUiExtensions();
+				const play = Boolean(view && isPlayMode(view.mode) && turn > 0);
+				if (play && view.releaseCapabilities && view.releaseCapabilities.sceneImages) return React.createElement(SceneImageAction, { key: props.sessionId + ":" + turn, sessionId: props.sessionId, turn: turn });
+				// With Tavern's own drawing off, an illustrator plugin answers the same button.
+				const illustrator = play ? tavernUiExtensions.illustrator() : null;
+				return illustrator && tavernPluginAllowed(illustrator.owner, props.sessionId) ? React.createElement(TavernPluginIllustrateAction, { key: props.sessionId + ":" + turn, sessionId: props.sessionId, turn: turn, illustrator: illustrator }) : null;
+			}
+			// Drawn like DSH's own action icons (copy, branch): 16px, 1px strokes.
+			function TavernIllustrateIcon() {
+				return React.createElement("svg", { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", "aria-hidden": true, strokeWidth: 1 },
+					React.createElement("rect", { x: 1.5, y: 2.5, width: 13, height: 11, rx: 2, stroke: "currentColor" }),
+					React.createElement("circle", { cx: 5.5, cy: 6, r: 1.25, stroke: "currentColor" }),
+					React.createElement("path", { d: "M1.75 11.5 5.6 8.2C6 7.86 6.6 7.88 6.97 8.25L8.6 9.88 10.6 8.05C10.98 7.7 11.57 7.72 11.93 8.09L14.25 10.5", stroke: "currentColor", strokeLinejoin: "round" }));
+			}
+			function TavernPluginIllustrateAction(props) {
+				const [busy, setBusy] = React.useState(false);
+				// Progress and outcome show in the turn's text (TavernIllustrationDraft), not here.
+				async function draw() {
+					if (busy) return;
+					setBusy(true);
+					try { await runTavernIllustrator(props.illustrator, props.sessionId, props.turn); }
+					finally { setBusy(false); }
+				}
+				const label = busy ? "正在整理画面…" : "为这一轮配图";
+				return React.createElement(DshUi.Tooltip, { label: label, side: "bottom" },
+					React.createElement("button", { type: "button", className: "dsh-tavern-message-fork dsh-tavern-message-illustrate", "aria-label": label, disabled: busy, onClick: draw },
+						React.createElement(TavernIllustrateIcon, null)));
 			}
 			function register(input) {
 				// uiWorkspace 由 dsh-client-ui-workspace 提供；缺失时（老宿主/未加载）退化为 sessions.retain。

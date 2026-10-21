@@ -62,6 +62,7 @@ window.__ModuleLoader__.load({
 		const tavernInteractionDiagnostics = createInteractionDiagnostics(window);
 
 		// @include text-resource-file.js
+		// @include download.js
 
 		/** Import one card file: PNG and JSON go as parsed JSON; archives (CHARX, DSH cards) and other
 		 * formats (a plugin's importer, tavern.cardImporter) go up as raw files. */
@@ -395,11 +396,7 @@ window.__ModuleLoader__.load({
 		// conversation menu too: the structure goes to the developer, the story text stays home.
 		async function downloadSessionDiagnostics(args, sessionId) {
 			const result = await rpc("exportSessionDiagnostics", args, sessionId);
-			const url = URL.createObjectURL(new Blob([result.text], { type: "application/json;charset=utf-8" }));
-			const link = document.createElement("a");
-			link.href = url; link.download = result.filename;
-			document.body.appendChild(link); link.click(); link.remove();
-			window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+			downloadTavernBlob(new Blob([result.text], { type: "application/json;charset=utf-8" }), result.filename);
 		}
 
 		function rpc(method, args, sessionId, requestOptions) {
@@ -418,7 +415,7 @@ window.__ModuleLoader__.load({
 			if (trace) payload._traceId = trace.id;
 			if (sessionId) payload.sessionId = sessionId;
 			const viewRead = method === "getSession" ? beginSessionViewRead(payload.sessionId) : null;
-			if (viewRead) { payload.viewSync = 1; payload.resourceSync = 1; payload.openingWindow = 1; if (historyFromSessions.has(payload.sessionId)) payload.historyFrom = historyFromSessions.get(payload.sessionId); payload.viewCursor = viewRead.cursor; if (viewRead.receiptSync) payload.receiptSync = 1; }
+			if (viewRead) { payload.viewSync = 1; payload.resourceSync = 1; payload.helperWorldbookSync = 1; payload.openingWindow = 1; if (historyFromSessions.has(payload.sessionId)) payload.historyFrom = historyFromSessions.get(payload.sessionId); payload.viewCursor = viewRead.cursor; if (viewRead.receiptSync) payload.receiptSync = 1; }
 			if (method === "getTavernHelperContext" && !payload.eventId && !payload.fullView) payload.openingWindow = 1;
 			const requestBody = JSON.stringify(payload);
 			if (trace) {
@@ -844,6 +841,7 @@ window.__ModuleLoader__.load({
 
 // @include features/card-list.js
 
+// @include-domain update-status-controller.js
 // @include features/sidebar.js
 
 // @include features/scene-images.js
@@ -879,6 +877,10 @@ window.__ModuleLoader__.load({
 
 // @include features/turn-history.js
 
+// @include modules/conversation-settings.js
+// @include features/conversation-header.js
+// @include-domain play-interaction-flow.js
+// @include features/play-interaction-panels.js
 // @include features/play-controls.js
 
 // @include features/request-context.js

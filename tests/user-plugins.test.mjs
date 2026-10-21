@@ -32,6 +32,8 @@ test('plugins 目录里的插件写进 profile patch，用户自己的条目原�
   await writeFile(patch, '# 我的覆盖\n- id: approval\n  config:\n    policy: never\n')
   const dir = await plugin(dataRoot, 'memory', { name: 'dsh-tavern-memory', exports: { '.': './index.mjs', './client': './client.js' }, dsh: { client: { platform: 'web' } } })
   await plugin(dataRoot, 'broken', null)
+  await plugin(dataRoot, 'a-generic', { name: 'generic-lowercase', main: 'index.mjs' })
+  await plugin(dataRoot, 'Z-generic', { name: 'generic-uppercase', main: 'index.mjs' })
   const warnings = []
   const result = await syncUserPlugins({ dataRoot, logger: { warn: text => warnings.push(text) } })
   assert.equal(result.changed, true)
@@ -39,12 +41,18 @@ test('plugins 目录里的插件写进 profile patch，用户自己的条目原�
   assert.match(text, /# 我的覆盖/)
   assert.deepEqual(parse(text), [
     { id: 'approval', config: { policy: 'never' } },
-    { insert: [{ id: 'tavern-user-plugin-dsh-tavern-memory', name: path.join(dir, '.tavern-entry.mjs') }] },
+    { insert: [
+      { id: 'tavern-user-plugin-generic-uppercase', name: path.join(dataRoot, 'plugins/Z-generic', '.tavern-entry.mjs') },
+      { id: 'tavern-user-plugin-generic-lowercase', name: path.join(dataRoot, 'plugins/a-generic', '.tavern-entry.mjs') },
+      { id: 'tavern-user-plugin-dsh-tavern-memory', name: path.join(dir, '.tavern-entry.mjs') },
+    ] },
   ])
   assert.match(warnings.join('\n'), /plugins\/broken：缺少 package\.json/)
   assert.equal((await syncUserPlugins({ dataRoot, logger: { warn() {} } })).changed, false, '没有变化时不改写文件')
 
   await rm(dir, { recursive: true })
+  await rm(path.join(dataRoot, 'plugins', 'Z-generic'), { recursive: true })
+  await rm(path.join(dataRoot, 'plugins', 'a-generic'), { recursive: true })
   await syncUserPlugins({ dataRoot, logger: { warn() {} } })
   assert.deepEqual(parse(await readFile(patch, 'utf8')), [{ id: 'approval', config: { policy: 'never' } }], '删掉文件夹后条目随之移除')
 })
@@ -108,6 +116,55 @@ test('不折行改写用户的长路径；与已安装的包重名的插件不�
   assert.ok(text.includes(`"${long}"`), '用户原有的长行保持一行')
   assert.deepEqual(parse(text).at(-1).insert.map(entry => entry.id), ['tavern-user-plugin-ok'])
   assert.equal(warnings.filter(text => text.includes('plugins/clash')).length, 1)
+})
+
+test('canonical profile 已登记时跳过 data/plugins 中旧名图片插件副本', async t => {
+  const { dataRoot, profile } = await home(t)
+  const installed = path.join(profile, 'node_modules', 'dsh-tavern-image')
+  await mkdir(installed, { recursive: true })
+  await writeFile(path.join(installed, 'package.json'), '{"name":"dsh-tavern-image"}')
+  await plugin(dataRoot, 'dsh-tavern-comfy', { name: 'dsh-tavern-comfy', main: 'index.mjs' })
+  const warnings = []
+
+  const result = await syncUserPlugins({ dataRoot, logger: { warn: text => warnings.push(text) } })
+
+  assert.deepEqual(result.plugins, [])
+  assert.equal(result.problems.length, 1)
+  assert.match(result.problems[0].reason, /已登记的图片插件身份（dsh-tavern-image）.*已跳过以避免重复加载；请在插件管理中检查重复登记/)
+  assert.match(warnings.join('\n'), /plugins\/dsh-tavern-comfy/)
+})
+
+test('旧名 profile 已登记时跳过 data/plugins 中 canonical 图片插件副本', async t => {
+  const { dataRoot, profile } = await home(t)
+  const installed = path.join(profile, 'node_modules', 'dsh-tavern-comfy')
+  await mkdir(installed, { recursive: true })
+  await writeFile(path.join(installed, 'package.json'), '{"name":"dsh-tavern-comfy"}')
+  await plugin(dataRoot, 'dsh-tavern-image', { name: 'dsh-tavern-image', main: 'index.mjs' })
+  const warnings = []
+
+  const result = await syncUserPlugins({ dataRoot, logger: { warn: text => warnings.push(text) } })
+
+  assert.deepEqual(result.plugins, [])
+  assert.equal(result.problems.length, 1)
+  assert.match(result.problems[0].reason, /已登记的图片插件身份（dsh-tavern-comfy）.*已跳过以避免重复加载；请在插件管理中检查重复登记/)
+  assert.match(warnings.join('\n'), /plugins\/dsh-tavern-image/)
+})
+
+test('两种图片插件 data/plugins 副本并存且 profile 未登记时只加载 canonical 包', async t => {
+  const { dataRoot, profile } = await home(t)
+  await plugin(dataRoot, 'dsh-tavern-comfy', { name: 'dsh-tavern-comfy', main: 'index.mjs' })
+  const canonicalDir = await plugin(dataRoot, 'dsh-tavern-image', { name: 'dsh-tavern-image', main: 'index.mjs' })
+  const warnings = []
+
+  const result = await syncUserPlugins({ dataRoot, logger: { warn: text => warnings.push(text) } })
+  const patch = parse(await readFile(path.join(profile, 'cordis.patch.yml'), 'utf8'))
+
+  assert.equal(result.plugins.length, 1)
+  assert.equal(result.plugins[0].folder, 'dsh-tavern-image')
+  assert.equal(result.plugins[0].name, 'dsh-tavern-image')
+  assert.equal(patch.at(-1).insert.length, 1)
+  assert.equal(patch.at(-1).insert[0].name, path.join(canonicalDir, '.tavern-entry.mjs'))
+  assert.match(warnings.join('\n'), /plugins\/dsh-tavern-comfy：同一生图插件存在多个副本，已保留一个并跳过重复项/)
 })
 
 test('插件经由 Tavern 的保护入口加载：导入失败或 apply 抛错只记日志，不让 DSH 起不来', async t => {

@@ -141,6 +141,14 @@ export function createSceneIllustrations(deps) {
   imageHosts.set(ownerId, path => jobs.has(path) || starts.has(path))
   imageAborters.set(ownerId, (path, requestId) => { const job = jobs.get(path); if (job?.requestId === requestId) job.controller.abort() })
   const imageModule = deps.imageModule || createImageGenerationModule({ ...deps, generateImpl: deps.generate })
+  // Generation is handed to the dsh-tavern-image plugin: this instance only serves old
+  // illustrations. Refuse at every entry, before the planning model runs and costs anything.
+  function refuseWhenDisabled() {
+    if (!deps.disabled) return
+    const error = new Error('剧情生图已交给 dsh-tavern-image 插件，Tavern 不再生成新图片')
+    error.code = 'scene-images-delegated'
+    throw error
+  }
   const setup = createModuleSceneImageSettings({ ...deps, imageModule })
   const { config, settings, configure, capture } = setup
   const connection = { test: setup.testConnection, models: setup.listModels }
@@ -219,7 +227,8 @@ export function createSceneIllustrations(deps) {
     }, config: current })
     const latestTurn = chat.sceneTargets ? Number(chat.sceneLatestTurn) : Number(last?.turn || (last?.greeting ? 1 : 0))
     // Only the newest round can still be drawn automatically.
-    const shared = { enabled: current.enabled === true, auto: current.enabled === true && current.auto === true && latestTurn === Number(turn), profile: imageExpressionProfile(current) }
+    const enabled = !deps.disabled && current.enabled === true
+    const shared = { enabled, auto: enabled && current.auto === true && latestTurn === Number(turn), profile: imageExpressionProfile(current) }
     const referenceOf = key => ({ ...reference.capability, warning: reference.warning,
       bindings: reference.active.filter(record => record.source.key === key).map(record => ({ versionId: record.source.versionId, personId: record.person.id, name: record.person.name })),
       versions: reference.active.filter(record => record.source.key === key).map(record => record.source.versionId) })
@@ -237,6 +246,7 @@ export function createSceneIllustrations(deps) {
   // or one whose last attempt failed or may have been charged — a failure waits
   // for the player instead of paying again.
   async function autoGenerate(sessionId) {
+    if (deps.disabled) return null
     const quick = await config()
     if (quick.enabled !== true || quick.auto !== true) return null
     // Readiness needs the stored key, which only the full settings read resolves.
@@ -341,6 +351,7 @@ export function createSceneIllustrations(deps) {
       existing, ...(request ? { request } : {}) }
   }
   async function start(sessionId, turn, expectedKey, options = {}) {
+    refuseWhenDisabled()
     const adding = options.kind === 'add'
     const kind = adding ? 'generate' : options.kind || 'generate'
     if (!['generate', 'replan', 'repaint', 'adjust', 'prompt'].includes(kind)) throw new Error('未知生图操作')
@@ -707,6 +718,7 @@ export function createSceneIllustrations(deps) {
   // An explicit, paid check of the saved channel: one fixed picture, shown
   // once and never kept. It waits in the same queue as story pictures.
   async function testGenerate() {
+    refuseWhenDisabled()
     const { active, apiKey } = await capture()
     if (!channelReady(active, apiKey)) throw new Error('请先在设置中完成生图渠道配置（地址、模型或 API Key）')
     const profile = imageExpressionProfile(active)
@@ -808,7 +820,7 @@ export function createSceneIllustrations(deps) {
         const versions = versionsOf(record).filter(item => item.attachment)
         if (typeof chatId !== 'string' || !versions.length || record.key + '.json' !== file.name || onlyChatId && chatId !== onlyChatId) continue
         const game = games.get(chatId)
-        items.push({ chatId, key: record.key, turn: Number(record.turn) || 0, cardName: game?.cardName || '', title: game?.title || '', deleted: !game,
+        items.push({ chatId, sessionId: typeof record.diagnosticContext?.sessionId === 'string' ? record.diagnosticContext.sessionId : '', key: record.key, turn: Number(record.turn) || 0, cardName: game?.cardName || '', title: game?.title || '', deleted: !game,
           versions: versions.map(item => ({ id: item.id, description: item.plan?.description || item.description || '', createdAt: Number(item.createdAt) || 0 })) })
       }
     }
