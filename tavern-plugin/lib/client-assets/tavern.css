@@ -757,8 +757,6 @@ body.dsh-tavern-picker-open [id^="improved-phone-floating-button-"] { visibility
 .dsh-tavern-character-design-meta { color: var(--dsh-tavern-accent); font-size: 9px; white-space: nowrap; }
 .dsh-tavern-character-design-body { padding: 2px 10px 10px; border-top: 1px solid var(--dsw-alias-border-l3); }
 .dsh-tavern-character-design-row { padding-top: 8px; }
-.dsh-tavern-game-plugin-errors summary { font-size: 13px; cursor: pointer; }
-.dsh-tavern-plugin-task-controls { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .dsh-tavern-plugin-tasks { display: flex; flex-wrap: wrap; gap: 6px; }
 .dsh-tavern-character-design-actions { display: flex; justify-content: flex-end; padding-top: 10px; }
 .dsh-tavern-character-design-row b { display: block; color: var(--dsw-alias-label-tertiary); font-size: 9px; }

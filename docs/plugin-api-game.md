@@ -110,7 +110,7 @@ const look = characters.find(person => person.name === '林岚')?.sections.find(
 
 - `sections` 的 `key` 为 `identity`（身份）、`personality`（性格）、`appearance`（外貌）、`speechStyle`（说话方式）、`narrativeRole`（剧情作用），只列出有内容的项。还没有档案时 `characters` 为空数组。
 - `saveCharacterDesign` 新建或更新一个人物，规则和后台结算自己建档时相同：`name`、`identity`、`personality`、`appearance`、`speechStyle`、`narrativeRole` 都要写完整，`aliases` 可选；同名人物会被更新。保存后这个人物同步进本局世界书，后续正文和结算都会用到。适合生图插件根据参考图修订外貌后写回，让文字跟着同一份设定走。
-- 档案在后台结算时也会更新，需要最新内容时在 `onTurnSettled` 里重新读取。玩家在本局关闭了插件时，保存会被拒绝。
+- 档案在后台结算时也会更新，需要最新内容时在 `onTurnSettled` 里重新读取。插件不在这一局生效时，保存会被拒绝。
 
 ## `backgroundModel({ gameId })`
 
@@ -145,7 +145,7 @@ ctx.tavern.onTurnSettled(async ({ gameId, turn, textVersion, text }) => {
 
 ## 改最新一轮（第 2 版）
 
-两个接口都只能改**最新一轮**，并且要等这一轮写完、后台结算结束；适合在 `onTurnSettled` 里调用。都要带上 `textVersion`：期间玩家回退、重新生成或已经改过，会报 `TAVERN_PLUGIN_STALE_VERSION`，什么也不改。玩家在本局关闭了这个插件时也会被拒绝。
+两个接口都只能改**最新一轮**，并且要等这一轮写完、后台结算结束；适合在 `onTurnSettled` 里调用。都要带上 `textVersion`：期间玩家回退、重新生成或已经改过，会报 `TAVERN_PLUGIN_STALE_VERSION`，什么也不改。插件不在这一局生效时也会被拒绝。
 
 ### `setVariables({ gameId, turn, textVersion, variables })`
 

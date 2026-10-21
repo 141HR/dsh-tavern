@@ -64,7 +64,7 @@ ctx.tavern.cardImporter({
 - `extensions` 1–10 个，写成 `.xxx`，大小写不敏感。`.png`、`.json`、`.charx`、`.dshcard` 始终由 Tavern 自己导入，插件不能接管；同一扩展名只能有一个插件。
 - `card` 里 CCv3 的 `data.assets`（封面、表情、背景）按 `files` 里的文件导入，和 CHARX 一样进角色素材；`packs` 存成素材包挂到这张卡上。
 - 同一个文件再次导入时直接打开已导入的卡，不再调用 `convert`。
-- `convert` 抛错、120 秒没返回或交回的东西不合格时，这次导入失败并把原因告诉玩家。`imported` 出错只记进插件错误，不影响已经导入的卡。
+- `convert` 抛错、120 秒没返回或交回的东西不合格时，这次导入失败并把原因告诉玩家。`imported` 出错只记进 Tavern 日志，不影响已经导入的卡。
 - 卡内插件不能注册导入器。
 
 ### `toolModes({ name, modes })`
@@ -116,7 +116,7 @@ ctx.tavern.skillSource({ dir: fileURLToPath(new URL('./skills', import.meta.url)
 
 ### `onCastAnnotated(handler)`
 
-一轮的标注保存后调用 `handler({ gameId, turn, textVersion, lines })`，字段同 `getCast`。适合配音插件在这时合成语音、演出插件在这时编排下一幕。它在结算过程中触发，早于 `onTurnSettled`；玩家在本局关闭了插件时不通知。
+一轮的标注保存后调用 `handler({ gameId, turn, textVersion, lines })`，字段同 `getCast`。适合配音插件在这时合成语音、演出插件在这时编排下一幕。它在结算过程中触发，早于 `onTurnSettled`；插件不在这一局生效时不通知。
 
 ### `getCastAssets({ gameId })`
 
@@ -128,7 +128,7 @@ ctx.tavern.skillSource({ dir: fileURLToPath(new URL('./skills', import.meta.url)
 
 - 并入后 `getCastAssets`、舞台、正文头像都会用到：正文里每句台词旁的头像按这句的情绪取 `avatars`，没有再取 `sprites`、`avatarUrl`。
 - 和玩家自己的素材是同一人物时（比对 `name` 和 `aliases`），玩家的图片优先，插件只补玩家没有的；只由插件提供的人物不能在「角色素材」里清除。
-- 每次读取都会调用，出错时跳过这个来源并记入插件错误；玩家在本局关闭插件后不再提供。
+- 每次读取都会调用，出错时跳过这个来源并记进 Tavern 日志。
 
 ### `listCardPacks({ gameId })`、`readCardPackFile({ gameId, pack, path })`
 
@@ -185,7 +185,7 @@ ctx.tavern.speechProvider({
 - `synthesize` 还收到（第 3 版）：`gameId`（为某一局合成时）、`speaker`（正文里的人名，设置页试听时为空字符串）、`narration`（是不是旁白）。渠道可以据此自己决定怎么读，例如按人物挑参考音频。
 - `version`（第 3 版，最多 40 字）：渠道的合成方式变了（换了模型、参数）时改它，旧缓存就不再使用。
 - 渠道自己的地址、Key 等设置由插件自己保存（DSH 的设置区或凭据服务），Tavern 只保存每个人物用哪个声音。
-- 同一渠道、同一声音、同一情绪的同一句话只合成一次，之后读缓存；插件渠道的缓存还按 `speaker`、`narration` 和 `version` 区分。120 秒没返回或出错时这句不播，错误写进插件错误记录。插件卸载后渠道消失，选着它的玩家听不到配音，直到选别的渠道或插件重新加载。
+- 同一渠道、同一声音、同一情绪的同一句话只合成一次，之后读缓存；插件渠道的缓存还按 `speaker`、`narration` 和 `version` 区分。120 秒没返回或出错时这句不播，错误记进 Tavern 日志。插件卸载后渠道消失，选着它的玩家听不到配音，直到选别的渠道或插件重新加载。
 
 ### `synthesizeSpeech({ gameId, speaker, text, emotion?, narration? })`
 

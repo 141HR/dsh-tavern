@@ -4665,7 +4665,7 @@ export async function apply(ctx) {
       case 'deleteGuide': return { guides: await conversationGuides.remove(args?.sessionId, args) }
       case 'getBodyEdit': return { edit: args?.role === 'user' ? await bodyEditor.readUser(args && args.sessionId, args) : await bodyEditor.read(args && args.sessionId) }
       case 'listGamePlugins': return { plugins: await pluginApi.gamePlugins(str(args && args.sessionId)) }
-      case 'setGamePlugin': return { plugins: await pluginApi.setGamePlugin(str(args && args.sessionId), { name: args && args.name, enabled: args && args.enabled, replace: args && args.replace, task: args && args.task, taskOrder: args && args.taskOrder, setting: args && args.setting }) }
+      case 'setGamePlugin': return { plugins: await pluginApi.setGamePlugin(str(args && args.sessionId), { setting: args && args.setting }) }
       case 'pluginState': return { data: await pluginApi.pluginState(str(args && args.sessionId), str(args && args.plugin), str(args && args.name)) }
       case 'pluginGameSettings': return { values: await pluginApi.pluginGameSettings(str(args && args.sessionId), str(args && args.plugin)) }
       case 'startPluginTask': return await startPluginTask(args && args.sessionId, args && args.key, args && args.input)

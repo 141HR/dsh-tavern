@@ -26,7 +26,6 @@ const POOL_TIMEOUT_MS = 5000
 const POOL_ENTRY_ID = /^[A-Za-z0-9._-]{1,64}$/
 const PLUGIN_TIMEOUT_MS = 30000
 const REPLACEMENT_TIMEOUT_MS = 120000
-const MAX_ERRORS_PER_GAME = 30
 const MAX_VARIABLES = 1024 * 1024
 const MAX_EDIT_TEXT = 200000
 const MAX_HISTORY_TURNS = 50
@@ -42,8 +41,6 @@ const MAX_PACK_FILES = 5000
 // Card files Tavern reads itself; a plugin importer never takes these.
 const NATIVE_CARD_EXTENSIONS = new Set(['.png', '.json', '.charx', '.dshcard'])
 const CARD_EXTENSION = /^\.[a-z0-9][a-z0-9._-]{0,19}$/
-// Stages a plugin may replace, and what a replacement must hand back (docs/plugin-design.md).
-const REPLACEABLE_STAGES = Object.freeze({ settlement: '结算' })
 
 function ownerOf(service) {
   const ctx = service && service.ctx
@@ -111,8 +108,6 @@ export function createTavernPluginApi(deps) {
   const settlementTasks = new Map()
   const manualTasks = new Map()
   const toolScopes = new Map()
-  const attachedOwners = new Set()
-  const errors = new Map()
   const reservedToolNames = new Set(deps.reservedToolNames || [])
   const notified = new Set()
   // The latest state each plugin published for its page side, per game and name (memory only).
@@ -126,28 +121,21 @@ export function createTavernPluginApi(deps) {
   })
   const { runSettlementTasks, manualTaskFor, runManualTask, stopTasks, runningTask, checkVersions } = taskExecution
 
-  /** Remember a plugin failure for the game's plugin panel, newest last. */
-  function recordError(gameId, owner, stage, error) {
+  /** Log a plugin failure; Tavern carries on with its own behaviour. */
+  function recordError(_gameId, owner, stage, error) {
     const message = String(error?.message || error).slice(0, 500)
     log.warn?.('dsh-tavern: 插件 ' + owner + ' 在「' + stage + '」出错: ' + message)
-    if (!gameId) return
-    const list = errors.get(gameId) || []
-    list.push({ at: Date.now(), plugin: owner, stage, message })
-    errors.set(gameId, list.slice(-MAX_ERRORS_PER_GAME))
-    if (errors.size > 200) errors.delete(errors.keys().next().value)
   }
 
-  /** The player's per-game choices. A game Tavern cannot resolve has everything enabled. */
+  /**
+   * Which plugins take part in a game. Installed plugins take part in every game (players
+   * switch them off globally, not per game); a card's own plugins only in that card's games.
+   * Per-game switches, replacement choices and task order saved by older versions are ignored.
+   */
   async function choicesFor(gameId) {
     const game = gameId ? await deps.resolveGame(String(gameId)).catch(() => null) : null
-    const settings = game && deps.data?.readSettings ? await deps.data.readSettings(game.chatId).catch(() => null) : null
-    // A card's own plugins exist only in that card's games, and there they are part of the
-    // game: always on, not listed among the plugins the player switches per game.
     const { elsewhere, own } = await cardPluginsFor(game)
-    const disabled = new Set((settings?.disabled || []).filter(name => !own.has(name)))
-    for (const name of elsewhere) disabled.add(name)
-    return { game, disabled, elsewhere, own, replacements: settings?.replacements || {},
-      disabledTasks: new Set((settings?.disabledTasks || []).filter(key => !own.has(String(key).split(':')[0]))), taskOrder: settings?.taskOrder || [] }
+    return { game, disabled: new Set(elsewhere), elsewhere, own, replacements: {}, disabledTasks: new Set(), taskOrder: [] }
   }
 
   /** Card plugins (card-plugins.js): those of another card than this game's, and this card's own. */
@@ -742,7 +730,6 @@ export function createTavernPluginApi(deps) {
       const material = await requireTurn(gameId, turn)
       if (typeof textVersion !== 'string' || textVersion === '') throw new Error('textVersion 必须是 onTurnSettled 或 getTurn 给出的值')
       const record = await deps.media.attach({ chatId: material.chatId, sessionId: material.sessionId, owner, turn: material.turn, key: textVersion, currentKey: material.key, item })
-      attachedOwners.add(owner)
       await changed(material.sessionId)
       return { id: record.id }
     },
@@ -1033,91 +1020,35 @@ export function createTavernPluginApi(deps) {
     }
   }
 
-  /** The game's plugin panel: what each plugin uses here, the player's choices, recent errors. */
+  /** A game's manual plugin tasks and the options plugins add to its settings. */
   async function gamePlugins(gameId) {
     const choices = await choicesFor(gameId)
-    const { game, disabled, replacements: chosen } = choices
+    const { game, disabled } = choices
     if (!game) return null
-    const uses = new Map()
-    const use = (owner, stage, mode) => {
-      const list = uses.get(owner) || []
-      if (!list.some(item => item.stage === stage && item.mode === mode)) list.push({ stage, mode })
-      uses.set(owner, list)
-    }
-    for (const entry of settledHandlers) use(entry.owner, '生命周期', '观察')
-    for (const entry of timelineHandlers) use(entry.owner, '生命周期', '观察')
-    for (const entry of removedHandlers) use(entry.owner, '生命周期', '观察')
-    for (const entry of castHandlers) use(entry.owner, '演出', '观察')
-    for (const entry of cardHandlers) use(entry.owner, '人物卡', '观察')
-    for (const entry of castSources.values()) use(entry.owner, '演出', '添加')
-    for (const entry of speechProviders.values()) use(entry.owner, '配音', '添加')
-    for (const entry of [...sections.values(), ...turnSections.values(), ...worldbookSources.values()]) use(entry.owner, '上下文', '添加')
-    for (const entry of worldbookPools.values()) use(entry.owner, '世界书', '添加')
-    for (const entry of [...settlementSections.values(), ...settlementTools.values()]) use(entry.owner, '结算', '添加')
-    for (const entry of candidateSections.values()) use(entry.owner, '候选', '添加')
-    for (const entry of compactionSections.values()) use(entry.owner, '压缩', '添加')
-    for (const owner of attachedOwners) use(owner, '界面', '添加')
-    for (const entry of settlementTasks.values()) use(entry.owner, '结算', '任务')
-    for (const entry of manualTasks.values()) use(entry.owner, '手动任务', '添加')
-    const stages = {}
-    for (const [stage, registry] of Object.entries(replacements)) {
-      for (const entry of registry.values()) use(entry.owner, REPLACEABLE_STAGES[stage], '替换')
-      const candidates = Array.from(registry.keys()).sort()
-      if (!candidates.length) continue
-      const active = await replacementFor(stage, gameId)
-      stages[stage] = { label: REPLACEABLE_STAGES[stage], candidates, chosen: Object.hasOwn(chosen, stage) ? chosen[stage] : null, active: active ? active.owner : '',
-        conflict: !Object.hasOwn(chosen, stage) && candidates.filter(owner => !disabled.has(owner)).length > 1 }
-    }
     const tasks = {
-      settlement: Object.keys(TASK_PHASES).flatMap(phase => taskExecution.orderedTasks(phase, choices).filter(entry => !choices.own.has(entry.owner)).map(entry => ({ key: taskKey(entry.owner, entry.name), plugin: entry.owner,
-        title: entry.title, phase, phaseLabel: TASK_PHASES[phase], enabled: !choices.disabledTasks.has(taskKey(entry.owner, entry.name)) }))),
       manual: Array.from(manualTasks.values()).filter(entry => !disabled.has(entry.owner)).sort((a, b) => a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name))
         .map(entry => ({ key: taskKey(entry.owner, entry.name), plugin: entry.owner, title: entry.title, description: entry.description, input: entry.input })),
       running: runningTask(game.sessionId)
     }
-    // Options plugins add to this game's settings: this card's own plugins and the plugins switched on here.
     const stored = deps.data?.readSettings ? (await deps.data.readSettings(game.chatId).catch(() => null))?.values || {} : {}
     const settings = Array.from(gameSettingDefs.values()).filter(entry => !disabled.has(entry.owner)).sort((a, b) => a.owner.localeCompare(b.owner))
       .map(entry => ({ plugin: entry.owner, title: entry.title || entry.owner, card: choices.own.has(entry.owner), fields: structuredClone(entry.fields), values: settingValues(entry, stored[entry.owner]) }))
-    for (const entry of gameSettingDefs.values()) use(entry.owner, '本局设置', '添加')
-    return { plugins: Array.from(uses.keys()).filter(name => !choices.elsewhere.has(name) && !choices.own.has(name)).sort().map(name => ({ name, enabled: !disabled.has(name), uses: uses.get(name) })),
-      replacements: stages, tasks, settings, errors: [...(errors.get(game.sessionId) || [])].reverse() }
+    return { tasks, settings }
   }
 
-  async function setGamePlugin(gameId, { name, enabled, replace, task, taskOrder, setting } = {}) {
-    const { game, own, disabled } = await choicesFor(gameId)
+  /** Change one option a plugin added to this game's settings. */
+  async function setGamePlugin(gameId, { setting } = {}) {
+    const { game, disabled } = await choicesFor(gameId)
     if (!game) throw new Error('这一局不存在或不是游玩对话')
-    let changedValues = null
-    if (setting && typeof setting === 'object') {
-      const entry = gameSettingDefs.get(String(setting.plugin))
-      const field = entry?.fields.find(item => item.key === setting.key)
-      if (!entry || !field || disabled.has(entry.owner)) throw new Error('这一局没有这个插件配置项')
-      const value = coerceSetting(field, setting.value)
-      if (value === undefined) throw new Error('「' + field.label + '」的值不符合要求')
-      await deps.data.updateSettings(game.chatId, settings => { settings.values[entry.owner] = { ...settings.values[entry.owner], [field.key]: value } })
-      changedValues = { owner: entry.owner, values: settingValues(entry, (await deps.data.readSettings(game.chatId)).values[entry.owner]) }
-    }
-    if (typeof name === 'string' && own.has(name) || task && typeof task.key === 'string' && own.has(task.key.split(':')[0])) throw new Error('卡内插件是这张卡的一部分，不能在本局单独关闭')
-    await deps.data.updateSettings(game.chatId, settings => {
-      if (typeof name === 'string' && typeof enabled === 'boolean') {
-        settings.disabled = settings.disabled.filter(item => item !== name)
-        if (!enabled) settings.disabled.push(name)
-      }
-      if (task && typeof task.key === 'string' && typeof task.enabled === 'boolean') {
-        settings.disabledTasks = settings.disabledTasks.filter(item => item !== task.key)
-        if (!task.enabled) settings.disabledTasks.push(task.key)
-      }
-      if (Array.isArray(taskOrder)) settings.taskOrder = [...new Set(taskOrder.filter(item => typeof item === 'string'))].slice(0, 200)
-      if (replace && Object.hasOwn(REPLACEABLE_STAGES, replace.stage)) {
-        // null: back to the default rule; '' : Tavern's own; a name: that plugin.
-        if (replace.plugin === null) delete settings.replacements[replace.stage]
-        else settings.replacements[replace.stage] = String(replace.plugin)
-      }
-    })
-    if (changedValues) {
-      dispatch(Array.from(settingHandlers).filter(entry => entry.owner === changedValues.owner), { gameId: game.sessionId, values: changedValues.values }, '本局配置项', disabled)
-      deps.settingsChanged?.(game.sessionId, changedValues.owner)
-    }
+    const entry = setting && typeof setting === 'object' ? gameSettingDefs.get(String(setting.plugin)) : undefined
+    const field = entry?.fields.find(item => item.key === setting.key)
+    if (!entry || !field || disabled.has(entry.owner)) throw new Error('这一局没有这个插件配置项')
+    const value = coerceSetting(field, setting.value)
+    if (value === undefined) throw new Error('「' + field.label + '」的值不符合要求')
+    await deps.data.updateSettings(game.chatId, settings => { settings.values[entry.owner] = { ...settings.values[entry.owner], [field.key]: value } })
+    const values = settingValues(entry, (await deps.data.readSettings(game.chatId)).values[entry.owner])
+    dispatch(Array.from(settingHandlers).filter(item => item.owner === entry.owner), { gameId: game.sessionId, values }, '本局配置项', disabled)
+    deps.settingsChanged?.(game.sessionId, entry.owner)
     return gamePlugins(gameId)
   }
 

@@ -127,7 +127,7 @@ export function apply(ctx) {
 |---|---|
 | [读取游戏](plugin-api-game.md) | 回合写完、读正文与人物卡、历史、时间线变化、改最新一轮 |
 | [正文、结算与任务](plugin-api-prompt.md) | 往正文请求、世界书、后台结算、候选、压缩里添加内容；结算任务、手动任务、`runTask`、`handle` |
-| [媒体与数据](plugin-api-data.md) | 挂图片等媒体、按轮与整局数据、插件数据、本局配置项、本局插件面板 |
+| [媒体与数据](plugin-api-data.md) | 挂图片等媒体、按轮与整局数据、插件数据、本局配置项、插件在哪些局生效 |
 | [人物卡、Skill 与演出](plugin-api-cards.md) | 人物卡库、改卡、Skill、台词标注、角色素材 |
 | [浏览器侧 tavernUi](plugin-api-ui.md) | 显示媒体、正文标记、按钮、面板、舞台、配音与音乐 |
 

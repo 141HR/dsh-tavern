@@ -64,9 +64,9 @@ function createConversationSettingsModule({
             error ? h("p", { role: "alert" }, "保存失败：" + error) : null);
     }
 
-    // Plugins active in this game (docs/plugin-design.md §5): what each uses, a switch per game,
-    // the choice when several plugins replace one stage, and their recent errors.
-    function TavernConversationPlugins(props) {
+    // Options plugins add to this game's settings (tavern.gameSettings), drawn like Tavern's own.
+    // Plugins themselves are switched on and off globally, on the 酒馆插件 page.
+    function TavernConversationPluginSettings(props) {
         const h = React.createElement;
         const [data, setData] = React.useState(null);
         const [busy, setBusy] = React.useState(false);
@@ -87,46 +87,8 @@ function createConversationSettingsModule({
             h("h3", null, entry.title),
             entry.fields.map(field => h(TavernPluginSettingField, { key: field.key, field: field, value: entry.values[field.key], busy: busy,
                 onChange: value => change({ setting: { plugin: entry.plugin, key: field.key, value: value } }) }))));
-        // The options plugins add sit with the game's own settings; the switches stay under 高级.
-        if (props.part === "settings") return pluginSettings.length ? h(React.Fragment, null, settingsBlock, error ? h("p", { role: "alert" }, "保存失败：" + error) : null) : null;
-        if (!data || (!data.plugins.length && !data.errors.length && !(data.tasks && data.tasks.settlement.length))) return error ? h("p", { role: "alert" }, "插件信息读取失败：" + error) : null;
-        const usesText = uses => uses.map(item => item.stage + "·" + item.mode).join("、");
-        const settlementTasks = data.tasks ? data.tasks.settlement : [];
-        // Swap with the neighbour in the same phase; the whole order is saved, so it holds for new tasks too.
-        function moveTask(index, step) {
-            const order = settlementTasks.map(task => task.key);
-            [order[index], order[index + step]] = [order[index + step], order[index]];
-            void change({ taskOrder: order });
-        }
-        const canMove = (index, step) => settlementTasks[index + step]?.phase === settlementTasks[index].phase;
-        return h("section", { className: "dsh-local-section dsh-tavern-game-plugins" }, h("h3", null, "插件"),
-            h("p", { className: "dsh-local-help" }, "本局用到的第三方插件。关掉后，它不再参与本局的提示词、结算和通知；已经挂上的内容保留。"),
-            data.plugins.map(plugin => h("label", { key: plugin.name, className: "dsh-tavern-background-task" },
-                h("span", null, plugin.name, h("span", { className: "dsh-tavern-settings-desc" }, usesText(plugin.uses))),
-                h("input", { type: "checkbox", role: "switch", "aria-label": "在本局启用插件 " + plugin.name, checked: plugin.enabled, disabled: busy, onChange: event => change({ name: plugin.name, enabled: event.target.checked }) }))),
-            Object.entries(data.replacements).map(([stage, info]) => h("div", { key: stage, className: "dsh-local-field" },
-                h("label", null, info.label + "由谁负责", h("select", { className: "dsh-tavern-settings-select", "aria-label": info.label + "由谁负责", disabled: busy,
-                    value: info.chosen === null ? "__default" : info.chosen, onChange: event => change({ replace: { stage, plugin: event.target.value === "__default" ? null : event.target.value } }) },
-                    h("option", { value: "__default" }, "默认（只有一个插件时用它）"),
-                    h("option", { value: "" }, "Tavern 自己的" + info.label),
-                    info.candidates.map(name => h("option", { key: name, value: name }, "插件 " + name)))),
-                h("p", { className: info.conflict ? "dsh-local-warning" : "dsh-local-help" }, info.conflict
-                    ? "有多个插件都要接管" + info.label + "，请在这里选一个；选好之前用 Tavern 自己的" + info.label + "。"
-                    : "当前：" + (info.active ? "插件 " + info.active : "Tavern 自己的" + info.label) + "。插件出错时自动改用 Tavern 自己的。"))),
-            settlementTasks.length ? h("div", { className: "dsh-local-field" },
-                h("p", { className: "dsh-local-help" }, "插件的结算任务：每轮在 Tavern 自己的结算之前或之后依次运行，下一轮会等它们跑完。可以单独关掉，或调整先后。"),
-                settlementTasks.map((task, index) => h("div", { key: task.key, className: "dsh-tavern-background-task" },
-                    h("span", null, task.title, h("span", { className: "dsh-tavern-settings-desc" }, task.phaseLabel + " · 插件 " + task.plugin)),
-                    h("span", { className: "dsh-tavern-plugin-task-controls" },
-                        h("button", { type: "button", className: "dsh-tavern-btn", "aria-label": "上移 " + task.title, disabled: busy || !canMove(index, -1), onClick: () => moveTask(index, -1) }, "↑"),
-                        h("button", { type: "button", className: "dsh-tavern-btn", "aria-label": "下移 " + task.title, disabled: busy || !canMove(index, 1), onClick: () => moveTask(index, 1) }, "↓"),
-                        h("input", { type: "checkbox", role: "switch", "aria-label": "在本局启用结算任务 " + task.title, checked: task.enabled, disabled: busy, onChange: event => change({ task: { key: task.key, enabled: event.target.checked } }) }))))) : null,
-            data.errors.length ? h("details", { className: "dsh-tavern-game-plugin-errors" },
-                h("summary", null, "最近的插件错误（" + data.errors.length + "）"),
-                data.errors.map((item, index) => h("p", { key: index, className: "dsh-tavern-settings-desc" },
-                    new Date(item.at).toLocaleTimeString() + " · " + item.plugin + " · " + item.stage + "：" + item.message)),
-                h("button", { type: "button", className: "dsh-tavern-btn", onClick: load }, "刷新")) : null,
-            error ? h("p", { role: "alert" }, "保存失败：" + error) : null);
+        if (!pluginSettings.length) return null;
+        return h(React.Fragment, null, settingsBlock, error ? h("p", { role: "alert" }, "保存失败：" + error) : null);
     }
 
     // One option a plugin added to this game's settings (tavern.gameSettings), drawn like Tavern's own.
@@ -171,10 +133,9 @@ function createConversationSettingsModule({
                     h(UserPreferenceProfileTab, { key: owner + ":profile", scope: { sessionId: owner }, conversationOnly: true }),
                     h(TavernStatusBarSetting, { key: owner + ":status", sessionId: owner })),
                 h(TavernConversationBackgroundModel, { key: owner, sessionId: owner }),
-                h(TavernConversationPlugins, { key: owner + ":plugin-settings", sessionId: owner, part: "settings" }),
+                h(TavernConversationPluginSettings, { key: owner + ":plugin-settings", sessionId: owner }),
                 h("details", { className: "dsh-local-advanced" }, h("summary", null, "高级"),
-                    h(TavernConversationWritingSkills, { key: owner + ":skills", sessionId: owner }),
-                    h(TavernConversationPlugins, { key: owner + ":plugins", sessionId: owner }))) : h("p", null, "请选择一个游玩对话。")));
+                    h(TavernConversationWritingSkills, { key: owner + ":skills", sessionId: owner }))) : h("p", null, "请选择一个游玩对话。")));
     }
 
     function TavernConversationSettingsAction(props) {
