@@ -1,17 +1,17 @@
 // 文风联想：正文提交后，后台模型凭记忆找一部笔调接近当前场景的小说（按题材选，不限名家），
-// 给出书名、作者和一段范文（不要求是原文）；下一轮前台像剧本参考一样带上它，借小说的笔致压住 AI 腔。
+// 给出一段范文（不要求是原文，书名、作者有就附上）；下一轮前台像剧本参考一样带上它，借小说的笔致压住 AI 腔。
 // 选段的提示词是系统提示词「文风联想选段」（prompts/style-reference-recall.md），可在面板修改。
 
 import { prompt } from '../prompt-catalog.js'
 
 export const STYLE_REFERENCE_SUBMIT_TOOL = {
   name: 'style_reference_submit',
-  description: '提交文风联想：一部小说的书名、作者，以及一段笔调贴合当前场景的范文。提交后任务完成。',
+  description: '提交文风联想：一段笔调贴合当前场景的范文；有对应的书时附上书名、作者。提交后任务完成。',
   parameters: { type: 'object', properties: {
-    book: { type: 'string', description: '书名，不带书名号' },
-    author: { type: 'string' },
+    book: { type: 'string', description: '书名，不带书名号；没有可不填' },
+    author: { type: 'string', description: '作者；没有可不填' },
     quote: { type: 'string', description: '一段范文，约 100～300 字，不超过 400 字' }
-  }, required: ['book', 'author', 'quote'], additionalProperties: false }
+  }, required: ['quote'], additionalProperties: false }
 }
 
 const KEPT = 8
@@ -25,7 +25,7 @@ export function readStyleReference(args) {
   const book = str(args?.book).trim().replace(/^《|》$/g, '')
   const author = str(args?.author).trim()
   const quote = str(args?.quote).trim()
-  if (!book || !author || !quote) throw new Error('书名、作者和范文都不能为空')
+  if (!quote) throw new Error('范文不能为空')
   if (quote.length > MAX_QUOTE) throw new Error('范文不超过 ' + MAX_QUOTE + ' 字，只写一段')
   return { book, author, quote }
 }
