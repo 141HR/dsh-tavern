@@ -80,7 +80,7 @@ import { replaceSessionSurface } from './domain/session-surface-mutations.js'
 import { createPresetDiagnostics } from './domain/preset-diagnostics.js'
 import { createIncrementalReplyView } from './domain/incremental-reply-view.js'
 import { createRequestPerformance } from './domain/request-performance.js'
-import { scriptChunkLayout } from './domain/script-chunks.js'
+import { createScriptReader } from './domain/script-reader.js'
 import { createScriptNavigation } from './domain/script-navigation.js'
 import { createSessionInventory } from './domain/session-inventory.js'
 import { createSessionViewSync } from './domain/session-view-sync.js'
@@ -793,17 +793,7 @@ export async function apply(ctx) {
     if (!['story', 'script'].includes(chat?.mode || 'story')) return []
     return composeTavernRegexScripts(await readCardExtensions(chat.cardPath || chat.cardId, chat), presetRegexScripts(chat))
   }
-  async function readScript(scriptOrCardPath) {
-    if (str(scriptOrCardPath) === '') return undefined
-    let scriptPath = str(scriptOrCardPath)
-    if (scriptPath.startsWith('cards/')) scriptPath = await fileResources.scriptForCard(scriptPath)
-    if (!scriptPath) return undefined
-    const kind = resourceKind(scriptPath)
-    if (kind !== 'source' && kind !== 'script') throw new Error('剧本引用必须指向剧本文件')
-    const source = await fileResources.readText(normalizeResourcePath(scriptPath, kind))
-    if (source === undefined) return undefined
-    return { path: scriptPath, title: scriptPath.split('/').pop(), sourceChars: source.length, ...scriptChunkLayout(source) }
-  }
+  const readScript = createScriptReader({ resources: fileResources, version: path => profileData.version('resources/' + path) })
   function prepareTextImport(payload, emptyMessage) {
     const source = payload !== null && typeof payload === 'object' ? payload : {}
     const name = str(source.name).trim()
@@ -840,10 +830,7 @@ export async function apply(ctx) {
   }
   // ---------- 剧本（可独立保存，也可与人物卡一对一绑定） ----------
   async function readSource(sourcePath) {
-    const normalized = normalizeResourcePath(sourcePath, 'source')
-    const source = await fileResources.readText(normalized)
-    if (source === undefined) return undefined
-    return { path: normalized, title: normalized.split('/').pop(), sourceChars: source.length, ...scriptChunkLayout(source) }
+    return readScript(normalizeResourcePath(sourcePath, 'source'))
   }
   async function listSources() {
     return await Promise.all((await fileResources.list('source')).map(async function (sourcePath) {
