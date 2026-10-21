@@ -2,12 +2,14 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSyn
 import path from 'node:path'
 
 /**
- * 首装时把 Tavern 自带的那份「固定版本」剧情生图插件装进用户插件目录。
+ * 把 Tavern 自带的那份「固定版本」剧情生图插件装进用户插件目录，已装旧版时就地升级。
  *
  * 设计约束（逐条对应需求）：
  *  - 固定版本：只读 `packages/dsh-tavern-image-bundled/BUNDLED-VERSION.json`，全程不联网、不拉 latest。
- *  - 只首装：目标目录一旦存在就跳过，不判断版本、不覆盖、不碰用户数据。
- *  - 原子安装：先复制并校验到同级临时目录，再将完整目录改名到目标位置。
+ *  - 首装：目标目录不存在时，先复制并校验到同级临时目录，再将完整目录改名到目标位置。
+ *  - 升级：目标是同一个插件（包名相同、普通目录、不是 Git 检出）且版本比内置的旧时，
+ *    只替换内置副本里有的代码文件，用户数据（配置、人物库、世界书、任务记录、缓存）一律不碰；
+ *    中途失败就把换下的旧文件放回去。更新的版本、版本不明、别的来源、符号链接一律不动。
  *  - 不重复加载：profile 里已经有同名包时跳过（Tavern 的 user-plugins 本来也会跳过
  *    plugins/ 下的副本以免同一包两个来源，这里提前让位，省得留一份永远不会被加载的副本）。
  *
@@ -20,6 +22,9 @@ export const BUNDLED_SCENE_IMAGE_DIR = ['tavern-plugin', 'packages', 'dsh-tavern
 export const SCENE_IMAGE_PACKAGE_NAME = 'dsh-tavern-image'
 /** 旧版 profile 包名：识别既有来源，避免新旧包并存。 */
 export const LEGACY_SCENE_IMAGE_PACKAGE_NAME = 'dsh-tavern-comfy'
+
+/** 插件自己的数据，升级时绝不覆盖（与插件 release-updater 的 PRIVATE 一致）。 */
+const PRIVATE = /^(config(\.json)?|definitions(\.json)?|worldbook(-outfits)?(\.json)?|jobs(-store)?\.json|plans(-store)?\.json|cache|backups|node_modules|\.git)(\/|$)/i
 
 /** 内置副本必须齐备的文件；缺一个就当"这份发行版没内置插件"，不去猜。 */
 const REQUIRED = ['package.json', 'lib/index.js', 'client.js', 'cordis.patch.yml']
@@ -96,18 +101,65 @@ export function readBundledSceneImage(sourceRoot) {
 }
 
 /** 将不含符号链接的内置副本复制到新建的临时目录。 */
-function copyTree(from, to, copied) {
+function copyTree(from, to, copied, root = to) {
   for (const entry of readdirSync(from, { withFileTypes: true })) {
     if (entry.name === 'node_modules' || entry.name === 'BUNDLED-VERSION.json') continue
     const source = path.join(from, entry.name)
     const target = path.join(to, entry.name)
     if (entry.isSymbolicLink()) throw new Error('内置插件副本包含不支持的符号链接：' + source)
-    if (entry.isDirectory()) { mkdirSync(target); copyTree(source, target, copied); continue }
+    if (entry.isDirectory()) { mkdirSync(target); copyTree(source, target, copied, root); continue }
     if (!entry.isFile()) continue
     mkdirSync(path.dirname(target), { recursive: true })
     copyFileSync(source, target)
-    copied.push(path.relative(to, target).split(path.sep).join('/'))
+    copied.push(path.relative(root, target).split(path.sep).join('/'))
   }
+}
+
+/** Why an existing plugin directory must not be upgraded; '' when it may. */
+function upgradeRefusal(target, bundledVersion) {
+  const stat = lstatSync(target)
+  if (stat.isSymbolicLink() || !stat.isDirectory()) return '目标插件目录不是普通目录，保留现有内容'
+  if (existsNoFollow(path.join(target, '.git'))) return '目标插件是 Git 检出，保留现有内容'
+  const pkg = readJson(path.join(target, 'package.json'))
+  const version = String(pkg?.version ?? '').trim()
+  if (pkg?.name !== SCENE_IMAGE_PACKAGE_NAME || !version) return '目标插件目录不是可识别的同名插件，保留现有内容'
+  if (comparePluginVersions(bundledVersion, version) <= 0) return '已安装的插件不比内置版本旧，保留现有内容'
+  return ''
+}
+
+/** Replace the bundled copy's code files in an older install; plugin data stays untouched. */
+function upgradeInPlace(bundled, target, installedVersion) {
+  const copied = []
+  const staging = mkdtempSync(path.join(path.dirname(target), '.dsh-tavern-image-'))
+  const backup = mkdtempSync(path.join(path.dirname(target), '.dsh-tavern-image-backup-'))
+  const moved = []
+  try {
+    copyTree(bundled.directory, staging, copied)
+    const copiedPkg = readJson(path.join(staging, 'package.json'))
+    if (copiedPkg?.name !== SCENE_IMAGE_PACKAGE_NAME || String(copiedPkg?.version ?? '').trim() !== bundled.version || copiedPkg?.dsh?.tavern?.sceneImages !== 'delegate') {
+      throw new Error('内置插件复制后的包名、版本或委派契约校验失败')
+    }
+    // package.json last: until it lands, the install still reports the old version.
+    const files = copied.filter(file => !PRIVATE.test(file)).sort((a, b) => (a === 'package.json') - (b === 'package.json'))
+    for (const file of files) {
+      const destination = path.join(target, file), saved = path.join(backup, file)
+      mkdirSync(path.dirname(destination), { recursive: true })
+      const existed = existsNoFollow(destination)
+      if (existed) { mkdirSync(path.dirname(saved), { recursive: true }); renameSync(destination, saved) }
+      moved.push({ destination, saved, existed })
+      renameSync(path.join(staging, file), destination)
+    }
+  } catch (error) {
+    for (const item of moved.reverse()) {
+      try { rmSync(item.destination, { force: true }); if (item.existed) renameSync(item.saved, item.destination) } catch {}
+    }
+    rmSync(staging, { recursive: true, force: true })
+    rmSync(backup, { recursive: true, force: true })
+    throw error
+  }
+  rmSync(staging, { recursive: true, force: true })
+  rmSync(backup, { recursive: true, force: true })
+  return { action: 'upgraded', reason: '从 ' + installedVersion + ' 升级', version: bundled.version, installedVersion, target, files: moved.length }
 }
 
 /**
@@ -126,15 +178,17 @@ export function installBundledSceneImagePlugin({ sourceRoot, dataRoot, profileDi
   const target = path.join(dataRoot, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
   const installedVersion = readJson(path.join(target, 'package.json'))?.version ?? null
 
-  // Any existing entry is user-owned: this includes broken directories and symlinks.
-  if (existsNoFollow(target)) return {
-    action: 'skipped', reason: '目标插件目录已存在，保留现有内容',
-    version: bundled.version, installedVersion, target,
-  }
-
   // profile 侧已装同名包：让它做唯一来源，别再放一份永不加载的副本
   const profileHasSceneImagePackage = profileDir && [SCENE_IMAGE_PACKAGE_NAME, LEGACY_SCENE_IMAGE_PACKAGE_NAME]
     .some(name => existsSync(path.join(profileDir, 'node_modules', name, 'package.json')))
+
+  // An existing entry is user-owned unless it is an older copy of this same plugin.
+  if (existsNoFollow(target)) {
+    const refusal = profileHasSceneImagePackage ? 'profile 已安装同名插件包，保持单一来源' : upgradeRefusal(target, bundled.version)
+    if (refusal) return { action: 'skipped', reason: refusal, version: bundled.version, installedVersion, target }
+    return upgradeInPlace(bundled, target, installedVersion)
+  }
+
   if (profileHasSceneImagePackage) {
     return {
       action: 'skipped', reason: 'profile 已安装同名插件包，保持单一来源',

@@ -101,26 +101,55 @@ test('已存在的较新插件目录：完整保留', t => {
   assert.equal(JSON.parse(readFileSync(path.join(target, 'package.json'), 'utf8')).version, '9.0.0')
 })
 
-test('已存在的旧版插件目录：不升级、不覆盖用户数据', t => {
+test('已存在的旧版插件目录：就地升级代码，用户数据和停用标记不动', t => {
   const source = makeSource(t, '2.8.0')
   const data = makeData(t)
   const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
-  mkdirSync(target, { recursive: true })
+  mkdirSync(path.join(target, 'lib'), { recursive: true })
   writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '2.7.0', main: './lib/index.js', dsh: CONTRACT }))
+  writeFileSync(path.join(target, 'lib', 'index.js'), 'export const old = true\n')
+  writeFileSync(path.join(target, 'lib', 'removed-upstream.js'), '// old helper\n')
   // 用户的私人数据：升级必须保留
   const userFiles = {
     'config.json': '{"apiKey":"user-own"}',
     'worldbook.json': '{"entries":[]}',
     'definitions.json': '{"characters":[]}',
     'jobs-store.json': '{"jobs":[]}',
+    '.tavern-disabled': '',
   }
   for (const [name, body] of Object.entries(userFiles)) writeFileSync(path.join(target, name), body)
 
   const r = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet })
-  assert.equal(r.action, 'skipped')
-  assert.equal(JSON.parse(readFileSync(path.join(target, 'package.json'), 'utf8')).version, '2.7.0')
+  assert.equal(r.action, 'upgraded')
+  assert.equal(r.installedVersion, '2.7.0')
+  assert.equal(JSON.parse(readFileSync(path.join(target, 'package.json'), 'utf8')).version, '2.8.0')
+  assert.match(readFileSync(path.join(target, 'lib', 'index.js'), 'utf8'), /bundled/)
+  assert.ok(existsSync(path.join(target, 'client.js')))
   for (const [name, body] of Object.entries(userFiles)) {
     assert.equal(readFileSync(path.join(target, name), 'utf8'), body, 'user data changed: ' + name)
+  }
+  assert.ok(existsSync(path.join(target, 'lib', 'removed-upstream.js')), '不删任何已有文件')
+  assert.deepEqual(readdirSync(path.join(data, 'plugins')).sort(), [BUNDLED_SCENE_IMAGE_FOLDER], '临时目录和备份都清理掉')
+  assert.equal(installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet }).action, 'skipped', '升级后再装是同版本，跳过')
+})
+
+test('旧版但来源不同：Git 检出、旧包名都不升级', t => {
+  const source = makeSource(t, '2.8.0')
+  for (const [setup, reason] of [
+    [target => mkdirSync(path.join(target, '.git')), /Git/],
+    [target => writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: LEGACY_SCENE_IMAGE_PACKAGE_NAME, version: '1.0.0' })), /不是可识别/],
+  ]) {
+    const data = makeData(t)
+    const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
+    mkdirSync(target, { recursive: true })
+    writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '2.7.0', main: './lib/index.js', dsh: CONTRACT }))
+    setup(target)
+    const before = readFileSync(path.join(target, 'package.json'), 'utf8')
+    const r = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet })
+    assert.equal(r.action, 'skipped')
+    assert.match(r.reason, reason)
+    assert.equal(readFileSync(path.join(target, 'package.json'), 'utf8'), before)
+    assert.equal(existsSync(path.join(target, 'client.js')), false)
   }
 })
 
