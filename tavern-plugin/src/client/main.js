@@ -1053,6 +1053,14 @@ window.__ModuleLoader__.load({
 					label: function () { return "配音"; }
 				}, function () { return React.createElement("div", { className: "dsh-tavern-settings-section dsh-tavern-global-settings" }, React.createElement(TavernSpeechSettings, null)); }); });
 			}, "dsh-tavern: speech settings section");
+			ctx.effect(function () {
+				return slots.inject("settings.section", function () { return slots.register({
+					name: "settings.section",
+					id: "dsh-tavern-plugins",
+					order: 113,
+					label: function () { return "酒馆插件"; }
+				}, TavernPluginsSettingsSection); });
+			}, "dsh-tavern: plugins settings section");
 
 			presetLibraryFeature.register({ ctx: ctx, appendMention: appendMention });
 			resourcesLibraryFeature.register({ ctx: ctx, appendMention: appendMention });

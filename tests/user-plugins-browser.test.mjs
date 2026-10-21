@@ -28,7 +28,7 @@ test('插件列表按 Release 显示更新、停用与启用', async t => {
       return { plugin: { folder: args.folder, name: 'dsh-runninghub', version: '1.1.5', replaced: true } }
     }
   }
-  const { page } = await openTavernSettings(t, { sceneImages: false, respond })
+  const { page } = await openTavernSettings(t, { respond, section: 'dsh-tavern: plugins settings section' })
   const pet = page.locator('.dsh-tavern-user-plugin').filter({ hasText: 'dsh-tavern-desktop-pet' })
   const hub = page.locator('.dsh-tavern-user-plugin').filter({ hasText: 'dsh-runninghub' })
   const panel = page.locator('.dsh-tavern-user-plugin').filter({ hasText: 'dsh-tavern-worldbook-panel' })

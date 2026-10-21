@@ -86,13 +86,13 @@ test('顶栏落成一个插槽，旧的两个插槽已移除', () => {
   assert.match(client, /function tavernStartGroups\(/)
 })
 
-test('默认对小白无感：开始页没有图钉，「⋯」只在有按钮收起时出现，配置放在高级里', () => {
+test('默认对小白无感：开始页没有图钉，「⋯」只在有按钮收起时出现，配置折叠在显示与交互末尾', () => {
   assert.doesNotMatch(client, /dsh-tavern-start-pin/)
   assert.doesNotMatch(client, /dsh-tavern-header-divider/)
   assert.match(client, /foldedEntries\.length \? h\("div", \{ className: "dsh-tavern-more-actions dsh-tavern-header-more" \}/)
-  const advanced = client.slice(client.indexOf('group("高级"'))
-  assert.match(advanced.slice(0, advanced.indexOf('state.error ?')), /h\(HeaderItemsSettings\)/)
-  assert.doesNotMatch(client.slice(client.indexOf('group("显示与交互"'), client.indexOf('group("高级"')), /HeaderItemsSettings/)
+  const display = client.slice(client.indexOf('group("显示与交互"'), client.indexOf('group("高级"'))
+  assert.match(display, /h\(HeaderItemsSettings\)\),\s*$/)
+  assert.doesNotMatch(client.slice(client.indexOf('group("高级"')).split('state.error ?')[0], /HeaderItemsSettings/)
 })
 
 test('手机上两个例外规则都放行新的顶栏容器', () => {

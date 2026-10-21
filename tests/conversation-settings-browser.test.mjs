@@ -4,7 +4,7 @@ import { openTavernSettings } from './fixtures/tavern-settings-browser.mjs'
 
 test('注册的本局设置保存玩家称呼、预设与后台模型，失败时保留已保存模型', async t => {
   let playerName = '你', preset = null, model = null, fail = false
-  const { page, calls } = await openTavernSettings(t, { sceneImages: false, sessionId: 'game', respond(method, args) {
+  const { page, calls } = await openTavernSettings(t, { sessionId: 'game', respond(method, args) {
     if (method === 'listSessions') return { sessions: [{ sessionId: 'game', mode: 'story' }] }
     if (method === 'getSession') return { view: { sessionId: 'game', mode: 'story', playerName, runtimePreset: preset, statusBarPlacement: 'sidebar' } }
     if (method === 'listPresets') return { presets: [{ path: 'presets/one.json', title: '测试预设', valid: true, recognized: true }] }

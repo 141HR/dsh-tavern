@@ -507,7 +507,7 @@
         }
 
         // @include modules/global-settings.js
-        const { TavernSettingsSection } = createGlobalSettingsModule({
+        const { TavernSettingsSection, TavernPluginsSettingsSection } = createGlobalSettingsModule({
             React, rpc, notifySettingsChanged: () => window.dispatchEvent(new CustomEvent("dsh-tavern-settings-changed")),
             TavernDefaultModelSetting, TavernConversationWritingSkills, DisplayPreferencesSettings, HeaderItemsSettings,
             CandidatePreferencesSettings, PromptTemplateSettingsEntry, ContextCompactionSettings, TavernUserPluginsSettings
