@@ -901,7 +901,6 @@ export function createFileResourceStore(options = {}) {
       await rm(path.dirname(oldWorking), { recursive: true, force: true })
       await rm(path.dirname(oldOriginal), { recursive: true, force: true })
     }
-    await writeBindings(bindings)
     if (replacements.size) {
       for (const row of index.chats || []) {
         const chat = await readChat(row.id)
