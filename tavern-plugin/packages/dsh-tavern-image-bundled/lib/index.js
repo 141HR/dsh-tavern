@@ -106,6 +106,8 @@ const DEFAULTS = {
   // 注意它和上面的 imageSize 是两回事：imageSize 决定生成分辨率，这个只决定
   // 正文里的显示宽度 —— 不重采样原图、不改生成分辨率，也不影响点开后的全屏看图。
   imageDisplayWidth: 0,
+  // 配图总开关：关掉后不再自动或手动配图，已有插图照常显示。
+  imageEnabled: true,
   // ---- 生图规划（agent 生图）：另起一次模型调用，决定配几张、插在哪、提示词怎么写 ----
   plannerEnabled: true,
   plannerProvider: '',
@@ -2737,6 +2739,7 @@ let worldbookCache = null
           defaultWorkflow: config.defaultWorkflow, lockWorkflow: config.lockWorkflow,
           autoImageGen: config.autoImageGen, imageGenCount: config.imageGenCount,
           smartImageSelection: config.smartImageSelection !== false,
+          imageEnabled: config.imageEnabled !== false,
           characterAutoUpdate: config.characterAutoUpdate !== false,
           styleArtists: config.styleArtists ?? '', imageSize: config.imageSize ?? '竖图',
           // 正文插图统一显示宽度（0 = 默认）：前端启动时读一次，之后每张图都不再问服务端。
@@ -3445,7 +3448,7 @@ let worldbookCache = null
         if (typeof patch.comfyAuthPass === 'string' && patch.comfyAuthPass !== '') config.comfyAuthPass = patch.comfyAuthPass
         if (patch.clearComfyAuthToken === true) config.comfyAuthToken = ''
         if (patch.clearComfyAuthPass === true) config.comfyAuthPass = ''
-        for (const key of ['lockWorkflow', 'overrideSteps', 'autoImageGen', 'plannerEnabled', 'jpegOutput', 'smartImageSelection', 'characterAutoUpdate']) if (typeof patch[key] === 'boolean') config[key] = patch[key]
+        for (const key of ['lockWorkflow', 'overrideSteps', 'autoImageGen', 'imageEnabled', 'plannerEnabled', 'jpegOutput', 'smartImageSelection', 'characterAutoUpdate']) if (typeof patch[key] === 'boolean') config[key] = patch[key]
         if (typeof patch.promptMode === 'string' && ['auto', 'tags', 'natural', 'mixed'].includes(patch.promptMode)) config.promptMode = patch.promptMode
         if (typeof patch.activePromptPreset === 'string') config.activePromptPreset = patch.activePromptPreset.slice(0, 80)
         if (Array.isArray(patch.promptPresets)) config.promptPresets = normalizePromptPresets(patch.promptPresets)
@@ -4281,6 +4284,7 @@ let worldbookCache = null
           }
         }
         if (imageDisposed) return { attached: 0, error: '插件已卸载，停止等待正文' }
+        if (config.imageEnabled === false) return { attached: 0, error: '配图已关闭（设置 → 配图）' }
         if (!settled) return { attached: 0, error: '读不到这一轮（可能还没结算完，或轮次号不对）' }
         // 手动这条路也把「哪张卡」记下来（和自动那条共用一个缓存）
         rememberTurn(gameId, turn, settled.card)

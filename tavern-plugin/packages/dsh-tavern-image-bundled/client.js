@@ -1991,6 +1991,11 @@ function versionsOf(jobId) {
 .dti-settings select:focus, .dti-settings input:focus, .dti-settings textarea:focus { outline: none;
   border-color: var(--dsw-alias-brand-primary) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); }
 .dti-settings input[type=checkbox] { accent-color: var(--dsw-alias-brand-primary); }
+.dti-switch { appearance: none; -webkit-appearance: none; flex-shrink: 0; width: 36px; height: 20px; margin: 0; border-radius: 10px; cursor: pointer; position: relative;
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 35%, transparent); transition: background .15s; }
+.dti-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.dti-switch:checked { background: var(--dsw-alias-brand-primary); }
+.dti-switch:checked::after { transform: translateX(16px); }
 .dti-field-label { font-size: 12px; color: var(--dsw-alias-label-secondary); margin-bottom: 6px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .dti-field-label small { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
 `
@@ -2598,6 +2603,7 @@ function versionsOf(jobId) {
           try {
             const r = await post('/config', { config: patch })
             receiveState(r.state, revision)
+            try { window.dispatchEvent(new CustomEvent('dsh-tavern-image:config', { detail: { imageEnabled: r.state?.config?.imageEnabled } })) } catch {}
             setNote('已保存')
             return r
           } catch (e) { setNote('保存失败：' + (e && e.message ? e.message : e)); return null }
@@ -3061,7 +3067,7 @@ function versionsOf(jobId) {
           h('div', { style: S.card },
             h('div', { style: S.row },
               h('label', { style: S.row },
-                h('input', { type: 'checkbox', checked: config.plannerEnabled !== false, onChange: e => save({ plannerEnabled: e.target.checked }) }),
+                h('input', { type: 'checkbox', disabled: config.imageEnabled === false, checked: config.plannerEnabled !== false, onChange: e => save({ plannerEnabled: e.target.checked }) }),
                 h('span', { style: { fontSize: '13px' } }, '每轮自动规划配图（前台只写正文）'),
               ),
             ),
@@ -5162,6 +5168,13 @@ function versionsOf(jobId) {
         h('style', null, SETTINGS_CSS),
         // 连接状态就在「渠道」里的测试按钮旁边，顶部不再单放一个状态框；这里只留保存等操作的提示。
         note ? h('div', { role: 'status', style: { fontSize: '12px', margin: '0 0 8px', color: 'var(--dsw-alias-brand-primary)' } }, note) : null,
+        // 总开关放在最上面：关掉后不再自动或手动配图，正文里不显示配图按钮，已有插图照常显示。
+        h('label', { style: Object.assign({}, S.card, { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginTop: 0, cursor: 'pointer' }) },
+          h('span', null,
+            h('span', { style: { display: 'block', fontSize: '14px', fontWeight: 600 } }, '启用配图'),
+            h('span', { style: { display: 'block', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '2px' } },
+              config.imageEnabled === false ? '已关闭：不再自动或手动配图，正文里不显示配图按钮；已有插图照常显示' : '为剧情自动或手动配图；关掉后正文里不显示配图按钮，已有插图照常显示')),
+          h('input', { type: 'checkbox', role: 'switch', className: 'dti-switch', 'aria-label': '启用配图', checked: config.imageEnabled !== false, onChange: e => save({ imageEnabled: e.target.checked }) })),
         taskPanel(),
         h('div', { style: S.row }, tabs.map(([key, label]) => h('button', { key, style: S.tab(tab === key), onClick: () => setTab(key) }, label))),
         // 设置页按第一次配置的顺序排：先接渠道，再定每轮怎么配图，最后是画风。
@@ -5216,12 +5229,22 @@ function versionsOf(jobId) {
       try {
         // 默认：标记通道按配置走；规划通道读不到配置就先不开（免得每轮白跑一次模型）
         // 默认先按「开」处理：渲染器可能在配置读回来之前就被调用，第一次太保守会整条消息都不接管
-        const settings = { autoImageGen: true, plannerEnabled: true, smartImageSelection: true }
+        const settings = { autoImageGen: true, plannerEnabled: true, smartImageSelection: true, imageEnabled: true }
+        // 配图总开关变化时重新登记 illustrator（关掉时不给 draw，Tavern 就不显示配图按钮）。
+        let refreshIllustrator = null
+        const applyImageEnabled = value => {
+          const next = value !== false
+          if (next === settings.imageEnabled) return
+          settings.imageEnabled = next
+          refreshIllustrator?.()
+        }
+        window.addEventListener('dsh-tavern-image:config', event => applyImageEnabled(event?.detail?.imageEnabled))
         jsonFetch(`${BASE}/state`).then(state => {
           if (state?.config) {
             settings.autoImageGen = state.config.autoImageGen !== false
             settings.plannerEnabled = state.config.plannerEnabled !== false
             settings.smartImageSelection = state.config.smartImageSelection !== false
+            applyImageEnabled(state.config.imageEnabled)
             // 正文插图统一宽度：每次启动都从 /state 读回来，所以刷新 / 重启之后依然生效。
             applyImageWidth(state.config.imageDisplayWidth)
           }
@@ -5439,22 +5462,28 @@ function versionsOf(jobId) {
                     mediaId: context.item.id, jobId: String(data.replacement && data.replacement.jobId || data.jobId || ''), ...extra }),
                 }).then(result => { if (!result || !result.ok) throw new Error(result && result.error || '请求未确认'); return result })
               }
-              const offIllustrator = ui.registerIllustrator({
-                kinds: ['dsh-tavern-image/image', 'dsh-tavern-comfy/image'],
-                // 进度和结果由 Tavern 显示在这一轮正文里：成功不提示，跳过返回说明，失败抛错。
-                draw: createMessageDrawRunner(async context => {
-                  const r = await drawTurn({ gameId: context.gameId, turn: context.turn })
-                  if (r && r.ok && r.attached) return {}
-                  if (r && r.ok && r.skipped) return { notice: '本轮跳过配图：' + (r.reason || '没有合适的画面') }
-                  throw new Error('没出画面：' + ((r && r.error) || '规划没有产出画面'))
-                }),
-                redraw: context => mediaAction('redraw', context),
-                editPrompt: context => mediaAction('redraw', context, { prompt: context.prompt }),
-                cancel: context => mediaAction('cancel', context),
-                // 图上的「重试」「查询结果」：由宿主侧按任务状态写进 item.actions。
-                action: context => mediaAction(context.actionId, context),
+              // 进度和结果由 Tavern 显示在这一轮正文里：成功不提示，跳过返回说明，失败抛错。
+              const draw = createMessageDrawRunner(async context => {
+                const r = await drawTurn({ gameId: context.gameId, turn: context.turn })
+                if (r && r.ok && r.attached) return {}
+                if (r && r.ok && r.skipped) return { notice: '本轮跳过配图：' + (r.reason || '没有合适的画面') }
+                throw new Error('没出画面：' + ((r && r.error) || '规划没有产出画面'))
               })
-              owner.effect?.(() => offIllustrator, 'dsh-tavern-image: illustrator')
+              let offIllustrator = null
+              refreshIllustrator = () => {
+                try { offIllustrator?.() } catch {}
+                offIllustrator = ui.registerIllustrator({
+                  kinds: ['dsh-tavern-image/image', 'dsh-tavern-comfy/image'],
+                  ...(settings.imageEnabled ? { draw } : {}),
+                  redraw: context => mediaAction('redraw', context),
+                  editPrompt: context => mediaAction('redraw', context, { prompt: context.prompt }),
+                  cancel: context => mediaAction('cancel', context),
+                  // 图上的「重试」「查询结果」：由宿主侧按任务状态写进 item.actions。
+                  action: context => mediaAction(context.actionId, context),
+                })
+              }
+              refreshIllustrator()
+              owner.effect?.(() => () => { refreshIllustrator = null; offIllustrator?.() }, 'dsh-tavern-image: illustrator')
             } else {
               const off = ui.registerMessageAction({
                 id: 'dsh-tavern-image-draw',

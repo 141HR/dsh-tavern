@@ -209,7 +209,7 @@ export function installTavernBridge({ tavern, attachments, engine, getConfig, lo
       const config = getConfig() ?? {}
       const api2 = Number(tavern.apiVersion) >= 2
       const historyEnabled = api2 && config.characterAutoUpdate !== false
-      const shouldGenerate = task.manual || config.plannerEnabled !== false
+      const shouldGenerate = config.imageEnabled !== false && (task.manual || config.plannerEnabled !== false)
       const planAndSave = async () => {
         let historySnapshot = null
         if (api2 && typeof tavern.readTurnData === 'function') {
@@ -398,7 +398,7 @@ export function installTavernBridge({ tavern, attachments, engine, getConfig, lo
       }
       const config = getConfig() ?? {}
       const canUpdate = Number(tavern.apiVersion) >= 2 && config.characterAutoUpdate !== false
-      if (config.plannerEnabled === false && !canUpdate) return
+      if ((config.imageEnabled === false || config.plannerEnabled === false) && !canUpdate) return
       // 不返回配图 Promise，宿主结算通知无需等待模型和 GPU。
       void attachTurn({
         gameId: turn.gameId, turn: turn.turn, textVersion: turn.textVersion, text: turn.text,
