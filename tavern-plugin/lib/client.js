@@ -5504,12 +5504,16 @@ function tavernModelRefusalNotice(text) {
 		}
 		// The tavern shell owns the tab while it is mounted. Brand images reach the
 		// stylesheet through custom properties so tavern.css stays a verbatim asset.
+		// They live in a stylesheet rule, not the root element's inline style: the host
+		// rewrites that style on layout changes, re-parsing every inline property.
 		// The icon link is appended last so it wins over the host icon; disposal
 		// restores the host icon.
 		function installTavernBrand(doc, urls) {
-		  const root = doc.documentElement;
 		  const properties = { '--dsh-tavern-logo': urls.logo, '--dsh-tavern-lockup': urls.lockup, '--dsh-tavern-lockup-dark': urls['lockup-dark'] };
-		  for (const [name, url] of Object.entries(properties)) root.style.setProperty(name, 'url("' + url + '")');
+		  const style = doc.createElement('style');
+		  style.dataset.plugin = 'dsh-tavern-plugin';
+		  style.textContent = ':root{' + Object.entries(properties).map(([name, url]) => name + ':url("' + String(url).replace(/["\\\n]/g, encodeURIComponent) + '")').join(';') + '}';
+		  doc.head.appendChild(style);
 		  const link = doc.createElement('link');
 		  link.rel = 'icon';
 		  link.type = 'image/svg+xml';
@@ -5526,7 +5530,7 @@ function tavernModelRefusalNotice(text) {
 		  return function () {
 		    if (observer) observer.disconnect();
 		    link.remove();
-		    for (const name of Object.keys(properties)) root.style.removeProperty(name);
+		    style.remove();
 		  };
 		}
 		// The header counts session summaries; its popup reads the lazy catalog.
@@ -5634,8 +5638,23 @@ function tavernModelRefusalNotice(text) {
 		    // Kept inside this function because frames receive it as source text.
 		    const prefix = 'dsh-tavern-text';
 		    const colors = { 'quote-light': true, 'quote-dark': true, 'em-light': true, 'em-dark': true };
-		    const shared = win.__dshTavernTextColors || (win.__dshTavernTextColors = { users: 0, style: null, highlights: new Map() });
+		    const shared = win.__dshTavernTextColors || (win.__dshTavernTextColors = { users: 0, style: null, highlights: new Map(), themed: new Set(), theme: null });
+		    // The page root changes often (layout variables, input modality); only a change of
+		    // the resolved text colors is a theme change that every message must re-read.
+		    function themeKey() {
+		        return win.getComputedStyle(doc.documentElement).colorScheme + '|' + win.getComputedStyle(doc.body || doc.documentElement).color;
+		    }
 		    if (!shared.users++) {
+		        shared.themeKey = themeKey();
+		        shared.theme = new win.MutationObserver(function () {
+		            const key = themeKey();
+		            if (key === shared.themeKey) return;
+		            shared.themeKey = key;
+		            shared.themed.forEach(function (schedule) { schedule(); });
+		        });
+		        const themeAttributes = { attributes: true, attributeFilter: ['style', 'class', 'data-ds-dark-theme', 'data-ds-theme-source'] };
+		        shared.theme.observe(doc.documentElement, themeAttributes);
+		        if (doc.body) shared.theme.observe(doc.body, themeAttributes);
 		        shared.style = doc.createElement('style');
 		        shared.style.setAttribute('data-dsh-tavern-text-colors', '');
 		        doc.head.appendChild(shared.style);
@@ -5734,7 +5753,7 @@ function tavernModelRefusalNotice(text) {
 		    function schedule() { if (!disposed && enabled && timer === null) timer = win.setTimeout(refresh, 32); }
 		    const observer = new win.MutationObserver(schedule);
 		    observer.observe(root, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['style', 'class', 'color', 'hidden'] });
-		    if (doc.documentElement !== root) observer.observe(doc.documentElement, { attributes: true, attributeFilter: ['style', 'class'] });
+		    shared.themed.add(schedule);
 		    // Batch mounts before reading computed styles; each message adds a stylesheet.
 		    schedule();
 		    return {
@@ -5750,7 +5769,10 @@ function tavernModelRefusalNotice(text) {
 		            if (disposed) return;
 		            disposed = true; observer.disconnect(); if (timer !== null) win.clearTimeout(timer);
 		            clearOwned();
+		            shared.themed.delete(schedule);
 		            if (--shared.users) return;
+		            shared.theme.disconnect();
+		            shared.theme = null;
 		            for (const kind of shared.highlights.keys()) win.CSS.highlights.delete(prefix + '-' + kind);
 		            shared.highlights.clear();
 		            style.remove();
@@ -15113,8 +15135,16 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
     void probe();
     probeTimer = browser.setInterval(probe, 400);
   }
+  // Poll fast only while an update is in flight; at rest a slow read still notices
+  // updates started elsewhere without asking the server every 2.5 seconds forever.
+  let lastPollAt = 0;
+  function pollUpdateStatus() {
+    if (!isUpdateBusy(statusValue) && now() - lastPollAt < 30000) return;
+    return refreshUpdateStatus();
+  }
   async function refreshUpdateStatus() {
     if (!active || pending || action.pending) return;
+    lastPollAt = now();
     const generation = action.generation;
     pending = true;
     try {
@@ -15217,7 +15247,7 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
       if (active || disposed) return;
       active = true;
       void refreshUpdateStatus();
-      pollTimer = browser.setInterval(refreshUpdateStatus, 2500);
+      pollTimer = browser.setInterval(pollUpdateStatus, 2500);
       syncProbe();
     },
     stop() {

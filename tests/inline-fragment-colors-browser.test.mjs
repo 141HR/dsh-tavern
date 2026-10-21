@@ -48,3 +48,24 @@ test('every message shares one stylesheet and four named highlights per document
   await page.evaluate(() => window.views.forEach(view => view.dispose()))
   assert.deepEqual(await page.evaluate(() => ({ names: CSS.highlights.size, styles: document.querySelectorAll('style[data-dsh-tavern-text-colors]').length })), { names: 0, styles: 0 })
 })
+
+test('page-root layout changes do not re-read every message; a theme change does', { skip: !process.env.TAVERN_BROWSER_TESTS }, async t => {
+  const { chromium } = await import('playwright')
+  const browser = await chromium.launch({ headless: true })
+  t.after(() => browser.close())
+  const page = await browser.newPage()
+  await page.setContent('<style>body{color:rgb(30,30,30)} html.dark body{color:rgb(220,220,220)}</style>' + Array.from({ length: 5 }, (_, i) => `<p>“第${i}句。”</p>`).join(''))
+  await page.addScriptTag({ content: await readFile(new URL('../tavern-plugin/src/client/text-colors.js', import.meta.url), 'utf8') + `
+    window.walks = 0; const walker = document.createTreeWalker; document.createTreeWalker = function (...args) { window.walks++; return walker.apply(this, args) };
+    window.ranges = name => CSS.highlights.get(name)?.size || 0;
+    Array.from(document.querySelectorAll('p'), p => installTavernTextColors(p, {}, findTavernQuoteRanges));
+  ` })
+  await page.waitForFunction(() => window.ranges('dsh-tavern-text-quote-light') === 5)
+  const settle = () => page.evaluate(() => new Promise(resolve => setTimeout(resolve, 100)))
+  await page.evaluate(() => { window.walks = 0; document.documentElement.style.setProperty('--layout-height', '220px'); document.body.style.setProperty('--font', '18px') })
+  await settle()
+  assert.equal(await page.evaluate(() => window.walks), 0)
+  await page.evaluate(() => document.documentElement.classList.add('dark'))
+  await page.waitForFunction(() => window.ranges('dsh-tavern-text-quote-dark') === 5)
+  assert.equal(await page.evaluate(() => window.walks), 5)
+})
