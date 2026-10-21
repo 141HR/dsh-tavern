@@ -254,6 +254,8 @@ export async function settlementPerformanceChecks({ page, step, savedChat, outpu
   if(process.argv.includes('--opening-only')) {report.settlementPerformance.scope+='; opening only: settlement and second restart not exercised';return}
   for (let run = 0; run < runs; run++) await step(`长档结算采样 ${run + 1}/${runs}`, async () => {
     const gold = 100 + run
+    // A player reads the reply before sending the next message: TAVERN_PERF_PAUSE_MS between rounds.
+    if (run > 0 && Number(process.env.TAVERN_PERF_PAUSE_MS) > 0) await page.waitForTimeout(Number(process.env.TAVERN_PERF_PAUSE_MS))
     await writeFile(join(output, 'performance-control.json'), JSON.stringify({ id: run, gold }))
     const offset = readLog().length
     const clickedAt = Date.now()
@@ -284,16 +286,21 @@ export async function settlementPerformanceChecks({ page, step, savedChat, outpu
     await page.getByPlaceholder('例如：这轮还没有交付物品，不要扣除库存。').fill('性能测试：本次金币更新为 ' + gold)
     await page.getByRole('button', { name: '重新结算', exact: true }).click()
     }
-    const frame = await statusFrame(page)
-    const visiblePromise = frame.evaluate(gold => new Promise(resolve => {
-      const node = document.querySelector('#e2e-gold')
-      const check = () => { if (node.textContent === '金币：' + gold) { observer.disconnect(); requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.timeOrigin + performance.now()))) } }
-      const observer = new MutationObserver(check); observer.observe(node, { subtree: true, characterData: true, childList: true }); check()
-    }), gold).then(value => ({ value }), error => ({ error }))
-    await frame.locator('#e2e-gold').filter({ hasText: new RegExp('^金币：' + gold + '$') }).waitFor({ timeout: 120000 })
-    const observation = await visiblePromise
-    if (observation.error) throw observation.error
-    const visibleAt = observation.value
+    // The status frame is re-rendered when display work lands: wait again in the new frame.
+    let visibleAt
+    for (const deadline = Date.now() + 120000; visibleAt === undefined;) {
+      const frame = await statusFrame(page)
+      const visiblePromise = frame.evaluate(gold => new Promise(resolve => {
+        const node = document.querySelector('#e2e-gold')
+        const check = () => { if (node.textContent === '金币：' + gold) { observer.disconnect(); requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.timeOrigin + performance.now()))) } }
+        const observer = new MutationObserver(check); observer.observe(node, { subtree: true, characterData: true, childList: true }); check()
+      }), gold).then(value => ({ value }), error => ({ error }))
+      try { await frame.locator('#e2e-gold').filter({ hasText: new RegExp('^金币：' + gold + '$') }).waitFor({ timeout: Math.max(1, deadline - Date.now()) }) }
+      catch (error) { if (!frame.isDetached() || Date.now() >= deadline) throw error; continue }
+      const observation = await visiblePromise
+      if (observation.error) { if (!frame.isDetached() || Date.now() >= deadline) throw observation.error; continue }
+      visibleAt = observation.value
+    }
     await page.locator('.dsh-tavern-mvu-receipt[data-status="updated"]').filter({ visible: true }).last().waitFor()
     const receiptAt = await page.evaluate(() => window.__perfSettlement.receiptAt || null)
     // Fresh store, independent of the running server's hot cache. Read only target.
