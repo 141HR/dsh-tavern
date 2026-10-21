@@ -24,6 +24,20 @@ function pause(ms, signal) {
   })
 }
 
+// Tavern 5's illustration card reads standard fields, not this plugin's data: mirror the
+// replacement task into them (what is under way, which buttons apply).
+const TASK_FIELDS = {
+  pending: { activity: { label: '重画中', progress: null, cancellable: true }, actions: [] },
+  uncertain: { activity: null, actions: [{ id: 'recover', label: '查询结果' }] },
+  failed: { activity: null, actions: [{ id: 'retry', label: '重试' }] },
+  cancelled: { activity: null, actions: [{ id: 'retry', label: '重试' }] },
+  ready: { activity: null, actions: [] },
+}
+export function withTaskFields(changes) {
+  const state = changes?.data?.replacement?.state
+  return TASK_FIELDS[state] ? { ...changes, ...TASK_FIELDS[state] } : changes
+}
+
 /**
  * Per-media redraw/retry actions. This service only mutates plugin-owned media
  * through Tavern's public API; the source image stays visible until replacement
@@ -35,6 +49,8 @@ export function createMediaActions({
 } = {}) {
   const tasks = new Map()
   const recovering = new Map()
+  const host = tavern
+  tavern = host && { ...host, getTurn: host.getTurn?.bind(host), list: host.list?.bind(host), update: host.update && ((id, changes) => host.update(id, withTaskFields(changes))) }
   const log = (message, error) => { try { logger?.warn?.('dsh-tavern-image[单图操作]: ' + message + (error ? '：' + safeError(error) : '')) } catch {} }
   let disposed = false
 
@@ -160,7 +176,7 @@ export function createMediaActions({
         ...(job.channelId || task.input.channelId ? { channelId: job.channelId || task.input.channelId } : {}),
         replacement: { ...(current.data?.replacement || {}), jobId: task.jobId, state: 'ready', error: '', finishedAt: Date.now() },
       }
-      await tavern.update(current.id, { status: 'ready', attachment, progress: 1, error: '', data })
+      await tavern.update(current.id, { status: 'ready', attachment, progress: 1, error: '', data, prompt: String(job.params?.rawTag || job.params?.tag || job.positive || task.input.prompt || '').slice(0, 12000) })
     } catch (error) {
       if (!task.controller.signal.aborted) await finishFailure(task, error?.uncertain ? 'uncertain' : 'failed', error)
       else await finishStopped(task)

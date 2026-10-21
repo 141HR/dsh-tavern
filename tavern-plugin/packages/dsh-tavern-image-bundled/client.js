@@ -5295,7 +5295,8 @@ function versionsOf(jobId) {
             id: 'dsh-tavern-image',
             order: 30,
             inject: (sessionId) => ({ sessionId }),
-          }, ImageActionButton))
+            // Tavern 第 5 版有自己的配图按钮（由本插件出图），这颗就不再显示。
+          }, props => typeof tavernUiService?.registerIllustrator === 'function' ? null : h(ImageActionButton, props)))
           reportHost('seat-registered', { seat: 'assistant-actions', injectReturned: ok !== undefined })
         } catch (error) {
           reportHost('seat-failed', { seat: 'assistant-actions', error: String(error?.message ?? error) })
@@ -5423,13 +5424,36 @@ function versionsOf(jobId) {
               }
               return r
             }, () => { if (typeof showToast === 'function') showToast('正在提交，等待本轮正文数据…') })
-            const off = ui.registerMessageAction({
-              id: 'dsh-tavern-image-draw',
-              label: '🎨 生图',
-              when: context => Boolean(context && context.gameId) && Number(context.turn) > 0,
-              run: runMessageDraw,
-            })
-            owner.effect?.(() => off, 'dsh-tavern-image: message action')
+            // Tavern 第 5 版起提供配图按钮和插图卡：本插件只负责出图，界面交给 Tavern。
+            const illustrates = typeof ui.registerIllustrator === 'function'
+            if (illustrates) {
+              const mediaAction = (operation, context, extra = {}) => {
+                const data = context.item && context.item.data || {}
+                return jsonFetch(BASE + '/media-action', {
+                  method: 'POST', headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({ operation, gameId: context.gameId, turn: context.turn, textVersion: context.textVersion,
+                    mediaId: context.item.id, jobId: String(data.replacement && data.replacement.jobId || data.jobId || ''), ...extra }),
+                }).then(result => { if (!result || !result.ok) throw new Error(result && result.error || '请求未确认'); return result })
+              }
+              const offIllustrator = ui.registerIllustrator({
+                kinds: ['dsh-tavern-image/image', 'dsh-tavern-comfy/image'],
+                draw: context => runMessageDraw({ gameId: context.gameId, turn: context.turn }),
+                redraw: context => mediaAction('redraw', context),
+                editPrompt: context => mediaAction('redraw', context, { prompt: context.prompt }),
+                cancel: context => mediaAction('cancel', context),
+                // 图上的「重试」「查询结果」：由宿主侧按任务状态写进 item.actions。
+                action: context => mediaAction(context.actionId, context),
+              })
+              owner.effect?.(() => offIllustrator, 'dsh-tavern-image: illustrator')
+            } else {
+              const off = ui.registerMessageAction({
+                id: 'dsh-tavern-image-draw',
+                label: '🎨 生图',
+                when: context => Boolean(context && context.gameId) && Number(context.turn) > 0,
+                run: runMessageDraw,
+              })
+              owner.effect?.(() => off, 'dsh-tavern-image: message action')
+            }
 
           // 正文里的 image###英文Tag### 标记：就地画一张图。
           // 自动配图走的是宿主侧 tavern.attach（Tavern 自己渲染、跟正文版本绑定）；
@@ -5459,8 +5483,8 @@ function versionsOf(jobId) {
             owner.effect?.(() => offMarker, 'dsh-tavern-image: text marker')
             reportHost('tavernui-marker-registered', { ok: true })
 
-          // 给自己的媒体类型定显示方式：大图 + 点开放大 + 右键/长按改提示词重画
-          for (const mediaKind of ['dsh-tavern-image/image', 'dsh-tavern-comfy/image']) {
+          // 给自己的媒体类型定显示方式：大图 + 点开放大 + 右键/长按改提示词重画（Tavern 有插图卡时由它显示）
+          for (const mediaKind of illustrates ? [] : ['dsh-tavern-image/image', 'dsh-tavern-comfy/image']) {
             try {
               const offMedia = ui.registerMediaRenderer(mediaKind, args => h(OfficialImage, {
                 item: args && args.item, gameId: args && args.gameId, turn: args && args.turn,

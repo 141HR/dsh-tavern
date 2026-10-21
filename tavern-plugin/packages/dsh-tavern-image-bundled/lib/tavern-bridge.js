@@ -305,7 +305,7 @@ export function installTavernBridge({ tavern, attachments, engine, getConfig, lo
         const job = await waitJob(jobId, task)
         if (!job) { await tavern.update(attached.id, { status: 'failed', error: '等待出图超时' }); return 0 }
         if (job.state !== 'done' || !job.file) {
-          await tavern.update(attached.id, { status: 'failed', error: String(job.error || '出图失败').slice(0, 200) })
+          await tavern.update(attached.id, { status: 'failed', error: String(job.error || '出图失败').slice(0, 200), actions: [{ id: 'retry', label: '重试' }] })
           return 0
         }
         const bytes = await readFileAsBytes(job.file)
@@ -318,7 +318,8 @@ export function installTavernBridge({ tavern, attachments, engine, getConfig, lo
           name: 'tavern-comfy-' + jobId.slice(0, 8) + '.' + extension,
         })
         await assertCurrent(task)
-        await tavern.update(attached.id, { status: 'ready', attachment, progress: 1 })
+        // prompt：Tavern 插图卡「改提示词」的初始内容。
+        await tavern.update(attached.id, { status: 'ready', attachment, progress: 1, prompt: String(job.params?.rawTag || job.params?.tag || job.positive || '').slice(0, 12000) })
         await assertCurrent(task)
         // The new image is now a completed media item. If a later manual click
         // supersedes this task while old items are being removed, keep this image.
