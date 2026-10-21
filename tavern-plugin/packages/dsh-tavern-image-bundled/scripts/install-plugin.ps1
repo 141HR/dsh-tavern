@@ -423,7 +423,7 @@ try {
     $looksInstalled = Test-Path -LiteralPath (Join-Path $pluginPath 'package.json') -PathType Leaf
     $stateText = if ($looksInstalled) { '目录里有 package.json，看起来是一份已装好的插件' } else { '目录里没有 package.json，多半是上次失败留下的残留' }
     throw ("目标目录已存在，安装器不会覆盖或合并：$pluginPath（$stateText）`n" +
-      "  1) 如果这是你正在用的安装：请用 DSH Tavern 的「设置 → 本地生图 → 插件更新」，不要重跑安装器。`n" +
+      "  1) 如果这是你正在用的安装：请用 DSH Tavern 的「设置 → 配图 → 插件更新」，不要重跑安装器。`n" +
       "  2) 如果是上次安装失败留下的残留：先检查并备份后再处理，然后重跑本安装器。`n" +
       "  3) 旧版目录迁移：见 README「旧版目录迁移」一节。")
   }

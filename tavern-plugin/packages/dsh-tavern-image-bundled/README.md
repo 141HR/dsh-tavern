@@ -69,7 +69,7 @@ git clone https://github.com/weixinlll/dsh-tavern-image.git "$env:TEMP\dsh-taver
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\dsh-tavern-image-source\scripts\install-plugin.ps1" -SourceDirectory "$env:TEMP\dsh-tavern-image-source" -Profile tavern
 ~~~
 
-运行 `scripts\Package-DshTavernImage.ps1` 可生成可离线携带的 ZIP；解压后双击其中的 `Install-DshTavernImage.cmd`。插件 **设置 → 本地生图 → 插件更新**页的“本机安装包”入口也可导出源码 ZIP，拷贝到目标电脑后用 `-SourceArchive` 安装。这个入口用于下载和转移安装包；当前 DSH Desktop 的插件清单页没有经验证的 GitHub URL/ZIP 安装输入框，不要在该页粘贴仓库网址。
+运行 `scripts\Package-DshTavernImage.ps1` 可生成可离线携带的 ZIP；解压后双击其中的 `Install-DshTavernImage.cmd`。插件 **设置 → 配图 → 插件更新**页的“本机安装包”入口也可导出源码 ZIP，拷贝到目标电脑后用 `-SourceArchive` 安装。这个入口用于下载和转移安装包；当前 DSH Desktop 的插件清单页没有经验证的 GitHub URL/ZIP 安装输入框，不要在该页粘贴仓库网址。
 
 安装器会显示插件版本和 ZIP 的 SHA-256，发布页也提供 `SHA256SUMS.txt`，下载后可以比对文件是否完整。安装后完整退出并重新打开 DSH Desktop，刷新网页不能替代宿主重启。
 
@@ -122,7 +122,7 @@ if ($LASTEXITCODE -ne 0) { throw 'DSH 官方 CLI 未能登记新包；保留备�
 
 ### 配置生图服务
 
-打开 **设置 → 本地生图 → 生图规划**，选择提供商，填写地址、模型和鉴权信息并保存。
+打开 **设置 → 配图 → 生图规划**，选择提供商，填写地址、模型和鉴权信息并保存。
 
 - **ComfyUI**：填写服务地址，默认是 `http://127.0.0.1:8188`。有鉴权时选择 Bearer 或 Basic，再测试连接。到「画风」页选择简单模式，或导入 API 格式工作流并设为默认。
 - **在线平台**：新增渠道，填写平台提供的 API 根地址、模型名和 API Key。中转服务需要选择它实际支持的协议。

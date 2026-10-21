@@ -6,7 +6,7 @@
  *   1. tavernUi.registerMediaRenderer  画自定义媒体类型（大图 / 右键改提示词 / 查看器）
  *   2. tavernUi.registerMessageAction  消息下方那颗「🎨 生图」按钮
  *   3. tavernUi.registerTextMarker     正文里模型自己写的 image###...### 标记
- *   4. 设置面板 / 控制台 / 历史图库 / 人物库 / 世界书 —— 插件自己的界面
+ *   4. 设置面板（设置 → 配图）/ 历史图库 / 人物库 / 世界书 —— 插件自己的界面
  *
  * 配置读取失败时安静退化成纯文本，绝不在宿主启动阶段抛错。 */
 window.__ModuleLoader__.load({
@@ -1969,7 +1969,7 @@ function versionsOf(jobId) {
       )
     }
 
-    // ================= 设置面板（设置 → 本地生图） =================
+    // ================= 设置面板（设置 → 配图） =================
     const S = {
       surface: { background: 'transparent', color: 'var(--dsw-alias-label-primary)' },
       row: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' },
@@ -5324,14 +5324,14 @@ function versionsOf(jobId) {
           console.warn('[dsh-tavern-image] 生图按钮未注册:', error?.message)
         }
 
-        // 设置 → 本地生图：插件唯一的配置入口（不再有侧栏按钮和控制台弹窗）
+        // 设置 → 配图：插件唯一的配置入口（不再有侧栏按钮和控制台弹窗）
         try {
           reportHost('seat-registered', { seat: 'settings.section' })
           ctx.slots?.inject?.('settings.section', () => ctx.slots.register({
             name: 'settings.section',
             id: 'dsh-tavern-image',
             order: 47,
-            label: () => '本地生图',
+            label: () => '配图',
           }, SettingsPanel))
         } catch (error) {
           console.warn('[dsh-tavern-image] 设置页面未注册:', error?.message)
