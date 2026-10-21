@@ -1,6 +1,7 @@
 import { postureForContext } from './posture-context.js'
 import { projectAgentContent } from './runtime-content-projection.js'
 import { cardSystemPromptText } from './card-system-prompt.js'
+import { styleReferenceSource } from './style-reference.js'
 
 function str(value) {
   return typeof value === 'string' ? value : (value === undefined || value === null ? '' : String(value))
@@ -132,7 +133,7 @@ export function createContextPlanner(options = {}) {
       }
       const style = input.styleReference
       if (style && str(style.quote) !== '') {
-        sections.push({ kind: 'style-reference', required: false, text: '【文风联想 · 《' + str(style.book) + '》' + str(style.author) + '】\n' + str(style.quote) })
+        sections.push({ kind: 'style-reference', required: false, text: '【文风联想' + (styleReferenceSource(style) ? ' · ' + styleReferenceSource(style) : '') + '】\n' + str(style.quote) })
         sections.push({ kind: 'style-reference', required: false, text: prompt('style-reference') })
       }
       const result = resultOf(sections, warnings, [{ kind: 'stable-card-details', reason: '人物卡基本信息、系统提示和常驻世界书已固定在游戏会话稳定前缀；系统提示变化时另行追加' }])

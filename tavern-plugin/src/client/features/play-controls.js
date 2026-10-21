@@ -364,7 +364,7 @@
                     }) : null,
                     view.styleReferenceEnabled && view.styleReference ? h("section", { className: "dsh-tavern-status-section" },
                         h("div", { className: "dsh-tavern-status-label" }, "下一轮文风联想"),
-                        h("p", { className: "dsh-tavern-settings-desc" }, "《" + view.styleReference.book + "》" + view.styleReference.author),
+                        view.styleReference.book ? h("p", { className: "dsh-tavern-settings-desc" }, "《" + view.styleReference.book + "》" + (view.styleReference.author || "")) : null,
                         h("blockquote", { className: "dsh-tavern-style-reference" }, view.styleReference.quote),
                         h("div", { className: "dsh-tavern-guide-add" },
                             h("textarea", { className: "dsh-tavern-regen-input", rows: 2, maxLength: 500, value: styleDraft, "aria-label": "换参考的要求", placeholder: "换一段的要求（可选），例如：要金庸的打斗描写；不要鲁迅", onChange: event => setStyleDraft(event.target.value) }),

@@ -31,9 +31,10 @@ test('同一轮重摘会替换旧条目，并丢掉回滚后失效的后续条�
   assert.equal(rememberStyleReference(Array.from({ length: 12 }, (_, i) => ref(i)), ref(20), 20).length, 8)
 })
 
-test('提交内容要有书名、作者和不超过 400 字的摘录', () => {
+test('提交内容要有不超过 400 字的范文，书名、作者可不填', () => {
   assert.deepEqual(readStyleReference({ book: '《边城》', author: '沈从文', quote: ' 小溪流下去。 ' }), { book: '边城', author: '沈从文', quote: '小溪流下去。' })
-  assert.throws(() => readStyleReference({ book: '边城', author: '', quote: '句子' }))
+  assert.deepEqual(readStyleReference({ quote: '句子' }), { book: '', author: '', quote: '句子' })
+  assert.throws(() => readStyleReference({ book: '边城', author: '沈从文', quote: ' ' }))
   assert.throws(() => readStyleReference({ book: '边城', author: '沈从文', quote: '长'.repeat(401) }))
 })
 
