@@ -60,7 +60,7 @@
 			}, [openingPicker && openingPicker.card.path]);
 			// 选卡/开局准备页展开时收起卡片自带的悬浮应用（外置小手机挂在宿主 body 上，
 			// 会盖住开场白预览和 letter 列表）；进入对局后由「人物卡应用」面板停靠显示。
-			const pickerOpen = Boolean(openingPicker) || (picking && uiMode === "play");
+			const pickerOpen = picking && uiMode === "play";
 			React.useEffect(function () {
 				if (!pickerOpen) return;
 				document.body.classList.add("dsh-tavern-picker-open");
