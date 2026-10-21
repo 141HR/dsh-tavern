@@ -1016,7 +1016,13 @@ body.dsh-tavern-shell-active [data-dsh-panel-host] { overflow: clip; }
 
 .dsh-tavern-error-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 12px; font-size: 12px; }
 .dsh-tavern-error-controls[hidden] { display: none; }
-.dsh-tavern-error-controls button { color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 5px; padding: 3px 8px; cursor: pointer; }
+.dsh-tavern-error-controls > span:first-child { color: var(--dsw-alias-label-secondary, #6b6f76); }
+.dsh-tavern-error-controls > span:first-child:empty { display: none; }
+.dsh-tavern-error-controls button { font: inherit; color: inherit; background: transparent; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.14)); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+.dsh-tavern-error-controls button:hover { background: rgba(127,127,127,.1); }
+/* Showing, hiding and restoring the notice are quiet text actions, not buttons. */
+.dsh-tavern-error-controls button.dsh-tavern-error-quiet { border-color: transparent; padding: 3px 4px; color: var(--dsw-alias-label-tertiary, #8a8f98); }
+.dsh-tavern-error-controls button.dsh-tavern-error-quiet:hover { background: transparent; color: var(--dsw-alias-label-primary, #16181b); text-decoration: underline; text-underline-offset: 3px; }
 .dsh-tavern-error-controls button.dsh-tavern-error-replay { border-color: rgba(166,107,53,.55); color: #a66b35; font-weight: 650; }
 .dsh-tavern-error-controls button.dsh-tavern-error-replay:hover { background: rgba(166,107,53,.18); }
 .dsh-tavern-error-controls button.dsh-tavern-error-replay:disabled { opacity: .55; cursor: default; }
@@ -2923,7 +2929,8 @@ body.dsh-tavern-shell-active [class*="_headerUtilities"]:has(.dsh-tavern-header-
   body.dsh-tavern-shell-active [data-composer-card] [class*="_placeholder"] { font-size: 16px; }
   body.dsh-tavern-shell-active :is([data-phase] > header, [data-slot="conversation.header"] > header) [role="tab"] { min-width: 40px; }
   body.dsh-tavern-shell-active [data-slot="conversation.session.header.lineage"] button { min-height: 40px; }
-  .dsh-tavern-error-controls button { min-height: 40px; }
+  .dsh-tavern-error-controls button:not(.dsh-tavern-error-quiet) { min-height: 40px; }
+  .dsh-tavern-error-controls button.dsh-tavern-error-quiet { min-height: 32px; }
 
   .dsh-tavern-mode-switch button, .dsh-tavern-history-action, .dsh-tavern-history-group-toggle,
   .dsh-tavern-update-button, .dsh-tavern-side-row-menu button { min-height: 40px; }

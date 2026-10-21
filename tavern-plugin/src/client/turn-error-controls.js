@@ -124,6 +124,7 @@ function createTurnErrorControls(root, options) {
                 replay.className = 'dsh-tavern-error-replay';
                 withdraw.className = 'dsh-tavern-error-withdraw';
                 rewind.className = 'dsh-tavern-error-rewind';
+                details.className = toggle.className = 'dsh-tavern-error-quiet';
                 replay.type = details.type = toggle.type = withdraw.type = rewind.type = 'button';
                 // Appended last: hosts and smoke checks address the first two
                 // controls positionally, and the tail actions are tail-only.
