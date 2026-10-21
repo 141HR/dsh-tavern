@@ -50,7 +50,7 @@
 			}
 			const service = {
 				ctx: undefined,
-				apiVersion: 3,
+				apiVersion: 4,
 				registerMediaRenderer(kind, render) {
 					if (typeof kind !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}\/[a-z0-9][a-z0-9._-]{0,63}$/.test(kind)) throw new TypeError("只能为插件自定义的 <插件名>/<类型> 注册显示方式");
 					if (typeof render !== "function") throw new TypeError("registerMediaRenderer 需要 render 函数");
@@ -79,6 +79,18 @@
 				callHost(name, args) {
 					if (typeof name !== "string" || !name) return Promise.reject(new TypeError("callHost 需要处理函数的名字"));
 					return rpc("callPluginHandler", { name: name, args: args === undefined ? {} : args }).then(function (reply) { return reply ? reply.result : null; });
+				},
+				// Pictures Tavern's own scene images drew, every game, newest first; read-only (apiVersion 4).
+				listIllustrations() {
+					return rpc("listSceneImageHistory", {}).then(function (reply) {
+						return ((reply && reply.items) || []).flatMap(function (item) {
+							return item.versions.map(function (version) {
+								return { gameTitle: item.title || item.cardName || "", cardName: item.cardName || "", turn: item.turn, gameDeleted: item.deleted === true,
+									description: version.description, createdAt: version.createdAt,
+									url: "/api/dsh-tavern/scene-image-stored?" + new URLSearchParams({ chatId: item.chatId, key: item.key, versionId: version.id }).toString() };
+							});
+						}).sort(function (a, b) { return b.createdAt - a.createdAt; });
+					});
 				},
 				// The plugin's own data, not tied to a game; the same copy its host side reads (tavern.readPluginData).
 				readPluginData() {

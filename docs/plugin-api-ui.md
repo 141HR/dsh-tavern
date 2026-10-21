@@ -48,6 +48,10 @@ context = { gameId, turn, busy }
 
 读写插件自己的数据，和宿主侧 `tavern.readPluginData()`、`tavern.savePluginData({ data })` 是同一份（见[媒体与数据](plugin-api-data.md)）。都返回 Promise；`savePluginData` 传 `null` 清除。
 
+## `listIllustrations()`（第 4 版）
+
+列出 Tavern 自带场景生图画过的全部插图（所有游戏，新的在前），只读。返回 Promise，每项是 `{ gameTitle, cardName, turn, gameDeleted, description, createdAt, url }`，`url` 可直接用作 `<img src>`。插件自己挂的媒体不在其中。
+
 ## `callHost(name, args)`（第 2 版）
 
 调用宿主侧用 `tavern.handle(name, handler)` 注册的处理函数，返回一个 Promise，结果是处理函数的返回值。
