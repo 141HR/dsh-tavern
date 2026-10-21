@@ -1556,8 +1556,22 @@ export async function apply(ctx) {
       remove: (sessionId, cwd) => rm(path.dirname(ctx.get('sessionPersistence').locate({ id: sessionId, cwd }).path), { recursive: true, force: true }),
     }
   })
-  async function exportTavernLogs(sessionId) {
-    const chat = await chatForSession(str(sessionId))
+  async function exportTavernLogs(requestedSessionId) {
+    let sessionId = str(requestedSessionId)
+    let chat = await chatForSession(sessionId)
+    // Opened from a background session: export its game's logs, which include this session.
+    if (!chat) {
+      let header = (sessionStore.get(sessionId) || agentRegistry.get(sessionId)?.session)?.header
+      if (!header && sessionId) {
+        try {
+          const handle = await ctx.get('sessionPersistence').open(sessionId, 'read')
+          try { header = handle.header } finally { await handle.close() }
+        } catch {}
+      }
+      const parentId = str(backgroundAgentRunner.requestContext(sessionId)?.parentSessionId || header?.parentSession)
+      chat = parentId ? await chatForSession(parentId) : undefined
+      if (chat) sessionId = parentId
+    }
     if (!chat) throw new Error('当前 Session 没有绑定 Tavern 对话')
     const diagnostic = await mvuDiagnostics.read(sessionId)
     const backgroundSessionIds = [...new Set(diagnostic.records.map(record => record.traceSessionId).filter(Boolean))]
