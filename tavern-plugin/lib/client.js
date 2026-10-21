@@ -1508,7 +1508,7 @@ window.__ModuleLoader__.load({
 			if (trace) payload._traceId = trace.id;
 			if (sessionId) payload.sessionId = sessionId;
 			const viewRead = method === "getSession" ? beginSessionViewRead(payload.sessionId) : null;
-			if (viewRead) { payload.viewSync = 1; payload.resourceSync = 1; payload.openingWindow = 1; if (historyFromSessions.has(payload.sessionId)) payload.historyFrom = historyFromSessions.get(payload.sessionId); payload.viewCursor = viewRead.cursor; if (viewRead.receiptSync) payload.receiptSync = 1; }
+			if (viewRead) { payload.viewSync = 1; payload.resourceSync = 1; payload.helperWorldbookSync = 1; payload.openingWindow = 1; if (historyFromSessions.has(payload.sessionId)) payload.historyFrom = historyFromSessions.get(payload.sessionId); payload.viewCursor = viewRead.cursor; if (viewRead.receiptSync) payload.receiptSync = 1; }
 			if (method === "getTavernHelperContext" && !payload.eventId && !payload.fullView) payload.openingWindow = 1;
 			const requestBody = JSON.stringify(payload);
 			if (trace) {
@@ -8869,7 +8869,7 @@ function bindTavernFontZoom(node, win) {
 				context.chatId = String(view && view.chatId || "");
 				context.playerName = String(view && view.playerName || "你");
 				context.characterName = String(character && character.name || "角色");
-				context.worldbook = clone(view && view.tavernHelperWorldbook || null);
+				if (!Object.prototype.hasOwnProperty.call(context, "worldbook")) context.worldbook = clone(view && view.tavernHelperWorldbook || null);
 				return decorateHelperContext(context);
 			}
 			function post(record, message) {

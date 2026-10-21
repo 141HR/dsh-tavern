@@ -153,7 +153,7 @@
 				context.chatId = String(view && view.chatId || "");
 				context.playerName = String(view && view.playerName || "你");
 				context.characterName = String(character && character.name || "角色");
-				context.worldbook = clone(view && view.tavernHelperWorldbook || null);
+				if (!Object.prototype.hasOwnProperty.call(context, "worldbook")) context.worldbook = clone(view && view.tavernHelperWorldbook || null);
 				return decorateHelperContext(context);
 			}
 			function post(record, message) {

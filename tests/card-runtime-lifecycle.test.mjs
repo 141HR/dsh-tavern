@@ -358,6 +358,19 @@ function sandbox(options = {}) {
   return Object.assign(h, { runtime, frames, calls, mutations, errors, ready, message, respond(fn) { respond = fn } })
 }
 
+test('helper sandbox accepts nested worldbooks and legacy aliases without overwriting explicit null', () => {
+  for (const nested of [undefined, null, { entries: [{ content: 'nested' }] }]) {
+    const h = sandbox(), input = view()
+    input.tavernHelperWorldbook = { entries: [{ content: 'legacy' }] }
+    if (nested !== undefined) input.tavernHelper.worldbook = nested
+    h.runtime.sync('A', input)
+    h.frames[0].load()
+    const delivered = h.frames[0].contentWindow.messages.find(item => item.type === 'dsh-tavern-helper-context')
+    assert.deepEqual(delivered.context.worldbook, nested === undefined ? input.tavernHelperWorldbook : nested)
+    h.runtime.dispose()
+  }
+})
+
 test('下载等待暂停初始化超时，同一沙箱可手动恢复且拒绝重复、伪造和旧窗口重试', () => {
   const states = [], h = sandbox({ onMvuLoadState: state => states.push(copy(state)) })
   const input = mvuView()
