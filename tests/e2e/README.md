@@ -1,5 +1,13 @@
 # 游玩验收 E2E
 
+## 状态与生命周期重构回归
+
+`TAVERN_E2E_TIMEOUT_MS=60000 TAVERN_E2E_OUTPUT=output/playwright/refactor-lifecycle node tests/e2e/gameplay.mjs --refactor-lifecycle`
+
+使用独立 DSH Profile、真实 Chromium 与官方 MVU，模型输出固定。覆盖局部变量写入、重新结算、第二页面实时同步及隔离服务重启；通过真实 HTTP 接口并发绑定剧本，检查独占限制、世界书与人物卡重命名、全局引用、删除失败与恢复，并独立读取磁盘验证。
+
+更新流程使用真实侧栏与控制器，但拦截所有更新接口，验证迟到轮询、重复点击、更新/取消响应丢失与刷新恢复；不会执行安装器。这部分不验证真实安装、操作系统重启或安装文件替换。结果、服务日志、截图和浏览器 trace 写入独立运行目录。
+
 ## 超长存档结算计时
 
 `TAVERN_E2E_TIMEOUT_MS=120000 node tests/e2e/gameplay.mjs --settlement-performance`

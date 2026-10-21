@@ -1,3 +1,4 @@
+import { refactorLifecycleChecks } from './refactor-lifecycle.mjs'
 import { installV3SaveFixture } from './session-upgrade-fixture.mjs'
 import { helperApiChecks, helperApiScript } from './helper-api.mjs'
 import { backgroundFailureChecks } from './background-failure.mjs'
@@ -644,6 +645,8 @@ try {
       await cpuProfiler.send('Profiler.start')
     }
     await settlementPerformanceChecks({page,step,savedChat,output,report,restartServer,root,data,runtime,readLog:()=>log})
+  } else if (process.argv.includes('--refactor-lifecycle')) {
+    await refactorLifecycleChecks({page,step,savedChat,data,output,report,restartServer})
   } else if (process.argv.includes('--mvu-incremental')) {
     await incrementalMvuChecks({page,step,savedChat,output,report,restartServer})
   } else if (process.argv.includes('--background-lifecycle')) {
