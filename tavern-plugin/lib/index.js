@@ -1898,7 +1898,8 @@ export async function apply(ctx) {
       // constant prefix still has to follow an edited book on the next read.
       const synced = context.busy === true ? null
         : await playCardSnapshots.autoSync(chat, card, { settings: context.settings })
-      if (chat.openingWorldbookSnapshot?.version !== 1) return playCardSnapshots.libraryBoundStatus(chat, card)
+      // A legacy copy still needs explicit synchronization; only a game without one follows the library.
+      if (!chat.openingWorldbookSnapshot) return playCardSnapshots.libraryBoundStatus(chat, card)
       // One library read now serves both the automatic refresh and the badge.
       return await playCardSnapshots.updateStatus(chat, card, synced?.observed)
     } catch (error) { return {available:true,error:String(error.message || error)} }

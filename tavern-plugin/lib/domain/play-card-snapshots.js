@@ -76,7 +76,11 @@ export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeCh
 
   /** A game that follows the library has no world book to update or synchronize. */
   function libraryBoundStatus(chat, card) {
-    return { ...cardStatusBase(chat, card), available: false, worldbookChanged: false, worldbookSyncRequired: false, digest: '' }
+    const base = cardStatusBase(chat, card)
+    // The card itself is still frozen: its explicit reload needs a digest, which
+    // guards the card alone because the game reads the live book every turn.
+    const digest = keepsCopy(chat) ? '' : cardOnlyDigest(card)
+    return { ...base, available: base.cardChanged, worldbookChanged: false, worldbookSyncRequired: false, digest }
   }
 
   /** The stored snapshot when ensure() would neither rebuild nor rewrite it. */
@@ -145,6 +149,10 @@ export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeCh
   function updateDigest(card, snapshot) {
     return cardContentDigest({ card: cardContentDigest(card), worldbook: worldbookContentDigest(snapshot) })
   }
+
+  function cardOnlyDigest(card) { return cardContentDigest({ card: cardContentDigest(card), worldbook: null }) }
+  // Any stored copy, even a legacy one, is replaced as a whole by an explicit reload.
+  function keepsCopy(chat) { return chat.openingWorldbookSnapshot !== undefined && chat.openingWorldbookSnapshot !== null }
 
   // One library observation serves both the badge and the automatic refresh.
   async function observe(chat, card) {
@@ -286,6 +294,13 @@ export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeCh
     // prefix. Resolve without the old snapshot, and fail before publishing if
     // a binding is missing; never mark a partial refresh as successfully applied.
     const worldBook = await liveBook(chat, card)
+    // A game that keeps no copy follows the library: reload only the card, and
+    // never start a copy behind its back.
+    if (!keepsCopy(chat)) {
+      if (expectedDigest !== undefined && expectedDigest !== cardOnlyDigest(card)) throw new Error('人物卡已再次修改，请刷新后确认')
+      const patch = await build(chat, card, true, worldBook)
+      return { ...patch, cardName: card.name || chat.cardName, cardContextRevision: (Number(chat.cardContextRevision) || 0) + 1 }
+    }
     const openingWorldbookSnapshot = bookSnapshot(worldBook)
     if (expectedDigest !== undefined && expectedDigest !== updateDigest(card, openingWorldbookSnapshot)) {
       throw new Error('人物卡或世界书已再次修改，请刷新后确认')
