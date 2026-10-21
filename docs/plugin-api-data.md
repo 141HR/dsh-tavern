@@ -19,7 +19,7 @@ item = {
   // 以下三项给 Tavern 的插图卡用（见 registerIllustrator）：
   prompt,        // 可选：这张图的提示词，「改提示词」的初始内容（≤ 12000 字）
   activity,      // 可选：图还在、但正在处理时的说明，{ label, progress?, cancellable? }；null 表示没有
-  actions,       // 可选：插图卡上额外的按钮，[{ id, label }]，最多 4 个；点了交给 illustrator.action
+  actions,       // 可选：插图卡上额外的按钮，[{ id, label, confirm? }]，最多 4 个；点了交给 illustrator.action，有 confirm 时先请玩家确认
 }
 ```
 

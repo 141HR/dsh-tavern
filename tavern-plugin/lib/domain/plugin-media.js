@@ -67,7 +67,9 @@ function actionsOf(value) {
     if (!action || typeof action.id !== 'string' || !ACTION_ID.test(action.id)) throw invalid('actions[].id 只能用小写字母、数字和连字符')
     const label = optionalText(action.label, 'actions[].label')
     if (!label.trim() || label.length > 20) throw invalid('actions[].label 需要 1–20 个字符')
-    return { id: action.id, label }
+    // Asked before the click goes to the plugin, e.g. when it may charge again.
+    const confirm = optionalText(action.confirm, 'actions[].confirm')
+    return { id: action.id, label, ...(confirm.trim() ? { confirm } : {}) }
   })
 }
 

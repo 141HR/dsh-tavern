@@ -673,7 +673,10 @@
 				!url && item.status === "failed" ? h("div", { className: "dsh-tavern-image-actions" },
 					h("button", { type: "button", className: "dsh-tavern-btn", disabled: busy, onClick: removeVersion }, "移除")) : null,
 				(item.actions || []).length && illustrator.action ? h("div", { className: "dsh-tavern-image-actions" }, item.actions.map(function (entry) {
-					return h("button", { key: entry.id, type: "button", className: "dsh-tavern-btn", disabled: busy, onClick: function () { return run("action", { actionId: entry.id }); } }, entry.label);
+					return h("button", { key: entry.id, type: "button", className: "dsh-tavern-btn", disabled: busy, onClick: async function () {
+						if (entry.confirm && !await askConfirm(entry.confirm)) return;
+						return run("action", { actionId: entry.id });
+					} }, entry.label);
 				})) : null,
 				error || item.error ? h("span", { role: "alert", className: "dsh-tavern-settings-error" }, error || (item.status === "failed" ? "生成失败：" : "") + item.error) : null);
 		}
