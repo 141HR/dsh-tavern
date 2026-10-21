@@ -12,6 +12,8 @@
 - `domain/chat-writes.js`：存档提交后的候选失效、摘要同步、状态通知、模板和压缩调度；
   各种写入口的豁免规则集中在此，原始导入写入不触发这些处理。
 - `domain/game-save-export.js`：在稳定快照内收集存档历史、人物卡、剧本、图片和当前分支插件媒体。
+- `domain/settings-transfer.js`：预设包导入导出与同名资源处理；
+  `domain/system-prompt-documents.js` 管理系统提示词文档校验、展示和默认值差异。
 - `domain/` 的其他文件：既有业务规则和运行模块。
 
 这些文件是 ES 模块。纯函数和固定定义直接 import；每次插件启动独有的对象与
