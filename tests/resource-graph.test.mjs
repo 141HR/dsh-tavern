@@ -77,3 +77,12 @@ test('资源删除后崩溃时，重启清理 Chat 中的旧引用', async funct
   assert.deepEqual(app.snapshot().chat.workspace.sourcePaths, [])
   assert.deepEqual(app.snapshot().chat.workspace.mountedResources, [])
 })
+
+test('删除绑定资源在写入前被拒绝后清理操作日志，下一次资源操作不被阻塞', async () => {
+  const app = harness()
+  app.options.resources.remove = async () => { throw Object.assign(new Error('resource still bound'), { code: 'DSH_TAVERN_RESOURCE_BOUND' }) }
+  await assert.rejects(app.graph.remove('materials/bound.txt', 'source'), /still bound/)
+  assert.equal(app.snapshot().operation, null)
+  await app.graph.rename('cards/old.json', 'new.json')
+  assert.deepEqual(app.snapshot().resourcePaths, ['cards/new.json'])
+})

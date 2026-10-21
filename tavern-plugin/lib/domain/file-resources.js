@@ -501,7 +501,7 @@ export function createFileResourceStore(options = {}) {
     const kind = resourceKind(normalized)
     if (kind === 'source') {
       const boundCards = await cardsForMaterial(normalized)
-      if (boundCards.length) throw new Error('剧本仍被人物卡绑定，请先解绑: ' + boundCards.join(', '))
+      if (boundCards.length) throw Object.assign(new Error('剧本仍被人物卡绑定，请先解绑: ' + boundCards.join(', ')), { code: 'DSH_TAVERN_RESOURCE_BOUND' })
     }
     const originalDir = path.dirname(absolute(normalized, true))
     const stem = path.basename(normalized, path.extname(normalized))
