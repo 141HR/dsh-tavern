@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, mkdtempSync, symlinkSync, readdirSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -207,6 +208,39 @@ test('复制遇到内置符号链接失败时清理临时目录且目标仍不�
   assert.throws(() => installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet }), /符号链接/)
   assert.equal(existsSync(path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)), false)
   assert.deepEqual(readdirSync(path.join(data, 'plugins')), [])
+})
+
+test('rename 目标被并发创建的非空目录占用时跳过并清理 staging', t => {
+  const source = makeSource(t)
+  const data = makeData(t)
+  const moduleUrl = pathToFileURL(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../bin/bundled-scene-image-plugin.mjs')).href
+  const child = `
+    import assert from 'node:assert/strict'
+    import fs from 'node:fs'
+    import path from 'node:path'
+    import { syncBuiltinESMExports } from 'node:module'
+    import { installBundledSceneImagePlugin } from ${JSON.stringify(moduleUrl)}
+    const [sourceRoot, dataRoot] = process.argv.slice(1)
+    const target = path.join(dataRoot, 'plugins', ${JSON.stringify(BUNDLED_SCENE_IMAGE_FOLDER)})
+    const originalRename = fs.renameSync
+    let injected = false
+    fs.renameSync = (from, to) => {
+      if (!injected && path.resolve(to) === path.resolve(target)) {
+        injected = true
+        fs.mkdirSync(target)
+        fs.writeFileSync(path.join(target, 'winner.txt'), 'winner')
+      }
+      return originalRename(from, to)
+    }
+    syncBuiltinESMExports()
+    const result = installBundledSceneImagePlugin({ sourceRoot, dataRoot, logger: { warn() {} } })
+    assert.equal(injected, true, 'the real renameSync call reached the race hook')
+    assert.equal(result.action, 'skipped')
+    assert.equal(fs.readFileSync(path.join(target, 'winner.txt'), 'utf8'), 'winner')
+    assert.deepEqual(fs.readdirSync(path.join(dataRoot, 'plugins')).filter(name => name.startsWith('.dsh-tavern-image-')), [])
+  `
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', child, source.root, data], { encoding: 'utf8' })
+  assert.equal(result.status, 0, result.stderr || result.stdout)
 })
 
 test('真实发行副本：完整安装、入口可加载且默认不创建私有配置', async t => {

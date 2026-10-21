@@ -165,6 +165,12 @@ export function installBundledSceneImagePlugin({ sourceRoot, dataRoot, profileDi
     renameSync(staging, target)
   } catch (error) {
     rmSync(staging, { recursive: true, force: true })
+    // Another first-install process may have promoted its complete staging tree
+    // after our initial absence check. Treat the winner as the existing install.
+    if (existsNoFollow(target)) return {
+      action: 'skipped', reason: '目标插件目录已存在，保留现有内容',
+      version: bundled.version, installedVersion: readJson(path.join(target, 'package.json'))?.version ?? null, target,
+    }
     throw error
   }
 
