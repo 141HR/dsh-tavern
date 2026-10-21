@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "22f09b85fc4308e0cba6686a87875b457c332d83",
-  "releaseSequence": 816,
+  "revision": "1db2614127cc3f344e6a84116c1f9ef2db1a7e12",
+  "releaseSequence": 817,
   "version": "3.1.0",
   "files": [
     {
@@ -1541,8 +1541,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/play-card-snapshots.js",
-      "sha256": "805c021959913dc94e6ddd1aa8d42ecc24ac11af7c99ffa5818ddc5e6780ffed",
-      "size": 19041
+      "sha256": "113f63b4835533dd983a746ffc6e1eca628fcd15f938c49ce59ed9069f758d43",
+      "size": 20114
     },
     {
       "path": "tavern-plugin/lib/domain/play-chat-debug.js",
@@ -2556,8 +2556,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "4149edf660de14a8a10c210f15f513bb6e04cb2b9e15b53a96c6d1191326cc7f",
-      "size": 347158
+      "sha256": "b9ea328988e180592040906f75197654392497068f9e20d9525b1c99e896df07",
+      "size": 347250
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
