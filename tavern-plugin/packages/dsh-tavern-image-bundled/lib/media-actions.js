@@ -45,7 +45,7 @@ export function withTaskFields(changes) {
  * bytes have been saved and update() succeeds.
  */
 export function createMediaActions({
-  tavern, attachments, getJob, refreshJob, startReplacement, cancelJob, readFileAsBytes,
+  tavern, attachments, getJob, refreshJob, startReplacement, revisePrompt, cancelJob, readFileAsBytes,
   logger, timeoutMs = DEFAULT_TIMEOUT_MS, pollMs = 700,
 } = {}) {
   const tasks = new Map()
@@ -266,7 +266,7 @@ export function createMediaActions({
         started = await Promise.race([
           Promise.resolve().then(() => startReplacement({
             sourceJobId, prompt: input.prompt, negative: input.negative, channelId: input.channelId,
-            sessionId: input.gameId, turn: Number(input.turn), textVersion: input.textVersion,
+            sessionId: input.gameId, turn: Number(input.turn), textVersion: input.textVersion, acceptUncertain: accepted,
           })),
           new Promise((_resolve, reject) => { startTimer = setTimeout(() => reject(Object.assign(new Error('提交作业超时；请到生图平台确认，不能安全地自动重发'), { uncertain: true })), 60000) }),
         ])
@@ -434,9 +434,20 @@ export function createMediaActions({
 
   async function handle(input = {}) {
     assertAvailable()
-    if (!['redraw', 'retry', 'cancel', 'recover'].includes(input.operation)) throw new Error('operation 必须是 redraw、retry、cancel 或 recover')
+    if (!['redraw', 'revise', 'retry', 'cancel', 'recover'].includes(input.operation)) throw new Error('operation 必须是 redraw、revise、retry、cancel 或 recover')
     const normalized = { ...input, turn: Number(input.turn) }
     const { item } = await locate(normalized)
+    // 重新整理提示词：先按意见改写这张图的提示词，再像改提示词一样重画。
+    if (input.operation === 'revise') {
+      if (typeof revisePrompt !== 'function') throw new Error('当前插件不支持重新整理提示词')
+      const sourceJob = await readJob(String(item.data?.replacement?.jobId || item.data?.jobId || ''))
+      const prompt = String(item.prompt || sourceJob?.params?.rawTag || sourceJob?.params?.tag || sourceJob?.positive || '')
+      await tavern.update(item.id, { activity: { label: '整理提示词', progress: null, cancellable: false } })
+      let revised
+      try { revised = await revisePrompt({ prompt, instruction: input.instruction, sessionId: normalized.gameId, turn: normalized.turn }) }
+      finally { await tavern.update(item.id, { activity: null }).catch(() => {}) }
+      return start({ ...normalized, operation: 'redraw', prompt: revised }, (await locate(normalized)).item)
+    }
     if (input.jobId && input.jobId !== item.data?.jobId && input.jobId !== item.data?.replacement?.jobId) {
       throw Object.assign(new Error('作业号与所选图片不匹配'), { code: 'JOB_MISMATCH' })
     }

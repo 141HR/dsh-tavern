@@ -5476,6 +5476,7 @@ function versionsOf(jobId) {
                   kinds: ['dsh-tavern-image/image', 'dsh-tavern-comfy/image'],
                   ...(settings.imageEnabled ? { draw } : {}),
                   redraw: context => mediaAction('redraw', context),
+                  revise: context => mediaAction('revise', context, { instruction: context.instruction || '' }),
                   editPrompt: context => mediaAction('redraw', context, { prompt: context.prompt }),
                   cancel: context => mediaAction('cancel', context),
                   // 图上的「重试」「查询结果」：由宿主侧按任务状态写进 item.actions。

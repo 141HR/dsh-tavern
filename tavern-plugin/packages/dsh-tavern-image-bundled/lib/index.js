@@ -577,7 +577,7 @@ export function apply(ctx, config = {}) {
           })
           deps.mediaActions = createMediaActions({
             tavern, attachments: attachmentApi,
-            getJob: id => engine.getJob(id), startReplacement: input => engine.startReplacement(input),
+            getJob: id => engine.getJob(id), startReplacement: input => engine.startReplacement(input), revisePrompt: input => engine.revisePrompt(input),
             cancelJob: id => engine.cancelJob(id), refreshJob: (id, options) => { const job = engine.getJob(id); if (job) return engine.refresh(job, options) },
             readFileAsBytes: async file => new Uint8Array(await readFile(file)), logger,
           })
@@ -1566,11 +1566,32 @@ function createRuntime(ctx, overrides, logger, deps) {
       return next
     }
 
-    async function startReplacement({ sourceJobId, prompt, negative, channelId, sessionId, turn, textVersion } = {}) {
+    /** 重画时「重新整理提示词」：按玩家意见（可为空）改写一张图的提示词，用规划模型。 */
+    async function revisePrompt({ prompt, instruction, sessionId, turn, signal } = {}) {
+      if (!deps.llm) throw new Error('当前 DSH 没有 llm 服务，无法整理提示词')
+      const original = String(prompt ?? '').trim()
+      if (!original) throw new Error('这张图没有记录提示词，不能重新整理')
+      const fallback = await backgroundModel(sessionId)
+      const provider = config.plannerProvider || fallback?.provider || ''
+      const model = config.plannerModel || fallback?.model || ''
+      if (!provider || !model) throw new Error('规划用的模型没定：Tavern 设置里的「默认后台模型」是空的，或者在本插件设置里单独指定一个')
+      let story = ''
+      try { story = String((await deps.tavern?.getTurn?.({ gameId: sessionId, turn: Number(turn) }))?.text || '').slice(-3000) } catch {}
+      const system = '你是生图提示词编辑。根据原提示词、这一轮正文和玩家意见，写出这张图的新提示词。'
+        + '保持原提示词的写法（标签或自然语言）、画风词和人物外貌；只按意见改动画面内容、构图、镜头或动作。只输出新的提示词本身，不要解释，不要加引号或代码块。'
+      const ask = ['原提示词：\n' + original, story ? '这一轮正文：\n' + story : '',
+        '玩家意见：\n' + (String(instruction ?? '').trim() || '没有具体意见：人物和场景不变，重新构思构图、镜头和动作，画一个不同的瞬间')].filter(Boolean).join('\n\n')
+      const result = await runPlanner(deps.llm, { provider, model, reasoningEffort: plannerEffortFor(fallback), system, text: ask, temperature: 0.9, maxTokens: 4000, signal })
+      const revised = String(result?.text ?? '').replace(/^```\w*\s*|\s*```$/g, '').trim()
+      if (!revised) throw new Error('模型没有给出新的提示词')
+      return revised.slice(0, 12000)
+    }
+
+    async function startReplacement({ sourceJobId, prompt, negative, channelId, sessionId, turn, textVersion, acceptUncertain = false } = {}) {
       const source = getJob(String(sourceJobId || ''))
       if (!source) throw Object.assign(new Error('找不到这张图片的源作业'), { submissionNotStarted: true })
-      if (source.state === 'uncertain' || source.cancelMayHaveContinued
-        || (source.requestMayHaveSucceeded && !['done', 'failed'].includes(source.state))) {
+      if (!acceptUncertain && (source.state === 'uncertain' || source.cancelMayHaveContinued
+        || (source.requestMayHaveSucceeded && !['done', 'failed'].includes(source.state)))) {
         throw Object.assign(new Error('原作业结果未知；请先检查生图平台，不能安全地重绘'), { code: 'UNCERTAIN', submissionNotStarted: true })
       }
       const jobConfig = replacementConfigFor(source, channelId)
@@ -4227,7 +4248,7 @@ let worldbookCache = null
 
     return {
       consoleHtml, consoleState, handleConsole, readBody, sendImage,
-      startJob, startReplacement, cancelJob, refresh, getJob: id => (id ? getJob(id) : null), findJob, publicJob,
+      startJob, startReplacement, revisePrompt, cancelJob, refresh, getJob: id => (id ? getJob(id) : null), findJob, publicJob,
       planFromTool, planMessage,
       currentConfig: () => config,
       // 手动配图：读这一轮的 textVersion 与正文，再交给官方桥 attach
