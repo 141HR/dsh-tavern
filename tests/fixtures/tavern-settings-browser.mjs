@@ -4,7 +4,7 @@ import { chromium } from 'playwright'
 
 // Exercise the public plugin registration and real React effects/events. Only
 // the DSH host and HTTP boundary are fixtures; no component source extraction.
-export async function openTavernSettings(t, { settings, respond, sceneImages = true, section: pageSection } = {}) {
+export async function openTavernSettings(t, { settings, respond, sceneImages = true, section: pageSection, sessionId } = {}) {
   const browser = await chromium.launch({ headless: true })
   t.after(() => browser.close())
   const page = await browser.newPage()
@@ -43,20 +43,23 @@ export async function openTavernSettings(t, { settings, respond, sceneImages = t
   const source = await readFile(new URL('../../tavern-plugin/lib/client.js', import.meta.url), 'utf8')
   await page.addScriptTag({ content: source })
   // Scene image settings live on their own page, registered once the release allows them.
-  const section = pageSection || (sceneImages ? 'dsh-tavern: scene image settings section' : 'dsh-tavern: settings section')
-  await page.evaluate(async section => {
+  const section = pageSection || (sessionId ? 'dsh-tavern: conversation settings tab' : sceneImages ? 'dsh-tavern: scene image settings section' : 'dsh-tavern: settings section')
+  await page.evaluate(async ({ section, sessionId }) => {
     let Settings
     window.client.apply({
       inject() { return { dispose() {} } },
-      get() {}, tavernSessionSignals: { subscribe() { return () => {} } },
+      get() {},
+      sessions: { subagentAddress() {} },
+      betterSidebar: { registerTab(spec) { Settings = () => modules.react.createElement(spec.component, { scope: { sessionId } }); } },
+      tavernSessionSignals: { subscribe() { return () => {} } },
       effect(run, label) { if (label === section) return run() },
       slots: { inject(_name, run) { return run() }, register(_spec, Component) { Settings = Component } }
     })
     while (!Settings) await new Promise(resolve => setTimeout(resolve, 10))
     modules['react-dom/client'].createRoot(document.querySelector('main')).render(modules.react.createElement(Settings))
-  }, section)
+  }, { section, sessionId })
   const form = page.locator('.dsh-tavern-settings-group').filter({ has: page.getByRole('heading', { name: '生图 API 配置（全局共用）' }) })
-  if (sceneImages) await form.getByLabel(/^提供商/).waitFor().catch(async error => { throw Error(error.message + '\n' + JSON.stringify(errors) + '\n' + await page.locator('body').innerText()) })
+  if (sceneImages && !sessionId) await form.getByLabel(/^提供商/).waitFor().catch(async error => { throw Error(error.message + '\n' + JSON.stringify(errors) + '\n' + await page.locator('body').innerText()) })
   t.after(() => { if (errors.length) throw Error(errors.join('\n')) })
   return { page, form, calls }
 }
