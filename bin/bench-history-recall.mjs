@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Memory-recall benchmark: does the model look things up in the story's history, and does it help?
 //   node bin/bench-history-recall.mjs (--import 吞噬星空-前60轮.jsonl --card 吞噬星空 | --save 已压缩.dshsave) --quiz 题库.json
-//     [--form ask|probe|both] [--repeat 1] [--only 1,5,9] [--out 结果.jsonl] [--home ~/.dsh-tavern] [--keep]
+//     [--form ask|hint|probe|both，默认 ask] [--repeat 1] [--only 1,5,9] [--out 结果.jsonl] [--home ~/.dsh-tavern] [--keep]
 // Every question gets a fresh game, the same start every time: the chat file imported anew (no model,
 // no compaction: the whole story may still be in context), or a frozen save — e.g. one compacted once —
 // imported anew. One player input is sent and the turn is read back from the session log.
-// --form ask puts the question off-stage without hinting at recall; probe sends the item's in-story line.
+// --form ask puts the question off-stage without hinting at recall (does the model look things up?);
+// hint asks it to check the story's history first (once it looks, does it find it?); probe sends the item's in-story line.
 // Per answer it records: the recalls made, whether any recall result held the answer, whether the reply
 // held it. Quiz items: { id, question, probe, keywords: [["809"], ["杨武", "杨哥"]] } — every group must
 // match, any word within a group counts. The game is deleted afterwards unless --keep.
@@ -25,8 +26,8 @@ if (!(importFile && cardName || saveFile) || !quizFile) {
 const home = path.resolve((option('home') || process.env.DSH_HOME || path.join(os.homedir(), '.dsh-tavern')).replace(/^~(?=$|\/)/, os.homedir()))
 const tavern = path.join(home, 'profile-data', 'tavern')
 const json = file => JSON.parse(readFileSync(file, 'utf8'))
-const forms = { ask: ['ask'], probe: ['probe'], both: ['ask', 'probe'] }[option('form') || 'both']
-if (!forms) throw new Error('--form 只能是 ask、probe 或 both')
+const forms = { ask: ['ask'], hint: ['hint'], probe: ['probe'], both: ['ask', 'probe'] }[option('form') || 'ask']
+if (!forms) throw new Error('--form 只能是 ask、hint、probe 或 both')
 const repeat = Math.max(1, Number(option('repeat')) || 1)
 const only = option('only') ? new Set(option('only').split(',').map(Number)) : null
 const quiz = json(quizFile).filter(item => !only || only.has(Number(item.id)))
@@ -73,7 +74,9 @@ async function play(item, form) {
   const chatId = json(path.join(tavern, 'data', 'sessions.json'))[sessionId]
   try {
     const start = sessionEvents(sessionId).length
-    const input = form === 'ask' ? `（场外提问，不要续写剧情）请直接简短回答：${item.question.replace(/[？?]$/, '')}？` : item.probe
+    const question = item.question.replace(/[？?]$/, '')
+    const input = form === 'ask' ? `（场外提问，不要续写剧情）请直接简短回答：${question}？`
+      : form === 'hint' ? `（场外提问，不要续写剧情）请先用历史检索查原文核实，再简短回答：${question}？` : item.probe
     const began = Date.now()
     await rpc('sendPlayerInput', { sessionId, text: input })
     let turn
