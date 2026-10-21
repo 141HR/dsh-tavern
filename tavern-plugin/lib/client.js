@@ -17285,8 +17285,6 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
                         state.settings ? h(GlobalPlayDefaults, { settings: state.settings }) : null,
                         h(TavernConversationWritingSkills, { globalDefaults: true })),
                     group("剧情", "所有游戏都按这些设置，下一轮生效。",
-                        state.settings ? h(SettingSwitch, { settings: state.settings, name: "worldbookAutoSync", title: "世界书自动更新",
-                            description: "人物卡绑定的世界书一改，进行中的游戏下一轮就用最新内容，不必再点「重新加载人物卡和世界书」。旧存档第一次仍需点一次；人物卡本身、开场变量和变量结构也仍需手动重新加载；本局脚本写进世界书的内容会被这次更新覆盖。" }) : null,
                         state.settings ? h(SettingSwitch, { settings: state.settings, name: "castPresentation", title: "对话头像",
                             description: "后台结算时顺带标注每句台词的说话人和情绪，台词显示成带头像的一行。主角用人物卡头像，其他人物用首字头像。" }) : null,
                         h(ContextCompactionSettings)),

@@ -107,11 +107,11 @@ test('世界书自动更新：库改动下一轮进入本局，只有常驻条�
   let stored = structuredClone(chat)
   const writes = [], plans = []
   const newerCard = { name: '自动', description: '后来改过的卡', character_book: card.character_book }
-  const api = (settings = { worldbookAutoSync: true }) => createPlayCardSnapshots({
+  const api = () => createPlayCardSnapshots({
     worldBooks, planner: { plan: async ({ card }) => { plans.push(card.description); return { text: '前缀' } } },
     readCard: async () => newerCard, writeChat: async () => { throw new Error('自动更新不能整份覆盖存档') },
-    updateChat: async (id, mutate, metadata) => { writes.push(metadata.source); stored = mutate(stored); return stored },
-    settings: async () => settings })
+    updateChat: async (id, mutate, metadata) => { writes.push(metadata.source); stored = mutate(stored); return stored }
+  })
   const snapshots = api()
 
   assert.equal((await snapshots.autoSync(chat, newerCard)).applied, false, '库没变就不写')
@@ -142,7 +142,6 @@ test('世界书自动更新：库改动下一轮进入本局，只有常驻条�
   text = book('第三版背景', '新常驻')
   assert.equal(await snapshots.autoSync({ ...chat, regenInProgress: true }, card), null, '重新生成期间不动快照')
   assert.equal(await snapshots.autoSync(chat, card, { busy: true }), null, '生成或结算期间不动快照')
-  assert.equal(await api({ worldbookAutoSync: false }).autoSync(chat, card), null, '关掉开关就回到手动')
   assert.equal(writes.length, 2)
 
   // 旧存档没有原始版本，本局快照可能已经含脚本写入，只能由用户显式同步。
@@ -166,7 +165,7 @@ test('世界书自动更新：读取失败保留本局快照，卡片工作台�
     openingWorldbookSnapshot: { version: 1, libraryDigest: 'old', source: { kind: 'standalone', path: 'worldbooks/broken.json' }, document: { entries: {} } } }
   let writes = 0
   const snapshots = createPlayCardSnapshots({ worldBooks, planner: { plan: async () => ({ text: '' }) }, readCard: async () => card,
-    writeChat: async () => {}, updateChat: async () => { writes++; return chat }, settings: async () => ({ worldbookAutoSync: true }) })
+    writeChat: async () => {}, updateChat: async () => { writes++; return chat } })
   readable = false
   assert.equal(await snapshots.autoSync(chat, card), null)
   assert.equal(writes, 0)
@@ -190,8 +189,8 @@ test('没有本局副本的游戏，常驻条目改动在下一轮读到时重�
   const api = createPlayCardSnapshots({ worldBooks,
     planner: { plan: async ({ worldBookContext }) => ({ text: worldBookContext.includes('新常驻') ? '前缀-新' : '前缀-旧' }) },
     readCard: async () => card, writeChat: async () => { throw new Error('自动更新不能整份覆盖存档') },
-    updateChat: async (id, mutate, metadata) => { writes.push(metadata.source); stored = mutate(stored); return stored },
-    settings: async () => ({ worldbookAutoSync: true }) })
+    updateChat: async (id, mutate, metadata) => { writes.push(metadata.source); stored = mutate(stored); return stored }
+  })
   const chat = { id: 'follow', sessionId: 'session-follow', mode: 'story', cardPath, messages: [{ role: 'assistant', text: '开场' }] }
   await api.prepare(chat, card, await worldBooks.bound(cardPath, card, {}))
   // A new game keeps no copy: only the fixed prefix is frozen.

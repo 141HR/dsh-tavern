@@ -1863,7 +1863,7 @@ export async function apply(ctx) {
       // A game that keeps no copy has no world book to offer as an update, but the
       // constant prefix still has to follow an edited book on the next read.
       const synced = context.busy === true ? null
-        : await playCardSnapshots.autoSync(chat, card, { settings: context.settings })
+        : await playCardSnapshots.autoSync(chat, card)
       // A legacy copy still needs explicit synchronization; only a game without one follows the library.
       if (!chat.openingWorldbookSnapshot) return playCardSnapshots.libraryBoundStatus(chat, card)
       // One library read now serves both the automatic refresh and the badge.
@@ -2000,7 +2000,7 @@ export async function apply(ctx) {
   }
   const contextPlanner = createContextPlanner({ prompt: runtimePrompt, callModel: callModel, now: Date.now, logger: console })
   const playCardSnapshots = createPlayCardSnapshots({ worldBooks, planner: contextPlanner, readCard: readChatCard, writeChat, updateChat,
-    settings: readTavernSettings, userPreferenceProfile })
+    userPreferenceProfile })
   const ensurePlayCardSnapshot = playCardSnapshots.ensure
   async function ensureNativeSystemPrefix(session, chat) {
     // Rebuilding the snapshot persists the complete Chat; a bounded history cannot.

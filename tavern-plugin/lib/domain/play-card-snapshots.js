@@ -17,7 +17,7 @@ function cardAgent(chat) { return chat.mode === 'card' && chat.cardEditContext?.
 function preferenceOnly(chat) { return cardAgent(chat) && chat.cardReferenceContext?.version !== 1 }
 
 /** Owns snapshot preparation, migration, persistence and concurrent build sharing. */
-export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeChat, updateChat, settings, userPreferenceProfile, logger = console }) {
+export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeChat, updateChat, userPreferenceProfile, logger = console }) {
   const pending = new Map()
   const syncing = new Set()
   const lastSyncWarning = new Map()
@@ -192,16 +192,13 @@ export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeCh
     catch { return '' }
   }
 
-  // Automatic mode replaces this game's frozen copy with the library on the next
-  // read, without touching the card definition, its initvars or the MVU state.
+  // An edited library replaces this game's frozen copy on the next read, without touching the card definition, its initvars or the MVU state.
   // A game that keeps no copy only needs the same treatment for its fixed prefix.
   // Explicit reload still owns those, so a card edit keeps its own button.
   async function autoSync(chat, card, options = {}) {
-    if (typeof updateChat !== 'function' || typeof settings !== 'function') return null
+    if (typeof updateChat !== 'function') return null
     if (!usesFixedContext(chat) || cardAgent(chat) || preferenceOnly(chat)) return null
     if (chat.regenInProgress === true || options.busy === true) return null
-    const active = options.settings ?? await settings()
-    if (active.worldbookAutoSync !== true) return null
     const key = chat.id || chat
     if (syncing.has(key)) return null
     syncing.add(key)
