@@ -1,25 +1,25 @@
 # 安装、更新与数据备份
 
-> 当前版本适配 DSH **0.2.1-rc.2**（官方 DeepSeek Harness、DSHA v0.2.0-rc2 内置的 0.2.0-rc.2、独立命令行）。Android 独立 APK 内置 DSH **0.2.0-rc.2**。Windows 一键安装版和 DSHA 0.1.5-rc2 说明属于[稳定版](https://github.com/flizzywine/dsh-tavern/blob/stable/docs/installation.md)（DSH 0.1.5，`stable` 分支）。
+> 当前版本适配 DSH **0.2.1-rc.2**（官方 DeepSeek Harness、独立命令行）。Android 独立 APK 内置 DSH **0.2.0-rc.2**。Windows 一键安装版和 DSHA 0.1.5-rc2 说明属于[稳定版](https://github.com/flizzywine/dsh-tavern/blob/stable/docs/installation.md)（DSH 0.1.5，`stable` 分支）。
 
 **桌面版仅支持官方 DeepSeek Harness，不再适配社区 DSH Desktop / DSH NEXT。** 社区版用户请先备份，再按[数据导入说明](data-import.md)迁移到官方版。
 
-## Android 独立 APK（首选，Android 11+ / ARM64）
+## Android 独立 APK（Android 11+ / ARM64）
 
 [下载 DSH Tavern Android APK](https://github.com/flizzywine/dsh-tavern/releases/latest/download/dsh-tavern-android-release.apk) · [下载 SHA-256 校验文件](https://github.com/flizzywine/dsh-tavern/releases/latest/download/dsh-tavern-android-release.apk.sha256)
 
 1. 下载 APK，按 Android 提示允许当前浏览器或文件管理器安装应用，然后安装。
-2. 打开「DSH Tavern」，按首次引导完成内置环境部署（离线解压，不需联网）；随后会自动下载并安装酒馆，保持联网并等待完成，无需另装 DSHA，也无需输入命令。
+2. 打开「DSH Tavern」，按首次引导完成内置环境部署（离线解压，不需联网）；随后会解包内置的酒馆与依赖并自动完成安装，无需另装 DSHA，也无需输入命令。
 3. 安装完成后会自动进入酒馆；在酒馆设置中配置文字模型，再导入人物卡。
 4. 以后直接打开此应用；酒馆源码更新在应用内完成，更新后返回启动页重启。
 
-独立 APK 只运行酒馆自己的 `tavern` Profile（端口 3080），不启动 DSHA 的 `web` Profile，所以手机上只有一个 DSH 服务，内存、CPU 和电量开销明显低于 DSHA 路线。
+独立 APK 只运行酒馆自己的 `tavern` Profile（端口 3080），手机上只运行这一个 DSH 服务。
 
 这是在线安装包，首次启动需要下载最新版酒馆；请保持应用运行。依赖下载失败时，应用会自动改用官方 npm 源（registry.npmjs.org）重试一次。仍失败时保留错误日志，再点击启动重试；安装日志位于容器内 /root/.dsh/logs/tavern-install.log。
 
 APK 使用独立包名 `io.github.flizzywine.dshtavern.standalone`，可以与旧版 v2.1 APK 和原版 DSHA 同时安装，数据各自独立。旧版 v2.1 APK 与本包签名不同，不能覆盖升级：先在旧包里导出存档和人物卡，装好本包后按[数据导入](data-import.md)导入。两个应用不要同时运行。Android 安装包不从应用内自更新；新版本从 [Releases](https://github.com/flizzywine/dsh-tavern/releases) 下载覆盖安装，不要先卸载。
 
-本包要求 Android 11 及以上、ARM64。设备不满足要求时使用下方的 DSHA 方案；DSHA 路线会同时运行两个 DSH 服务。
+Android 仅提供独立 APK，要求 Android 11 及以上、ARM64；不再提供通过 DSHA 安装的方式。
 
 [返回项目首页](../README.md) · [在线使用文档](https://flizzywine.github.io/dsh-tavern/)
 
@@ -70,11 +70,10 @@ CLI 首次安装可选择：**默认目录 `~/.dsh-tavern/`、当前目录（回
 | 命令行版（Windows / macOS / Linux） | 使用独立的 DSH `0.2.1-rc.2`；版本匹配且可启动时直接复用，不要求预装 DSH，不复用或替换全局 DSH | 默认 `~/.dsh-tavern/`，与外部 DSH 数据分开 |
 | 官方 DeepSeek Harness | 适配版本：**0.2.1-rc.2**（内置 DSH `0.2.1-rc.2`），复用宿主自带 DSH，要求内置 DSH 版本完全匹配 | Desktop 的 Tavern Profile 数据目录 |
 | 独立 APK（Android） | 内置 DSHA v0.2.0-rc2 与 DSH `0.2.0-rc.2`，只运行 `tavern` Profile，手机上只有一个 DSH 服务 | APK 自己的应用数据目录 |
-| DSHA（Android，备选） | 适配版本：**v0.2.0-rc2**（内置 DSH `0.2.0-rc.2`），复用宿主自带 DSH，要求内置 DSH 版本完全匹配；会同时运行 DSHA 与酒馆两个 DSH 服务 | DSHA 的 Tavern Profile 数据目录 |
 
 命令行版与 Desktop / DSHA 不再共用一套数据。切换安装方式不会自动同步人物卡或对话；首次升级旧 CLI 时会复制旧 CLI 配置和游戏数据，保留原件，Desktop / DSHA 数据不会自动迁入。
 
-Desktop / DSHA 安装器会检查宿主内置的 DSH 版本：与适配版本不一致时停止安装，并提示适配宿主版本；不会自动升级或降级宿主。若缺少必需依赖或接口，会明确报错。如遇兼容问题，请自行下载适配版本：[DSH 下载页面](https://www.deepseek.com/harness/) · [DSHA 历史版本](https://github.com/DSH-APP/DSHA/releases)。
+官方桌面版安装器会检查宿主内置的 DSH 版本：与适配版本不一致时停止安装，并提示适配宿主版本；不会自动升级或降级宿主。若缺少必需依赖或接口，会明确报错。如遇兼容问题，请自行下载适配版本：[DSH 下载页面](https://www.deepseek.com/harness/)。
 
 **首次安装、更新或重新安装，都运行下面对应的同一条命令。** 已安装时会覆盖更新程序文件，保留人物卡、对话、配置、自定义工具和 Skill，无需先卸载。重新安装前建议备份数据；如果使用了自定义数据或安装目录，请保持原配置。
 
@@ -159,49 +158,6 @@ node ./bin/dsh-tavern.mjs install --host desktop
 ```
 
 然后重新打开官方桌面应用。
-
-### Android：通过 DSHA 安装（备选）
-
-> DSHA 路线会同时运行 DSHA 自己的 DSH（`web` / `user` Profile，3080）和酒馆的 DSH（`tavern` Profile，3088），内存、耗电和 CPU 占用都高于独立 APK。设备满足 Android 11+ / ARM64 时优先用上面的独立 APK。
-
-> 不同手机系统、DSHA 版本、网络和后台限制都可能导致安装或运行失败。
-
-当前版本适配 DSHA **v0.2.0-rc2**（内置 DSH 0.2.0-rc.2）。请安装 **[DSHA v0.2.0-rc2](https://github.com/DSH-APP/DSHA/releases/tag/v0.2.0-rc2)**。Android 11 及以上用标准包 `dsha-0.2.0-rc2.apk`，更早的系统用兼容包 `dsha-0.2.0-rc2low.apk`。DSHA 0.1.5（内置 DSH 0.1.5）不能安装当前版本；需要旧宿主时改用 stable 分支的安装方法。历史包见 [DSHA 历史版本下载页面](https://github.com/DSH-APP/DSHA/releases)。
-
-借助 [DSHA](https://github.com/DSH-APP/DSHA)，可以尝试在 Android 手机上运行本项目。首次安装步骤：
-
-1. 安装 DSHA，配置模型并成功启动一次；
-2. 打开 DSHA 底部的 **终端**，把下面整条命令复制进去并回车。安装脚本会自行完成下载、配置、校验、启动和失败回滚：
-
-```bash
-node -e "fetch('https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/android/setup.sh').then(async r=>{if(!r.ok)throw Error('HTTP '+r.status);require('fs').writeFileSync('/tmp/dsh-tavern-setup.sh',await r.text())}).then(()=>{const r=require('child_process').spawnSync('bash',['/tmp/dsh-tavern-setup.sh'],{stdio:'inherit'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"
-```
-
-3. 如果不会使用终端，也可以打开“创造模式”，完整复制下面这一整段话发给 Agent：
-
-```text
-请帮我安装 DSH Tavern。只需要原样执行下面这一条命令，等待它结束，然后把最后的结果告诉我；不要拆解步骤，也不要修改命令：
-
-node -e "fetch('https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/android/setup.sh').then(async r=>{if(!r.ok)throw Error('HTTP '+r.status);require('fs').writeFileSync('/tmp/dsh-tavern-setup.sh',await r.text())}).then(()=>{const r=require('child_process').spawnSync('bash',['/tmp/dsh-tavern-setup.sh'],{stdio:'inherit'});process.exit(r.status??1)}).catch(e=>{console.error(e);process.exit(1)})"
-```
-
-4. 看到“全部完成”后重启 DSHA，在底部 **启动** 页点 **启动**；显示“已就绪，可进入”后点 **进入**，再从侧栏打开 **酒馆工作台**。
-
-点击 **酒馆工作台** 后，酒馆会直接在 DSHA 内全屏打开，无需另外安装窗口插件或手动填写地址。窗口里没有工具栏，整屏都留给酒馆。按系统 **返回键** 关闭窗口、回到 DSHA；页面卡住或需要刷新时，返回后再点一次 **酒馆工作台** 即可重新加载。
-
-**以后打开酒馆：DSHA → 底部「启动」→「进入」→ 侧栏「酒馆工作台」。** 如果还没运行，先点「启动」并等到「已就绪，可进入」。这条路径自动处理认证，不需要手输地址或复制 token；使用期间保持 DSHA 运行。
-
-**浏览器显示 `dsh web authentication required; reopen the URL printed by dsh web.`？** 这是浏览器缺少登录凭证，不代表安装失败。回到 DSHA，按上面的路径进入即可。不要直接输入 `http://127.0.0.1:3080` 或 `http://127.0.0.1:3088`，也不要把内置页面地址直接搬到另一个浏览器：它们不共享登录状态。
-
-必须用外部浏览器时，从 DSHA「启动」页本次启动日志的「本机打开」取得**完整地址（包括 `?token=` 后的全部内容）**，在同一台安卓设备的浏览器打开，再点「酒馆工作台」。找不到完整地址或不方便复制时，使用上面的 DSHA 内置入口。详见 [浏览器认证与恢复步骤](android-install.md#浏览器提示需要认证怎么办)。
-
-需要从手机 Download 目录导入人物卡时，请在 Android 系统设置中允许 DSHA **访问所有文件**；未授权时酒馆会给出提示，并保留系统文件选择器作为备选。
-
-以后更新直接点击酒馆左侧栏底部的 **更新到最新版**。如果酒馆打不开，可在 DSHA 的 **酒馆工作台**入口点击 **更新/修复**。更新完成后，在 DSHA 底部 **启动** 页点 **重启**，再进入酒馆，让新版入口生效；老用户无需卸载重装。
-
-窗口白屏时先点顶部 **刷新**，仍不正常可点 **直接打开**；两个入口都打不开时，返回 DSHA 主界面确认服务运行，再尝试 **更新/修复**。
-
-详细排错见 [Android 安装说明](android-install.md)。
 
 ### 命令行版的启动、停止与更新
 

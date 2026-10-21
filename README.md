@@ -1,6 +1,6 @@
 <p align="center">
 
-> **当前版本适配 DSH 0.2.1-rc.2**（官方 DeepSeek Harness、DSHA v0.2.0-rc2 或独立命令行），安装见[快速开始](#快速开始)。还在用 DSH 0.1.5 的，请用[稳定版](#稳定版dsh-015)。
+> **当前版本适配 DSH 0.2.1-rc.2**（官方 DeepSeek Harness 或独立命令行；Android 使用独立 APK），安装见[快速开始](#快速开始)。还在用 DSH 0.1.5 的，请用[稳定版](#稳定版dsh-015)。
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/docs/assets/brand/dsh-tavern-lockup-on-dark.svg">
     <img src="docs/assets/brand/dsh-tavern-lockup.svg" width="360" alt="DSH 酒馆">
@@ -136,20 +136,7 @@
 
 ### Android
 
-首选 **独立 APK**（Android 11+ / ARM64）：[下载 DSH Tavern Android APK](https://github.com/flizzywine/dsh-tavern/releases/latest/download/dsh-tavern-android-release.apk)。它内置 DSHA v0.2.0-rc2 与 DSH 0.2.0-rc.2，只运行酒馆自己的 `tavern` Profile，手机上只有一个 DSH 服务，内存和电量开销最低。首次按引导完成环境部署后自动安装并进入；酒馆更新在应用内完成。包名独立，可与旧版 v2.1 APK、原版 DSHA 并存，旧包数据需先导出再导入。详见 [Android 安装说明](docs/android-install.md)。
-
-设备不满足 APK 要求时，可以改用 DSHA v0.2.0-rc2 + 安装脚本：
-
-1. 安装 [DSHA v0.2.0-rc2](https://github.com/DSH-APP/DSHA/releases/tag/v0.2.0-rc2)，打开一次。
-2. 打开底部 **终端**，粘贴下面这行并按回车执行：
-
-   ```sh
-   curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/android/setup.sh' -o /tmp/dsh-tavern-setup.sh && bash /tmp/dsh-tavern-setup.sh
-   ```
-
-3. 看到 **全部完成** 后重启 DSHA，点 **启动** → **进入** → **酒馆工作台**。
-
-这条路线会同时运行 DSHA 和酒馆两个 DSH 服务，内存、耗电和 CPU 占用都高于独立 APK。
+Android 仅提供 **独立 APK**（Android 11+ / ARM64）：[下载 DSH Tavern Android APK](https://github.com/flizzywine/dsh-tavern/releases/latest/download/dsh-tavern-android-release.apk)。它内置 DSHA v0.2.0-rc2 与 DSH 0.2.0-rc.2，只运行酒馆自己的 `tavern` Profile，手机上只有一个 DSH 服务，内存和电量开销最低。首次按引导完成环境部署后自动安装并进入；酒馆更新在应用内完成。包名独立，可与旧版 v2.1 APK、原版 DSHA 并存，旧包数据需先导出再导入。详见 [Android 安装说明](docs/android-install.md)。
 
 ### macOS
 

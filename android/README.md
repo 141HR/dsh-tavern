@@ -1,8 +1,8 @@
 # Android 安装与入口组件
 
-这里的脚本和组件只处理项目已知的 DSHA 部署兼容问题。
+Android 用户安装仅提供独立 APK。此目录保留旧 DSHA 部署实现，供维护和历史兼容参考，不再作为用户安装入口。
 
-用户安装步骤见 [Android 安装说明](../docs/android-install.md)。首次安装和更新都使用同一条命令，无需单独安装内嵌窗口组件。更新后请在 DSHA 底部 **启动** 页点 **重启**，再点 **进入 → 酒馆工作台**。
+APK 下载、安装、更新和旧数据导入步骤见 [Android 安装说明](../docs/android-install.md)。
 
 这里保存 DSHA 部署使用的酒馆入口插件：
 
@@ -13,7 +13,7 @@
 
 DSHA 不自动安装 `dsh-pocket`；它与 Desktop 的插件选择独立。移动端界面由 Tavern Profile 的 `dsh-web-mobile` 提供，当前锁定 `2.4.1`；更新时会迁移 Tavern 管理的旧包名 `@dsh-external/dsh-mobile-nav`。旧的 `dsh-client-ui-mobile-adapt` 已移除，避免两个 UI 适配插件同时运行。
 
-这些组件不进入桌面端、命令行版的默认依赖。用户只运行 [`setup.sh`](./setup.sh)；它负责首次下载或安全更新，再调用内部的 [`install.sh`](./install.sh) 完成 Android 部署。
+这些组件不进入桌面端、命令行版的默认依赖。旧部署脚本 `setup.sh` 曾负责下载或更新，再调用 `install.sh` 完成部署；不再提供给用户作为安装方式。
 
 移动端插件仍依赖部分 DSH 前端结构。DSH 或 DSHA 更新后如出现布局异常，应先核对插件与当前前端版本的兼容性。
 
