@@ -2555,6 +2555,7 @@ let worldbookCache = null
         rawPrompt: job.params?.rawTag || job.params?.tag || job.positive || '',
         artist: job.params?.artist ?? '', size: job.size ? `${job.size.width}x${job.size.height}` : '',
         hits: job.hits ?? [], hasImage: job.state === 'done' && Boolean(job.byteLength), label: job.label ?? '',
+        gameId: job.gameId ?? '', turn: job.turn ?? null,
         byteLength: job.byteLength ?? 0, mediaType: job.mediaType ?? '', completedAt: job.completedAt ?? null,
         imageOutputWarning: job.imageOutputWarning ?? '',
       }

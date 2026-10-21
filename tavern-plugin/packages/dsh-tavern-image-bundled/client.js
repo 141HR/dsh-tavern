@@ -2345,6 +2345,7 @@ function versionsOf(jobId) {
       const [historyJobs, setHistoryJobs] = React.useState([])
       const [legacyImages, setLegacyImages] = React.useState([])
       const [legacyViewer, setLegacyViewer] = React.useState(null)
+      const [gameNames, setGameNames] = React.useState({})
       const [historyNote, setHistoryNote] = React.useState('')
       // 历史图的重载信号：切 tab 与点「刷新」都靠它真正重跑一次拉取。
       // 原来「刷新」是 setTab('plan') + setTimeout(setTab('gallery'))，依赖 [tab] 时
@@ -2451,6 +2452,14 @@ function versionsOf(jobId) {
         tavernUiService.listIllustrations().then(items => { if (alive) setLegacyImages(Array.isArray(items) ? items : []) }, () => { if (alive) setLegacyImages([]) })
         return () => { alive = false }
       }, [tab, historyTick])
+      // 画廊按局分组：用 tavernUi.getGames 查各局名称。
+      const galleryGameIds = tab === 'gallery' ? [...new Set(historyJobs.map(job => job.gameId).concat(legacyImages.map(item => item.gameId)).filter(Boolean))].sort().join(',') : ''
+      React.useEffect(() => {
+        if (!galleryGameIds || typeof tavernUiService?.getGames !== 'function') return undefined
+        let alive = true
+        tavernUiService.getGames(galleryGameIds.split(',')).then(games => { if (alive) setGameNames(games || {}) }, () => {})
+        return () => { alive = false }
+      }, [galleryGameIds])
       React.useEffect(() => {
         if (tab !== 'gallery') return undefined
         let alive = true
@@ -4665,8 +4674,22 @@ function versionsOf(jobId) {
             style: { padding: 0, textAlign: 'left', cursor: 'zoom-in', borderRadius: '10px', overflow: 'hidden', background: 'transparent', color: 'inherit', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 20%, transparent)' } },
             h('img', { src: item.url, loading: 'lazy', decoding: 'async', alt: item.description || '插图', style: { display: 'block', width: '100%', aspectRatio: '3 / 4', objectFit: 'cover', background: 'var(--dsw-specific-input-major)' } }),
             h('div', { style: { padding: '6px 8px', fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
-              (item.gameTitle || '未命名的局') + (item.gameDeleted ? '（已删）' : '') + ' · 第 ' + item.turn + ' 轮'))
+              '第 ' + item.turn + ' 轮 · 早期插图'))
         })
+        // 按局分组：插件图按出图时的局，早期插图按 Tavern 记录的局；组内与组间都是新的在前。
+        const groups = new Map()
+        const groupOf = key => { if (!groups.has(key)) groups.set(key, { key, items: [], legacyTitle: '', deleted: false }); return groups.get(key) }
+        done.forEach((job, index) => groupOf(job.gameId || '').items.push({ at: Number(job.completedAt || job.createdAt) || 0, node: tiles[index] }))
+        legacyImages.forEach((item, index) => {
+          const group = groupOf(item.gameId || 'legacy:' + item.gameTitle)
+          group.legacyTitle = group.legacyTitle || item.gameTitle
+          group.deleted = group.deleted || item.gameDeleted
+          group.items.push({ at: Number(item.createdAt) || 0, node: legacyTiles[index] })
+        })
+        for (const group of groups.values()) group.items.sort((a, b) => b.at - a.at)
+        const ordered = [...groups.values()].sort((a, b) => (b.items[0]?.at || 0) - (a.items[0]?.at || 0))
+        const groupTitle = group => group.key === '' ? '未归属对局（在设置里试画的图）'
+          : (gameNames[group.key]?.title || gameNames[group.key]?.cardName || group.legacyTitle || '已删除的对局') + (group.deleted ? '（已删除）' : '')
         const viewing = legacyViewer === null ? null : legacyImages[legacyViewer]
         const step = delta => setLegacyViewer(index => (index + delta + legacyImages.length) % legacyImages.length)
         return h('div', { style: S.card },
@@ -4692,12 +4715,12 @@ function versionsOf(jobId) {
             }, '🗑 删除选中（' + Object.keys(galleryPicked).filter(k => galleryPicked[k]).length + '）') : null,
             historyNote ? h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, historyNote) : null,
           ),
-          tiles.length ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px', marginTop: '12px' } }, tiles)
-            : historyNote ? null : h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', padding: '14px 0 0' } }, legacyTiles.length ? '插件还没画过图' : '还没有图片'),
-          legacyTiles.length ? h('div', { style: { marginTop: '18px' } },
-            h('div', { style: { fontSize: '13px', marginBottom: '4px' } }, '早期插图（Tavern 原生生图）'),
-            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '10px' } }, '换用插件之前画的图，只读；要删除请到对应那局的「画廊」。'),
-            h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px' } }, legacyTiles)) : null,
+          ordered.length ? ordered.map(group => h('details', { key: group.key, open: true, style: { marginTop: '14px' } },
+            h('summary', { style: { cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--dsw-alias-label-primary)' } },
+              groupTitle(group), h('span', { style: { fontWeight: 400, fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginLeft: '8px' } }, group.items.length + ' 张')),
+            h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px', marginTop: '10px' } }, group.items.map(item => item.node))))
+            : historyNote ? null : h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', padding: '14px 0 0' } }, '还没有图片'),
+          legacyTiles.length ? h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '14px' } }, '「早期插图」是换用插件之前 Tavern 自带生图画的，只读；要删除请到对应那局的「画廊」。') : null,
           viewing ? h('div', { role: 'dialog', 'aria-label': '查看早期插图', tabIndex: -1,
             ref: node => { if (node) node.focus() },
             onKeyDown: e => { if (e.key === 'Escape') setLegacyViewer(null); else if (e.key === 'ArrowLeft') step(-1); else if (e.key === 'ArrowRight') step(1) },
