@@ -25,6 +25,8 @@ window.__ModuleLoader__.load({
 
     const h = React.createElement
     const { useEffect, useState } = React
+    // Tavern 的浏览器接口（tavernUi），注入后填上；设置页的画廊用它读 Tavern 原生生图的旧图。
+    let tavernUiService = null
 
     // 插件接口前缀。正文渲染跑在 Tavern 的渲染上下文里（不一定等于插件页面的 base），
 // 用相对路径会被解析到错误地址、图片直接加载失败，所以这里必须拼成绝对地址。
@@ -2341,6 +2343,8 @@ function versionsOf(jobId) {
       const [saveState, setSaveState] = React.useState('')
       // 历史图库
       const [historyJobs, setHistoryJobs] = React.useState([])
+      const [legacyImages, setLegacyImages] = React.useState([])
+      const [legacyViewer, setLegacyViewer] = React.useState(null)
       const [historyNote, setHistoryNote] = React.useState('')
       // 历史图的重载信号：切 tab 与点「刷新」都靠它真正重跑一次拉取。
       // 原来「刷新」是 setTab('plan') + setTimeout(setTab('gallery'))，依赖 [tab] 时
@@ -2440,6 +2444,13 @@ function versionsOf(jobId) {
         }, 3000)
         return () => clearInterval(timer)
       }, [])
+      // 画廊也列出 Tavern 原生生图画过的旧图（tavernUi 第 4 版起提供，只读）。
+      React.useEffect(() => {
+        if (tab !== 'gallery' || typeof tavernUiService?.listIllustrations !== 'function') return undefined
+        let alive = true
+        tavernUiService.listIllustrations().then(items => { if (alive) setLegacyImages(Array.isArray(items) ? items : []) }, () => { if (alive) setLegacyImages([]) })
+        return () => { alive = false }
+      }, [tab, historyTick])
       React.useEffect(() => {
         if (tab !== 'gallery') return undefined
         let alive = true
@@ -4602,7 +4613,7 @@ function versionsOf(jobId) {
                 // 用「所有历史图」作为翻页列表，并定位到点的这一张 —— 这样打开第一张就能一路翻到最后
                 const all = done.map(function (j) { return j.id })
                 const at = Math.max(0, all.indexOf(job.id))
-                openImageOverlay({ open: true, jobIds: all.length ? all : [job.id], note: '历史图（' + (at + 1) + '/' + all.length + '）', working: false, index: at })
+                openImageOverlay({ open: true, jobIds: all.length ? all : [job.id], note: '画廊（' + (at + 1) + '/' + all.length + '）', working: false, index: at })
               },
               // 右键：出菜单
               onContextMenu: function (event) {
@@ -4614,7 +4625,7 @@ function versionsOf(jobId) {
                     { icon: '🖼', label: '查看大图', onClick: function () {
                         const all = done.map(function (j) { return j.id })
                         const at = Math.max(0, all.indexOf(job.id))
-                        openImageOverlay({ open: true, jobIds: all.length ? all : [job.id], note: '历史图（' + (at + 1) + '/' + all.length + '）', working: false, index: at })
+                        openImageOverlay({ open: true, jobIds: all.length ? all : [job.id], note: '画廊（' + (at + 1) + '/' + all.length + '）', working: false, index: at })
                       } },
                     { icon: '✏️', label: '改提示词重画', onClick: function () {
                         if (typeof openEditorFor === 'function') openEditorFor(job.id, job.label)
@@ -4649,13 +4660,22 @@ function versionsOf(jobId) {
               (job.label || '未命名') + ' · ' + (job.size || '')),
           )
         })
+        const legacyTiles = legacyImages.map(function (item, index) {
+          return h('button', { key: item.url, type: 'button', title: item.description || '', onClick: function () { setLegacyViewer(index) },
+            style: { padding: 0, textAlign: 'left', cursor: 'zoom-in', borderRadius: '10px', overflow: 'hidden', background: 'transparent', color: 'inherit', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 20%, transparent)' } },
+            h('img', { src: item.url, loading: 'lazy', decoding: 'async', alt: item.description || '插图', style: { display: 'block', width: '100%', aspectRatio: '3 / 4', objectFit: 'cover', background: 'var(--dsw-specific-input-major)' } }),
+            h('div', { style: { padding: '6px 8px', fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
+              (item.gameTitle || '未命名的局') + (item.gameDeleted ? '（已删）' : '') + ' · 第 ' + item.turn + ' 轮'))
+        })
+        const viewing = legacyViewer === null ? null : legacyImages[legacyViewer]
+        const step = delta => setLegacyViewer(index => (index + delta + legacyImages.length) % legacyImages.length)
         return h('div', { style: S.card },
-          h('div', { style: { fontSize: '13px', marginBottom: '4px' } }, '历史图片（' + done.length + ' / ' + historyJobs.length + ' 张）'),
+          h('div', { style: { fontSize: '13px', marginBottom: '4px' } }, '画廊（插件 ' + done.length + ' 张' + (legacyImages.length ? ' · 早期 ' + legacyImages.length + ' 张' : '') + '）'),
           h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '10px' } }, '左键看大图（可以左右翻整个历史库），右键出菜单，鼠标移到图上右上角能直接删。'),
           h('div', { style: S.row },
             h('button', { style: buttonStyle, onClick: function () { setHistoryNote('读取中…'); setHistoryTick(n => n + 1) } }, '🔄 刷新'),
             h('button', { style: buttonStyle, onClick: function () {
-              if (typeof openImageOverlay === 'function' && done.length) openImageOverlay({ open: true, jobIds: done.map(function (job) { return job.id }), note: '全部历史（◀ ▶ 翻页）', working: false, index: 0 })
+              if (typeof openImageOverlay === 'function' && done.length) openImageOverlay({ open: true, jobIds: done.map(function (job) { return job.id }), note: '全部插件图（◀ ▶ 翻页）', working: false, index: 0 })
             } }, '🖼 全部打开'),
             h('button', { style: buttonStyle, onClick: function () {
               setGallerySelect(v => !v); setGalleryPicked({})
@@ -4672,8 +4692,20 @@ function versionsOf(jobId) {
             }, '🗑 删除选中（' + Object.keys(galleryPicked).filter(k => galleryPicked[k]).length + '）') : null,
             historyNote ? h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, historyNote) : null,
           ),
-          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px', marginTop: '12px' } },
-            tiles.length ? tiles : h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', padding: '14px' } }, historyNote || '还没有图片')),
+          tiles.length ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px', marginTop: '12px' } }, tiles)
+            : historyNote ? null : h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', padding: '14px 0 0' } }, legacyTiles.length ? '插件还没画过图' : '还没有图片'),
+          legacyTiles.length ? h('div', { style: { marginTop: '18px' } },
+            h('div', { style: { fontSize: '13px', marginBottom: '4px' } }, '早期插图（Tavern 原生生图）'),
+            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '10px' } }, '换用插件之前画的图，只读；要删除请到对应那局的「画廊」。'),
+            h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px' } }, legacyTiles)) : null,
+          viewing ? h('div', { role: 'dialog', 'aria-label': '查看早期插图', tabIndex: -1,
+            ref: node => { if (node) node.focus() },
+            onKeyDown: e => { if (e.key === 'Escape') setLegacyViewer(null); else if (e.key === 'ArrowLeft') step(-1); else if (e.key === 'ArrowRight') step(1) },
+            onClick: e => { if (e.target === e.currentTarget) setLegacyViewer(null) },
+            style: { position: 'fixed', inset: 0, zIndex: 2147483000, background: 'rgba(0,0,0,.82)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', outline: 'none' } },
+            h('img', { src: viewing.url, alt: viewing.description || '插图', style: { maxWidth: '92vw', maxHeight: '84vh', objectFit: 'contain', borderRadius: '8px' } }),
+            h('div', { style: { color: '#eee', fontSize: '12px', maxWidth: '80vw', textAlign: 'center' } },
+              (legacyViewer + 1) + ' / ' + legacyImages.length + ' · ' + (viewing.gameTitle || '未命名的局') + ' · 第 ' + viewing.turn + ' 轮' + (viewing.description ? ' · ' + viewing.description : '') + '　（← → 翻页，Esc 关闭）')) : null,
         )
       }
 
@@ -5099,7 +5131,7 @@ function versionsOf(jobId) {
         )
       }
 
-      const tabs = [['plan', '设置'], ['people', '人物库'], ['worldbook', '世界书'], ['gallery', '历史图']]
+      const tabs = [['plan', '设置'], ['people', '人物库'], ['worldbook', '世界书'], ['gallery', '画廊']]
       const section = text => h('div', { style: { fontSize: '14px', fontWeight: 600, margin: '18px 0 2px', color: 'var(--dsw-alias-label-primary)' } }, text)
       return h('div', { className: 'dti-settings', style: Object.assign({}, S.surface, { padding: '4px 2px 20px', fontSize: '13px' }) },
         h('style', null, SETTINGS_CSS),
@@ -5267,6 +5299,7 @@ function versionsOf(jobId) {
         //   · 按钮 —— tavernUi.registerMessageAction
         ctx.inject?.(['tavernUi'], owner => {
           const ui = owner.tavernUi
+          tavernUiService = ui || null
           if (!ui || ui.apiVersion < 1) {
             reportHost('tavernui-missing', { got: Boolean(ui) })
             try { console.warn('[dsh-tavern-image] 当前 Tavern 没有 tavernUi 接口，生图按钮不可用') } catch {}
