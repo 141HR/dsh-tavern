@@ -88,7 +88,7 @@ function longGame(rounds) {
   return { events, save }
 }
 
-test('按窗口算：窗口内每个原生轮的结论与全量计算相同，窗口之前不判断', () => {
+test('按窗口算：窗口内每个原生轮的结论与全量计算相同，窗口之前原样显示', () => {
   const { events, save } = longGame(60)
   const whole = planTranscriptRows({ chat: { messages: save }, events })
   const window = planTranscriptWindow({ messages: save.slice(-48), events, partial: true })
@@ -96,7 +96,8 @@ test('按窗口算：窗口内每个原生轮的结论与全量计算相同，�
   for (let turn = 1; turn <= events.filter(event => event.type === 'turn/start').length + 5; turn++) {
     for (const kind of ['user', 'turn-trigger', 'assistant-step', 'turn-tail']) {
       const planned = planShowsRow(window.turns, { turn, kind }, window.from)
-      if (turn < window.from) assert.equal(planned, null)
+      // Before the window: shown as the host draws it, until scrolling widens the window.
+      if (turn < window.from) assert.equal(planned, true)
       else assert.equal(planned, planShowsRow(whole, { turn, kind }), `原生轮 ${turn} ${kind}`)
     }
   }
@@ -114,4 +115,45 @@ test('按窗口算，访问的日志事件数只和窗口有关，与游戏长�
   const short = touched(300), long = touched(3000)
   assert.ok(short > 0)
   assert.equal(long, short, `300 轮访问 ${short} 个事件，3000 轮访问 ${long} 个`)
+})
+
+// #311: an old save repaired many times and rolled back twice. The log's prose is
+// replaced by placeholders (tests/fixtures/transcript/issue-311.json); the save holds the
+// opening and rounds 2, 3, 5 and 12.
+test('#311 旧存档：只画存档里五轮各一份输入与正文，修复副本与已回退的轮都不画', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const { events } = JSON.parse(await readFile(new URL('./fixtures/transcript/issue-311.json', import.meta.url), 'utf8'))
+  const messages = [{ role: 'assistant', greeting: true, turn: 1 }, ...[2, 3, 5, 12].flatMap(turn => [{ role: 'user', turn }, { role: 'assistant', turn }])]
+  const plan = planTranscriptRows({ chat: { messages }, events })
+  const turns = [...new Set(events.filter(event => event.type === 'turn/start').map(event => event.data.turn))]
+  const shown = kind => turns.filter(turn => planShowsRow(plan, { turn, kind }))
+  assert.deepEqual(shown('user'), [1, 2, 3, 5, 12])
+  assert.deepEqual(shown('assistant-step'), [1, 2, 3, 11, 14])
+  assert.deepEqual([11, 14].map(turn => planStoryTurn(plan, turn)), [5, 12])
+})
+
+test('重新生成期间：旧正文只留输入，尝试轮只画正文；落定前后都不空、不重', () => {
+  const base = round(0, 1, '旧')
+  const attempt = [mark(5, 'turn/start', 2), input(6, { kind: 'plugin:dsh-tavern' }), reply(7, 2, '新'), mark(8, 'step/end', 2)]
+  const regeneration = { replacing: [1], inProgress: true }
+  // Running: the attempt (no player input) draws its reply, not the trigger card.
+  const running = planTranscriptRows({ chat: chat([1]), events: [...base, ...attempt], regeneration })
+  assert.deepEqual(plain(running), { 1: { input: 1, reply: 0 }, 2: { input: 0, reply: 1 } })
+  // Ended, body not yet drawn as the round's: still the attempt's reply.
+  const ended = [...base, ...attempt, mark(9, 'turn/end', 2)]
+  assert.deepEqual(plain(planTranscriptRows({ chat: chat([1]), events: ended, regeneration })), { 1: { input: 1, reply: 0 }, 2: { input: 0, reply: 1 } })
+  // Committed: the projection maps round 1 to the attempt and the regeneration is over.
+  const committed = [...ended, { seq: 10, type: 'assistant/message', surfaceOp: { op: 'replace', startSeq: 7, endSeq: 7 }, data: { turn: 2, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: '新' }], ...story(1) } } }]
+  assert.deepEqual(plain(planTranscriptRows({ chat: chat([1]), events: committed })), { 1: { input: 1, reply: 0 }, 2: { input: 0, reply: 1, story: 1 } })
+})
+
+test('不在重新生成时，进行中的轮照原样画：日志不一定把玩家输入标成玩家的', () => {
+  const events = [...round(0, 1), mark(5, 'turn/start', 2), input(6, { kind: 'plugin:dsh-tavern' }), reply(7, 2, '正文')]
+  assert.deepEqual(plain(planTranscriptRows({ chat: chat([1]), events })), {})
+})
+
+test('重新生成期间存档暂时没有这一轮：被替换的那一轮仍显示玩家输入', () => {
+  const events = [...round(0, 1), ...round(5, 2), mark(10, 'turn/start', 3), input(11, { kind: 'plugin:dsh-tavern' }), reply(12, 3, '新')]
+  const plan = planTranscriptRows({ chat: chat([1]), events, regeneration: { replacing: [2], inProgress: true } })
+  assert.deepEqual(plain(plan), { 2: { input: 1, reply: 0 }, 3: { input: 0, reply: 1 } })
 })

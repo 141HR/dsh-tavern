@@ -2317,12 +2317,7 @@ export async function apply(ctx) {
       : null
     const rollbackEvidence = sessionDebugEvidence(chat.sessionId, true)
     const rollbackFields = rollbackViewFields(chat, rollbackEvidence, options.inputChanges)
-    // The row plan (docs/design/transcript-row-plan.md) over what this view already
-    // holds — the window of floors and the log since its first round — sent as
-    // turn-keyed exceptions; the client only compares it with the hiding lists for now.
-    const transcriptPlan = rollbackEvidence.loaded && ['story', 'script'].includes(chat.mode || 'story') && Array.isArray(chat.messages) && !isScopedMessages(chat.messages)
-      ? await requestPerformance.stage('transcriptRowPlan', async () => planTranscriptWindow({ messages: chat.messages, events: rollbackEvidence.events, partial: chat.windowRevision !== undefined }))
-      : null
+    const transcriptPlan = await requestPerformance.stage('transcriptRowPlan', async () => transcriptPlanFields(chat, rollbackEvidence, rollbackFields.replacingDshTurns))
     return {
       chatId: chat.id,
       contextCompaction: chat.contextCompaction || null,
@@ -2355,8 +2350,7 @@ export async function apply(ctx) {
       inputSources,
       inputTemplateDisplays,
       ...rollbackFields,
-      transcriptTurns: transcriptPlan ? transcriptPlan.turns : null,
-      transcriptFrom: transcriptPlan ? transcriptPlan.from : null,
+      ...transcriptPlan,
       presentation: null,
       replyProjections: replyDisplay.projections,
       // tavernStatusView duplicated tavernStatusViews[0] in every read; clients use the list.
@@ -2511,8 +2505,24 @@ export async function apply(ctx) {
     const session = sessionStore.get(str(chat?.sessionId)) || agentRegistry.get(str(chat?.sessionId))?.session
     return forkTargetsFromSession(session, chat?.regeneratedDshTurns)
   }
+  // The row plan (docs/design/transcript-row-plan.md) over what the view holds — the
+  // window of floors, or the whole short history — and the log since its first round, as
+  // turn-keyed exceptions. The page shows exactly the rows it plans. The log grows every
+  // turn without a save change, so every projection, cached or not, plans again; the cost
+  // follows the view's floors, never the length of the game.
+  function transcriptPlanFields(chat, evidence, replacing) {
+    const messages = chat.messages
+    if (!evidence.loaded || !['story', 'script'].includes(chat.mode || 'story') || !messages || !Number.isSafeInteger(messages.length)) return { transcriptTurns: null, transcriptFrom: null }
+    const floors = new Array(messages.length)
+    for (let index = 0; index < messages.length; index++) floors[index] = messages[index]
+    const plan = planTranscriptWindow({ messages: floors, events: evidence.events, partial: chat.windowRevision !== undefined,
+      regeneration: { replacing, inProgress: chat.regenInProgress === true } })
+    return { transcriptTurns: plan.turns, transcriptFrom: plan.from }
+  }
   function volatileSessionViewFields(chat, activity, changes) {
-    return { ...sessionStateView.volatile(chat, activity, changes), forkTurnsByMessageId: forkTurnsForChat(chat) }
+    const fields = sessionStateView.volatile(chat, activity, changes)
+    return { ...fields, forkTurnsByMessageId: forkTurnsForChat(chat),
+      ...transcriptPlanFields(chat, sessionDebugEvidence(chat.sessionId), fields.replacingDshTurns) }
   }
 
   async function projectCachedSessionView(chat, previous, activity) {

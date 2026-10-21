@@ -1366,18 +1366,9 @@
 					result => setBackgroundTurns(result.turns || []),
 					error => console.warn("后台回退显示刷新失败", error));
 			}, [props.sessionId, latestMessageId, running, backgroundRevision]);
-			const foregroundTurns = suppressionState.view && Array.isArray(suppressionState.view.suppressedDshTurns) ? suppressionState.view.suppressedDshTurns : [];
-			const suppressedDshTurns = foregroundTurns.concat(backgroundTurns);
-			const suppressedDshTurnsRevision = suppressedDshTurns.join(",");
-			const regeneratedDshTurns = suppressionState.view && suppressionState.view.regeneratedDshTurns || {};
-			const regeneratedDshTurnsRevision = JSON.stringify(regeneratedDshTurns);
-			// 正在被重生成替换的那一楼：只藏旧正文，玩家输入留着。
-			const replacingDshTurns = suppressionState.view && Array.isArray(suppressionState.view.replacingDshTurns) ? suppressionState.view.replacingDshTurns : [];
-			const replacingDshTurnsRevision = replacingDshTurns.join(",");
-			// 正文已被替换掉、但宿主仍会画出来的原生回合（旧存档也要藏）。
-			const supersededDshTurns = suppressionState.view && Array.isArray(suppressionState.view.supersededDshTurns) ? suppressionState.view.supersededDshTurns : [];
-			const supersededDshTurnsRevision = supersededDshTurns.join(",");
-			// 行计划只做对照，不改显示（docs/design/transcript-row-plan.md 第 2 步）。
+			// Background Agent sessions have no row plan: their rolled-back turns hide whole.
+			const backgroundTurnsRevision = backgroundTurns.join(",");
+			// The row plan decides which rows show (docs/design/transcript-row-plan.md).
 			// Immutable and keyed by turn: a changed plan is a new object, never serialized here.
 			const transcriptTurns = suppressionState.view && suppressionState.view.transcriptTurns || null;
 			const transcriptFrom = suppressionState.view ? suppressionState.view.transcriptFrom : null;
@@ -1385,7 +1376,7 @@
 				let frame = null;
 				function applyProjectionState() {
 					frame = null;
-					historyProjection.apply(props.sessionId, suppressedDshTurns, regeneratedDshTurns, replacingDshTurns, supersededDshTurns, { turns: transcriptTurns, from: transcriptFrom });
+					historyProjection.apply(props.sessionId, transcriptTurns ? { turns: transcriptTurns, from: transcriptFrom } : null, backgroundTurns);
 				}
 				function scheduleProjection() {
 					if (frame === null) frame = window.requestAnimationFrame(applyProjectionState);
@@ -1404,7 +1395,7 @@
 				});
 				observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-chat-flow-kind", "data-chat-turn", "data-turn-tail"] });
 				return function () { observer.disconnect(); if (frame !== null) window.cancelAnimationFrame(frame); };
-			}, [props.sessionId, latestMessageId, running, suppressedDshTurnsRevision, regeneratedDshTurnsRevision, replacingDshTurnsRevision, supersededDshTurnsRevision, transcriptTurns, transcriptFrom]);
+			}, [props.sessionId, latestMessageId, running, backgroundTurnsRevision, transcriptTurns, transcriptFrom]);
 			return null;
 		}
 		function CandidateQuestion(props) {
