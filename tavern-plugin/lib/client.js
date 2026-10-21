@@ -14155,7 +14155,7 @@ function bindTavernFontZoom(node, win) {
 					catch (e) { setError(String(e.message || e)); }
 					finally { setBusy(false); notify(); }
 				}
-				const url = version ? "/api/dsh-tavern/scene-image?" + new URLSearchParams({ sessionId: props.sessionId, turn: String(props.turn), key: state.key, versionId: version.id }).toString() : "";
+				const url = version && state ? "/api/dsh-tavern/scene-image?" + new URLSearchParams({ sessionId: props.sessionId, turn: String(props.turn), key: state.key, versionId: version.id }).toString() : "";
 				if (!state) return null;
 				// Without a picture, generation lives in the turn's action row.
 				if (!version && state.status === "idle") return null;
@@ -14380,7 +14380,9 @@ function bindTavernFontZoom(node, win) {
 						characterImageUrl: castPath ? "/api/dsh-tavern/card-image?path=" + encodeURIComponent(castPath) : "" } : null;
 				}, [props.sessionId, castLines, castCharacters, castName, castPath]);
 				const sceneImagesEnabled = Boolean(liveState.view && liveState.view.releaseCapabilities && liveState.view.releaseCapabilities.sceneImages);
-				const sceneShown = sceneImagesEnabled && settled && playView;
+				// Old pictures show whenever the turn is settled; only drawing new ones needs the capability.
+				const sceneShown = settled && playView;
+				const sceneGeneratable = sceneImagesEnabled && sceneShown;
 				const sceneRecord = useSceneImageRecord(sceneShown ? props.sessionId : null, storyTurn);
 				const sceneAnchor = (function () {
 					const versions = sceneRecord && sceneRecord.versions || [];
@@ -14388,7 +14390,7 @@ function bindTavernFontZoom(node, win) {
 					return "";
 				})();
 				const sceneExtras = sceneShown && sceneRecord && sceneRecord.extras || [];
-				const canAddPicture = Boolean(sceneRecord && sceneRecord.maxPictures && sceneExtras.length + 1 < sceneRecord.maxPictures);
+				const canAddPicture = sceneGeneratable && Boolean(sceneRecord && sceneRecord.maxPictures && sceneExtras.length + 1 < sceneRecord.maxPictures);
 				const illustration = sceneShown ? React.createElement(SceneIllustration, { key: props.sessionId + ":" + storyTurn + ":" + JSON.stringify(projection), sessionId: props.sessionId, turn: storyTurn, record: sceneRecord, canAdd: canAddPicture }) : null;
 				// Added pictures sit at their own sentences; unplaced ones follow the text.
 				const extraPictures = sceneExtras.map(function (extra) {
@@ -16512,26 +16514,45 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
 			const [picked, setPicked] = React.useState({});
 			const [busy, setBusy] = React.useState(false);
 			const [notice, setNotice] = React.useState("");
+			const loadRevision = React.useRef(0);
+			const galleryRevision = React.useRef(0);
 			const load = React.useCallback(async function () {
+				const requested = ++loadRevision.current;
+				const sessionId = props.gallerySessionId;
 				setBusy(true);
-				try { setItems((await rpc("listSceneImageHistory", { sessionId: props.gallerySessionId }, props.gallerySessionId)).items); }
-				catch (e) { setNotice(String(e.message || e)); }
-				finally { setBusy(false); }
+				try {
+					const result = await rpc("listSceneImageHistory", { sessionId: sessionId }, sessionId);
+					if (requested === loadRevision.current) { setItems({ sessionId: sessionId, native: result.items || [], plugin: result.pluginItems || [] }); setNotice(""); }
+				}
+				catch (e) { if (requested === loadRevision.current) setNotice(String(e.message || e)); }
+				finally { if (requested === loadRevision.current) setBusy(false); }
 			}, [props.gallerySessionId]);
 			React.useEffect(function () {
-				setItems(null); setPicked({}); setPicking(false); void load();
+				++galleryRevision.current;
+				++loadRevision.current;
+				setItems(null); setPicked({}); setPicking(false); setNotice(""); void load();
 				function changed() { void load(); }
 				window.addEventListener("dsh-tavern-image-changed", changed);
-				return function () { window.removeEventListener("dsh-tavern-image-changed", changed); };
+				// A plugin attached or removed a picture.
+				const stopPlugin = props.gallerySessionId ? tavernPluginMediaIndex.subscribe(props.gallerySessionId, changed) : function () {};
+				return function () { ++galleryRevision.current; ++loadRevision.current; window.removeEventListener("dsh-tavern-image-changed", changed); stopPlugin(); };
 			}, [load]);
+			const currentItems = items && items.sessionId === props.gallerySessionId ? items : null;
 			const rows = [];
-			(items || []).forEach(function (item) {
+			// Tavern's own pictures (old saves) and pictures plugins attached share one timeline.
+			(currentItems ? currentItems.native : []).forEach(function (item) {
 				let row = rows.find(function (entry) { return entry.turn === item.turn; });
 				if (!row) rows.push(row = { turn: item.turn, shots: [] });
 				item.versions.forEach(function (version) {
 					row.shots.push({ item: item, version: version, id: item.chatId + "/" + item.key + "/" + version.id,
 						url: "/api/dsh-tavern/scene-image-stored?" + new URLSearchParams({ chatId: item.chatId, key: item.key, versionId: version.id }).toString() });
 				});
+			});
+			(currentItems ? currentItems.plugin : []).forEach(function (item) {
+				let row = rows.find(function (entry) { return entry.turn === item.turn; });
+				if (!row) rows.push(row = { turn: item.turn, shots: [] });
+				row.shots.push({ item: item, plugin: true, version: { id: item.id, description: item.caption, createdAt: item.createdAt }, id: "plugin/" + item.id,
+					url: "/api/dsh-tavern/plugin-media?" + new URLSearchParams({ sessionId: props.gallerySessionId, id: item.id, v: String(item.updatedAt || "") }).toString() });
 			});
 			rows.sort(function (a, b) { return a.turn - b.turn; });
 			rows.forEach(function (row) { row.shots.sort(function (a, b) { return a.version.createdAt - b.version.createdAt; }); });
@@ -16540,21 +16561,30 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
 			const chosen = shots.filter(function (shot) { return picked[shot.id]; });
 			function toggle(shot, on) { setPicked(function (value) { const next = Object.assign({}, value); if (on) next[shot.id] = true; else delete next[shot.id]; return next; }); }
 			async function remove(list) {
+				const revision = galleryRevision.current;
+				const sessionId = props.gallerySessionId;
 				if (!list.length || !await askConfirm(list.length === 1 ? "删除第 " + list[0].item.turn + " 轮的这张图片？只移除图片，不影响正文与存档。" : "删除选中的 " + list.length + " 张图片？只移除图片，不影响正文与存档。")) return;
+				if (revision !== galleryRevision.current) return;
 				setBusy(true); setNotice("");
 				try {
-					const results = (await rpc("removeSceneImageHistory", { items: list.map(function (shot) { return { chatId: shot.item.chatId, key: shot.item.key, versionId: shot.version.id }; }) }, props.gallerySessionId)).results;
+					const results = (await rpc("removeSceneImageHistory", {
+						sessionId: sessionId,
+						items: list.filter(function (shot) { return !shot.plugin; }).map(function (shot) { return { chatId: shot.item.chatId, key: shot.item.key, versionId: shot.version.id }; }),
+						pluginItems: list.filter(function (shot) { return shot.plugin; }).map(function (shot) { return shot.item.id; })
+					}, sessionId)).results;
 					const failed = results.filter(function (row) { return !row.ok; });
-					if (failed.length || list.length > 1) setNotice("已删除 " + (results.length - failed.length) + " 张" + (failed.length ? "，" + failed.length + " 张失败：" + failed[0].error : ""));
-					setPicked({}); setPicking(false);
+					if (revision === galleryRevision.current) {
+						if (failed.length || list.length > 1) setNotice("已删除 " + (results.length - failed.length) + " 张" + (failed.length ? "，" + failed.length + " 张失败：" + failed[0].error : ""));
+						setPicked({}); setPicking(false);
+					}
 					// Turns showing a removed picture refresh; this listener reloads the gallery too.
 					window.dispatchEvent(new CustomEvent("dsh-tavern-image-changed"));
-				} catch (e) { setNotice(String(e.message || e)); }
-				finally { setBusy(false); }
+				} catch (e) { if (revision === galleryRevision.current) setNotice(String(e.message || e)); }
+				finally { if (revision === galleryRevision.current) setBusy(false); }
 			}
 			return h("section", { className: "dsh-tavern-full-context dsh-tavern-gallery" + (picking ? " is-picking" : "") },
 				h("header", { className: "dsh-context-header" },
-					h("div", null, h("h3", null, "画廊"), h("p", null, items ? "本局共 " + shots.length + " 张，按轮次排列" : "读取中…")),
+					h("div", null, h("h3", null, "画廊"), h("p", null, currentItems ? "本局共 " + shots.length + " 张，按轮次排列" : notice ? "读取失败" : "读取中…")),
 					h("button", { disabled: busy, onClick: load }, busy ? "读取中…" : "刷新")),
 				shots.length ? h("div", { className: "dsh-context-toolbar" },
 					picking ? h(React.Fragment, null,
@@ -16563,7 +16593,7 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
 						h("button", { type: "button", disabled: busy, onClick: function () { setPicking(false); setPicked({}); } }, "完成"))
 						: h("button", { type: "button", disabled: busy, onClick: function () { setPicking(true); } }, "批量删除")) : null,
 				notice ? h("p", { role: "status" }, notice) : null,
-				items && !shots.length ? h("p", { className: "dsh-context-empty" }, "这一局还没有插图。") : null,
+				currentItems && !shots.length ? h("p", { className: "dsh-context-empty" }, "这一局还没有插图。") : null,
 				rows.map(function (row) {
 					return h("section", { key: row.turn, className: "dsh-tavern-gallery-turn" },
 						h("h4", null, row.turn > 0 ? "第 " + row.turn + " 轮" : "开场", h("span", null, row.shots.length + " 张")),

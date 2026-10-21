@@ -471,7 +471,7 @@
 					catch (e) { setError(String(e.message || e)); }
 					finally { setBusy(false); notify(); }
 				}
-				const url = version ? "/api/dsh-tavern/scene-image?" + new URLSearchParams({ sessionId: props.sessionId, turn: String(props.turn), key: state.key, versionId: version.id }).toString() : "";
+				const url = version && state ? "/api/dsh-tavern/scene-image?" + new URLSearchParams({ sessionId: props.sessionId, turn: String(props.turn), key: state.key, versionId: version.id }).toString() : "";
 				if (!state) return null;
 				// Without a picture, generation lives in the turn's action row.
 				if (!version && state.status === "idle") return null;
@@ -696,7 +696,9 @@
 						characterImageUrl: castPath ? "/api/dsh-tavern/card-image?path=" + encodeURIComponent(castPath) : "" } : null;
 				}, [props.sessionId, castLines, castCharacters, castName, castPath]);
 				const sceneImagesEnabled = Boolean(liveState.view && liveState.view.releaseCapabilities && liveState.view.releaseCapabilities.sceneImages);
-				const sceneShown = sceneImagesEnabled && settled && playView;
+				// Old pictures show whenever the turn is settled; only drawing new ones needs the capability.
+				const sceneShown = settled && playView;
+				const sceneGeneratable = sceneImagesEnabled && sceneShown;
 				const sceneRecord = useSceneImageRecord(sceneShown ? props.sessionId : null, storyTurn);
 				const sceneAnchor = (function () {
 					const versions = sceneRecord && sceneRecord.versions || [];
@@ -704,7 +706,7 @@
 					return "";
 				})();
 				const sceneExtras = sceneShown && sceneRecord && sceneRecord.extras || [];
-				const canAddPicture = Boolean(sceneRecord && sceneRecord.maxPictures && sceneExtras.length + 1 < sceneRecord.maxPictures);
+				const canAddPicture = sceneGeneratable && Boolean(sceneRecord && sceneRecord.maxPictures && sceneExtras.length + 1 < sceneRecord.maxPictures);
 				const illustration = sceneShown ? React.createElement(SceneIllustration, { key: props.sessionId + ":" + storyTurn + ":" + JSON.stringify(projection), sessionId: props.sessionId, turn: storyTurn, record: sceneRecord, canAdd: canAddPicture }) : null;
 				// Added pictures sit at their own sentences; unplaced ones follow the text.
 				const extraPictures = sceneExtras.map(function (extra) {

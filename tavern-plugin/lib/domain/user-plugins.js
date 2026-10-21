@@ -5,6 +5,8 @@ import { parseDocument, YAMLSeq } from 'yaml'
 
 // Entries Tavern writes for folders in <data>/plugins. Every other patch entry belongs to the user.
 const ID_PREFIX = 'tavern-user-plugin-'
+const IMAGE_PLUGIN_NAME = 'dsh-tavern-image'
+const LEGACY_IMAGE_PLUGIN_NAME = 'dsh-tavern-comfy'
 // Loaded in place of the plugin's own entry, beside its package.json so its browser half is still found.
 export const GUARD_FILE = '.tavern-entry.mjs'
 // The guard records whether the plugin loaded, so the settings list can say why one is missing.
@@ -85,8 +87,17 @@ export async function scanUserPlugins(pluginsDir, { installed = () => false } = 
   let names
   try { names = (await readdir(pluginsDir, { withFileTypes: true })).filter(item => item.isDirectory() && !item.name.startsWith('.')).map(item => item.name).sort() }
   catch (error) { if (error.code === 'ENOENT') return { plugins: [], problems: [], disabled: [] }; throw error }
+  // A package migration can leave both names in profile dependencies and both copies
+  // in data/plugins. Resolve this one known pair before the normal folder-name order.
+  const candidates = await Promise.all(names.map(async folder => {
+    try {
+      const pkg = JSON.parse(await readFile(path.join(pluginsDir, folder, 'package.json'), 'utf8'))
+      return { folder, canonicalImage: pkg.name === IMAGE_PLUGIN_NAME }
+    } catch { return { folder, canonicalImage: false } }
+  }))
+  candidates.sort((a, b) => Number(b.canonicalImage) - Number(a.canonicalImage))
   const plugins = [], problems = [], disabled = []
-  for (const folder of names) {
+  for (const { folder } of candidates) {
     const dir = path.join(pluginsDir, folder)
     // A disabled plugin keeps its files and settings but is not registered, so DSH does not load it.
     if (existsSync(path.join(dir, DISABLED_FILE))) { disabled.push(folder); continue }
@@ -97,10 +108,25 @@ export async function scanUserPlugins(pluginsDir, { installed = () => false } = 
     if (!main) { problems.push({ folder, reason: 'package.json 没有写 exports "." 或 main（宿主入口）' }); continue }
     const entry = path.resolve(dir, main)
     if (!existsSync(entry)) { problems.push({ folder, reason: '找不到宿主入口 ' + main }); continue }
+    const packageName = String(pkg.name || folder)
+    const isImagePlugin = packageName === IMAGE_PLUGIN_NAME || packageName === LEGACY_IMAGE_PLUGIN_NAME
     // A second source for an installed package breaks DSH's browser module composition.
-    if (pkg.name && installed(String(pkg.name))) { problems.push({ folder, reason: '插件名 ' + pkg.name + ' 与已安装的包重名，请换一个名字' }); continue }
-    const id = ID_PREFIX + String(pkg.name || folder).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-    if (plugins.some(plugin => plugin.id === id)) { problems.push({ folder, reason: '插件名与其他插件重复' }); continue }
+    const installedNames = isImagePlugin ? [IMAGE_PLUGIN_NAME, LEGACY_IMAGE_PLUGIN_NAME] : pkg.name ? [packageName] : []
+    const installedName = installedNames.find(name => installed(name))
+    if (installedName) {
+      const reason = isImagePlugin
+        ? `插件 ${packageName} 与已登记的图片插件身份（${installedName}）相同，已跳过以避免重复加载；请在插件管理中检查重复登记`
+        : '插件名 ' + packageName + ' 与已安装的包重名，请换一个名字'
+      problems.push({ folder, reason }); continue
+    }
+    const identityName = packageName === LEGACY_IMAGE_PLUGIN_NAME ? IMAGE_PLUGIN_NAME : packageName
+    const id = ID_PREFIX + identityName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    if (plugins.some(plugin => plugin.id === id)) {
+      const reason = isImagePlugin
+        ? '同一生图插件存在多个副本，已保留一个并跳过重复项'
+        : '插件名与其他插件重复'
+      problems.push({ folder, reason }); continue
+    }
     const relative = './' + path.relative(dir, entry).split(path.sep).join('/')
     plugins.push({ id, folder, name: String(pkg.name || folder), entry: path.join(dir, GUARD_FILE), main: relative })
   }

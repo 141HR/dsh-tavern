@@ -15,6 +15,7 @@ import { extractDshVersion, assertCompatibleDshVersion, dshCompatibilityNotice }
 import { patchThemeFontLimit } from './theme-font-limit.mjs'
 import { patchChatAnswerStep } from './chat-answer-step-patch.mjs'
 import { installPluginDependencies, resolveHostDependencies } from './plugin-dependencies.mjs'
+import { installBundledSceneImagePlugin } from './bundled-scene-image-plugin.mjs'
 import { isAsarPath } from './desktop-host-paths.mjs'
 import { migrateLegacyTavernData, resolveTavernDataRoot } from '../tavern-plugin/lib/domain/tavern-data.js'
 import { ensureUserExtensions } from '../tavern-plugin/lib/domain/user-extensions.js'
@@ -300,6 +301,17 @@ async function installProfileOwned(host, { attemptId, runInstall, runDsh }) {
 
     const hostDependencies = await installPluginDependencies({ pluginDirectory: path.join(SOURCE_ROOT, 'tavern-plugin'), dsh, host, run: runInstall })
     for (const dependency of hostDependencies) console.log(`复用当前 DSH 依赖：${dependency.name} ${dependency.version}`)
+
+    // 首装内置固定版本的剧情生图插件：只读发行包里随附的副本，全程不联网、不拉 latest。
+    // 目标插件目录只要已存在就跳过（包括旧版和残缺目录）；插件更新由用户自行操作。
+    // 失败不阻断 Tavern 安装 —— 插件装不上只是少了接管方，Tavern 本身照常可用。
+    try {
+      const bundledPlugin = installBundledSceneImagePlugin({ sourceRoot: SOURCE_ROOT, dataRoot, profileDir: PROFILE_DIR })
+      if (bundledPlugin.action === 'installed') console.log(`已内置剧情生图插件 ${bundledPlugin.version}：${bundledPlugin.target}`)
+      else console.log(`内置剧情生图插件：${bundledPlugin.reason || bundledPlugin.action}`)
+    } catch (error) {
+      console.warn('[Tavern 插件] 内置剧情生图插件安装失败（不影响 Tavern 使用）：' + (error?.message || error))
+    }
     const configuration = prepareProfileConfiguration(host, dshVersion)
     const transaction = await beginProfileConfigurationUpdate({
       profileDir: PROFILE_DIR,
