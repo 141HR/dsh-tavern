@@ -16,6 +16,8 @@ const patches = Object.values(workspace.patchedDependencies || {}).map(value => 
 
 const required = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'bin/dsh-compatibility.mjs', 'bin/dsh-tavern.mjs', 'bin/launcher-environment.mjs', 'bin/launcher-settings.mjs', 'bin/profile-installation.mjs', 'bin/service-lifecycle.mjs', 'bin/application-update.mjs', 'config/dsh-compatibility.json', ...patches]
 required.push('bin/dsh-tavern-update-helper.mjs', 'bin/windows-update-launch.mjs', 'bin/update-diagnostics.mjs')
+const bundledWorldbooks = ['tavern-plugin/packages/dsh-tavern-image-bundled/世界书-通用生图规则.json', 'tavern-plugin/packages/dsh-tavern-image-bundled/世界书-角色与服装库.json']
+required.push('bin/bundled-scene-image-plugin.mjs', 'tavern-plugin/packages/dsh-tavern-image-bundled/package.json', 'tavern-plugin/packages/dsh-tavern-image-bundled/BUNDLED-VERSION.json', 'tavern-plugin/packages/dsh-tavern-image-bundled/cordis.patch.yml', 'tavern-plugin/packages/dsh-tavern-image-bundled/lib/index.js', 'tavern-plugin/packages/dsh-tavern-image-bundled/client.js', ...bundledWorldbooks)
 required.push('tavern-plugin/lib/domain/server-template-runtime.js', 'tavern-plugin/lib/domain/server-template-worker.js', 'tavern-plugin/lib/vendor/st-prompt-template/server-artifact/engine.js', 'tavern-plugin/lib/vendor/st-prompt-template/server-artifact/manifest.json')
 required.push('tavern-plugin/lib/domain/tavern-client-assets.js', 'tavern-plugin/lib/client-assets/tavern.css')
 required.push('bin/build-tavern-client.mjs', 'tavern-plugin/src/client/main.js',
@@ -101,9 +103,12 @@ for (const format of ['tar', 'zip']) {
     await writeFile(file, archive)
     // ZIP readers may stop before consuming all stdin bytes; use a seekable file
     // to avoid EPIPE or a blocked synchronous pipe on macOS.
-    const listing = format === 'zip' && process.platform === 'linux'
-      ? execFileSync('unzip', ['-Z1', file], { encoding: 'utf8' })
-      : execFileSync('tar', ['-tf', file], { encoding: 'utf8' })
+    // Windows bsdtar uses the legacy system locale to decode ZIP names; .NET reads UTF-8 names directly.
+    const listing = format === 'zip' && process.platform === 'win32'
+      ? execFileSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '$ErrorActionPreference = \'Stop\'; [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); Add-Type -AssemblyName System.IO.Compression.FileSystem; $zip = [System.IO.Compression.ZipFile]::OpenRead($env:DSH_TEST_ZIP_PATH); try { foreach ($entry in $zip.Entries) { [Console]::Out.WriteLine($entry.FullName) } } finally { $zip.Dispose() }'], { encoding: 'utf8', env: { ...process.env, DSH_TEST_ZIP_PATH: file } })
+      : format === 'zip' && process.platform === 'linux'
+        ? execFileSync('unzip', ['-Z1', file], { encoding: 'utf8' })
+        : execFileSync('tar', ['-tf', file], { encoding: 'utf8' })
     const files = listing.split(/\r?\n/)
     for (const file of required) assert.ok(files.includes(file), `运行包遗漏：${file}`)
     assert.ok(files.includes('LICENSE'), '保留许可文件')
