@@ -262,9 +262,9 @@ let openImageOverlay = null
     const wrapStyle = { margin: '14px 0', textAlign: 'center' }
     const imgStyle = { maxWidth: '100%', borderRadius: '10px', cursor: 'zoom-in', background: '#111' }
     const noteStyle = { display: 'inline-block', padding: '10px 16px', borderRadius: '10px', fontSize: '13px',
-      color: '#9aa3b2', border: '1px dashed #465365', background: 'rgba(255,255,255,.02)' }
-    const buttonStyle = { padding: '8px 16px', borderRadius: '9px', border: '1px solid #566275',
-      background: 'rgba(255,255,255,.04)', color: '#e8ebf1', cursor: 'pointer', fontSize: '13px' }
+      color: 'var(--dsw-alias-label-tertiary)', border: '1px dashed var(--dsw-alias-border-l2)', background: 'transparent' }
+    const buttonStyle = { padding: '8px 16px', borderRadius: '9px', border: '1px solid var(--dsw-alias-border-l2)',
+      background: 'transparent', color: 'var(--dsw-alias-label-primary)', cursor: 'pointer', fontSize: '13px' }
 
     // ---- 正文插图的统一显示宽度（全局设置）---------------------------------
     // 只改正文里的显示宽度：不重采样原图、不改生成分辨率，点开后的全屏看图也不受影响。
@@ -1971,13 +1971,13 @@ function versionsOf(jobId) {
 
     // ================= 设置面板（设置 → 本地生图） =================
     const S = {
-      surface: { background: '#0f131a', color: '#e8edf5' },
+      surface: { background: 'transparent', color: 'var(--dsw-alias-label-primary)' },
       row: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' },
-      label: { fontSize: '13px', color: '#b2bdcc', minWidth: '92px' },
-      input: { background: '#1a2029', color: '#e8edf5', border: '1px solid #566275', borderRadius: '7px', padding: '6px 9px', fontSize: '13px' },
-      card: { border: '1px solid #465365', borderRadius: '10px', padding: '12px 14px', margin: '10px 0', background: 'rgba(255,255,255,.025)' },
-      tab: (on) => ({ padding: '5px 13px', borderRadius: '8px', border: '1px solid ' + (on ? '#79aaff' : '#566275'), background: on ? 'rgba(106,168,255,.2)' : 'rgba(255,255,255,.035)', color: on ? '#f2f6ff' : '#c5cedb', cursor: 'pointer', fontSize: '13px' }),
-      badge: (ok) => ({ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: ok ? '#4ec98a' : '#f2686b', marginRight: '6px' }),
+      label: { fontSize: '13px', color: 'var(--dsw-alias-label-secondary)', minWidth: '92px' },
+      input: { background: 'var(--dsw-specific-input-major)', color: 'var(--dsw-alias-label-primary)', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '7px', padding: '6px 9px', fontSize: '13px' },
+      card: { border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '10px', padding: '12px 14px', margin: '10px 0', background: 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 2%, transparent)' },
+      tab: (on) => ({ padding: '5px 13px', borderRadius: '8px', border: '1px solid ' + (on ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-border-l2)'), background: on ? 'color-mix(in srgb, var(--dsw-alias-brand-primary) 20%, transparent)' : 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 4%, transparent)', color: on ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-secondary)', cursor: 'pointer', fontSize: '13px' }),
+      badge: (ok) => ({ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: ok ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-error-primary)', marginRight: '6px' }),
     }
 
     function WorkflowGraphEditor(props) {
@@ -2159,57 +2159,57 @@ function versionsOf(jobId) {
       const chosen = nodes[selected]
       const primitiveFields = chosen ? Object.entries(chosen.inputs || {}).filter(([, value]) => ['string', 'number', 'boolean'].includes(typeof value) || value === null) : []
       const typeStyle = type => ({ borderLeft: '4px solid ' + nodeColor(type) })
-      const button = { background: '#171e29', color: '#fff', border: '1px solid #718097', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '12px' }
-      return h('div', { role: 'dialog', 'aria-modal': 'true', 'aria-label': '工作流可视化编辑器', style: { position: 'fixed', inset: 0, zIndex: 2147483200, display: 'flex', flexDirection: 'column', background: '#080d14', color: '#f4f7fb', fontFamily: 'system-ui, sans-serif' } },
-        h('header', { style: { minHeight: '58px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', borderBottom: '1px solid #384455', background: '#101722' } },
+      const button = { background: 'var(--dsw-specific-input-major)', color: 'var(--dsw-alias-label-primary)', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '12px' }
+      return h('div', { role: 'dialog', 'aria-modal': 'true', 'aria-label': '工作流可视化编辑器', style: { position: 'fixed', inset: 0, zIndex: 2147483200, display: 'flex', flexDirection: 'column', background: 'var(--dsw-specific-input-major)', color: 'var(--dsw-alias-label-primary)', fontFamily: 'system-ui, sans-serif' } },
+        h('header', { style: { minHeight: '58px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', borderBottom: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-specific-input-major)' } },
           h('strong', { style: { fontSize: '15px', flex: 1 } }, '节点工作流 · ' + file.split(/[\\/]/).pop()),
-          h('span', { role: 'status', style: { color: isDirty() ? '#ffd166' : '#9eacbd', fontSize: '12px' } }, isDirty() ? '● 有未保存修改' : (raw ? ids.length + ' 节点 · ' + links.length + ' 连线' : '读取中…')),
+          h('span', { role: 'status', style: { color: isDirty() ? 'var(--dsw-alias-state-warning-primary)' : 'var(--dsw-alias-label-secondary)', fontSize: '12px' } }, isDirty() ? '● 有未保存修改' : (raw ? ids.length + ' 节点 · ' + links.length + ' 连线' : '读取中…')),
           h('button', { type: 'button', 'aria-label': '缩小', disabled: busy, style: button, onClick: () => changeZoom(-0.15) }, '−'),
           h('button', { type: 'button', 'aria-label': '放大', disabled: busy, style: button, onClick: () => changeZoom(0.15) }, '+'),
           h('button', { type: 'button', 'aria-label': '适配画布', disabled: busy, style: button, onClick: fitView }, '适配'),
           h('button', { type: 'button', 'aria-label': '重置视图', disabled: busy, style: button, onClick: resetView }, '重置'),
-          h('button', { type: 'button', 'aria-label': '保存工作流图', disabled: !raw || !isDirty() || busy, style: Object.assign({}, button, { background: '#17684d', borderColor: '#4ed4a2', opacity: !raw || !isDirty() || busy ? 0.55 : 1 }), onClick: save }, busy ? '保存中…' : '保存'),
-          h('button', { type: 'button', 'aria-label': '关闭工作流图', disabled: busy, style: Object.assign({}, button, { borderColor: '#b56f78', opacity: busy ? 0.55 : 1 }), onClick: close }, '关闭 ×'),
+          h('button', { type: 'button', 'aria-label': '保存工作流图', disabled: !raw || !isDirty() || busy, style: Object.assign({}, button, { background: 'color-mix(in srgb, var(--dsw-alias-state-success-primary) 10%, transparent)', borderColor: 'var(--dsw-alias-state-success-primary)', opacity: !raw || !isDirty() || busy ? 0.55 : 1 }), onClick: save }, busy ? '保存中…' : '保存'),
+          h('button', { type: 'button', 'aria-label': '关闭工作流图', disabled: busy, style: Object.assign({}, button, { borderColor: 'var(--dsw-alias-state-error-primary)', opacity: busy ? 0.55 : 1 }), onClick: close }, '关闭 ×'),
         ),
           h('div', { style: { minHeight: 0, flex: 1, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(220px, 28vw)' } },
-          h('div', { ref: canvasRef, role: 'application', 'aria-label': '工作流节点画布', onMouseDown: event => { if (!busy) beginPan(event) }, onMouseMove: movePointer, onMouseUp: () => setDrag(null), onMouseLeave: () => setDrag(null), onWheel: event => { event.preventDefault?.(); if (!busy) changeZoom(event.deltaY < 0 ? 0.08 : -0.08) }, style: { position: 'relative', overflow: 'hidden', cursor: drag?.kind === 'pan' ? 'grabbing' : 'grab', backgroundColor: '#0b111a', backgroundImage: 'radial-gradient(#344153 1px, transparent 1px)', backgroundSize: '22px 22px' } },
-            error ? h('div', { role: 'alert', style: { position: 'absolute', zIndex: 4, top: '12px', left: '12px', color: '#ff9a9e', background: '#21141a', border: '1px solid #854650', borderRadius: '7px', padding: '8px 12px', fontSize: '12px' } }, error) : null,
+          h('div', { ref: canvasRef, role: 'application', 'aria-label': '工作流节点画布', onMouseDown: event => { if (!busy) beginPan(event) }, onMouseMove: movePointer, onMouseUp: () => setDrag(null), onMouseLeave: () => setDrag(null), onWheel: event => { event.preventDefault?.(); if (!busy) changeZoom(event.deltaY < 0 ? 0.08 : -0.08) }, style: { position: 'relative', overflow: 'hidden', cursor: drag?.kind === 'pan' ? 'grabbing' : 'grab', backgroundColor: 'var(--dsw-specific-input-major)', backgroundImage: 'radial-gradient(var(--dsw-specific-input-major) 1px, transparent 1px)', backgroundSize: '22px 22px' } },
+            error ? h('div', { role: 'alert', style: { position: 'absolute', zIndex: 4, top: '12px', left: '12px', color: 'var(--dsw-alias-state-error-primary)', background: 'var(--dsw-specific-input-major)', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '7px', padding: '8px 12px', fontSize: '12px' } }, error) : null,
             raw ? h('div', { style: { position: 'absolute', left: 0, top: 0, transform: 'translate(' + view.x + 'px,' + view.y + 'px) scale(' + view.scale + ')', transformOrigin: '0 0' } },
               h('svg', { 'aria-hidden': 'true', width: 1, height: 1, style: { position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none' } },
-                h('defs', null, h('marker', { id: 'workflow-graph-arrow', markerWidth: 8, markerHeight: 8, refX: 6, refY: 3, orient: 'auto', markerUnits: 'strokeWidth' }, h('path', { d: 'M0,0 L0,6 L7,3 z', fill: '#91a8c1' }))),
+                h('defs', null, h('marker', { id: 'workflow-graph-arrow', markerWidth: 8, markerHeight: 8, refX: 6, refY: 3, orient: 'auto', markerUnits: 'strokeWidth' }, h('path', { d: 'M0,0 L0,6 L7,3 z', fill: 'var(--dsw-alias-label-tertiary)' }))),
                 links.map((link, index) => {
                   const from = positions[link.source] || { x: 0, y: 0 }, to = positions[link.target] || { x: 0, y: 0 }
                   const x1 = from.x + nodeWidth, y1 = from.y + 56, x2 = to.x, y2 = to.y + 56, curve = Math.max(50, Math.abs(x2 - x1) * 0.45)
-                  return h('path', { key: index, d: 'M ' + x1 + ' ' + y1 + ' C ' + (x1 + curve) + ' ' + y1 + ', ' + (x2 - curve) + ' ' + y2 + ', ' + x2 + ' ' + y2, fill: 'none', stroke: '#91a8c1', strokeWidth: 2.2, opacity: 0.9, markerEnd: 'url(#workflow-graph-arrow)' })
+                  return h('path', { key: index, d: 'M ' + x1 + ' ' + y1 + ' C ' + (x1 + curve) + ' ' + y1 + ', ' + (x2 - curve) + ' ' + y2 + ', ' + x2 + ' ' + y2, fill: 'none', stroke: 'var(--dsw-alias-label-tertiary)', strokeWidth: 2.2, opacity: 0.9, markerEnd: 'url(#workflow-graph-arrow)' })
                 })),
               ids.map((id, index) => {
                 const node = nodes[id], position = positions[id] || { x: 0, y: 0 }, classType = node.class_type || '未知节点'
                 const primitiveCount = Object.values(node.inputs || {}).filter(value => value === null || ['string', 'number', 'boolean'].includes(typeof value)).length
-                return h('div', { key: id, role: 'button', tabIndex: 0, 'aria-label': '节点 ' + id + ' ' + classType, onClick: () => setSelected(id), onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault?.(); setSelected(id) } }, onMouseDown: event => { if (!busy) beginDrag(event, id) }, onMouseMove: movePointer, onMouseUp: () => setDrag(null), style: { position: 'absolute', left: position.x, top: position.y, width: nodeWidth, boxSizing: 'border-box', border: '1px solid ' + (selected === id ? '#fff' : nodeColor(classType)), borderRadius: '9px', background: '#151e2a', boxShadow: selected === id ? '0 0 0 2px rgba(255,255,255,.28), 0 8px 24px #0009' : '0 6px 18px #0008', overflow: 'hidden', cursor: drag?.id === id ? 'grabbing' : 'grab' } },
-                  h('div', { style: Object.assign({ padding: '9px 11px', background: '#222d3b', fontWeight: 650, fontSize: '12px', display: 'flex', justifyContent: 'space-between', gap: '8px' }, typeStyle(classType)) }, h('span', null, classType), h('span', { style: { color: '#acb9c9', fontWeight: 400 } }, '#' + id)),
-                  h('div', { style: { padding: '8px 11px', color: '#bfccdb', fontSize: '11px', lineHeight: '1.5' } }, primitiveCount ? primitiveCount + ' 个可编辑参数' : '参数由连线提供', node._meta?.title ? h('div', { style: { marginTop: '3px', color: '#97a8ba' } }, node._meta.title) : null),
+                return h('div', { key: id, role: 'button', tabIndex: 0, 'aria-label': '节点 ' + id + ' ' + classType, onClick: () => setSelected(id), onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault?.(); setSelected(id) } }, onMouseDown: event => { if (!busy) beginDrag(event, id) }, onMouseMove: movePointer, onMouseUp: () => setDrag(null), style: { position: 'absolute', left: position.x, top: position.y, width: nodeWidth, boxSizing: 'border-box', border: '1px solid ' + (selected === id ? 'var(--dsw-alias-label-primary)' : nodeColor(classType)), borderRadius: '9px', background: 'var(--dsw-specific-input-major)', boxShadow: selected === id ? '0 0 0 2px color-mix(in srgb, var(--dsw-alias-label-tertiary) 28%, transparent), 0 8px 24px #0009' : '0 6px 18px #0008', overflow: 'hidden', cursor: drag?.id === id ? 'grabbing' : 'grab' } },
+                  h('div', { style: Object.assign({ padding: '9px 11px', background: 'var(--dsw-specific-input-major)', fontWeight: 650, fontSize: '12px', display: 'flex', justifyContent: 'space-between', gap: '8px' }, typeStyle(classType)) }, h('span', null, classType), h('span', { style: { color: 'var(--dsw-alias-label-secondary)', fontWeight: 400 } }, '#' + id)),
+                  h('div', { style: { padding: '8px 11px', color: 'var(--dsw-alias-label-secondary)', fontSize: '11px', lineHeight: '1.5' } }, primitiveCount ? primitiveCount + ' 个可编辑参数' : '参数由连线提供', node._meta?.title ? h('div', { style: { marginTop: '3px', color: 'var(--dsw-alias-label-tertiary)' } }, node._meta.title) : null),
                 )
               }),
-            ) : h('div', { style: { padding: '24px', color: '#c1cfdf', fontSize: '13px' } }, error || '正在读取工作流…'),
+            ) : h('div', { style: { padding: '24px', color: 'var(--dsw-alias-label-secondary)', fontSize: '13px' } }, error || '正在读取工作流…'),
           ),
-          h('aside', { style: { overflowY: 'auto', borderLeft: '1px solid #384455', background: '#101722', padding: '16px', color: '#f4f7fb' } },
+          h('aside', { style: { overflowY: 'auto', borderLeft: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-specific-input-major)', padding: '16px', color: 'var(--dsw-alias-label-primary)' } },
             h('div', { style: { fontSize: '13px', fontWeight: 700, marginBottom: '12px' } }, chosen ? '节点检查器' : '选择一个节点'),
             chosen ? h('div', null,
-              h('div', { style: { padding: '10px', borderRadius: '8px', background: '#192331', borderLeft: '4px solid ' + nodeColor(chosen.class_type), marginBottom: '12px' } },
+              h('div', { style: { padding: '10px', borderRadius: '8px', background: 'var(--dsw-specific-input-major)', borderLeft: '4px solid ' + nodeColor(chosen.class_type), marginBottom: '12px' } },
                 h('div', { style: { fontSize: '13px', fontWeight: 650 } }, chosen._meta?.title || chosen.class_type || '未知节点'),
-                h('div', { style: { fontSize: '11px', color: '#b8c5d3', marginTop: '4px' } }, '节点 #' + selected + ' · ' + Object.keys(chosen.inputs || {}).length + ' 个输入')),
-              h('div', { style: { fontSize: '11px', lineHeight: 1.5, color: '#f0cc84', background: '#282116', padding: '8px', borderRadius: '7px', marginBottom: '12px' } }, '提示：绑定的正面、负面、种子和尺寸会被生成设置覆盖。'),
-              primitiveFields.length ? primitiveFields.map(([field, value]) => h('label', { key: field, style: { display: 'block', margin: '0 0 12px', fontSize: '11px', color: '#d4deea' } },
-                h('span', { style: { display: 'block', marginBottom: '5px', color: '#b8c5d3' } }, field + ' · ' + (typeof value === 'boolean' ? '布尔' : typeof value === 'number' ? '数字' : '文本')),
-                value === null ? h('div', { style: { color: '#9eacbd', fontStyle: 'italic' } }, '空值（只读）') : typeof value === 'boolean'
+                h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-secondary)', marginTop: '4px' } }, '节点 #' + selected + ' · ' + Object.keys(chosen.inputs || {}).length + ' 个输入')),
+              h('div', { style: { fontSize: '11px', lineHeight: 1.5, color: 'var(--dsw-alias-state-warning-primary)', background: 'var(--dsw-specific-input-major)', padding: '8px', borderRadius: '7px', marginBottom: '12px' } }, '提示：绑定的正面、负面、种子和尺寸会被生成设置覆盖。'),
+              primitiveFields.length ? primitiveFields.map(([field, value]) => h('label', { key: field, style: { display: 'block', margin: '0 0 12px', fontSize: '11px', color: 'var(--dsw-alias-label-primary)' } },
+                h('span', { style: { display: 'block', marginBottom: '5px', color: 'var(--dsw-alias-label-secondary)' } }, field + ' · ' + (typeof value === 'boolean' ? '布尔' : typeof value === 'number' ? '数字' : '文本')),
+                value === null ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontStyle: 'italic' } }, '空值（只读）') : typeof value === 'boolean'
                   ? h('input', { type: 'checkbox', disabled: busy, 'aria-label': field, checked: draft[selected]?.[field] === undefined ? value : (draft[selected][field] === true || draft[selected][field] === 'true'), onChange: event => setField(selected, field, event.target.checked) })
-                  : h(typeof value === 'string' && value.length > 100 ? 'textarea' : 'input', { type: typeof value === 'number' ? 'number' : 'text', disabled: busy, 'aria-label': field, value: inputValue(selected, field, value), onChange: event => setField(selected, field, event.target.value), style: { width: '100%', boxSizing: 'border-box', padding: '8px', borderRadius: '6px', border: '1px solid #66778d', background: busy ? '#151b24' : '#0c121b', color: '#fff', fontSize: '12px', minHeight: typeof value === 'string' && value.length > 100 ? '84px' : '34px' } }),
-              )) : h('div', { style: { color: '#b8c5d3', fontSize: '12px' } }, '此节点没有可编辑的普通参数。'),
-              h('div', { style: { borderTop: '1px solid #384455', paddingTop: '12px', marginTop: '10px', fontSize: '11px', color: '#b8c5d3' } },
+                  : h(typeof value === 'string' && value.length > 100 ? 'textarea' : 'input', { type: typeof value === 'number' ? 'number' : 'text', disabled: busy, 'aria-label': field, value: inputValue(selected, field, value), onChange: event => setField(selected, field, event.target.value), style: { width: '100%', boxSizing: 'border-box', padding: '8px', borderRadius: '6px', border: '1px solid var(--dsw-alias-border-l2)', background: busy ? 'var(--dsw-specific-input-major)' : 'var(--dsw-specific-input-major)', color: 'var(--dsw-alias-label-primary)', fontSize: '12px', minHeight: typeof value === 'string' && value.length > 100 ? '84px' : '34px' } }),
+              )) : h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: '12px' } }, '此节点没有可编辑的普通参数。'),
+              h('div', { style: { borderTop: '1px solid var(--dsw-alias-border-l2)', paddingTop: '12px', marginTop: '10px', fontSize: '11px', color: 'var(--dsw-alias-label-secondary)' } },
                 '已有连线（只读）',
-                links.filter(link => link.target === selected || link.source === selected).map((link, i) => h('div', { key: i, style: { marginTop: '6px', color: '#d7e2ee' } }, link.source + ' → ' + link.target + ' · ' + link.field))),
-            ) : h('div', { style: { color: '#b8c5d3', fontSize: '12px', lineHeight: 1.6 } }, '点选画布中的节点查看参数。可拖动节点调整布局，滚轮缩放，拖动画布空白处平移。'),
-            error ? h('div', { role: 'alert', style: { color: '#ff9a9e', fontSize: '12px', marginTop: '12px' } }, error) : null,
+                links.filter(link => link.target === selected || link.source === selected).map((link, i) => h('div', { key: i, style: { marginTop: '6px', color: 'var(--dsw-alias-label-primary)' } }, link.source + ' → ' + link.target + ' · ' + link.field))),
+            ) : h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: '12px', lineHeight: 1.6 } }, '点选画布中的节点查看参数。可拖动节点调整布局，滚轮缩放，拖动画布空白处平移。'),
+            error ? h('div', { role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary)', fontSize: '12px', marginTop: '12px' } }, error) : null,
           ),
         ),
       )
@@ -2605,25 +2605,25 @@ function versionsOf(jobId) {
         : ((providers.find(item => item.id === imageBackend) || {}).label || imageBackend)
       const head = h('div', { style: S.card },
         h('div', { style: { fontSize: '14px', fontWeight: 600, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
-          h('span', { style: imageBackend === 'comfyui' ? S.badge(comfyOnline) : Object.assign({}, S.badge(externalConnected), (!externalStatus || externalStatus.status === 'configured') ? { background: '#8491a2' } : {}) }),
+          h('span', { style: imageBackend === 'comfyui' ? S.badge(comfyOnline) : Object.assign({}, S.badge(externalConnected), (!externalStatus || externalStatus.status === 'configured') ? { background: 'var(--dsw-alias-label-tertiary)' } : {}) }),
           h('span', null, imageBackend === 'comfyui'
             ? (comfyOnline ? ('ComfyUI 在线' + (data.comfy.version ? ' ' + data.comfy.version : '') + (data.comfy.device ? '　' + data.comfy.device : '')) : ('ComfyUI 没开' + (data.comfy && data.comfy.error ? '：' + data.comfy.error : '')))
             : (backendLabel + (selectedChannel ? ' · ' + selectedChannel.name : ' · 尚未选择渠道') + (externalStatus?.checking ? ' · 检测中…' : externalConnected ? ' · 连接可用' : externalStatus?.status === 'configured' ? ' · 已配置，尚未验证' : externalStatus ? ' · 连接失败' : selectedChannel ? ' · 已配置，尚未验证' : ''))),
           imageBackend === 'comfyui' ? h('button', {
-            style: { fontSize: '11px', padding: '3px 10px', borderRadius: '7px', border: '1px solid rgba(150,170,200,.45)', background: 'transparent', color: '#9aa3b2', cursor: 'pointer' },
+            style: { fontSize: '11px', padding: '3px 10px', borderRadius: '7px', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 45%, transparent)', background: 'transparent', color: 'var(--dsw-alias-label-tertiary)', cursor: 'pointer' },
             onClick: loadComfyStatus,
           }, comfyStatus?.checking ? '检测中…' : '测试连接') : null,
-          imageBackend === 'comfyui' && comfyStatus && !comfyStatus.checking ? h('span', { style: { fontSize: '11px', color: comfyStatus.ok ? '#8bd48b' : '#f2686b' } },
+          imageBackend === 'comfyui' && comfyStatus && !comfyStatus.checking ? h('span', { style: { fontSize: '11px', color: comfyStatus.ok ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-error-primary)' } },
             comfyStatus.ok ? ('✓ ' + (comfyStatus.ms || 0) + 'ms') : ('✗ ' + String(comfyStatus.error || '').slice(0, 60))) : null,
         ),
-        imageBackend === 'comfyui' ? h('div', { style: { fontSize: '12px', color: '#9aa3b2' } },
+        imageBackend === 'comfyui' ? h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } },
           '当前画风：' + (config.comfyMode === 'simple'
             ? ('简单模式 · ' + ({ checkpoint: 'Checkpoint（SD / SDXL）', flux: 'Flux', anima: 'Anima' }[config.comfySimple?.template] || 'Checkpoint') + ' · ' + (config.comfySimple?.template === 'checkpoint' ? (config.comfySimple?.checkpoint || '未选模型') : (config.comfySimple?.unet || '未选模型')))
             : ((workflows.find(w => w.id === config.defaultWorkflow) || {}).label || '（没选）'))) : null,
-        h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginTop: '4px' } },
+        h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '4px' } },
           config.plannerEnabled ? ('规划模型：' + effective.provider + ' / ' + effective.model + (effective.fromTavern ? '（跟随 Tavern）' : '')) : '（规划已关）',
         ),
-        note ? h('div', { style: { fontSize: '12px', marginTop: '6px', color: '#6aa8ff' } }, note) : null,
+        note ? h('div', { style: { fontSize: '12px', marginTop: '6px', color: 'var(--dsw-alias-brand-primary)' } }, note) : null,
       )
 
       // ---- 手动生图（安全版：只读写自己的数据，不接管宿主渲染）----
@@ -2648,11 +2648,11 @@ function versionsOf(jobId) {
         }
         return h('div', { style: S.card },
           h('div', { style: { fontSize: '13px', marginBottom: '4px' } }, '手动生图'),
-          h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '8px' } }, '按当前会话最新一条回复的正文生成插图。会弹出全屏看图。'),
+          h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } }, '按当前会话最新一条回复的正文生成插图。会弹出全屏看图。'),
           h('div', { style: S.row },
             h('button', { style: Object.assign({}, buttonStyle, { padding: '5px 16px', fontSize: '13px' }), disabled: busy, onClick: run },
               busy ? '🎨 生成中…' : '🎨 给最新一条回复生图'),
-            note ? h('span', { style: { fontSize: '12px', color: note.startsWith('失败') || note.startsWith('没有') ? '#f2686b' : '#9aa3b2' } }, note) : null,
+            note ? h('span', { style: { fontSize: '12px', color: note.startsWith('失败') || note.startsWith('没有') ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-label-tertiary)' } }, note) : null,
           ),
         )
       }
@@ -2667,16 +2667,16 @@ function versionsOf(jobId) {
           const label = t.kind + '：' + t.label
           if (t.state === 'running') {
             return h('div', { key: t.id, style: { fontSize: '12px', margin: '3px 0' } },
-              h('span', { style: { color: '#6aa8ff' } }, '● ' + label + '（后台进行中，' + seconds + 's）'),
+              h('span', { style: { color: 'var(--dsw-alias-brand-primary)' } }, '● ' + label + '（后台进行中，' + seconds + 's）'),
               h('button', { style: Object.assign({}, buttonStyle, { marginLeft: '8px', padding: '1px 9px', fontSize: '11px' }), onClick: async () => { await post('/cancel', { id: t.id }); refresh() } }, '取消'),
             )
           }
-          return h('div', { key: t.id, style: { fontSize: '12px', margin: '3px 0', color: '#9aa3b2' } },
+          return h('div', { key: t.id, style: { fontSize: '12px', margin: '3px 0', color: 'var(--dsw-alias-label-tertiary)' } },
             (t.state === 'done' ? '✓ ' : t.state === 'cancelled' ? '⊗ ' : '✗ ') + label + '　' + seconds + 's' + (t.error ? '　' + t.error : ''))
         })
         return h('div', { style: S.card },
           h('div', { style: { fontSize: '13px', marginBottom: '4px' } }, '后台任务' + (running.length ? '（' + running.length + ' 个在跑）' : '')),
-          h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '6px' } }, '规划、设计、看图都在后台跑，不占用前台写作；这里能看到进度，卡住可以取消。'),
+          h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '6px' } }, '规划、设计、看图都在后台跑，不占用前台写作；这里能看到进度，卡住可以取消。'),
           rows,
         )
       }
@@ -2684,7 +2684,7 @@ function versionsOf(jobId) {
       // ---- 规划页 ----
       /** 生图后端（ComfyUI 地址与鉴权）—— 标签在上、控件全宽。 */
       function ComfyBackendCard() {
-        const optStyle = { color: '#12161c', background: '#e9eef6' }
+        const optStyle = {}
         const providerOptions = providers.length ? providers : [
           ['novelai', 'NovelAI'], ['openai', 'OpenAI 兼容'], ['gemini', 'Gemini'], ['gemini-chat', 'Gemini Chat'],
           ['grok', 'Grok'], ['seedream', 'Seedream'], ['qwen', 'Qwen'], ['sdwebui', 'Stable Diffusion WebUI'],
@@ -2695,8 +2695,8 @@ function versionsOf(jobId) {
         const channelDraft = channel ? (channelSecretDrafts[channel.id] || { apiKey: '', password: '' }) : { apiKey: '', password: '' }
         const localFields = channel ? (channelDraft.fields || channel) : {}
         const full = (extra) => Object.assign({}, S.input, { width: '100%', boxSizing: 'border-box', colorScheme: 'dark' }, extra || {})
-        const label = (text, hint) => h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '5px' } },
-          text, hint ? h('span', { style: { color: '#9aa3b2', marginLeft: '6px' } }, hint) : null)
+        const label = (text, hint) => h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '5px' } },
+          text, hint ? h('span', { style: { color: 'var(--dsw-alias-label-tertiary)', marginLeft: '6px' } }, hint) : null)
         const setCfg = (patch) => setData(current => Object.assign({}, current, { config: Object.assign({}, current?.config || {}, patch) }))
         const nextId = (provider) => provider + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7)
         const defaultChannel = provider => {
@@ -2867,15 +2867,15 @@ function versionsOf(jobId) {
               const r = await post('/comfy-test', { url: saved.state?.config?.comfyUrl || config.comfyUrl || '' }).catch(e => ({ ok: false, error: String(e?.message ?? e) }))
               setComfyStatus(r)
             } }, comfyStatus?.checking ? '测试中…' : '测试连接与鉴权'),
-            comfyStatus?.checking ? h('span', { style: { fontSize: '12px', color: '#9aa3b2', marginLeft: '10px' } }, '正在连接…') : null,
-            comfyStatus && !comfyStatus.checking ? h('span', { style: { fontSize: '12px', color: comfyStatus.ok ? '#8bd48b' : '#f2686b', marginLeft: '10px' } }, comfyStatus.ok ? ('● 在线' + (comfyStatus.version ? ' ' + comfyStatus.version : '') + (comfyStatus.device ? '　' + comfyStatus.device : '') + (comfyStatus.vram ? '　' + comfyStatus.vram : '') + '　✓ ' + (comfyStatus.ms || 0) + 'ms') : ('● 离线：' + String(comfyStatus.error || '未知原因'))) : null,
+            comfyStatus?.checking ? h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginLeft: '10px' } }, '正在连接…') : null,
+            comfyStatus && !comfyStatus.checking ? h('span', { style: { fontSize: '12px', color: comfyStatus.ok ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-error-primary)', marginLeft: '10px' } }, comfyStatus.ok ? ('● 在线' + (comfyStatus.version ? ' ' + comfyStatus.version : '') + (comfyStatus.device ? '　' + comfyStatus.device : '') + (comfyStatus.vram ? '　' + comfyStatus.vram : '') + '　✓ ' + (comfyStatus.ms || 0) + 'ms') : ('● 离线：' + String(comfyStatus.error || '未知原因'))) : null,
           ) : channel ? h('div', null,
             h('div', { style: S.row },
               h('select', { 'aria-label': '生图渠道', value: channel.id, style: Object.assign({}, full(), { flex: 1, minWidth: '180px' }), onChange: e => { setCfg({ activeImageChannel: e.target.value }); save({ activeImageChannel: e.target.value }) } },
                 channels.filter(item => item.provider === backend).map(item => h('option', { key: item.id, value: item.id, style: optStyle }, item.name))),
               h('button', { style: buttonStyle, onClick: () => { const created = defaultChannel(backend); persistChannelSelection(channels.concat(created), backend, created.id) } }, '新增渠道'),
               h('button', { style: buttonStyle, onClick: () => { const created = Object.assign({}, channel, localFields, { id: nextId(backend), name: localFields.name + ' 副本', hasApiKey: false, hasPassword: false }); delete created.apiKey; delete created.password; persistChannelSelection(channels.concat(created), backend, created.id) } }, '复制渠道'),
-              h('button', { style: Object.assign({}, buttonStyle, { color: '#f28b8b' }), onClick: () => {
+              h('button', { style: Object.assign({}, buttonStyle, { color: 'var(--dsw-alias-state-error-primary)' }), onClick: () => {
                 if (!confirm('删除渠道「' + channel.name + '」？已保存的密钥也会删除。')) return
                 const next = channels.filter(item => item.id !== channel.id)
                 const fallback = next.find(item => item.provider === backend)
@@ -2929,7 +2929,7 @@ function versionsOf(jobId) {
               sizeField('sizeWidth', '宽（像素）', '如 832', legacySize.width),
               sizeField('sizeHeight', '高（像素）', '如 1216', legacySize.height),
               (sizeValue('sizeWidth', legacySize.width) && sizeValue('sizeHeight', legacySize.height)) ? null
-                : h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginBottom: '10px', alignSelf: 'end', paddingBottom: '8px' } }, '宽高都填才覆盖；留空跟随规划给的分辨率')) : null,
+                : h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '10px', alignSelf: 'end', paddingBottom: '8px' } }, '宽高都填才覆盖；留空跟随规划给的分辨率')) : null,
             ['openai', 'sdwebui', 'qwen'].includes(backend) ? optionField('size', '尺寸覆盖（可选）', '例如：1024x1536') : null,
             backend === 'seedream' ? optionField('size', '输出尺寸（可选）', '1K、1.5K、2K 或 2048x2048') : null,
             backend === 'gemini' ? optionField('imageSize', '输出分辨率（可选）', '1K、2K 或 4K') : null,
@@ -2963,17 +2963,17 @@ function versionsOf(jobId) {
                   else setChannelTestStatuses(current => { const statuses = Object.assign({}, current); delete statuses[channel.id]; return statuses })
                 } finally { delete channelTestsInFlight.current[channel.id] }
               } }, channelTestStatuses[channel.id]?.checking ? '测试中…' : '保存并测试连接'),
-              h('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '12px', color: channelTestStatuses[channel.id]?.status === 'reachable' && channelTestStatuses[channel.id]?.ok ? '#8bd48b' : channelTestStatuses[channel.id]?.status === 'configured' ? '#9aa3b2' : channelTestStatuses[channel.id] ? '#f2686b' : '#9aa3b2' } },
+              h('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '12px', color: channelTestStatuses[channel.id]?.status === 'reachable' && channelTestStatuses[channel.id]?.ok ? 'var(--dsw-alias-state-success-primary)' : channelTestStatuses[channel.id]?.status === 'configured' ? 'var(--dsw-alias-label-tertiary)' : channelTestStatuses[channel.id] ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-label-tertiary)' } },
                 channelTestStatuses[channel.id]?.checking ? '正在探测渠道…' : channelTestStatuses[channel.id]?.status === 'reachable' && channelTestStatuses[channel.id]?.ok ? ('连接可用' + (channelTestStatuses[channel.id].message ? '：' + channelTestStatuses[channel.id].message : '')) : channelTestStatuses[channel.id]?.status === 'configured' ? ('已配置，尚未验证：' + (channelTestStatuses[channel.id].message || '此服务没有可安全探测的接口。')) : channelTestStatuses[channel.id] ? ('无法连接：' + (channelTestStatuses[channel.id].message || channelTestStatuses[channel.id].error || '检查地址与鉴权')) : (channel.hasApiKey || channel.hasPassword ? '已配置，尚未验证' : '填写地址和鉴权后保存并测试')),
             ),
-            h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginTop: '8px', lineHeight: 1.55 } },
+            h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '8px', lineHeight: 1.55 } },
               backend === 'novelai' ? 'NovelAI 使用 API Key，不需要账户 OAuth 登录；密钥可从官方账户获取。' : backend === 'openai' ? '支持 OpenAI 图片 API 和兼容中转；建议模型 ID 来自服务端模型列表，兼容中转可修改生成路径。' : backend === 'grok' ? 'Grok 当前由服务端模型决定尺寸和比例；插件不会发送尺寸覆盖参数。' : backend === 'qwen' ? '百炼 API 根地址必须匹配账号所在地域和控制台提供的工作空间地址；请从平台控制台复制完整区域端点。' : '可填写服务商或自建中转的完整 API 根地址；测试只检查连接与模型信息，不会付费生成图片。复制渠道会复制参数，但需要重新填写密钥。'),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', flexWrap: 'wrap' } },
-              h('label', { style: { fontSize: '12px', color: '#b2bdcc' } }, '同时生成', h('input', { 'aria-label': '同时生成', type: 'number', min: 1, max: 4, value: Number(config.imageConcurrency || 2), style: Object.assign({}, S.input, { width: '70px', marginLeft: '8px' }), onChange: e => setCfg({ imageConcurrency: Math.max(1, Math.min(4, Number(e.target.value) || 1)) }) })),
+              h('label', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' } }, '同时生成', h('input', { 'aria-label': '同时生成', type: 'number', min: 1, max: 4, value: Number(config.imageConcurrency || 2), style: Object.assign({}, S.input, { width: '70px', marginLeft: '8px' }), onChange: e => setCfg({ imageConcurrency: Math.max(1, Math.min(4, Number(e.target.value) || 1)) }) })),
               h('button', { style: buttonStyle, onClick: () => save({ imageConcurrency: Math.max(1, Math.min(4, Number(config.imageConcurrency || 2))) }) }, '保存并发设置'),
-              h('span', { style: { fontSize: '11px', color: '#9aa3b2' } }, '1–4 个任务；并发提高速度，也会增加服务端额度消耗。'),
+              h('span', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' } }, '1–4 个任务；并发提高速度，也会增加服务端额度消耗。'),
             ),
-          ) : h('div', { style: { color: '#9aa3b2', fontSize: '12px' } }, '此提供商还没有渠道。'),
+          ) : h('div', { style: { color: 'var(--dsw-alias-label-tertiary)', fontSize: '12px' } }, '此提供商还没有渠道。'),
         )
       }
 
@@ -3000,13 +3000,13 @@ function versionsOf(jobId) {
          */
         // 只列两个**确定**的值：设置值和默认值。聊天区宽度因面板不同而变，放进来只会让人怀疑数字。
         const compareRows = [
-          { key: 'mine', label: '你设的宽度', width: previewWidth, color: '#8fb4ff', image: sampleSrc },
-          { key: 'default', label: '默认', width: IMAGE_WIDTH_LIMIT.fallback, color: '#6b7480', dashed: true },
+          { key: 'mine', label: '你设的宽度', width: previewWidth, color: 'var(--dsw-alias-brand-primary)', image: sampleSrc },
+          { key: 'default', label: '默认', width: IMAGE_WIDTH_LIMIT.fallback, color: 'var(--dsw-alias-label-tertiary)', dashed: true },
         ]
-        const rulerBg = 'repeating-linear-gradient(to right, rgba(120,140,170,.18) 0 1px, transparent 1px 100px)'
+        const rulerBg = 'repeating-linear-gradient(to right, color-mix(in srgb, var(--dsw-alias-label-tertiary) 18%, transparent) 0 1px, transparent 1px 100px)'
         const compareBar = row => h('div', { key: row.key, style: { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px' } },
           h('div', { style: { flex: '0 0 auto', width: '74px', fontSize: '10px', color: row.color, lineHeight: 1.3 } }, row.label),
-          h('div', { style: { position: 'relative', flex: '1 1 auto', height: '42px', overflowX: 'auto', overflowY: 'hidden', borderRadius: '6px', background: '#12151b', border: '1px solid #262c36', backgroundImage: rulerBg } },
+          h('div', { style: { position: 'relative', flex: '1 1 auto', height: '42px', overflowX: 'auto', overflowY: 'hidden', borderRadius: '6px', background: 'var(--dsw-specific-input-major)', border: '1px solid var(--dsw-alias-border-l2)', backgroundImage: rulerBg } },
             h('div', {
               title: row.width + ' px',
               style: Object.assign({
@@ -3014,7 +3014,7 @@ function versionsOf(jobId) {
                 transition: 'width .12s ease-out', boxSizing: 'border-box',
               }, row.image
                 ? { border: '1px solid ' + row.color }
-                : (row.dashed ? { border: '1px dashed ' + row.color, background: 'rgba(120,140,170,.12)' } : { border: '1px solid ' + row.color, background: 'rgba(232,192,122,.14)' })),
+                : (row.dashed ? { border: '1px dashed ' + row.color, background: 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 12%, transparent)' } : { border: '1px solid ' + row.color, background: 'color-mix(in srgb, var(--dsw-alias-state-warning-primary) 14%, transparent)' })),
             },
               row.image ? h('img', { key: 'shot', src: row.image, alt: '插图', loading: 'lazy', decoding: 'async', style: { display: 'block', width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top center' } }) : null,
             ),
@@ -3023,13 +3023,13 @@ function versionsOf(jobId) {
         )
         return h('div', { style: S.card },
           h('div', { style: { fontSize: '13px', fontWeight: 600, marginBottom: '6px' } }, '正文图片显示大小'),
-          h('div', { style: { fontSize: '12px', color: '#9aa3b2', lineHeight: 1.6 } },
+          h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: 1.6 } },
             '正文里所有插件插图（已存在的和新生成的）统一按这个宽度显示，高度按原比例，窄屏不会溢出。',
             '只改显示大小：不重采样原图、不改生成分辨率，点开后的全屏大图也不受影响。',
             '拖动滑块时，正文里的插图会立刻跟着变 —— 看准了再保存。'),
           h('div', { style: { marginTop: '10px' } },
             compareRows.map(compareBar),
-            h('div', { style: { fontSize: '11px', color: '#8b93a1', marginTop: '7px', lineHeight: 1.6 } },
+            h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '7px', lineHeight: 1.6 } },
               '最大只到铺满屏幕，再大也不会超出；实际显示多宽以正文为准 —— 双击插图，控制条会给出「设定 X px · 实际 Y px」。'),
           ),
           h('div', { style: Object.assign({}, S.row, { marginTop: '10px' }) },
@@ -3037,7 +3037,7 @@ function versionsOf(jobId) {
               'aria-label': '正文图片显示宽度', type: 'range',
               min: String(IMAGE_WIDTH_LIMIT.min), max: String(IMAGE_WIDTH_LIMIT.max), step: '10',
               value: String(draftValue || IMAGE_WIDTH_LIMIT.fallback), disabled: busy,
-              style: { width: 'min(240px, 52vw)', accentColor: '#8fb4ff', cursor: 'pointer' },
+              style: { width: 'min(240px, 52vw)', accentColor: 'var(--dsw-alias-brand-primary)', cursor: 'pointer' },
               onChange: e => { setDisplayWidthNote(''); setDisplayWidthDraft(String(e.target.value)); applyImageWidth(e.target.value) },
             }),
             h('input', {
@@ -3047,16 +3047,16 @@ function versionsOf(jobId) {
               style: Object.assign({}, S.input, { width: '92px' }),
               onChange: e => { setDisplayWidthNote(''); setDisplayWidthDraft(e.target.value); applyImageWidth(e.target.value) },
             }),
-            h('span', { style: { fontSize: '12px', color: '#9aa3b2' } }, draftValue ? draftValue + ' px' : '默认'),
+            h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, draftValue ? draftValue + ' px' : '默认'),
             h('button', { style: buttonStyle, disabled: busy || !valid || draftValue === saved, onClick: () => { void saveDisplayWidth() } }, busy ? '保存中…' : '保存'),
             dirty ? h('button', { style: buttonStyle, disabled: busy, onClick: () => { setDisplayWidthDraft(null); setDisplayWidthNote(''); applyImageWidth(saved) } }, '取消预览') : null,
             h('button', { style: buttonStyle, disabled: busy || !saved, onClick: () => { void saveDisplayWidth('') } }, '恢复默认'),
-            !valid ? h('span', { role: 'alert', style: { fontSize: '12px', color: '#f2686b' } }, '宽度只能是数字') : null,
+            !valid ? h('span', { role: 'alert', style: { fontSize: '12px', color: 'var(--dsw-alias-state-error-primary)' } }, '宽度只能是数字') : null,
             dirty
-              ? h('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '12px', color: '#e8c07a' } }, '预览中（未保存）：正文已临时按 ' + (draftValue ? draftValue + ' px' : '默认') + ' 显示')
-              : (displayWidthNote ? h('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '12px', color: /失败/.test(displayWidthNote) ? '#f2686b' : '#8bd48b' } }, displayWidthNote) : null),
+              ? h('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '12px', color: 'var(--dsw-alias-state-warning-primary)' } }, '预览中（未保存）：正文已临时按 ' + (draftValue ? draftValue + ' px' : '默认') + ' 显示')
+              : (displayWidthNote ? h('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '12px', color: /失败/.test(displayWidthNote) ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-success-primary)' } }, displayWidthNote) : null),
           ),
-          h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginTop: '6px' } },
+          h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '6px' } },
             '可填 ' + IMAGE_WIDTH_LIMIT.min + '–' + IMAGE_WIDTH_LIMIT.max + ' 像素；留空 = 默认。超出范围会自动收窄到区间内。',
             '保存后刷新或重启依然有效。拖完可以直接切回正文看效果，不满意点「取消预览」。'),
         )
@@ -3090,14 +3090,14 @@ function versionsOf(jobId) {
             h('div', { style: S.row },
               h('span', { style: S.label }, '一轮几张'),
               h('input', { type: 'number', min: 1, max: 8, value: config.plannerCount || 3, style: Object.assign({}, S.input, { width: '78px' }), onChange: e => save({ plannerCount: Number(e.target.value) || 3 }) }),
-              h('span', { style: { fontSize: '12px', color: '#9aa3b2' } }, '本地出图慢，建议 2-3'),
+              h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '本地出图慢，建议 2-3'),
             ),
             h('div', { style: S.row },
               h('span', { style: S.label }, '人物块'),
               h('select', { value: config.traitMode || 'auto', style: S.input, onChange: e => save({ traitMode: e.target.value }) },
-                h('option', { value: 'auto', style: { color: '#12161c', background: '#e9eef6' } }, '自动（画面露才带露出版本）'),
-                h('option', { value: 'sfw', style: { color: '#12161c', background: '#e9eef6' } }, '只带常规版本'),
-                h('option', { value: 'all', style: { color: '#12161c', background: '#e9eef6' } }, '全都带上'),
+                h('option', { value: 'auto' }, '自动（画面露才带露出版本）'),
+                h('option', { value: 'sfw' }, '只带常规版本'),
+                h('option', { value: 'all' }, '全都带上'),
               ),
             ),
             h(ModelPicker, {
@@ -3118,7 +3118,7 @@ function versionsOf(jobId) {
                 const on = all.filter(e => e.enabled !== false && String(e.content ?? '').trim()).length
                 return '世界书（' + all.length + ' 条，已启用 ' + on + ' 条）'
               })()),
-            h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '8px' } },
+            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } },
               '启用的常驻条目每轮发送；关键词条目仅在正文命中时发送，并按适用渠道筛选。旧条目默认常驻。触发方式和内容可在「世界书」标签页里改。'),
             h('div', { style: S.row },
               h('button', { style: buttonStyle, onClick: () => setTab('worldbook') }, '📖 去世界书里勾选 / 编辑'),
@@ -3142,8 +3142,8 @@ function versionsOf(jobId) {
             ),
             planRows ? planRows.map((p, i) => h('div', { key: i, style: { marginTop: '8px', fontSize: '12px' } },
               h('div', { style: { fontWeight: 600 } }, (i + 1) + '. ' + (p.title || '(无标题)') + '　' + (p.sizeText || p.size || '')),
-              h('div', { style: { color: '#9aa3b2' } }, '插在这句之后：' + (p.mount || '（没给挂载句）')),
-              h('div', { style: { color: '#9aa3b2', wordBreak: 'break-all' } }, String(p.prompts || '').slice(0, 260)),
+              h('div', { style: { color: 'var(--dsw-alias-label-tertiary)' } }, '插在这句之后：' + (p.mount || '（没给挂载句）')),
+              h('div', { style: { color: 'var(--dsw-alias-label-tertiary)', wordBreak: 'break-all' } }, String(p.prompts || '').slice(0, 260)),
               p.jobId ? h('img', { src: BASE + '/jobs?id=' + encodeURIComponent(p.jobId) + '&image=1', style: { maxWidth: '300px', borderRadius: '8px', marginTop: '6px' } }) : null,
             )) : null,
           ),
@@ -3200,8 +3200,8 @@ function versionsOf(jobId) {
 
         function batchPanel() {
           if (!peopleBatchOpen) return null
-          return h('div', { style: Object.assign({}, S.card, { margin: '8px 0 12px', background: 'rgba(106,168,255,.04)' }) },
-            h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '6px' } }, '选择要批量修改的角色（列表按上方搜索筛选；已选 ' + picked.length + ' 位，包含隐藏角色）'),
+          return h('div', { style: Object.assign({}, S.card, { margin: '8px 0 12px', background: 'color-mix(in srgb, var(--dsw-alias-brand-primary) 4%, transparent)' }) },
+            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '6px' } }, '选择要批量修改的角色（列表按上方搜索筛选；已选 ' + picked.length + ' 位，包含隐藏角色）'),
             h('div', { style: S.row },
               h('button', { style: buttonStyle, disabled: !filteredCharacters.length, onClick: () => setPeoplePicked(current => Object.assign({}, current, Object.fromEntries(filteredCharacters.map(character => [character.id, true])))) }, '全选当前筛选'),
               h('button', { style: buttonStyle, onClick: () => setPeoplePicked({}) }, '清除选择'),
@@ -3210,7 +3210,7 @@ function versionsOf(jobId) {
               filteredCharacters.length ? filteredCharacters.map(character => h('label', { key: character.id, style: { display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px' } },
                 h('input', { type: 'checkbox', 'aria-label': '批量选择角色 ' + (character.name || '未命名'), checked: Boolean(peoplePicked[character.id]), onChange: event => { const checked = event.target.checked; setPeoplePicked(current => Object.assign({}, current, { [character.id]: checked })) } }),
                 character.name || '（未命名角色）',
-              )) : h('span', { style: { fontSize: '12px', color: '#9aa3b2' } }, '没有匹配的角色')),
+              )) : h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '没有匹配的角色')),
             h('div', { style: S.row },
               h('span', { style: S.label }, '批量编辑'),
               h('select', { 'aria-label': '批量编辑字段', value: peopleBatchField, style: S.input, onChange: async event => {
@@ -3224,7 +3224,7 @@ function versionsOf(jobId) {
               } }, batchFields.map(([key, label]) => h('option', { key, value: key }, label))),
               peopleBatchField === 'enabled' ? null : h('select', { 'aria-label': '批量编辑方式', value: peopleBatchMode, style: S.input, onChange: event => setPeopleBatchMode(event.target.value) },
                 h('option', { value: 'replace' }, '覆盖'), h('option', { value: 'append' }, '追加')),
-              h('span', { style: { fontSize: '12px', color: '#9aa3b2' } }, '只修改选中的 ' + picked.length + ' 位角色'),
+              h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '只修改选中的 ' + picked.length + ' 位角色'),
             ),
             peopleBatchField === 'enabled'
               ? h('select', { 'aria-label': '批量启用状态', value: peopleBatchValue === 'false' ? 'false' : 'true', style: S.input, onChange: event => setPeopleBatchValue(event.target.value) }, h('option', { value: 'true' }, '启用'), h('option', { value: 'false' }, '禁用'))
@@ -3232,15 +3232,15 @@ function versionsOf(jobId) {
                 ? h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', maxHeight: '180px', overflowY: 'auto' } },
                   cardList.length ? cardList.map(card => h('label', { key: card.path, style: { fontSize: '12px' } },
                     h('input', { type: 'checkbox', checked: peopleBatchCards.includes(card.path), onChange: event => { const checked = event.target.checked; setPeopleBatchCards(current => checked ? [...new Set([...current, card.path])] : current.filter(path => path !== card.path)) } }), ' ' + card.name))
-                    : h('span', { style: { fontSize: '12px', color: '#9aa3b2' } }, '暂无卡片可选'),
+                    : h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '暂无卡片可选'),
                 )
                 : h('textarea', { 'aria-label': '批量编辑内容', value: peopleBatchValue, placeholder: '填写要应用到所选角色的内容', rows: 3, style: Object.assign({}, S.input, { width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }), onChange: event => setPeopleBatchValue(event.target.value) }),
             h('div', { style: S.row },
               h('button', { style: buttonStyle, disabled: !picked.length, onClick: applyBatch }, '应用到所选角色'),
-              h('button', { style: Object.assign({}, buttonStyle, { borderColor: 'rgba(242,104,107,.65)', color: '#f2686b' }), disabled: !picked.length, onClick: deletePicked }, '删除所选'),
-              h('span', { style: { fontSize: '12px', color: '#9aa3b2' } }, peopleBatchField === 'cards' && peopleBatchMode === 'replace' && !peopleBatchCards.length ? '未选卡片时清除绑定，所有卡片都能使用' : peopleBatchMode === 'replace' && peopleBatchField !== 'enabled' ? '覆盖会替换原内容；文本留空会清空该字段' : '应用后点保存即可写入人物库'),
+              h('button', { style: Object.assign({}, buttonStyle, { borderColor: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 65%, transparent)', color: 'var(--dsw-alias-state-error-primary)' }), disabled: !picked.length, onClick: deletePicked }, '删除所选'),
+              h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, peopleBatchField === 'cards' && peopleBatchMode === 'replace' && !peopleBatchCards.length ? '未选卡片时清除绑定，所有卡片都能使用' : peopleBatchMode === 'replace' && peopleBatchField !== 'enabled' ? '覆盖会替换原内容；文本留空会清空该字段' : '应用后点保存即可写入人物库'),
             ),
-            peopleBatchNote ? h('div', { role: 'status', style: { fontSize: '12px', color: '#9aa3b2' } }, peopleBatchNote) : null,
+            peopleBatchNote ? h('div', { role: 'status', style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, peopleBatchNote) : null,
           )
         }
 
@@ -3529,28 +3529,28 @@ function versionsOf(jobId) {
               setDesignPanelBusy(false)
             }
           }
-          const area = { width: '100%', minHeight: '96px', boxSizing: 'border-box', background: '#11141a', color: '#dbe3ee', border: '1px solid rgba(200,140,60,.55)', borderRadius: '12px', padding: '12px 14px', fontSize: '13px', lineHeight: '1.6', fontFamily: 'inherit', resize: 'vertical' }
-          return h('div', { style: { margin: '10px 0 4px', padding: '16px', borderRadius: '12px', background: 'linear-gradient(180deg,#1b2029,#161a21)', border: '1px solid rgba(230,160,60,.4)' } },
+          const area = { width: '100%', minHeight: '96px', boxSizing: 'border-box', background: 'var(--dsw-specific-input-major)', color: 'var(--dsw-alias-label-primary)', border: '1px solid color-mix(in srgb, var(--dsw-alias-state-warning-primary) 55%, transparent)', borderRadius: '12px', padding: '12px 14px', fontSize: '13px', lineHeight: '1.6', fontFamily: 'inherit', resize: 'vertical' }
+          return h('div', { style: { margin: '10px 0 4px', padding: '16px', borderRadius: '12px', background: 'linear-gradient(180deg,var(--dsw-specific-input-major),var(--dsw-specific-input-major))', border: '1px solid color-mix(in srgb, var(--dsw-alias-state-warning-primary) 40%, transparent)' } },
             h('div', { style: { fontSize: '15px', fontWeight: 600, marginBottom: '4px' } },
               characters.find(character => character.id === improveTarget)
                 ? ('✏️ 改进「' + (characters.find(character => character.id === improveTarget).name || '未命名') + '」')
                 : '🎨 输入生成需求'),
-            h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '10px' } }, '请描述您希望生成的角色或服装的具体需求'),
+            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '10px' } }, '请描述您希望生成的角色或服装的具体需求'),
             h('textarea', { value: designBrief, placeholder: '例如：生成一个穿着古风汉服的少女角色，温柔可爱…', style: area, onChange: e => setDesignBrief(e.target.value) }),
-            h('div', { style: { marginTop: '12px', padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,.03)', border: '1px solid rgba(120,140,170,.18)' } },
+            h('div', { style: { marginTop: '12px', padding: '12px', borderRadius: '10px', background: 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 3%, transparent)', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 18%, transparent)' } },
               h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
-                h('span', { style: { fontSize: '12px', color: '#9aa3b2' } }, '📎 参考图片（可选）'),
-                h('label', { style: { padding: '6px 14px', fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(230,160,60,.6)', color: '#f0b45c', cursor: 'pointer', background: 'rgba(240,166,60,.08)' } },
+                h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '📎 参考图片（可选）'),
+                h('label', { style: { padding: '6px 14px', fontSize: '12px', borderRadius: '8px', border: '1px solid color-mix(in srgb, var(--dsw-alias-state-warning-primary) 60%, transparent)', color: 'var(--dsw-alias-state-warning-primary)', cursor: 'pointer', background: 'color-mix(in srgb, var(--dsw-alias-state-warning-primary) 8%, transparent)' } },
                   '＋ 添加图片',
                   h('input', { type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: pickDesignFile }),
                 ),
               ),
-              designPreview ? h('img', { src: designPreview, style: { display: 'block', maxWidth: '140px', borderRadius: '10px', margin: '10px auto 0' } }) : h('div', { style: { textAlign: 'center', fontSize: '12px', color: '#9aa3b2', marginTop: '10px' } }, '点击上方按钮添加参考图片'),
+              designPreview ? h('img', { src: designPreview, style: { display: 'block', maxWidth: '140px', borderRadius: '10px', margin: '10px auto 0' } }) : h('div', { style: { textAlign: 'center', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '10px' } }, '点击上方按钮添加参考图片'),
             ),
-            designNote ? h('div', { style: { fontSize: '12px', color: /失败|太大|没产出/.test(designNote) ? '#f2686b' : '#9aa3b2', marginTop: '10px' } }, designNote) : null,
+            designNote ? h('div', { style: { fontSize: '12px', color: /失败|太大|没产出/.test(designNote) ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-label-tertiary)', marginTop: '10px' } }, designNote) : null,
             h('div', { style: { display: 'flex', gap: '10px', marginTop: '14px' } },
               h('button', { style: buttonStyle, onClick: () => { setDesignOpen(false); setDesignNote(''); setDesignDone(''); setImproveTarget('') } }, '收起'),
-              h('button', { disabled: designPanelBusy, style: Object.assign({}, buttonStyle, { borderColor: 'rgba(230,160,60,.7)', background: 'rgba(240,166,60,.15)', color: '#f0b45c' }), onClick: runDesign }, designPanelBusy ? '正在生成…' : '确定生成'),
+              h('button', { disabled: designPanelBusy, style: Object.assign({}, buttonStyle, { borderColor: 'color-mix(in srgb, var(--dsw-alias-state-warning-primary) 70%, transparent)', background: 'color-mix(in srgb, var(--dsw-alias-state-warning-primary) 15%, transparent)', color: 'var(--dsw-alias-state-warning-primary)' }), onClick: runDesign }, designPanelBusy ? '正在生成…' : '确定生成'),
             ),
           )
         }
@@ -3590,7 +3590,7 @@ function versionsOf(jobId) {
 
         function area(label, why, value, onChange, rows) {
           return h('div', { style: { margin: '6px 0' } },
-            h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '2px' } }, label + (why ? '　' + why : '')),
+            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '2px' } }, label + (why ? '　' + why : '')),
             h('textarea', { value: value || '', onChange: e => onChange(e.target.value),
               style: Object.assign({}, S.input, { width: '100%', minHeight: ((rows || 2) * 20) + 'px', fontFamily: 'inherit', lineHeight: '1.5' }) }),
           )
@@ -3605,7 +3605,7 @@ function versionsOf(jobId) {
           return h('details', { key: c.id, open: peopleEditorOpen, onToggle: event => {
             const open = event.currentTarget.open
             setPeopleEditorOpen(current => current === open ? current : open)
-          }, style: { border: '1px solid #3a4150', borderRadius: '10px', padding: '10px 12px', margin: '8px 0' } },
+          }, style: { border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '10px', padding: '10px 12px', margin: '8px 0' } },
             h('summary', { style: { cursor: 'pointer', fontSize: '13px', fontWeight: 600 } }, title),
             h('div', { style: S.row },
               h('input', { type: 'text', placeholder: '分组（只影响排序）', title: '只用于人物库列表的分组排序和搜索，不参与关键词触发', value: c.group || '', style: Object.assign({}, S.input, { width: '130px' }), onChange: e => patchIdentity(i, { group: e.target.value.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 40) }) }),
@@ -3627,7 +3627,7 @@ function versionsOf(jobId) {
               }),
               h('button', { style: buttonStyle, disabled: designBusy && Boolean(improveInFlight.current[c.id]), onClick: () => sendImprove(i) }, improveInFlight.current[c.id] ? '正在改进…' : '✏️ 改进'),
             ),
-            h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginTop: '-4px' } }, '直接写要求点改进即可（回车也行），不用先打开面板'),
+            h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '-4px' } }, '直接写要求点改进即可（回车也行），不用先打开面板'),
 
             h('div', { style: S.row },
               h('span', { style: S.label }, '绑定卡片'),
@@ -3644,13 +3644,13 @@ function versionsOf(jobId) {
                 },
               }, (c.cards || []).length ? ('已绑定 ' + (c.cards || []).length + ' 张：' + (c.cards || []).map(p => String(p).replace(/^cards\//, '').replace(/\.json$/, '')).join('、').slice(0, 26) + '（点击修改）') : '点这里选择要绑定的卡片（不选 = 所有卡都能用）'),
             ),
-            cardPickerFor === c.id ? h('div', { style: { marginTop: '8px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(255,255,255,.03)', border: '1px solid rgba(120,140,170,.2)' } },
-              h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '8px' } }, '勾选要绑定的卡片（可多选）'),
+            cardPickerFor === c.id ? h('div', { style: { marginTop: '8px', padding: '10px 12px', borderRadius: '10px', background: 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 3%, transparent)', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 20%, transparent)' } },
+              h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } }, '勾选要绑定的卡片（可多选）'),
               h('div', { style: { maxHeight: '220px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' } },
                 cardList.length
                   ? cardList.map(item => h('label', {
                       key: item.path,
-                      style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 10px', borderRadius: '8px', cursor: 'pointer', background: (c.cards || []).includes(item.path) ? 'rgba(106,168,255,.14)' : 'transparent' },
+                      style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 10px', borderRadius: '8px', cursor: 'pointer', background: (c.cards || []).includes(item.path) ? 'color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent)' : 'transparent' },
                     },
                       h('input', {
                         type: 'checkbox',
@@ -3663,7 +3663,7 @@ function versionsOf(jobId) {
                       }),
                       h('span', { style: { fontSize: '13px' } }, item.name),
                     ))
-                  : h('div', { style: { fontSize: '12px', color: '#9aa3b2', padding: '8px' } }, '没读到卡片（检查设置页顶部的 ComfyUI 状态）'),
+                  : h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', padding: '8px' } }, '没读到卡片（检查设置页顶部的 ComfyUI 状态）'),
               ),
               h('div', { style: { marginTop: '10px', display: 'flex', gap: '8px' } },
                 h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px' }), onClick: () => patch(i, { cards: [] }) }, '清空'),
@@ -3681,21 +3681,21 @@ function versionsOf(jobId) {
                 ' ' + (o.name || o.id),
               )),
             ) : null,
-            h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginTop: '10px' } }, '外貌（正面与背面互斥：背面不放眼睛/胸部；SFW 块不放裸露词，否则衣服画不出来）'),
+            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '10px' } }, '外貌（正面与背面互斥：背面不放眼睛/胸部；SFW 块不放裸露词，否则衣服画不出来）'),
             grouped([["feature","角色特征","气质属性，只写与绘图有关的（innocent / seductive / cold / gentle）",2,false],["face","五官外貌","【正面】发型、发色、瞳色、脸型、肤色、年龄段 —— 不写表情",3,false],["faceBack","五官外貌背面","【背面】发型背面、后脑勺、脖子后面、耳背 —— 不能写眼睛鼻子嘴巴",2,true]]),
-            h('details', { style: { marginTop: '4px' } }, h('summary', { style: { cursor: 'pointer', fontSize: '12px', color: '#9aa3b2' } }, '穿衣身体块（上半身 / 下半身，正背面）'),
+            h('details', { style: { marginTop: '4px' } }, h('summary', { style: { cursor: 'pointer', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '穿衣身体块（上半身 / 下半身，正背面）'),
               grouped([["bodySFW","上半身SFW","穿衣可见的上半身正面：体型、胸部轮廓、肩宽 —— 禁裸露词",2,false],["bodySFWBack","上半身SFW背面","穿衣可见的背面：肩膀轮廓、腰部线条 —— 不写胸部",2,true],["lowerSFW","下半身SFW","穿衣可见的下半身正面：腿型 —— 禁裸露词",2,true],["lowerSFWBack","下半身SFW背面","臀部轮廓、腿部背面",2,true]]),
             ),
-            h('details', { style: { marginTop: '4px' } }, h('summary', { style: { cursor: 'pointer', fontSize: '12px', color: '#9aa3b2' } }, '赤裸身体块（只在 NSFW 画面用）'),
+            h('details', { style: { marginTop: '4px' } }, h('summary', { style: { cursor: 'pointer', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '赤裸身体块（只在 NSFW 画面用）'),
               grouped([["bodyNSFW","上半身NSFW","赤裸才可见：胸部详细、乳头、正面纹身伤疤",2,true],["bodyNSFWBack","上半身NSFW背面","bare back、背部线条、肩胛骨 —— 不写胸和乳头",2,true],["lowerNSFW","下半身NSFW","赤裸才可见：生殖器官、正面纹身痣",2,true],["lowerNSFWBack","下半身NSFW背面","臀部详细、肛门 —— 不写正面生殖器",2,true]]),
             ),
-            h('details', { style: { marginTop: '4px' } }, h('summary', { style: { cursor: 'pointer', fontSize: '12px', color: '#9aa3b2' } }, '负面 / 状态'),
+            h('details', { style: { marginTop: '4px' } }, h('summary', { style: { cursor: 'pointer', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '负面 / 状态'),
               grouped([["negative","负面","这张脸/身体不该出现的特征（进负向提示词）",2,true]]),
               area('状态与变化', '随剧情改，默认不注入', c.continuity, v => patch(i, { continuity: v }), 2),
               area('形态线索', '同一角色有多个形态时（名字互为前缀，如「阿梅」与「阿梅（狐形）」）填在形态条目上，逗号分隔，如 fox ears, fox tail, 狐耳。画面写着这些时，规划写的基础名字会自动换成这个形态', c.formCues || '', v => patch(i, { formCues: v }), 1),
             ),
-            h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginTop: '12px', fontWeight: 600 } }, '服装库'),
-            outfits.map((o, j) => h('div', { key: o.id || j, style: { borderTop: '1px solid #3a4150', marginTop: '8px', paddingTop: '6px' } },
+            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '12px', fontWeight: 600 } }, '服装库'),
+            outfits.map((o, j) => h('div', { key: o.id || j, style: { borderTop: '1px solid var(--dsw-alias-border-l2)', marginTop: '8px', paddingTop: '6px' } },
               h('div', { style: S.row },
                 h('input', { type: 'text', placeholder: '服装名（常服 / 居家 / 内衣…）', value: o.name || '', style: Object.assign({}, S.input, { width: '170px' }), onChange: e => patchOutfit(i, j, { name: e.target.value }) }),
                 h('label', { style: S.row }, h('input', { type: 'radio', name: 'default-outfit-' + i, checked: o.default === true, onChange: () => patch(i, { outfits: outfits.map((x, k) => Object.assign({}, x, { default: k === j })) }) }), h('span', { style: { fontSize: '12px' } }, '常穿')),
@@ -3719,18 +3719,18 @@ function versionsOf(jobId) {
         }
         return h('div', null,
           // 设计完成的提醒：放在 tab 顶部，面板关着也看得见
-          designDone ? h('div', { style: { margin: '0 0 10px', padding: '14px 16px', borderRadius: '12px', background: 'linear-gradient(180deg,rgba(240,166,60,.22),rgba(240,166,60,.12))', border: '1px solid rgba(240,166,60,.65)', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' } },
-            h('div', { style: { fontSize: '14px', color: saveState.startsWith('failed') ? '#f2686b' : '#f5c078', fontWeight: 600, flex: 1, minWidth: '180px' } },
+          designDone ? h('div', { style: { margin: '0 0 10px', padding: '14px 16px', borderRadius: '12px', background: 'linear-gradient(180deg,color-mix(in srgb, var(--dsw-alias-state-warning-primary) 22%, transparent),color-mix(in srgb, var(--dsw-alias-state-warning-primary) 12%, transparent))', border: '1px solid color-mix(in srgb, var(--dsw-alias-state-warning-primary) 65%, transparent)', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' } },
+            h('div', { style: { fontSize: '14px', color: saveState.startsWith('failed') ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warning-primary)', fontWeight: 600, flex: 1, minWidth: '180px' } },
               saveState === 'saving' ? '⏳ 正在保存…'
                 : saveState === 'saved' ? '💾 已保存到 definitions.json'
                 : saveState.startsWith('failed') ? ('❌ 保存失败：' + saveState.slice(7))
                 : ('✅ ' + designDone)),
-            h('button', { style: Object.assign({}, buttonStyle, { borderColor: 'rgba(240,166,60,.8)', background: 'linear-gradient(180deg,#f0a63c,#e0861f)', color: '#1a1206', fontWeight: 600, padding: '8px 22px', fontSize: '14px' }), onClick: () => { commit(true).then(saved => { if (saved) setDesignDone('') }) } }, '💾 保存人物库'),
+            h('button', { style: Object.assign({}, buttonStyle, { borderColor: 'color-mix(in srgb, var(--dsw-alias-state-warning-primary) 80%, transparent)', background: 'linear-gradient(180deg,var(--dsw-alias-state-warning-primary),var(--dsw-alias-state-warning-primary))', color: 'var(--dsw-alias-label-primary)', fontWeight: 600, padding: '8px 22px', fontSize: '14px' }), onClick: () => { commit(true).then(saved => { if (saved) setDesignDone('') }) } }, '💾 保存人物库'),
             h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px' }), onClick: () => setDesignDone('') }, '知道了'),
         ) : null,
           h('div', { style: S.card },
             h('div', { style: { fontSize: '13px', marginBottom: '4px' } }, '人物设计（' + characters.length + ' 个角色）'),
-            h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '8px' } }, '填了名字 + 五官 + 体态的角色，会作为「可用角色清单」交给规划模型；正文里出现这个名字时，这些内容会自动补齐，所以不会换脸。'),
+            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } }, '填了名字 + 五官 + 体态的角色，会作为「可用角色清单」交给规划模型；正文里出现这个名字时，这些内容会自动补齐，所以不会换脸。'),
           h('div', { style: Object.assign({}, S.row, { alignItems: 'stretch' }) },
             h('input', { type: 'search', 'aria-label': '搜索角色', value: peopleSearch, placeholder: '搜索中文名或英文触发名', style: Object.assign({}, S.input, { flex: '1 1 220px', minWidth: '180px' }), onChange: event => setPeopleSearch(event.target.value) }),
             h('select', { 'aria-label': '当前角色', value: activeCharacter?.id || '', style: Object.assign({}, S.input, { flex: '1 1 220px', minWidth: '180px' }), onChange: event => { setPeopleActiveId(event.target.value); setPeopleEditorOpen(true) } },
@@ -3753,22 +3753,22 @@ function versionsOf(jobId) {
             h('button', { style: buttonStyle, onClick: designPeople }, '让 agent 设计角色'),
             h('button', { style: buttonStyle, disabled: saveState === 'saving', onClick: () => commit(false) }, saveState === 'saving' ? '正在保存…' : '保存人物库'),
             h('button', { style: buttonStyle, onClick: () => setPeopleBatchOpen(current => !current) }, peopleBatchOpen ? '收起批量编辑' : '批量编辑'),
-            h('span', { style: { fontSize: '12px', color: '#9aa3b2' } }, '已选 ' + picked.length + ' / ' + characters.length + ' 位'),
+            h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '已选 ' + picked.length + ' / ' + characters.length + ' 位'),
           ),
           designPanel(),
           batchPanel(),
-          !designOpen && designNote ? h('div', { role: 'status', style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '8px' } }, designNote) : null,
-          characters.length && !activeCharacter ? h('div', { role: 'status', style: { fontSize: '12px', color: '#9aa3b2', padding: '10px 0' } }, '没有匹配的角色，请调整搜索词。') : null,
-          !characters.length ? h('div', { style: { fontSize: '12px', color: '#9aa3b2' } }, '还没有角色，点上方「新增角色」。') : null,
+          !designOpen && designNote ? h('div', { role: 'status', style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } }, designNote) : null,
+          characters.length && !activeCharacter ? h('div', { role: 'status', style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', padding: '10px 0' } }, '没有匹配的角色，请调整搜索词。') : null,
+          !characters.length ? h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '还没有角色，点上方「新增角色」。') : null,
           activeCharacter ? characterBlock(activeCharacter, activeIndex) : null,
           h('div', { style: S.row },
-            h('span', { role: 'status', style: { fontSize: '12px', color: saveState.startsWith('failed') ? '#f2686b' : '#9aa3b2' } }, saveState.startsWith('failed') ? '保存失败，请重试' : libraryDirty.current ? '有未保存修改' : saveState === 'saved' ? '人物库已保存' : '改完记得点保存'),
+            h('span', { role: 'status', style: { fontSize: '12px', color: saveState.startsWith('failed') ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-label-tertiary)' } }, saveState.startsWith('failed') ? '保存失败，请重试' : libraryDirty.current ? '有未保存修改' : saveState === 'saved' ? '人物库已保存' : '改完记得点保存'),
           ),
           ),
           h('div', { style: S.card },
             h('div', { style: { fontSize: '13px', marginBottom: '4px' } }, '通用服装库（可跨角色复用）'),
-            h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '8px' } }, '这里放"办公室职业装""居家睡衣"这类通用套装；在角色那边勾上，他就能穿。'),
-            (data.outfits || []).map((o, j) => h('div', { key: o.id || j, style: { borderTop: '1px solid #3a4150', marginTop: '8px', paddingTop: '6px' } },
+            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } }, '这里放"办公室职业装""居家睡衣"这类通用套装；在角色那边勾上，他就能穿。'),
+            (data.outfits || []).map((o, j) => h('div', { key: o.id || j, style: { borderTop: '1px solid var(--dsw-alias-border-l2)', marginTop: '8px', paddingTop: '6px' } },
               h('div', { style: S.row },
                 h('input', { type: 'text', placeholder: '套装名', value: o.name || '', style: Object.assign({}, S.input, { width: '190px' }), onChange: e => { const next = (data.outfits || []).slice(); next[j] = Object.assign({}, o, { name: e.target.value }); setLibraryData(Object.assign({}, dataRef.current, { outfits: next })) } }),
                 h('label', { style: S.row }, h('input', { type: 'checkbox', checked: o.enabled !== false, onChange: e => { const next = (data.outfits || []).slice(); next[j] = Object.assign({}, o, { enabled: e.target.checked }); setLibraryData(Object.assign({}, dataRef.current, { outfits: next })) } }), h('span', { style: { fontSize: '12px' } }, '启用')),
@@ -3999,22 +3999,22 @@ function versionsOf(jobId) {
         const ta = Object.assign({}, S.input, { width: '100%', minHeight: '110px', fontFamily: 'ui-monospace, Consolas, monospace', fontSize: '11px', lineHeight: '1.5', resize: 'vertical', boxSizing: 'border-box' })
 
         return h('div', { style: S.card },
-          h('div', { style: { padding: '12px', marginBottom: '12px', borderRadius: '10px', background: 'rgba(106,168,255,.08)', border: '1px solid rgba(106,168,255,.35)' } },
+          h('div', { style: { padding: '12px', marginBottom: '12px', borderRadius: '10px', background: 'color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 35%, transparent)' } },
             h('div', { style: { fontSize: '14px', fontWeight: 700, marginBottom: '8px' } }, 'ComfyUI 生成方式'),
             h('div', { style: Object.assign({}, S.row, { alignItems: 'stretch' }) },
               h('label', { style: { fontSize: '12px', fontWeight: 600, minWidth: '92px', paddingTop: '7px' } }, '模式'),
               h('select', { value: config.comfyMode === 'simple' ? 'simple' : 'workflow', style: Object.assign({}, S.input, { minWidth: '220px', flex: 1 }), onChange: e => save({ comfyMode: e.target.value }) },
                 h('option', { value: 'workflow' }, '工作流模式（当前默认）'), h('option', { value: 'simple' }, '简单模式（不需要 JSON）'))),
             config.comfyMode === 'simple' ? h('div', { style: { marginTop: '10px' } },
-              h('div', { style: { fontSize: '12px', color: '#d6deea', marginBottom: '8px' } }, '从 ComfyUI 读取实际可用的模型与节点；此操作只读取信息，不会提交生成任务。'),
+              h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-primary)', marginBottom: '8px' } }, '从 ComfyUI 读取实际可用的模型与节点；此操作只读取信息，不会提交生成任务。'),
               h('div', { style: Object.assign({}, S.row, { alignItems: 'stretch' }) },
                 h('label', { style: { fontSize: '12px', fontWeight: 600, minWidth: '92px', paddingTop: '7px' } }, '模板'),
                 h('select', { value: simpleDraft.template || 'checkpoint', style: Object.assign({}, S.input, { minWidth: '220px', flex: 1 }), onChange: e => updateSimple({ template: e.target.value }) },
                   h('option', { value: 'checkpoint' }, 'Checkpoint（SD / SDXL）'), h('option', { value: 'flux' }, 'Flux'), h('option', { value: 'anima' }, 'Anima')),
                 h('button', { style: buttonStyle, onClick: refreshSimpleInfo, disabled: simpleLoading }, simpleLoading ? '读取中…' : '刷新模型列表'),
-                h('button', { style: Object.assign({}, buttonStyle, { borderColor: 'rgba(139,212,139,.65)', color: '#8bd48b', fontWeight: 600 }), onClick: async () => { const r = await save({ comfyMode: 'simple', comfySimple: simpleDraft }); if (r) { setSimpleConfigDraft(null); setSimpleNote('简单模式设置已保存') } } }, '保存简单模式设置')),
-              simpleNote ? h('div', { style: { fontSize: '12px', color: /失败|不可用/.test(simpleNote) ? '#ff8d8d' : '#b5c6dc', marginTop: '7px' } }, simpleNote) : null,
-              simpleSupport?.reason ? h('div', { role: 'status', style: { marginTop: '8px', padding: '9px 10px', color: '#ffd08a', background: 'rgba(255,190,90,.10)', border: '1px solid rgba(255,190,90,.35)', borderRadius: '8px', fontSize: '12px', lineHeight: 1.5 } }, simpleSupport.reason) : null,
+                h('button', { style: Object.assign({}, buttonStyle, { borderColor: 'color-mix(in srgb, var(--dsw-alias-state-success-primary) 65%, transparent)', color: 'var(--dsw-alias-state-success-primary)', fontWeight: 600 }), onClick: async () => { const r = await save({ comfyMode: 'simple', comfySimple: simpleDraft }); if (r) { setSimpleConfigDraft(null); setSimpleNote('简单模式设置已保存') } } }, '保存简单模式设置')),
+              simpleNote ? h('div', { style: { fontSize: '12px', color: /失败|不可用/.test(simpleNote) ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-brand-primary)', marginTop: '7px' } }, simpleNote) : null,
+              simpleSupport?.reason ? h('div', { role: 'status', style: { marginTop: '8px', padding: '9px 10px', color: 'var(--dsw-alias-state-warning-primary)', background: 'color-mix(in srgb, var(--dsw-alias-state-warning-primary) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--dsw-alias-state-warning-primary) 35%, transparent)', borderRadius: '8px', fontSize: '12px', lineHeight: 1.5 } }, simpleSupport.reason) : null,
               ['checkpoint', 'flux', 'anima'].includes(simpleDraft.template) ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' } },
                 simpleDraft.template === 'checkpoint'
                   ? h('div', { style: Object.assign({}, S.row, { alignItems: 'stretch' }) }, h('label', { style: { fontSize: '12px', fontWeight: 600, minWidth: '92px', paddingTop: '7px' } }, 'Checkpoint'),
@@ -4046,12 +4046,12 @@ function versionsOf(jobId) {
                   h('input', { type: 'number', min: 64, max: 8192, step: 8, value: simpleDraft.width ?? 832, 'aria-label': '宽度', style: Object.assign({}, S.input, { width: '82px' }), onChange: e => updateSimple({ width: e.target.value }) }),
                   h('span', { style: { paddingTop: '7px' } }, '×'),
                   h('input', { type: 'number', min: 64, max: 8192, step: 8, value: simpleDraft.height ?? 1216, 'aria-label': '高度', style: Object.assign({}, S.input, { width: '82px' }), onChange: e => updateSimple({ height: e.target.value }) })),
-                h('div', { style: { fontSize: '11px', color: '#bac7d7', paddingLeft: '92px' } }, '宽高按 8 像素倍数生效（其他数值自动取最近值）；简单模式固定输出 ' + (simpleDraft.width || 832) + ' × ' + (simpleDraft.height || 1216) + ' 像素，工作流模式的画幅设置不会覆盖它。'),
+                h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-secondary)', paddingLeft: '92px' } }, '宽高按 8 像素倍数生效（其他数值自动取最近值）；简单模式固定输出 ' + (simpleDraft.width || 832) + ' × ' + (simpleDraft.height || 1216) + ' 像素，工作流模式的画幅设置不会覆盖它。'),
                 h('div', { style: Object.assign({}, S.row, { alignItems: 'stretch' }) },
                   h('label', { style: { fontSize: '12px', fontWeight: 600, minWidth: '92px', paddingTop: '7px' } }, '固定种子'),
                   h('input', { type: 'number', min: 0, max: 140737488355327, value: simpleDraft.seed ?? '', placeholder: '留空则每张随机', style: Object.assign({}, S.input, { width: '220px' }), onChange: e => updateSimple({ seed: e.target.value }) }),
-                  h('span', { style: { fontSize: '11px', color: '#bac7d7', paddingTop: '7px' } }, '只读取已保存的固定种子；默认每张随机')),
-                h('div', { style: { padding: '9px', border: '1px solid rgba(120,140,170,.3)', borderRadius: '8px' } },
+                  h('span', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-secondary)', paddingTop: '7px' } }, '只读取已保存的固定种子；默认每张随机')),
+                h('div', { style: { padding: '9px', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 30%, transparent)', borderRadius: '8px' } },
                   h('div', { style: { fontSize: '12px', fontWeight: 600, marginBottom: '7px' } }, 'LoRA（按当前模板的模型路径连接）'),
                   (simpleDraft.loras || []).map((lora, index) => h('div', { key: index, style: Object.assign({}, S.row, { marginBottom: '6px' }) },
                     h('input', { type: 'checkbox', checked: lora.enabled !== false, 'aria-label': '启用 LoRA', onChange: e => updateSimple({ loras: simpleDraft.loras.map((item, i) => i === index ? Object.assign({}, item, { enabled: e.target.checked }) : item) }) }),
@@ -4063,9 +4063,9 @@ function versionsOf(jobId) {
             ) : null,
           ),
           h('div', { style: { fontSize: '13px', marginBottom: '4px' } }, '工作流（' + list.length + ' 张）'),
-          h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '10px' } },
+          h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '10px' } },
             '从 ComfyUI 导出「API 格式」的 JSON 就能导进来，插件会自动认出正负面提示词、尺寸、步数、底模和 LoRA。',
-            h('div', { style: { fontSize: '12px', color: '#8fbcff', marginBottom: '10px' } },
+            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-brand-primary)', marginBottom: '10px' } },
               '导入后点它右边的「设为默认」，之后生成就用这张了。当前：' + (function () {
                 const cur = (data.workflows || []).find(w => w.current)
                 return cur ? '《' + (cur.label || cur.id) + '》' : '（没选，用第一张可用的）'
@@ -4074,17 +4074,17 @@ function versionsOf(jobId) {
             h('button', { style: buttonStyle, onClick: () => setWfImportOpen(v => !v) }, wfImportOpen ? '✖ 收起导入' : '📥 导入工作流'),
             h('button', { style: buttonStyle, onClick: async () => { const r = await post('/reload', {}); if (r?.state) receiveState(r.state); setWfNote('已重新扫描') } }, '🔄 重新扫描'),
             h('button', { style: buttonStyle, onClick: loadLoraNames }, '🧩 读 ComfyUI 的 LoRA 列表'),
-            h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#9aa3b2' } },
+            h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } },
               h('input', { type: 'checkbox', checked: Boolean(config.lockWorkflow), onChange: e => save({ lockWorkflow: e.target.checked }) }),
               '锁定（不管别处选什么都用这张）'),
-            wfNote ? h('span', { style: { fontSize: '12px', color: /失败|不是/.test(wfNote) ? '#f2686b' : '#9aa3b2' } }, wfNote) : null,
+            wfNote ? h('span', { style: { fontSize: '12px', color: /失败|不是/.test(wfNote) ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-label-tertiary)' } }, wfNote) : null,
           ),
 
-          wfImportOpen ? h('div', { style: { marginTop: '10px', padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,.03)', border: '1px solid rgba(120,140,170,.22)' } },
-            h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '8px' } },
+          wfImportOpen ? h('div', { style: { marginTop: '10px', padding: '12px', borderRadius: '10px', background: 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 3%, transparent)', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 22%, transparent)' } },
+            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } },
               '在 ComfyUI 里用「工作流 → 导出（API）」，或用 Save (API Format) 得到 JSON；也可以直接把 JSON 粘在下面。'),
             h('div', { style: S.row },
-              h('label', { style: { padding: '6px 14px', fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(106,168,255,.6)', color: '#8fbcff', cursor: 'pointer', background: 'rgba(106,168,255,.1)' } },
+              h('label', { style: { padding: '6px 14px', fontSize: '12px', borderRadius: '8px', border: '1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 60%, transparent)', color: 'var(--dsw-alias-brand-primary)', cursor: 'pointer', background: 'color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent)' } },
                 '📁 选 JSON 文件',
                 h('input', { type: 'file', accept: '.json,application/json', style: { display: 'none' }, onChange: pickWfFile }),
               ),
@@ -4100,16 +4100,16 @@ function versionsOf(jobId) {
             list.length ? list.map(wf => {
               const isOpen = String(wf.file ?? '') === String(wfOpen)
               const sum = wf.summary || {}
-              return h('div', { key: wf.id, style: { borderRadius: '10px', border: isOpen ? '1px solid rgba(106,168,255,.7)' : '1px solid rgba(120,140,170,.22)', background: 'rgba(255,255,255,.03)', padding: '10px 12px' } },
+              return h('div', { key: wf.id, style: { borderRadius: '10px', border: isOpen ? '1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 70%, transparent)' : '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 22%, transparent)', background: 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 3%, transparent)', padding: '10px 12px' } },
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
                   h('span', { style: { fontSize: '13px', fontWeight: 600, flex: 1, minWidth: '140px' } },
                     wf.label || wf.id || '(无名)',
-                    wf.current ? h('span', { style: { fontSize: '11px', color: '#8bd48b', marginLeft: '8px' } }, '← 正在使用') : null,
-                    wf.error ? h('span', { style: { fontSize: '11px', color: '#f2686b', marginLeft: '8px' } }, '（不可用）') : null),
+                    wf.current ? h('span', { style: { fontSize: '11px', color: 'var(--dsw-alias-state-success-primary)', marginLeft: '8px' } }, '← 正在使用') : null,
+                    wf.error ? h('span', { style: { fontSize: '11px', color: 'var(--dsw-alias-state-error-primary)', marginLeft: '8px' } }, '（不可用）') : null),
                   wf.current
-                    ? h('span', { style: { fontSize: '11px', color: '#8bd48b', padding: '3px 8px', borderRadius: '7px', background: 'rgba(139,212,139,.12)' } }, '✓ 正在用这张')
+                    ? h('span', { style: { fontSize: '11px', color: 'var(--dsw-alias-state-success-primary)', padding: '3px 8px', borderRadius: '7px', background: 'color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent)' } }, '✓ 正在用这张')
                     : h('button', {
-                        style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 12px', borderColor: 'rgba(139,212,139,.6)', color: '#8bd48b' }),
+                        style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 12px', borderColor: 'color-mix(in srgb, var(--dsw-alias-state-success-primary) 60%, transparent)', color: 'var(--dsw-alias-state-success-primary)' }),
                         title: '之后的生成都用这张工作流',
                         onClick: async () => {
                           if (wf.error) { if (typeof showToast === 'function') showToast('这张工作流不可用：' + wf.error, 'fail'); return }
@@ -4118,7 +4118,7 @@ function versionsOf(jobId) {
                         },
                       }, '设为默认'),
                   h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 12px' }), onClick: () => openWorkflow(wf.file) }, isOpen ? '△ 收起' : '✏️ 编辑 / LoRA'),
-                  h('button', { type: 'button', 'aria-label': '可视化编辑 ' + (wf.label || wf.id), style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 12px', borderColor: 'rgba(106,168,255,.7)', color: '#a8caff' }), onClick: () => setWfGraphFile(wf.file) }, '可视化编辑'),
+                  h('button', { type: 'button', 'aria-label': '可视化编辑 ' + (wf.label || wf.id), style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 12px', borderColor: 'color-mix(in srgb, var(--dsw-alias-brand-primary) 70%, transparent)', color: 'var(--dsw-alias-brand-primary)' }), onClick: () => setWfGraphFile(wf.file) }, '可视化编辑'),
                   h('button', {
                     style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 12px' }),
                     title: '重命名这张',
@@ -4133,7 +4133,7 @@ function versionsOf(jobId) {
                     },
                   }, '改名'),
                   h('button', {
-                    style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 12px', borderColor: 'rgba(242,104,107,.6)', color: '#f2686b' }),
+                    style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 12px', borderColor: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 60%, transparent)', color: 'var(--dsw-alias-state-error-primary)' }),
                     title: '从列表移除（不删文件）',
                     onClick: async () => {
                       if (!confirm('把《' + (wf.label || wf.id) + '》从列表移除？只移除条目，磁盘 JSON 不删。')) return
@@ -4145,22 +4145,22 @@ function versionsOf(jobId) {
                     },
                   }, '移除'),
                 ),
-                h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginTop: '4px' } },
+                h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '4px' } },
                   (sum.model ? '底模 ' + sum.model + '　' : '') +
                   (sum.base ? '尺寸 ' + sum.base + '　' : '') +
                   (sum.nodeCount ? sum.nodeCount + ' 节点　' : '') +
                   ((sum.loras || []).length ? (sum.loras || []).length + ' 个 LoRA' : '')),
-                (sum.positivePeek || sum.negativePeek) ? h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginTop: '3px', fontFamily: 'ui-monospace, Consolas, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
+                (sum.positivePeek || sum.negativePeek) ? h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '3px', fontFamily: 'ui-monospace, Consolas, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
                   (sum.positivePeek ? '＋ ' + sum.positivePeek : '') + (sum.negativePeek ? '　－ ' + sum.negativePeek : '')) : null,
-                h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginTop: '3px' } },
+                h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '3px' } },
                   '点右边的「✏️ 编辑 / LoRA」可以改提示词、尺寸、步数、底模和 LoRA。'),
-                wf.error ? h('div', { style: { fontSize: '12px', color: '#f2686b', marginTop: '4px' } }, wf.error) : null,
+                wf.error ? h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-state-error-primary)', marginTop: '4px' } }, wf.error) : null,
 
-                isOpen ? h('div', { style: { marginTop: '10px', borderTop: '1px solid rgba(120,140,170,.25)', paddingTop: '10px' } },
+                isOpen ? h('div', { style: { marginTop: '10px', borderTop: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 25%, transparent)', paddingTop: '10px' } },
                   !detail
-                    ? h('div', { style: { fontSize: '12px', color: '#9aa3b2' } }, '读取中…')
+                    ? h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '读取中…')
                     : h('div', null,
-                        h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '8px' } },
+                        h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } },
                           '输出节点 ' + (detail.outputNode || '?') +
                           '　正面 ' + (detail.bindings?.positive?.length ?? 0) +
                           '　负面 ' + (detail.bindings?.negative?.length ?? 0) +
@@ -4170,17 +4170,17 @@ function versionsOf(jobId) {
                         // 试跑 + 编辑绑定
                         h('div', { style: Object.assign({}, S.row, { marginBottom: '10px' }) },
                           h('button', {
-                            style: Object.assign({}, buttonStyle, { borderColor: 'rgba(139,212,139,.6)', color: '#8bd48b', fontWeight: 600 }),
+                            style: Object.assign({}, buttonStyle, { borderColor: 'color-mix(in srgb, var(--dsw-alias-state-success-primary) 60%, transparent)', color: 'var(--dsw-alias-state-success-primary)', fontWeight: 600 }),
                             onClick: () => testWorkflow(wf),
                             title: '用这张工作流真的画一张，验证它能不能跑通',
                           }, '⚡ 试跑一张'),
 
-                          wfTestNote ? h('span', { style: { fontSize: '12px', color: /✗/.test(wfTestNote) ? '#f2686b' : (/✓/.test(wfTestNote) ? '#8bd48b' : '#9aa3b2') } }, wfTestNote) : null,
+                          wfTestNote ? h('span', { style: { fontSize: '12px', color: /✗/.test(wfTestNote) ? 'var(--dsw-alias-state-error-primary)' : (/✓/.test(wfTestNote) ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-label-tertiary)') } }, wfTestNote) : null,
                         ),
 
                         // 简单编辑：直接改参数值（不用理解节点）
-                        wfValues && !wfValues.__error ? h('div', { style: { marginBottom: '12px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(255,255,255,.03)', border: '1px solid rgba(120,140,170,.22)' } },
-                          h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '8px' } },
+                        wfValues && !wfValues.__error ? h('div', { style: { marginBottom: '12px', padding: '10px 12px', borderRadius: '10px', background: 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 3%, transparent)', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 22%, transparent)' } },
+                          h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } },
                             '这张工作流的参数。改完点「💾 保存参数」立刻生效，之后生成就用这些值。'),
                           h('div', { style: Object.assign({}, S.row, { alignItems: 'flex-start' }) },
                             h('span', { style: Object.assign({}, S.label, { minWidth: '74px', paddingTop: '6px' }) }, '正面提示词'),
@@ -4199,9 +4199,9 @@ function versionsOf(jobId) {
                           h('div', { style: S.row },
                             h('span', { style: Object.assign({}, S.label, { minWidth: '74px' }) }, '尺寸'),
                             h('input', { type: 'number', value: wfValues.width ?? '', placeholder: '宽', style: Object.assign({}, S.input, { width: '88px' }), onChange: e => setWfValues(Object.assign({}, wfValues, { width: e.target.value })) }),
-                            h('span', { style: { color: '#9aa3b2' } }, '×'),
+                            h('span', { style: { color: 'var(--dsw-alias-label-tertiary)' } }, '×'),
                             h('input', { type: 'number', value: wfValues.height ?? '', placeholder: '高', style: Object.assign({}, S.input, { width: '88px' }), onChange: e => setWfValues(Object.assign({}, wfValues, { height: e.target.value })) }),
-                            h('span', { style: { fontSize: '11px', color: '#9aa3b2', marginLeft: '8px' } }, '这里只是这张工作流的上限参考，实际尺寸由生成时的画幅决定'),
+                            h('span', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginLeft: '8px' } }, '这里只是这张工作流的上限参考，实际尺寸由生成时的画幅决定'),
                           ),
                           h('div', { style: S.row },
                             h('span', { style: Object.assign({}, S.label, { minWidth: '74px' }) }, '步数'),
@@ -4218,7 +4218,7 @@ function versionsOf(jobId) {
                             }),
                           ),
                           h('div', { style: S.row },
-                            h('button', { style: Object.assign({}, buttonStyle, { borderColor: 'rgba(106,168,255,.6)', color: '#8fbcff', fontWeight: 600 }), onClick: saveWfValues }, '💾 保存参数'),
+                            h('button', { style: Object.assign({}, buttonStyle, { borderColor: 'color-mix(in srgb, var(--dsw-alias-brand-primary) 60%, transparent)', color: 'var(--dsw-alias-brand-primary)', fontWeight: 600 }), onClick: saveWfValues }, '💾 保存参数'),
                             h('button', { style: buttonStyle, onClick: async () => {
                               const v = await post('/workflow-values', { file: wfValues.__file }).catch(() => null)
                               if (v?.ok) setWfValues(Object.assign({}, v.values, { __file: wfValues.__file }))
@@ -4226,30 +4226,30 @@ function versionsOf(jobId) {
                             } }, '↻ 重新读取'),
                           ),
                         ) : wfValues && wfValues.__error
-                          ? h('div', { style: { fontSize: '12px', color: '#f2686b', marginBottom: '10px' } },
+                          ? h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-state-error-primary)', marginBottom: '10px' } },
                               '读参数失败：' + wfValues.__error + '　（多半是宿主没重启，重启 DSH 后再试）')
-                          : h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '10px' } }, '读取参数中…'),
+                          : h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '10px' } }, '读取参数中…'),
 
                         h('div', { style: { fontSize: '12px', fontWeight: 600, marginBottom: '6px' } },
                           'LoRA（' + (detail.bindings?.loras?.length ?? 0) + ' 个）'),
                         (detail.bindings?.loras ?? []).length
                           ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
-                              (detail.bindings.loras).map(lora => h('div', { key: lora.node, style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', padding: '6px 8px', borderRadius: '8px', background: lora.enabled === false ? 'rgba(0,0,0,.2)' : 'rgba(106,168,255,.07)' } },
+                              (detail.bindings.loras).map(lora => h('div', { key: lora.node, style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', padding: '6px 8px', borderRadius: '8px', background: lora.enabled === false ? 'rgba(0,0,0,.2)' : 'color-mix(in srgb, var(--dsw-alias-brand-primary) 7%, transparent)' } },
                                 h('input', { type: 'checkbox', checked: lora.enabled !== false, title: '启用 / 停用这个 LoRA', onChange: e => patchLora(lora.node, { enabled: e.target.checked }) }),
                                 loraList.length
                                   ? h('select', { value: lora.name || '', style: Object.assign({}, S.input, { flex: 1, minWidth: '170px', fontSize: '12px' }), onChange: e => patchLora(lora.node, { name: e.target.value }) },
-                                      h('option', { value: lora.name || '', style: { color: '#12161c', background: '#e9eef6' } }, lora.name || '（未选）'),
-                                      loraList.filter(n => n !== lora.name).map(n => h('option', { key: n, value: n, style: { color: '#12161c', background: '#e9eef6' } }, n)))
+                                      h('option', { value: lora.name || '' }, lora.name || '（未选）'),
+                                      loraList.filter(n => n !== lora.name).map(n => h('option', { key: n, value: n }, n)))
                                   : h('input', { type: 'text', value: lora.name || '', placeholder: 'lora 文件名', style: Object.assign({}, S.input, { flex: 1, minWidth: '170px', fontSize: '12px' }), onChange: e => patchLora(lora.node, { name: e.target.value }) }),
-                                h('span', { style: { fontSize: '11px', color: '#9aa3b2' } }, '权重'),
+                                h('span', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' } }, '权重'),
                                 h('input', { type: 'number', step: '0.05', value: lora.strengthModel ?? 1, style: Object.assign({}, S.input, { width: '76px', fontSize: '12px' }), onChange: e => patchLora(lora.node, { strengthModel: Number(e.target.value), strengthClip: Number(e.target.value) }) }),
-                                h('span', { style: { fontSize: '11px', color: '#9aa3b2' } }, '节点 ' + lora.node),
+                                h('span', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' } }, '节点 ' + lora.node),
                               )))
-                          : h('div', { style: { fontSize: '12px', color: '#9aa3b2' } }, '这张工作流里没有 LoRA 节点（没有 LoraLoader）'),
+                          : h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '这张工作流里没有 LoRA 节点（没有 LoraLoader）'),
                       ),
                 ) : null,
               )
-            }) : h('div', { style: { fontSize: '12px', color: '#9aa3b2', padding: '12px' } }, '还没有工作流。点「📥 导入工作流」或往插件目录的 workflows/ 里丢 JSON 再点重新扫描。'),
+            }) : h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', padding: '12px' } }, '还没有工作流。点「📥 导入工作流」或往插件目录的 workflows/ 里丢 JSON 再点重新扫描。'),
           ),
         )
       }
@@ -4469,9 +4469,9 @@ function versionsOf(jobId) {
                 style: Object.assign({}, buttonStyle, {
                   fontSize: '12px',
                   padding: '5px 12px',
-                  borderColor: on ? 'rgba(106,168,255,.85)' : 'rgba(120,140,170,.35)',
-                  background: on ? 'rgba(106,168,255,.18)' : 'transparent',
-                  color: on ? '#cfe2ff' : '#9aa3b2',
+                  borderColor: on ? 'color-mix(in srgb, var(--dsw-alias-brand-primary) 85%, transparent)' : 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 35%, transparent)',
+                  background: on ? 'color-mix(in srgb, var(--dsw-alias-brand-primary) 18%, transparent)' : 'transparent',
+                  color: on ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-label-tertiary)',
                 }),
                 onClick: () => {
                   setWbBook(book.key)
@@ -4482,23 +4482,23 @@ function versionsOf(jobId) {
               }, '📖 ' + (book.name || book.key) + '（' + (book.count ?? 0) + ' 条）')
             }),
           ),
-          h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '10px' } },
+          h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '10px' } },
             '启用的常驻条目会作为画图规则发送给规划模型；关键词条目仅在正文命中关键词时发送。旧条目默认常驻。可逐条调整触发方式和适用渠道。'),
-          h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginBottom: '10px' } },
+          h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '10px' } },
             '固定规则会前置，方便服务端复用；规划仍通过 DSH 模型接口完成。'),
           h('div', { style: S.row },
             h('button', { style: buttonStyle, onClick: () => setWbImportOpen(v => !v) }, wbImportOpen ? '✖ 收起导入' : '📥 导入世界书'),
             h('button', { style: buttonStyle, onClick: addEntry }, '➕ 新条目'),
             h('button', { style: buttonStyle, onClick: exportWb }, '📤 导出（复制 JSON）'),
             h('button', { style: buttonStyle, onClick: refreshWb }, '🔄 刷新'),
-            wbNote ? h('span', { style: { fontSize: '12px', color: /失败/.test(wbNote) ? '#f2686b' : '#8bd48b' } }, wbNote) : null,
+            wbNote ? h('span', { style: { fontSize: '12px', color: /失败/.test(wbNote) ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-success-primary)' } }, wbNote) : null,
           ),
 
-          wbImportOpen ? h('div', { style: { marginTop: '10px', padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,.03)', border: '1px solid rgba(120,140,170,.22)' } },
-            h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '8px' } },
+          wbImportOpen ? h('div', { style: { marginTop: '10px', padding: '12px', borderRadius: '10px', background: 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 3%, transparent)', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 22%, transparent)' } },
+            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } },
               '可以直接导入 SillyTavern 的世界书 JSON（选文件），也可以把 JSON / 纯文本粘在下面。纯文本会按空行切成条目。'),
             h('div', { style: S.row },
-              h('label', { style: { padding: '6px 14px', fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(106,168,255,.6)', color: '#8fbcff', cursor: 'pointer', background: 'rgba(106,168,255,.1)' } },
+              h('label', { style: { padding: '6px 14px', fontSize: '12px', borderRadius: '8px', border: '1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 60%, transparent)', color: 'var(--dsw-alias-brand-primary)', cursor: 'pointer', background: 'color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent)' } },
                 '📁 选文件（.json / .txt）',
                 h('input', { type: 'file', accept: '.json,.txt,application/json,text/plain', style: { display: 'none' }, onChange: pickWbFile }),
               ),
@@ -4513,7 +4513,7 @@ function versionsOf(jobId) {
           h('div', { style: { marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' } },
             list.length ? list.map(entry => h('div', {
               key: entry.index,
-              style: { borderRadius: '10px', border: '1px solid rgba(120,140,170,.28)', background: entry.enabled === false ? '#131820' : '#1a2029', color: '#e8edf5', padding: '9px 11px' },
+              style: { borderRadius: '10px', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 28%, transparent)', background: entry.enabled === false ? 'var(--dsw-specific-input-major)' : 'var(--dsw-specific-input-major)', color: 'var(--dsw-alias-label-primary)', padding: '9px 11px' },
             },
               h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
                 h('input', {
@@ -4521,9 +4521,9 @@ function versionsOf(jobId) {
                   title: '启用 / 停用这条',
                   onChange: e => patchEntry(entry.index, { enabled: e.target.checked }),
                 }),
-                h('span', { style: { flex: 1, minWidth: 0, fontSize: '13px', color: entry.enabled === false ? '#9aa3b2' : '#dbe3ee', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+                h('span', { style: { flex: 1, minWidth: 0, fontSize: '13px', color: entry.enabled === false ? 'var(--dsw-alias-label-tertiary)' : 'var(--dsw-alias-label-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
                   String(entry.index + 1) + '. ' + (entry.comment || '未命名')),
-                h('span', { style: { fontSize: '11px', color: '#9aa3b2', flexShrink: 0 } },
+                h('span', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', flexShrink: 0 } },
                   (entry.length ?? String(entry.content ?? '').length) + ' 字'),
                 h('button', {
                   style: Object.assign({}, buttonStyle, { fontSize: '11px', padding: '2px 8px' }),
@@ -4531,21 +4531,21 @@ function versionsOf(jobId) {
                   onClick: () => setWbOpen(current => ({ ...current, [entry.index]: !current[entry.index] })),
                 }, wbOpen[entry.index] ? '▾ 收起' : '▸ 内容'),
                 h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 10px' }), onClick: () => setWbEditing(wbEditing === entry.index ? -1 : entry.index) }, wbEditing === entry.index ? '收起' : '编辑'),
-                h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 10px', borderColor: 'rgba(242,104,107,.6)', color: '#f2686b' }), onClick: () => { if (confirm('删除这条世界书条目？')) patchEntry(entry.index, null, true) } }, '删'),
+                h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 10px', borderColor: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 60%, transparent)', color: 'var(--dsw-alias-state-error-primary)' }), onClick: () => { if (confirm('删除这条世界书条目？')) patchEntry(entry.index, null, true) } }, '删'),
               ),
               wbOpen[entry.index] && wbEditing !== entry.index ? h('div', {
                 style: {
                   marginTop: '8px',
                   padding: '10px 12px',
                   borderRadius: '8px',
-                  background: '#141a22',
-                  color: '#c8d2df',
+                  background: 'var(--dsw-specific-input-major)',
+                  color: 'var(--dsw-alias-label-primary)',
                   fontSize: '12px',
                   lineHeight: '1.75',
                   whiteSpace: 'pre-wrap',
                   maxHeight: '340px',
                   overflow: 'auto',
-                  border: '1px solid rgba(120,140,170,.22)',
+                  border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 22%, transparent)',
                 },
               }, String(entry.content ?? '').trim() || '（这条还没有内容）') : null,
               wbEditing === entry.index ? h('div', { style: { marginTop: '8px' } },
@@ -4559,7 +4559,7 @@ function versionsOf(jobId) {
                   style: ta,
                   onChange: e => patchEntrySoon(entry.index, { content: e.target.value }, '内容'),
                 }),
-                h('div', { style: { marginTop: '10px', padding: '9px', borderRadius: '8px', background: '#141a22', color: '#e8edf5', border: '1px solid rgba(120,140,170,.24)' } },
+                h('div', { style: { marginTop: '10px', padding: '9px', borderRadius: '8px', background: 'var(--dsw-specific-input-major)', color: 'var(--dsw-alias-label-primary)', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 24%, transparent)' } },
                   h('div', { style: { fontSize: '12px', marginBottom: '6px' } }, '触发方式'),
                   h('label', { style: Object.assign({}, S.row, { fontSize: '12px', marginBottom: '6px' }) },
                     h('input', { type: 'radio', name: 'wb-activation-' + entry.index, value: 'always', checked: (wbDrafts[entry.index]?.activation ?? entry.activation ?? 'always') === 'always', onChange: () => patchEntry(entry.index, { activation: 'always' }, false, '触发方式') }),
@@ -4569,13 +4569,13 @@ function versionsOf(jobId) {
                     '关键词触发：正文命中下方任一词时发送（填了附加条件就还要再命中一个）'),
                   (wbDrafts[entry.index]?.activation ?? entry.activation) === 'keywords' ? h('div', { style: { marginTop: '6px' } },
                     h('textarea', { 'aria-label': '触发关键词 ' + entry.index, value: wbDrafts[entry.index]?.keywords ?? keywordValues(entry).join('，'), placeholder: '例如：雨夜，咖啡馆（逗号、中文逗号或换行分隔）', style: Object.assign({}, ta, { minHeight: '54px' }), onChange: e => patchEntrySoon(entry.index, { keywords: e.target.value.split(/[，,\n\r]+/).map(value => value.trim()).filter(Boolean) }, '关键词', { keywords: e.target.value }) }),
-                    (wbDrafts[entry.index]?.keywords ?? keywordValues(entry).join('，')).split(/[，,\n\r]+/).map(value => value.trim()).filter(Boolean).length === 0 ? h('div', { role: 'alert', style: { color: '#f2a36b', fontSize: '11px', marginTop: '4px' } }, '没有关键词：此条目不会注入。请填写至少一个词，或改为常驻。') : null,
-                    h('div', { style: { fontSize: '11px', color: '#9aa3b2', margin: '8px 0 3px' } }, '附加条件 AND（可留空）：主关键词命中后，还要命中这里的任意一个词，才注入这条'),
+                    (wbDrafts[entry.index]?.keywords ?? keywordValues(entry).join('，')).split(/[，,\n\r]+/).map(value => value.trim()).filter(Boolean).length === 0 ? h('div', { role: 'alert', style: { color: 'var(--dsw-alias-state-warning-primary)', fontSize: '11px', marginTop: '4px' } }, '没有关键词：此条目不会注入。请填写至少一个词，或改为常驻。') : null,
+                    h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', margin: '8px 0 3px' } }, '附加条件 AND（可留空）：主关键词命中后，还要命中这里的任意一个词，才注入这条'),
                     h('textarea', { 'aria-label': '附加条件 ' + entry.index, value: draftKeywordText(wbDrafts, entry.index, entry, 'andKeywords'), placeholder: '例如：精液，射精（留空 = 主关键词命中就注入）', style: Object.assign({}, ta, { minHeight: '44px' }), onChange: e => patchEntrySoon(entry.index, { andKeywords: e.target.value.split(/[，,\n\r]+/).map(value => value.trim()).filter(Boolean) }, '附加条件', { andKeywords: e.target.value }) }),
-                    andKeywordValues(entry).length ? h('div', { style: { fontSize: '11px', color: '#8fb6d9', marginTop: '4px' } }, '已设 ' + andKeywordValues(entry).length + ' 个附加条件：命中主关键词但没有命中它们时，这条不会注入。') : null,
+                    andKeywordValues(entry).length ? h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-brand-primary)', marginTop: '4px' } }, '已设 ' + andKeywordValues(entry).length + ' 个附加条件：命中主关键词但没有命中它们时，这条不会注入。') : null,
                   ) : null,
                   h('div', { style: { fontSize: '12px', margin: '10px 0 4px' } }, '适用生图渠道'),
-                  h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginBottom: '5px' } }, '未勾选任何渠道表示全部渠道。'),
+                  h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '5px' } }, '未勾选任何渠道表示全部渠道。'),
                   h('div', { style: Object.assign({}, S.row, { gap: '8px 14px' }) }, providers.map(([id, label]) => h('label', { key: id, style: { display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px' } },
                     h('input', { type: 'checkbox', checked: backendValues(entry).includes(id), onChange: e => {
                       const next = new Set(backendValues(entry))
@@ -4584,14 +4584,14 @@ function versionsOf(jobId) {
                       patchEntry(entry.index, { backends }, false, '适用渠道')
                     } }), label))),
                 ),
-                h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginTop: '4px' } }, '改动即时保存。'),
+                h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '4px' } }, '改动即时保存。'),
               ) : null,
-            )) : h('div', { style: { fontSize: '12px', color: '#9aa3b2', padding: '12px' } },
+            )) : h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', padding: '12px' } },
               '还没有条目。可以点「📥 导入世界书」，或「➕ 新条目」自己写。'),
           ),
-          h('details', { style: { marginTop: '14px', borderTop: '1px solid rgba(120,140,170,.2)', paddingTop: '10px', color: '#dbe3ee' } },
-            h('summary', { style: { cursor: 'pointer', fontSize: '12px', color: '#b8c5d3' } }, '上次规划的诊断'),
-            context ? h('div', { style: { marginTop: '8px', fontSize: '11px', color: '#b8c5d3', lineHeight: 1.6 } },
+          h('details', { style: { marginTop: '14px', borderTop: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 20%, transparent)', paddingTop: '10px', color: 'var(--dsw-alias-label-primary)' } },
+            h('summary', { style: { cursor: 'pointer', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' } }, '上次规划的诊断'),
+            context ? h('div', { style: { marginTop: '8px', fontSize: '11px', color: 'var(--dsw-alias-label-secondary)', lineHeight: 1.6 } },
               h('div', { style: { marginBottom: '8px' } }, '轮次 ' + (context.turn ?? '—') + ' · 渠道 ' + (providers.find(([id]) => id === context.backend)?.[1] || context.backend || '—') + ' · 时间 ' + (context.at || '—')),
               h('div', {}, '字符统计：固定 ' + (context.staticChars ?? '—') + ' · 动态 ' + (context.dynamicChars ?? '—') + ' · 正文 ' + (context.bodyChars ?? '—')),
               h('div', { style: { marginTop: '8px' } }, '已纳入条目'),
@@ -4604,7 +4604,7 @@ function versionsOf(jobId) {
                 : h('div', {}, '没有未纳入条目。'),
               h('div', { style: { marginTop: '8px' } }, '本轮识别角色'),
               Array.isArray(context.includedCharacters) && context.includedCharacters.length ? context.includedCharacters.map((item, i) => h('div', { key: 'character-' + i }, diagnosticText(item))) : h('div', {}, '无角色。'),
-            ) : h('div', { style: { marginTop: '8px', fontSize: '11px', color: '#9aa3b2' } }, '暂无诊断记录。完成一轮规划后，这里会显示实际纳入和排除的规则及原因。'),
+            ) : h('div', { style: { marginTop: '8px', fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' } }, '暂无诊断记录。完成一轮规划后，这里会显示实际纳入和排除的规则及原因。'),
           ),
         )
       }
@@ -4617,9 +4617,9 @@ function versionsOf(jobId) {
             key: job.id,
             style: {
               position: 'relative', borderRadius: '10px', overflow: 'hidden',
-              background: 'rgba(255,255,255,.03)',
-              border: gallerySelect && galleryPicked[job.id] ? '2px solid #6aa8ff' : '1px solid rgba(120,140,170,.2)',
-              boxShadow: gallerySelect && galleryPicked[job.id] ? '0 0 0 3px rgba(106,168,255,.25)' : 'none',
+              background: 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 3%, transparent)',
+              border: gallerySelect && galleryPicked[job.id] ? '2px solid var(--dsw-alias-brand-primary)' : '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 20%, transparent)',
+              boxShadow: gallerySelect && galleryPicked[job.id] ? '0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary) 25%, transparent)' : 'none',
             },
           },
             h('img', {
@@ -4628,7 +4628,7 @@ function versionsOf(jobId) {
               decoding: 'async',
               alt: job.label || '图',
               title: '左键看大图　右键出菜单',
-              style: { display: 'block', width: '100%', aspectRatio: '3 / 4', objectFit: 'cover', cursor: 'zoom-in', background: '#1a1d24' },
+              style: { display: 'block', width: '100%', aspectRatio: '3 / 4', objectFit: 'cover', cursor: 'zoom-in', background: 'var(--dsw-specific-input-major)' },
               // 左键：批量模式下 = 勾选；平时 = 看大图（带上整库，能左右翻）
               onClick: function () {
                 if (gallerySelect) { setGalleryPicked(cur => Object.assign({}, cur, { [job.id]: !cur[job.id] })); return }
@@ -4666,7 +4666,7 @@ function versionsOf(jobId) {
               },
             }),
             gallerySelect ? h('div', {
-              style: { position: 'absolute', top: '6px', left: '6px', width: '24px', height: '24px', borderRadius: '6px', border: '1px solid rgba(255,255,255,.5)', background: galleryPicked[job.id] ? '#6aa8ff' : 'rgba(0,0,0,.5)', color: '#fff', fontSize: '15px', lineHeight: '22px', textAlign: 'center' },
+              style: { position: 'absolute', top: '6px', left: '6px', width: '24px', height: '24px', borderRadius: '6px', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 50%, transparent)', background: galleryPicked[job.id] ? 'var(--dsw-alias-brand-primary)' : 'rgba(0,0,0,.5)', color: 'var(--dsw-alias-label-primary)', fontSize: '15px', lineHeight: '22px', textAlign: 'center' },
             }, galleryPicked[job.id] ? '✓' : '') : null,
             !gallerySelect ? h('button', {
               type: 'button',
@@ -4674,18 +4674,18 @@ function versionsOf(jobId) {
               onClick: function (e) { e.stopPropagation(); deleteJob(job.id) },
               style: {
                 position: 'absolute', top: '6px', right: '6px', width: '26px', height: '26px',
-                borderRadius: '7px', border: '1px solid rgba(255,255,255,.25)',
-                background: 'rgba(0,0,0,.55)', color: '#ffb3b5', cursor: 'pointer',
+                borderRadius: '7px', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 25%, transparent)',
+                background: 'rgba(0,0,0,.55)', color: 'var(--dsw-alias-state-error-primary)', cursor: 'pointer',
                 fontSize: '13px', lineHeight: 1, padding: 0,
               },
             }, '🗑') : null,
-            h('div', { style: { padding: '6px 8px', fontSize: '11px', color: '#9aa3b2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
+            h('div', { style: { padding: '6px 8px', fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
               (job.label || '未命名') + ' · ' + (job.size || '')),
           )
         })
         return h('div', { style: S.card },
           h('div', { style: { fontSize: '13px', marginBottom: '4px' } }, '历史图片（' + done.length + ' / ' + historyJobs.length + ' 张）'),
-          h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '10px' } }, '左键看大图（可以左右翻整个历史库），右键出菜单，鼠标移到图上右上角能直接删。'),
+          h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '10px' } }, '左键看大图（可以左右翻整个历史库），右键出菜单，鼠标移到图上右上角能直接删。'),
           h('div', { style: S.row },
             h('button', { style: buttonStyle, onClick: function () { setHistoryNote('读取中…'); setHistoryTick(n => n + 1) } }, '🔄 刷新'),
             h('button', { style: buttonStyle, onClick: function () {
@@ -4701,13 +4701,13 @@ function versionsOf(jobId) {
             } }, '全选') : null,
             gallerySelect ? h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px' }), onClick: function () { setGalleryPicked({}) } }, '取消全选') : null,
             gallerySelect ? h('button', {
-              style: Object.assign({}, buttonStyle, { borderColor: 'rgba(242,104,107,.7)', color: '#f2686b' }),
+              style: Object.assign({}, buttonStyle, { borderColor: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 70%, transparent)', color: 'var(--dsw-alias-state-error-primary)' }),
               onClick: function () { deleteJobBatch(Object.keys(galleryPicked).filter(k => galleryPicked[k])) },
             }, '🗑 删除选中（' + Object.keys(galleryPicked).filter(k => galleryPicked[k]).length + '）') : null,
-            historyNote ? h('span', { style: { fontSize: '12px', color: '#9aa3b2' } }, historyNote) : null,
+            historyNote ? h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, historyNote) : null,
           ),
           h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px', marginTop: '12px' } },
-            tiles.length ? tiles : h('div', { style: { fontSize: '12px', color: '#9aa3b2', padding: '14px' } }, historyNote || '还没有图片')),
+            tiles.length ? tiles : h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', padding: '14px' } }, historyNote || '还没有图片')),
         )
       }
 
@@ -4761,7 +4761,7 @@ function versionsOf(jobId) {
         const ef = String(config[effortKey] || '')
         const models = (llmModels[pv] || []).filter(m => !onlyVision || m.vision)
         const reason = llmReasoning[pv + '/' + md]
-        const optStyle = { color: '#12161c', background: '#e9eef6' }
+        const optStyle = {}
         const set = (patch) => setData(current => Object.assign({}, current, { config: Object.assign({}, current?.config || {}, patch) }))
         return h('div', { style: { marginBottom: '8px' } },
           h('div', { style: S.row },
@@ -4794,7 +4794,7 @@ function versionsOf(jobId) {
               h('option', { value: '', style: optStyle }, reason ? '默认' : '（选模型后可选）'),
               (reason?.efforts || []).map(x => h('option', { key: x.id, value: x.id, style: optStyle }, x.name + (x.id !== x.name ? '　' + x.id : ''))),
             ),
-            hint ? h('span', { style: { fontSize: '11px', color: '#9aa3b2' } }, hint) : null,
+            hint ? h('span', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' } }, hint) : null,
           ),
         )
       }
@@ -4822,17 +4822,17 @@ function versionsOf(jobId) {
           h('span', {
             style: {
               flexShrink: 0, width: '18px', height: '18px', borderRadius: '50%', fontSize: '11px', lineHeight: '18px', textAlign: 'center',
-              background: done ? 'rgba(139,212,139,.2)' : 'rgba(226,185,59,.18)',
-              color: done ? '#8bd48b' : '#e2b93b',
+              background: done ? 'color-mix(in srgb, var(--dsw-alias-state-success-primary) 20%, transparent)' : 'color-mix(in srgb, var(--dsw-alias-state-warning-primary) 18%, transparent)',
+              color: done ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-warning-primary)',
             },
           }, done ? '✓' : String(n)),
           h('div', null,
-            h('div', { style: { fontSize: '13px', color: done ? '#8bd48b' : '#dfe4ec' } }, text),
-            hint ? h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginTop: '2px' } }, hint) : null,
+            h('div', { style: { fontSize: '13px', color: done ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-label-primary)' } }, text),
+            hint ? h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '2px' } }, hint) : null,
           ),
         )
-        return h('div', { style: Object.assign({}, S.card, { border: '1px solid rgba(226,185,59,.45)' }) },
-          h('div', { style: { fontSize: '13px', fontWeight: 600, marginBottom: '8px', color: '#e2b93b' } }, '还没配置好 —— 三步就能用'),
+        return h('div', { style: Object.assign({}, S.card, { border: '1px solid color-mix(in srgb, var(--dsw-alias-state-warning-primary) 45%, transparent)' }) },
+          h('div', { style: { fontSize: '13px', fontWeight: 600, marginBottom: '8px', color: 'var(--dsw-alias-state-warning-primary)' } }, '还没配置好 —— 三步就能用'),
           step(1, external ? '配置图像提供商渠道' : '填 ComfyUI 地址并测试连接', external ? hasUrl : hasUrl && online,
             external ? (online ? '渠道探测成功。' : externalStatus?.checking ? '正在探测渠道…' : externalStatus?.status === 'configured' ? ('已配置但无法安全探测：' + (externalStatus.message || '请在服务商侧确认模型与权限。')) : externalStatus ? ('探测未通过：' + (externalStatus.message || externalStatus.error || '检查地址和鉴权。')) : '在「生图规划」标签页选择提供商，填写 API 地址、模型和鉴权，然后保存并测试。') : (online ? ('已连上 ' + (comfyStatus?.version ? 'ComfyUI ' + comfyStatus.version : 'ComfyUI')) : '在「生图规划」标签页上面的「生图后端」里填，然后点「测试连接与鉴权」')),
           external ? null : simpleMode
@@ -4875,7 +4875,7 @@ function versionsOf(jobId) {
           width: '100%', minHeight: hgt, fontFamily: 'ui-monospace, Consolas, monospace',
           lineHeight: '1.6', resize: 'vertical', boxSizing: 'border-box', fontSize: '12px',
         })
-        const optStyle = { color: '#12161c', background: '#e9eef6' }
+        const optStyle = {}
         // 每套画风预设自己的生成参数（空 = 跟渠道设置）
         const PRESET_SAMPLERS = [['k_euler_ancestral', 'Euler Ancestral'], ['k_euler', 'Euler'], ['k_dpmpp_2m', 'DPM++ 2M'], ['k_dpmpp_2s_ancestral', 'DPM++ 2S Anc'], ['k_dpmpp_sde', 'DPM++ SDE'], ['k_dpmpp_2m_sde', 'DPM++ 2M SDE'], ['ddim_v3', 'DDIM'], ['k_lms', 'LMS'], ['k_heun', 'Heun'], ['k_dpm_2', 'DPM2'], ['k_dpm_2_ancestral', 'DPM2 Anc']]
         const PRESET_NOISE = [['karras', 'Karras'], ['native', 'Native'], ['exponential', 'Exponential'], ['polyexponential', 'Polyexponential']]
@@ -4889,10 +4889,10 @@ function versionsOf(jobId) {
         }
         const PARAM_ROW = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '10px 12px' }
         const paramGroupTitle = (text, first) => h('div', {
-          style: { fontSize: '11px', letterSpacing: '.02em', color: '#7f8a9c', margin: first ? '0 0 6px' : '12px 0 6px', paddingTop: first ? '0' : '10px', borderTop: first ? 'none' : '1px solid rgba(120,140,170,.14)' },
+          style: { fontSize: '11px', letterSpacing: '.02em', color: 'var(--dsw-alias-label-tertiary)', margin: first ? '0 0 6px' : '12px 0 6px', paddingTop: first ? '0' : '10px', borderTop: first ? 'none' : '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 14%, transparent)' },
         }, text)
         const paramField = (caption, control) => h('div', { style: { display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '0' } },
-          h('div', { style: { fontSize: '11px', color: '#9aa3b2' } }, caption), control)
+          h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' } }, caption), control)
         const paramSelect = (i, p, key, caption, items) => paramField(caption,
           h('select', { value: paramValue(p, key), title: caption + '：留空表示沿用渠道设置', style: Object.assign({}, S.input, { width: '100%', boxSizing: 'border-box' }), onChange: e => setParam(i, p, key, e.target.value === '' ? undefined : e.target.value) },
             h('option', { value: '', style: optStyle }, '跟随渠道'),
@@ -4908,7 +4908,7 @@ function versionsOf(jobId) {
         return h('div', { style: S.card },
           h('div', { style: { fontSize: '13px', marginBottom: '4px' } },
             '画风预设（' + presets.length + ' 套）' + (activeName ? '　当前：' + activeName : '　当前：默认')),
-          h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '10px' } },
+          h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '10px' } },
             '每套可以带自己的画师串、风格词和负面词。点左边圆点选中，生成时就用那套；一套都不选就用下面的默认。'),
           h('div', { style: S.row },
             h('button', { style: buttonStyle, onClick: add }, '➕ 新增一套'),
@@ -4919,8 +4919,8 @@ function versionsOf(jobId) {
               key: p.id || i,
               style: {
                 borderRadius: '10px', padding: '10px 12px',
-                border: String(p.id) === active ? '1px solid rgba(106,168,255,.75)' : '1px solid rgba(120,140,170,.22)',
-                background: String(p.id) === active ? '#1b2a3e' : '#1a2029', color: '#e8edf5',
+                border: String(p.id) === active ? '1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 75%, transparent)' : '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 22%, transparent)',
+                background: String(p.id) === active ? 'color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent)' : 'var(--dsw-specific-input-major)', color: 'var(--dsw-alias-label-primary)',
               },
             },
               h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' } },
@@ -4939,23 +4939,23 @@ function versionsOf(jobId) {
                   h('option', { value: 'prefix', style: optStyle }, '放在最前面'),
                   h('option', { value: 'suffix', style: optStyle }, '放在最后面'),
                 ),
-                h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 10px', borderColor: 'rgba(242,104,107,.6)', color: '#f2686b' }), onClick: () => remove(i) }, '删'),
+                h('button', { style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 10px', borderColor: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 60%, transparent)', color: 'var(--dsw-alias-state-error-primary)' }), onClick: () => remove(i) }, '删'),
               ),
-              h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginBottom: '4px' } }, '正面：画师串 / 风格词'),
+              h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '4px' } }, '正面：画师串 / 风格词'),
               h('textarea', {
                 value: p.artist || '', placeholder: '(@artist_a:1.1), (@artist_b:1.0), masterpiece, best quality',
                 style: ta('72px'),
                 onChange: e => patch(i, { artist: e.target.value }),
               }),
-              h('div', { style: { fontSize: '11px', color: '#9aa3b2', margin: '6px 0 4px' } }, '这套的负面固定词（会并进负面）'),
+              h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', margin: '6px 0 4px' } }, '这套的负面固定词（会并进负面）'),
               h('textarea', {
                 value: p.negative || '', placeholder: 'worst quality, low quality, bad hands',
                 style: ta('46px'),
                 onChange: e => patch(i, { negative: e.target.value }),
               }),
               h('details', { style: { marginTop: '10px' } },
-                h('summary', { style: { fontSize: '11px', color: '#9aa3b2', cursor: 'pointer', padding: '2px 0' } }, '这套自己的生成参数（采样 / 步数 / CFG / NovelAI 高级…；留空 = 跟随渠道）'),
-                h('div', { style: { marginTop: '8px', padding: '12px 14px', borderRadius: '8px', background: '#151a22', border: '1px solid rgba(120,140,170,.18)' } },
+                h('summary', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', cursor: 'pointer', padding: '2px 0' } }, '这套自己的生成参数（采样 / 步数 / CFG / NovelAI 高级…；留空 = 跟随渠道）'),
+                h('div', { style: { marginTop: '8px', padding: '12px 14px', borderRadius: '8px', background: 'var(--dsw-specific-input-major)', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 18%, transparent)' } },
                   paramGroupTitle('采样', true),
                   h('div', { style: PARAM_ROW },
                     paramSelect(i, p, 'sampler', '采样器', PRESET_SAMPLERS),
@@ -4976,9 +4976,9 @@ function versionsOf(jobId) {
                     paramBool(i, p, 'varietyBoost', '多样性（variety_boost）'))),
               ),
             )),
-          ) : h('div', { style: { fontSize: '12px', color: '#9aa3b2', padding: '10px 0' } }, '还没有画风预设。点「➕ 新增一套」开始。'),
+          ) : h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', padding: '10px 0' } }, '还没有画风预设。点「➕ 新增一套」开始。'),
 
-          h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginTop: '14px', borderTop: '1px solid rgba(120,140,170,.2)', paddingTop: '12px', marginBottom: '6px' } }, '没选预设时用的默认值'),
+          h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '14px', borderTop: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 20%, transparent)', paddingTop: '12px', marginBottom: '6px' } }, '没选预设时用的默认值'),
           h('div', { style: S.row },
             h('span', { style: Object.assign({}, S.label, { minWidth: '86px' }) }, '默认画师串'),
             h('input', {
@@ -5000,7 +5000,7 @@ function versionsOf(jobId) {
       }
 
       function PromptPresetCard() {
-        const optStyle = { color: '#12161c', background: '#e9eef6' }
+        const optStyle = {}
         const library = Array.isArray(config.promptPresetLibrary) ? config.promptPresetLibrary : []
         const saved = Array.isArray(config.promptPresets) ? config.promptPresets : []
         const draftStorageKey = 'dsh-tavern-image-prompt-draft-v1'
@@ -5049,19 +5049,19 @@ function versionsOf(jobId) {
         const area = height => Object.assign({}, S.input, { width: '100%', minHeight: height, boxSizing: 'border-box', fontFamily: 'ui-monospace, Consolas, monospace', fontSize: '12px', lineHeight: '1.5', resize: 'vertical' })
         return h('div', { style: S.card },
           h('div', { style: { fontSize: '14px', fontWeight: 600, marginBottom: '5px' } }, '专业提示词预设'),
-          h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '9px' } }, '按后端使用标签、自然语言或混合格式；预设包含构图、光线、材质与风格指导。脸部一致性需要参考图，预设本身不保证跨图一致。'),
+          h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '9px' } }, '按后端使用标签、自然语言或混合格式；预设包含构图、光线、材质与风格指导。脸部一致性需要参考图，预设本身不保证跨图一致。'),
           h('div', { style: S.row },
             h('label', { style: S.label }, '提示词格式'),
             h('select', { value: config.promptMode || 'auto', style: S.input, onChange: e => save({ promptMode: e.target.value }) },
               h('option', { value: 'auto', style: optStyle }, '自动'), h('option', { value: 'tags', style: optStyle }, '标签'), h('option', { value: 'natural', style: optStyle }, '自然语言'), h('option', { value: 'mixed', style: optStyle }, '混合')),
-            h('span', { style: { fontSize: '11px', color: '#9aa3b2' } }, '当前：' + (config.promptEffectiveFormat || 'mixed')),
+            h('span', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' } }, '当前：' + (config.promptEffectiveFormat || 'mixed')),
           ),
-          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' } }, library.map(profile => h('button', { key: profile.id, style: Object.assign({}, buttonStyle, { borderColor: activeId === profile.id ? '#6aa8ff' : undefined }), onClick: () => save({ activePromptPreset: profile.id }) }, (activeId === profile.id ? '● ' : '○ ') + profile.name))),
+          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' } }, library.map(profile => h('button', { key: profile.id, style: Object.assign({}, buttonStyle, { borderColor: activeId === profile.id ? 'var(--dsw-alias-brand-primary)' : undefined }), onClick: () => save({ activePromptPreset: profile.id }) }, (activeId === profile.id ? '● ' : '○ ') + profile.name))),
           h('div', { style: Object.assign({}, S.row, { marginTop: '7px' }) }, h('button', { style: buttonStyle, disabled: draft.length >= 60, onClick: addBlank }, '新建空白预设'), h('button', { style: buttonStyle, onClick: () => save({ activePromptPreset: '' }) }, '不使用预设')),
-          draft.map((p, i) => h('div', { key: p.id || i, style: { padding: '9px', marginTop: '8px', border: '1px solid rgba(120,140,170,.25)', borderRadius: '8px' } },
+          draft.map((p, i) => h('div', { key: p.id || i, style: { padding: '9px', marginTop: '8px', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 25%, transparent)', borderRadius: '8px' } },
             h('div', { style: S.row }, h('input', { type: 'radio', name: 'dsh-prompt-preset', checked: activeId === String(p.id), onChange: () => save({ activePromptPreset: String(p.id) }) }), h('input', { value: p.name || '', style: Object.assign({}, S.input, { flex: 1 }), onChange: e => edit(i, 'name', e.target.value) }), h('button', { style: buttonStyle, onClick: () => { const next = draft.filter((_, n) => n !== i); setDraft(next); save({ promptPresets: next, activePromptPreset: activeId === String(p.id) ? '' : activeId }) } }, '删除')),
-            h('div', { style: { fontSize: '11px', color: '#9aa3b2', margin: '5px 0 3px' } }, '正面指导'), h('textarea', { 'aria-label': '预设正面指导 ' + (p.name || i + 1), value: p.positive || '', style: area('60px'), onChange: e => edit(i, 'positive', e.target.value) }),
-            h('div', { style: { fontSize: '11px', color: '#9aa3b2', margin: '5px 0 3px' } }, '负面指导'), h('textarea', { 'aria-label': '预设负面指导 ' + (p.name || i + 1), value: p.negative || '', style: area('42px'), onChange: e => edit(i, 'negative', e.target.value) }),
+            h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', margin: '5px 0 3px' } }, '正面指导'), h('textarea', { 'aria-label': '预设正面指导 ' + (p.name || i + 1), value: p.positive || '', style: area('60px'), onChange: e => edit(i, 'positive', e.target.value) }),
+            h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', margin: '5px 0 3px' } }, '负面指导'), h('textarea', { 'aria-label': '预设负面指导 ' + (p.name || i + 1), value: p.negative || '', style: area('42px'), onChange: e => edit(i, 'negative', e.target.value) }),
           )),
           h('div', { style: Object.assign({}, S.row, { marginTop: '8px' }) },
             h('button', { style: buttonStyle, onClick: () => addCopy(active || library[1]) }, '复制当前预设'),
@@ -5073,19 +5073,19 @@ function versionsOf(jobId) {
             h('button', { style: buttonStyle, onClick: exportPresets }, '导出 JSON')),
           h('textarea', { value: importText, placeholder: '粘贴单个预设对象或 JSON 数组', style: Object.assign({}, area('48px'), { marginTop: '7px' }), onChange: e => setImportText(e.target.value) }),
           h('button', { style: Object.assign({}, buttonStyle, { marginTop: '5px' }), onClick: importPresets }, '导入 JSON'),
-          active ? h('div', { style: { marginTop: '8px', padding: '8px', background: 'rgba(255,255,255,.035)', borderRadius: '7px', fontSize: '12px' } },
-            h('div', { style: { color: '#9aa3b2' } }, '正面预览'), h('div', { style: { whiteSpace: 'pre-wrap' } }, config.promptPreviewPositive || active.positive || ''),
-            h('div', { style: { color: '#9aa3b2', marginTop: '5px' } }, '负面预览'), h('div', { style: { whiteSpace: 'pre-wrap' } }, config.promptPreviewNegative || active.negative || '')) : null,
-          h('div', { style: { borderTop: '1px solid rgba(120,140,170,.2)', marginTop: '10px', paddingTop: '9px' } },
+          active ? h('div', { style: { marginTop: '8px', padding: '8px', background: 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 4%, transparent)', borderRadius: '7px', fontSize: '12px' } },
+            h('div', { style: { color: 'var(--dsw-alias-label-tertiary)' } }, '正面预览'), h('div', { style: { whiteSpace: 'pre-wrap' } }, config.promptPreviewPositive || active.positive || ''),
+            h('div', { style: { color: 'var(--dsw-alias-label-tertiary)', marginTop: '5px' } }, '负面预览'), h('div', { style: { whiteSpace: 'pre-wrap' } }, config.promptPreviewNegative || active.negative || '')) : null,
+          h('div', { style: { borderTop: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 20%, transparent)', marginTop: '10px', paddingTop: '9px' } },
             h('div', { style: { fontSize: '12px', marginBottom: '4px' } }, '手动提示词覆盖'),
             h('textarea', { value: manualPositive, placeholder: '附加到所有正面提示词', style: area('42px'), onChange: e => setManualPositive(e.target.value) }),
             h('textarea', { value: manualNegative, placeholder: '附加到所有负面提示词', style: Object.assign({}, area('38px'), { marginTop: '4px' }), onChange: e => setManualNegative(e.target.value) }),
             h('button', { style: Object.assign({}, buttonStyle, { marginTop: '5px' }), onClick: () => save({ promptManualPositive: manualPositive, promptManualNegative: manualNegative }) }, '保存手动覆盖')),
-          h('div', { style: { borderTop: '1px solid rgba(120,140,170,.2)', marginTop: '10px', paddingTop: '9px' } },
+          h('div', { style: { borderTop: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 20%, transparent)', marginTop: '10px', paddingTop: '9px' } },
             h('label', { style: { display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px' } }, h('input', { type: 'checkbox', checked: config.jpegOutput === true, onChange: e => save({ jpegOutput: e.target.checked }) }), '将 PNG 转为 JPEG（有损压缩）'),
             h('div', { style: S.row }, h('label', { style: S.label }, '质量 50–100'), h('input', { type: 'number', min: 50, max: 100, value: quality, style: Object.assign({}, S.input, { width: '75px' }), onChange: e => setQuality(e.target.value) }), h('label', { style: S.label }, '透明底色'), h('input', { type: 'color', value: background, onChange: e => setBackground(e.target.value) }), h('button', { style: buttonStyle, onClick: () => save({ jpegQuality: quality, jpegBackground: background }) }, '保存')),
-            h('div', { style: { fontSize: '11px', color: '#9aa3b2' } }, '仅转换 PNG；GIF/WebP 或转换失败时保留原图并显示提示。')),
-          message ? h('div', { style: { fontSize: '12px', marginTop: '7px', color: '#6aa8ff' } }, message) : null,
+            h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' } }, '仅转换 PNG；GIF/WebP 或转换失败时保留原图并显示提示。')),
+          message ? h('div', { style: { fontSize: '12px', marginTop: '7px', color: 'var(--dsw-alias-brand-primary)' } }, message) : null,
         )
       }
 
@@ -5157,34 +5157,34 @@ function versionsOf(jobId) {
         return h('div', null,
           h('div', { style: S.card },
             h('div', { style: { fontSize: '14px', fontWeight: 600, marginBottom: '8px' } }, '插件更新'),
-            h('div', { role: 'note', style: { fontSize: '12px', color: '#9aa3b2', marginBottom: '8px' } }, releaseMode ? 'Release 更新：下载官方发布包并校验 SHA-256。' : 'Git 更新：仅对官方、干净的 master checkout 执行 fast-forward。'),
-            pluginUpdateLocal?.compatibility?.compatible === false ? h('div', { role: 'alert', style: { fontSize: '12px', color: '#f0b45c', marginBottom: '8px' } }, pluginUpdateLocal.compatibility.reason || '当前 Tavern 版本不兼容，请先更新 Tavern。') : null,
+            h('div', { role: 'note', style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '8px' } }, releaseMode ? 'Release 更新：下载官方发布包并校验 SHA-256。' : 'Git 更新：仅对官方、干净的 master checkout 执行 fast-forward。'),
+            pluginUpdateLocal?.compatibility?.compatible === false ? h('div', { role: 'alert', style: { fontSize: '12px', color: 'var(--dsw-alias-state-warning-primary)', marginBottom: '8px' } }, pluginUpdateLocal.compatibility.reason || '当前 Tavern 版本不兼容，请先更新 Tavern。') : null,
             h('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(120px, auto) 1fr', gap: '6px 12px', fontSize: '13px' } },
               h('span', { style: S.label }, '当前版本'), h('span', null, version(pluginUpdateLocal?.currentVersion)),
               h('span', { style: S.label }, '远端版本'), h('span', null, version(pluginUpdateCheck?.latestVersion)),
             ),
-            latestConfirmed ? h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginTop: '8px' } }, '当前已是最新版本。') : null,
-            pluginUpdateLocal?.supported === false && repositoryUrl ? h('a', { href: repositoryUrl.slice(0, -4), target: '_blank', rel: 'noopener noreferrer', style: { display: 'inline-block', marginTop: '8px', color: '#8bb8ff' } }, '打开插件 GitHub 页面手动下载') : null,
+            latestConfirmed ? h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '8px' } }, '当前已是最新版本。') : null,
+            pluginUpdateLocal?.supported === false && repositoryUrl ? h('a', { href: repositoryUrl.slice(0, -4), target: '_blank', rel: 'noopener noreferrer', style: { display: 'inline-block', marginTop: '8px', color: 'var(--dsw-alias-brand-primary)' } }, '打开插件 GitHub 页面手动下载') : null,
             h('div', { style: S.row },
               h('button', { style: buttonStyle, disabled: !canCheck || Boolean(pluginUpdatePending), onClick: () => { setPluginUpdateCheck(null); void checkPluginUpdate() } }, pluginUpdatePending === 'check' ? '正在检查…' : '检查更新'),
               h('button', { style: buttonStyle, disabled: !canUpdate || Boolean(pluginUpdatePending), onClick: applyPluginUpdate }, pluginUpdatePending === 'apply' ? '正在更新…' : '更新插件'),
               !pluginUpdateLocal && pluginUpdatePending !== 'local' ? h('button', { style: buttonStyle, disabled: Boolean(pluginUpdatePending), onClick: () => { pluginUpdateLocalAttempted.current = true; void loadPluginUpdateLocal() } }, '重试读取本地状态') : null,
             ),
-            h('div', { role: 'status', 'aria-live': 'polite', style: { minHeight: '18px', fontSize: '12px', color: restartNeeded || migrationNeeded ? '#f0b45c' : '#9aa3b2', marginTop: '8px' } },
+            h('div', { role: 'status', 'aria-live': 'polite', style: { minHeight: '18px', fontSize: '12px', color: restartNeeded || migrationNeeded ? 'var(--dsw-alias-state-warning-primary)' : 'var(--dsw-alias-label-tertiary)', marginTop: '8px' } },
               pluginUpdateNote || (pluginUpdatePending === 'local' ? '读取本地插件状态…' : ''),
             ),
-            migrationNeeded ? h('div', { role: 'note', style: { fontSize: '12px', color: '#f0b45c', marginTop: '8px', lineHeight: 1.55 } }, pluginUpdateLocal.directoryMigrationMessage) : null,
-            h('div', { style: { fontSize: '12px', color: '#9aa3b2', marginTop: '8px', lineHeight: 1.55 } }, releaseMode ? 'Release 更新使用发布 metadata 中的版本和 SHA-256 校验；只更新插件代码，更新后请完整重启 DSH。' : 'Git 更新仅允许官方干净 master checkout 快进；只更新插件代码，更新后请完整重启 DSH。'),
-            h('div', { style: { borderTop: '1px solid rgba(120,140,170,.2)', marginTop: '12px', paddingTop: '10px' } },
-              h('div', { style: { fontSize: '12px', color: '#dfe4ec', marginBottom: '6px' } }, '手动下载插件包'),
-              h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginBottom: '9px', lineHeight: 1.55 } }, '本机安装包包含当前本机代码（包括未发布测试改动）；GitHub ZIP 与备用下载是公开仓库 master 版本，不包含本机测试改动。若公开 ZIP 下载较慢，可试备用下载；它也由 GitHub codeload 提供。历史发布可选稳定版本。'),
+            migrationNeeded ? h('div', { role: 'note', style: { fontSize: '12px', color: 'var(--dsw-alias-state-warning-primary)', marginTop: '8px', lineHeight: 1.55 } }, pluginUpdateLocal.directoryMigrationMessage) : null,
+            h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '8px', lineHeight: 1.55 } }, releaseMode ? 'Release 更新使用发布 metadata 中的版本和 SHA-256 校验；只更新插件代码，更新后请完整重启 DSH。' : 'Git 更新仅允许官方干净 master checkout 快进；只更新插件代码，更新后请完整重启 DSH。'),
+            h('div', { style: { borderTop: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 20%, transparent)', marginTop: '12px', paddingTop: '10px' } },
+              h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-primary)', marginBottom: '6px' } }, '手动下载插件包'),
+              h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginBottom: '9px', lineHeight: 1.55 } }, '本机安装包包含当前本机代码（包括未发布测试改动）；GitHub ZIP 与备用下载是公开仓库 master 版本，不包含本机测试改动。若公开 ZIP 下载较慢，可试备用下载；它也由 GitHub codeload 提供。历史发布可选稳定版本。'),
               h('div', { style: S.row },
                 h('button', { type: 'button', style: buttonStyle, disabled: !localDownloadPath, onClick: downloadLocalPackage }, '本机安装包'),
                 sourceUrl ? h('a', { href: sourceUrl, target: '_blank', rel: 'noopener noreferrer', style: linkStyle }, 'GitHub 源码ZIP') : null,
                 alternateUrl ? h('a', { href: alternateUrl, target: '_blank', rel: 'noopener noreferrer', style: linkStyle }, '备用下载') : null,
                 releasesUrl ? h('a', { href: releasesUrl, target: '_blank', rel: 'noopener noreferrer', style: linkStyle }, '历史发布') : null,
               ),
-              !localDownloadPath && !sourceUrl && !alternateUrl && !releasesUrl ? h('div', { role: 'status', style: { fontSize: '11px', color: '#f0b45c', marginTop: '6px' } }, '下载地址尚不可用，请刷新控制台状态后重试。') : null,
+              !localDownloadPath && !sourceUrl && !alternateUrl && !releasesUrl ? h('div', { role: 'status', style: { fontSize: '11px', color: 'var(--dsw-alias-state-warning-primary)', marginTop: '6px' } }, '下载地址尚不可用，请刷新控制台状态后重试。') : null,
             ),
           ),
         )
@@ -5203,7 +5203,7 @@ function versionsOf(jobId) {
         tab === 'gallery' ? galleryTab() : null,
         tab === 'worldbook' ? worldbookTab() : null,
         tab === 'plugin-update' ? pluginUpdateTab() : null,
-        h('div', { style: { fontSize: '11px', color: '#9aa3b2', marginTop: '14px' } }, '人物与服装修改后请点「保存人物库」。'),
+        h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '14px' } }, '人物与服装修改后请点「保存人物库」。'),
         // 注意：openWorkflow 定义在 workflow 标签页函数内部，这里跨作用域调用会 ReferenceError。
         // 保存后只做本层能做的收尾：关掉编辑器、清掉旧详情，让用户重新点开时读到新数据。
         wfGraphFile ? h(WorkflowGraphEditor, {
@@ -5218,85 +5218,6 @@ function versionsOf(jobId) {
         }) : null,
       )
     }
-    // ─────────────────────────────────────────────────────────────
-    // 控制台浮层：把整套设置界面搬到「主窗口」显示
-    // DSH 的「设置」是独立渲染上下文，访问 127.0.0.1 会被拒（fetch/XHR 都失败），
-    // 所以设置页里的面板读不到数据；主窗口正常，这里提供一个等效入口。
-    // ─────────────────────────────────────────────────────────────
-    function ConsoleOverlay() {
-      const [open, setOpen] = React.useState(false)
-      React.useEffect(() => {
-        const onOpen = () => setOpen(true)
-        const onKey = event => { if (event.key === 'Escape') setOpen(false) }
-        try {
-          window.addEventListener('dsh-tavern-image:open-console', onOpen)
-          window.addEventListener('keydown', onKey)
-        } catch {}
-        return () => {
-          try {
-            window.removeEventListener('dsh-tavern-image:open-console', onOpen)
-            window.removeEventListener('keydown', onKey)
-          } catch {}
-        }
-      }, [])
-      // 收起时不渲染任何东西：入口在左侧栏底部（见 ConsoleLauncher），
-      // 不再在右下角浮一个常驻按钮 —— 那个位置会盖住正文和面板。
-      if (!open) return null
-      return h('div', {
-        style: {
-          position: 'fixed', inset: 0, zIndex: 2147483100,
-          background: 'rgba(6,9,14,.86)', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', padding: '18px',
-        },
-        onClick: event => { if (event.target === event.currentTarget) setOpen(false) },
-      }, h('div', {
-        style: {
-          width: 'min(1180px, 96vw)', height: 'min(86vh, 900px)', overflow: 'auto',
-          background: '#0f131a', color: '#e8edf5', border: '1px solid rgba(255,255,255,.18)',
-          borderRadius: '14px', padding: '16px',
-        },
-      },
-        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' } },
-          h('div', { style: { fontSize: '15px', fontWeight: 600 } }, '🎨 本地生图控制台'),
-          h('button', {
-            style: { background: 'transparent', color: '#dfe4ec', border: '1px solid rgba(255,255,255,.2)', borderRadius: '8px', padding: '4px 12px', cursor: 'pointer' },
-            onClick: () => setOpen(false),
-          }, '关闭 ✕'),
-        ),
-        h(SettingsPanel),
-      ))
-    }
-
-    /**
-     * 侧栏底部的入口按钮 —— 和「卡片更新器」「错题库」排在一起（sidebar.footer.action，
-     * 即"设置"按钮旁边的动作区）。窄栏（56px 轨道，wide=false）时只留图标。
-     */
-    function ConsoleLauncher(props) {
-      const wide = props?.wide !== false
-      const [hover, setHover] = React.useState(false)
-      const open = () => { try { window.dispatchEvent(new CustomEvent('dsh-tavern-image:open-console')) } catch {} }
-      return h('button', {
-        type: 'button',
-        title: '本地生图控制台（人物库 / 历史图 / 世界书 / 画风）',
-        'aria-label': '本地生图',
-        onClick: open,
-        onMouseEnter: () => setHover(true),
-        onMouseLeave: () => setHover(false),
-        style: {
-          display: 'flex', alignItems: 'center', gap: '8px',
-          justifyContent: wide ? 'flex-start' : 'center',
-          width: '100%', margin: '2px 0',
-          background: hover ? 'rgba(255,255,255,.07)' : 'transparent',
-          border: 'none', color: 'inherit', cursor: 'pointer',
-          padding: wide ? '8px 10px' : '8px 0', borderRadius: '8px',
-          fontSize: '13px', textAlign: 'left',
-        },
-      },
-        h('span', { style: { fontSize: '15px', lineHeight: 1 } }, '🎨'),
-        wide ? h('span', null, '本地生图') : null,
-      )
-    }
-
     function apply(ctx) {
       // 诊断：证明 apply 被调到，并看清 ctx 上到底有什么
       try {
@@ -5327,31 +5248,6 @@ function versionsOf(jobId) {
             applyImageWidth(state.config.imageDisplayWidth)
           }
         }).catch(() => { /* 拿不到配置就安静退化成只在有标记时出图 */ })
-
-        // ★ 控制台浮层（主窗口，网络可用）
-        try {
-          ctx.slots?.inject?.('shell.overlay', () => ctx.slots.register({
-            name: 'shell.overlay',
-            id: 'dsh-tavern-image-console',
-            order: 95,
-          }, ConsoleOverlay))
-          reportHost('seat-registered', { seat: 'shell.overlay.console' })
-        } catch (error) {
-          reportHost('seat-failed', { seat: 'shell.overlay.console', error: String(error?.message ?? error).slice(0, 120) })
-        }
-
-        // ★ 侧栏底部入口：和「卡片更新器」「错题库」并排（设置按钮旁边那一排）
-        try {
-          ctx.slots?.inject?.('sidebar.footer.action', () => ctx.slots.register({
-            name: 'sidebar.footer.action',
-            id: 'dsh-tavern-image-launcher',
-            order: 48,
-            label: '本地生图',
-          }, ConsoleLauncher))
-          reportHost('seat-registered', { seat: 'sidebar.footer.action' })
-        } catch (error) {
-          reportHost('seat-failed', { seat: 'sidebar.footer.action', error: String(error?.message ?? error).slice(0, 120) })
-        }
 
         // 全屏看图浮层
         try {
@@ -5428,7 +5324,7 @@ function versionsOf(jobId) {
           console.warn('[dsh-tavern-image] 生图按钮未注册:', error?.message)
         }
 
-        // 设置 → 本地生图（与「错题库」「卡片更新器」同一层）
+        // 设置 → 本地生图：插件唯一的配置入口（不再有侧栏按钮和控制台弹窗）
         try {
           reportHost('seat-registered', { seat: 'settings.section' })
           ctx.slots?.inject?.('settings.section', () => ctx.slots.register({
