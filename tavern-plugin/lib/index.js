@@ -6,7 +6,6 @@ import { createGameSaveSnapshot } from './domain/game-save-snapshot.js'
 import { createGameSaveResources } from './domain/game-save-resources.js'
 import { createCardEditor } from './domain/card-editor.js'
 import { ensureSessionVariableDirectory } from './domain/session-variable-directory.js'
-import { createCompatibilityTurnCompiler } from './domain/compatibility-turn.js'
 import { registerTavernHttpRoutes } from './http/routes.js'
 import { installChatAnswerBootPatch } from './domain/chat-answer-boot-patch.js'
 import { registerRequestHooks } from './hooks/request.js'
@@ -397,11 +396,16 @@ export async function apply(ctx) {
       templateSync.unchanged(chat.sessionId,chat._storageRevision)
       return
     }
+    // Display work waits while a turn or a background task runs: it shares the template
+    // queue with their own template work, which reads the latest state itself. The turn's
+    // end and the task's last write let it run once.
     templateSync.schedule(chat.sessionId, chat._storageRevision, {
       enabled: groupOfMode(chat.mode || 'story') === 'play',
-      blocked: ['pending', 'running'].includes(chat.settleStatus)
+      blocked: ['pending', 'running'].includes(chat.settleStatus) || agentRegistry.get(chat.sessionId)?.phase?.kind === 'running'
+        || Object.values(chat.timeline?.operations || {}).some(operation => operation?.kind === 'agent' && operation.status === 'running')
     })
   }
+  ctx.on('session/event', function (session, event) { if (event?.type === 'turn/end' && session?.id) templateSync.release(session.id) })
   ctx.effect(() => () => templateSync.dispose())
   ctx.effect(() => () => fullTemplateRuntime.dispose())
   const cardOrganization = createCardOrganization(profileData)
@@ -1307,7 +1311,7 @@ export async function apply(ctx) {
     return generateHelper(config, { ...context, presetSnapshot, presetRegexScripts: activeSnapshot?.regexScripts || [], callModel: opts => callModel({ ...opts, background: true, signal: context.signal }) })
   }
   ctx.effect(() => () => openingPreparation.dispose())
-  async function getCardOpenings(cardPath, userName, requestMode, previewTransport) {
+  async function getCardOpenings(cardPath, userName, previewTransport) {
     const startedAt = performance.now(), stages = {}
     let success = false
     async function timedStage(stage, operation) {
@@ -1320,14 +1324,11 @@ export async function apply(ctx) {
     const settings = await readTavernSettings()
     const cardExtensions = await timedStage('readExtensions', () => readCardExtensions(cardPath))
     const extensions = { ...cardExtensions, ...await timedStage('resources', () => tavernRemoteAssets.pinExtensions(cardExtensions)) }
-    const preset = settings.compatibilityMode && requestMode === 'sillytavern'
-      ? await runtimePresets.fullSnapshot()
-      : null
     const previews = await timedStage('preview', () => projectCardOpeningPreviews({
       card,
       extensions,
       userName,
-      presetRegexScripts: Array.isArray(preset && preset.regexScripts) ? preset.regexScripts : []
+      presetRegexScripts: []
     }))
     const hasOpeningScript = opening => /<script\b/i.test(opening.projection.text) || opening.projection.parts.some(part => /<script\b/i.test(part.content || ''))
     const hasHelperScripts = projectTavernHelperScripts(extensions.helperScripts).scripts.length > 0
@@ -3521,15 +3522,6 @@ export async function apply(ctx) {
     await writeChat(chat, { source: 'player-name.set' })
     return name
   }
-  async function setRequestMode(sessionId, requestMode) {
-    const chat = await chatForSession(sessionId)
-    if (chat === undefined) throw new Error('当前会话没有绑定人物卡')
-    if ((chat.mode || 'story') === 'card') throw new Error('卡片工作台不能切换请求模式')
-    chat.requestMode = requestMode === 'sillytavern' ? 'sillytavern' : 'dsh'
-    await writeChat(chat)
-    return chat.requestMode
-  }
-
   // ---------- 后台结算 ----------
   // `knownPosture`: the posture the background history already shows; the block is
   // repeated only when that differs (new session, compaction, rewind).
@@ -4536,7 +4528,7 @@ export async function apply(ctx) {
       case 'retainOpeningPreparation': return openingPreparation.retain(args && args.id)
       case 'releaseOpeningPreparation': fullTemplateRuntime.cancel('opening:' + args.id); return openingPreparation.release(args && args.id)
       case 'replaceOpeningWorldbook': return await openingPreparation.replaceWorldbook(args && args.id, args && args.entries, args && args.expectedEntries)
-      case 'getCardOpenings': return await getCardOpenings(args && args.path, args && args.userName, args && args.requestMode, args && args.previewTransport)
+      case 'getCardOpenings': return await getCardOpenings(args && args.path, args && args.userName, args && args.previewTransport)
       case 'preparePlayStart': {
         await requestPerformance.stage('preparePreset', () => runtimePresets.prepareFullSnapshot())
         return { prepared: true }
@@ -4813,7 +4805,7 @@ export async function apply(ctx) {
       }
       case 'listSessions': {
         const settings = await readTavernSettings()
-        return { sessions: (await listTavernSessions()).filter(chat => chat.requestMode !== 'sillytavern'), capabilities: { compatibilityMode: false, trustedCardMode: settings.trustedCardMode } }
+        return { sessions: (await listTavernSessions()).filter(chat => chat.requestMode !== 'sillytavern'), capabilities: { trustedCardMode: settings.trustedCardMode } }
       }
       case 'renameConversation': {
         const chat = await chatForSession(args && args.sessionId)
@@ -5137,7 +5129,6 @@ export async function apply(ctx) {
         return { statusBarPlacement: args.placement }
       }
       case 'setPlayerName': return { playerName: await setPlayerName(args && args.sessionId, args && args.userName) }
-      case 'setRequestMode': return { requestMode: await setRequestMode(args && args.sessionId, args && args.requestMode) }
       case 'ensureOpening': return { view: await ensureNativeOpening(args && args.sessionId) }
       case 'getChoices': return { candidates: await candidateGenerator.find({ sessionId: args && args.sessionId, messageId: args && args.messageId }) }
       case 'startChoices': return await candidateTasks.startLegacy(args)
@@ -5487,16 +5478,6 @@ export async function apply(ctx) {
     return fresh
   }
 
-  const compileCompatibilityTurn = createCompatibilityTurnCompiler({
-    promptTemplateRuntime,
-    readCardExtensions,
-    readChatCard,
-    readPromptTemplateGlobalVariables,
-    resolveChatRuntimePreset,
-    str,
-    worldBooks,
-  })
-
   // ---------- DSH 回合生命周期 ----------
   const requestCoordinates = new Map()
   const tavernRetryLimiter = createTavernRetryLimiter({
@@ -5515,61 +5496,9 @@ export async function apply(ctx) {
     foregroundStrategies.clearRequestState(sessionId)
   }
 
-  function compatibilityMessages(compiled) {
-    return compiled.messages.map(function (item, index) {
-      const label = str(item.source && (item.source.identifier || item.source.kind)) || 'message-' + (index + 1)
-      return {
-        id: randomUUID(),
-        role: item.role,
-        content: projectPlayerContent(item.inputAttachments, item.content, { fallback: false }),
-        source: {
-          kind: 'plugin:dsh-tavern', form: 'sillytavern-compatibility',
-          sections: [{ name: 'tavern:sillytavern:' + label, text: item.content }],
-          trace: item.source
-        }
-      }
-    })
-  }
-
   const skillGatedTools = createSkillGatedTools()
   const controlledToolNames = new Set([STORY_SUBMIT_TOOL_NAME, 'tavern_read_variables', ...CARD_MEMORY_TOOLS, 'bash', 'pwsh', ...dshFileToolNames, 'skill', 'tavern_read_skill_reference', 'web_search', 'tavern_save_skill', ...cordisToolNames, 'tavern_user_profile_read', 'tavern_user_profile_save', 'tavern_user_profile_confirm', 'tavern_read_card', 'tavern_read_card_raw', 'tavern_search_card', 'tavern_replace_card_text', 'tavern_mvu_overview', 'tavern_apply_mvu', 'tavern_read_play_chat', 'tavern_read_script', 'tavern_recall_history', 'worldbook_search', 'tavern_read_worldbook', 'tavern_update_worldbook', 'tavern_read_preset', 'tavern_update_preset', 'tavern_read_regex_library', 'tavern_copy_card', 'tavern_set_card_cover', 'tavern_export_card_png', 'tavern_update_card', 'tavern_restore_card', 'tavern_validate_card', 'tavern_test_response'])
   const foregroundStrategies = createForegroundOrchestrationStrategies({
-    compatibility: {
-      beforeTurn: async function (input) {
-        if (!hasTavernScriptRuntime(input.chat, (await readCardExtensions(input.chat.cardPath, input.chat))?.helperScripts)) return
-        const context = await tavernScriptHostAdapter.context(input.sessionId, input.chat, input.userText)
-        const messageId = Math.max(0, context.messages.length - 1)
-        await tavernScriptHostAdapter.dispatchEvent({ sessionId: input.sessionId, context, name: 'MESSAGE_SENT', args: [messageId] })
-      },
-      beginTurn: async function (input) { return await turnOrchestrator.beginCompatibility(input) },
-      chatForSession,
-      compileTurn: compileCompatibilityTurn,
-      persistCompiled: async function (input) {
-        const compiled = input.compiled
-        await updateChat(input.chat.id, function (current) {
-          if (!current || typeof current !== 'object') return current
-          current.macroState = compiled.macroState
-          if (compiled.promptTemplateState && compiled.promptTemplateState.persist === true) {
-            const scopes = compiled.promptTemplateState.scopes || {}
-            current.promptTemplateInitialVariables = scopes.initial && typeof scopes.initial === 'object' ? scopes.initial : {}
-            current.variables = scopes.local && typeof scopes.local === 'object' ? scopes.local : {}
-            if (Array.isArray(current.messages) && current.messages.length > 0) {
-              replaceTavernHelperVariables(current, {
-                option: { type: 'message', message_id: 'latest' },
-                variables: scopes.message
-              })
-            }
-          }
-          if (!current.compatibilityTraces || typeof current.compatibilityTraces !== 'object') current.compatibilityTraces = {}
-          current.compatibilityTraces[String(input.turn)] = Object.assign({ createdAt: Date.now() }, compiled.trace, { diagnostics: compiled.diagnostics })
-          return current
-        }, { source: 'compatibility.compile' })
-        if (compiled.promptTemplateState && compiled.promptTemplateState.persist === true) {
-          await writePromptTemplateGlobalVariables(compiled.promptTemplateState.scopes.global)
-        }
-      },
-      projectMessages: compatibilityMessages
-    },
     nativePlay: {
       // History is replayed as calls of the same submission tool, so it follows that switch.
       historyToolCall: async () => (await readTavernSettings()).storyToolCall,
