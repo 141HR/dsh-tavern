@@ -34,7 +34,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Check launcher
-        run: node --test tests/windows-update-launch.test.mjs tests/installation-process.test.mjs tests/installation-state.test.mjs tests/application-update-lifecycle.test.mjs tests/application-update-api.test.mjs tests/update-status-client.test.mjs tests/application-updater.test.mjs tests/download.test.mjs tests/windows-setup-progress.test.mjs tests/windows-installer-command-log.test.mjs tests/launcher.test.mjs tests/windows-command-shim.test.mjs tests/runtime-package.test.mjs tests/cdn-upgrade.test.mjs tests/plugin-dependencies.test.mjs tests/bundled-image-plugin.test.mjs
+        run: node --test tests/windows-update-launch.test.mjs tests/installation-process.test.mjs tests/installation-state.test.mjs tests/application-update-lifecycle.test.mjs tests/application-update-api.test.mjs tests/update-status-client.test.mjs tests/application-updater.test.mjs tests/download.test.mjs tests/windows-setup-progress.test.mjs tests/windows-installer-command-log.test.mjs tests/launcher.test.mjs tests/windows-command-shim.test.mjs tests/runtime-package.test.mjs tests/cdn-upgrade.test.mjs tests/plugin-dependencies.test.mjs tests/bundled-image-plugin.test.mjs tests/portable-fs-links.test.mjs
       - name: Check delegated scene images
         run: node --test tests/bundled-scene-image-plugin.test.mjs tests/user-plugins.test.mjs tests/scene-illustration.test.mjs tests/scene-image-gallery.test.mjs tests/scene-image-frontend.test.mjs tests/scene-image-controls.test.mjs
       - name: Check server template process

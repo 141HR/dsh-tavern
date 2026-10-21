@@ -2,7 +2,7 @@ name: Windows UI Verify
 
 # Pre-release check on a clean Windows: silent-install official DeepSeek Harness, get past its
 # welcome page with the DEEPSEEK_API_KEY secret, run install.ps1 the README way (it installs
-# the published main), relaunch and screenshot over CDP. Screenshots are the artifact.
+# the published main), run it once more as an upgrade, relaunch and screenshot over CDP. Screenshots are the artifact.
 on:
   workflow_dispatch:
 
@@ -62,7 +62,22 @@ jobs:
           try { Invoke-Expression $script *>&1 | Tee-Object "$env:RUNNER_TEMP\shots\install.log"; Write-Output "install OK in $($sw.Elapsed.TotalSeconds)s" }
           catch { Write-Output "install FAILED in $($sw.Elapsed.TotalSeconds)s: $_"; throw }
 
+      # Upgrades go through paths a first install never touches (profile copy, link reuse).
+      - name: Run install.ps1 again over the installed Tavern
+        timeout-minutes: 30
+        run: |
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          $env:DSH_TAVERN_HOST = 'desktop'
+          $script = [IO.File]::ReadAllText((Resolve-Path ./install.ps1), [Text.Encoding]::UTF8)
+          try { Invoke-Expression $script *>&1 | Tee-Object "$env:RUNNER_TEMP\shots\reinstall.log"; Write-Output "reinstall OK in $($sw.Elapsed.TotalSeconds)s" }
+          catch { Write-Output "reinstall FAILED in $($sw.Elapsed.TotalSeconds)s: $_"; throw }
+          $modules = "$env:USERPROFILE\.dsh\profiles\tavern\node_modules"
+          Get-ChildItem -LiteralPath $modules -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint } | ForEach-Object {
+            if (-not ($_.Attributes -band [IO.FileAttributes]::Directory)) { throw "File-type link to a directory: $($_.FullName)" }
+          }
+
       - name: Relaunch and screenshot
+        if: always()
         continue-on-error: true
         timeout-minutes: 5
         env:
