@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "ad95d2bb8ede469327126ccfd00861533c6bf65b",
-  "releaseSequence": 794,
+  "revision": "c3aba636e4ccd64ff85191e46f021c4ef3026ff1",
+  "releaseSequence": 795,
   "version": "3.0.1",
   "files": [
     {
@@ -641,8 +641,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "a301f329855e3b913ad3a23f214fb218532071533bb134a8c5d3885dc6626445",
-      "size": 2008859
+      "sha256": "df14106d0349097b06bf000651a236ec3bd60be5016df7d73f8cf84bb5d1d4fb",
+      "size": 1996494
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -721,8 +721,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/body-editor.js",
-      "sha256": "d520686c8e7d9bd2b812d1dab92c82003e270931600c4f5e3fdc0a848e972881",
-      "size": 12137
+      "sha256": "34b2ad5cc901dbe5d967ce8be4653da02baaca7d4a621aab9b83940ac9b7cea1",
+      "size": 12808
     },
     {
       "path": "tavern-plugin/lib/domain/bounded-compaction.js",
@@ -2071,8 +2071,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/story-alignment.js",
-      "sha256": "4b46a207bb9d68f3cb8b37488db15075ceb3a3c5979c800e9d8602eac055f3f4",
-      "size": 4107
+      "sha256": "5a1b66a05348d1911c3f5ae25d4d3c21c3dda443430446b267ca5f2d0794eafb",
+      "size": 5063
     },
     {
       "path": "tavern-plugin/lib/domain/story-compaction.js",
@@ -2291,8 +2291,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/transcript-row-plan.js",
-      "sha256": "39b987295d7746cff7907bee4fefe317a89c889550ab168005af7d9261950015",
-      "size": 12677
+      "sha256": "08064d9f5025970d8c1e2c12d31588e4224558f5253f4108df161671dd194ef0",
+      "size": 15364
     },
     {
       "path": "tavern-plugin/lib/domain/turn-orchestration.js",
@@ -2461,8 +2461,8 @@
     },
     {
       "path": "tavern-plugin/lib/hooks/turn-lifecycle.js",
-      "sha256": "b3fa35baba1a7825ea3a87a53376fac7e9e815bf52b214e93d0fb27a283cad97",
-      "size": 6026
+      "sha256": "1fbf30eb4d0b080218c30277f19eec0526950a99d08fa93fd4342c6d15adc357",
+      "size": 6411
     },
     {
       "path": "tavern-plugin/lib/http/routes.js",
@@ -2471,8 +2471,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "3385e2dd1608acbf2ee1fbffef93c685bc776c095ad9aaa9bc78914ac31ed325",
-      "size": 390135
+      "sha256": "b76078be6f7d354117d7dfa51147d8c14237fa0c6ea89f70cc3d238d2593fa22",
+      "size": 391627
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -5056,8 +5056,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/assistant-renderer.js",
-      "sha256": "9c8ec9fa0cba783a477fed98085a8be8f438231f21e99e5227e9acedea311ee0",
-      "size": 67766
+      "sha256": "0df54da58fa59c782de07ff368f923fae12cac12d224550a9f4d81960cb64150",
+      "size": 67122
     },
     {
       "path": "tavern-plugin/src/client/features/card-library.js",
@@ -5096,8 +5096,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/play-controls.js",
-      "sha256": "31f0563f58e74bcc0c94d3b4020e436f65024778c279e9122ee4b6d8f245d776",
-      "size": 148906
+      "sha256": "b4bcf6111c359773443912b415024da231b09253527a9285520aa8b71082a440",
+      "size": 147804
     },
     {
       "path": "tavern-plugin/src/client/features/plugin-extensions.js",
@@ -5166,8 +5166,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/turn-history.js",
-      "sha256": "aeb3ab2c85e7c8b6c41b203a15ed81ca85b6bc3b79fadcc7d75f9cd9140bd1b1",
-      "size": 22952
+      "sha256": "072e9e21bf5b33fff9d64b4a9ef790c5081d4e15e0bd22fc980714241adf7ae1",
+      "size": 12189
     },
     {
       "path": "tavern-plugin/src/client/features/user-profile.js",
@@ -5236,8 +5236,8 @@
     },
     {
       "path": "tavern-plugin/src/client/main.js",
-      "sha256": "289dc08ed27415242f16d7f76f2d3b4bf2419a3d083f729240a2b6a2acf93fbb",
-      "size": 68983
+      "sha256": "2ccdb0b6e4eb36946ff0bdd642fefbcd0f10606c47a2e5c1233a2cf9666dc602",
+      "size": 69127
     },
     {
       "path": "tavern-plugin/src/client/modules/assistant-visibility.js",
