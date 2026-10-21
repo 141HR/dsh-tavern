@@ -822,8 +822,29 @@
 				const liveState = useScopedLiveTavernView(props.sessionId, String(props.messageId || ""), [["mode"], ["releaseCapabilities"], ["forkTurnsByMessageId", String(props.messageId || "")]]);
 				const view = liveState.view;
 				const turn = Number(view && view.forkTurnsByMessageId && view.forkTurnsByMessageId[String(props.messageId || "")]) || 0;
-				const shown = Boolean(view && isPlayMode(view.mode) && view.releaseCapabilities && view.releaseCapabilities.sceneImages && turn > 0);
-				return shown ? React.createElement(SceneImageAction, { key: props.sessionId + ":" + turn, sessionId: props.sessionId, turn: turn }) : null;
+				useTavernUiExtensions();
+				const play = Boolean(view && isPlayMode(view.mode) && turn > 0);
+				if (play && view.releaseCapabilities && view.releaseCapabilities.sceneImages) return React.createElement(SceneImageAction, { key: props.sessionId + ":" + turn, sessionId: props.sessionId, turn: turn });
+				// With Tavern's own drawing off, an illustrator plugin answers the same button.
+				const illustrator = play ? tavernUiExtensions.illustrator() : null;
+				return illustrator && tavernPluginAllowed(illustrator.owner, props.sessionId) ? React.createElement(TavernPluginIllustrateAction, { key: props.sessionId + ":" + turn, sessionId: props.sessionId, turn: turn, illustrator: illustrator }) : null;
+			}
+			function TavernPluginIllustrateAction(props) {
+				const [busy, setBusy] = React.useState(false);
+				async function draw() {
+					if (busy) return;
+					setBusy(true);
+					try { await props.illustrator.draw({ gameId: props.sessionId, turn: props.turn }); }
+					catch (e) { tavernErrorHub.report("配图", e); }
+					finally { setBusy(false); }
+				}
+				const label = busy ? "正在整理画面…" : "为这一轮配图";
+				return React.createElement(DshUi.Tooltip, { label: label, side: "bottom" },
+					React.createElement("button", { type: "button", className: "dsh-tavern-message-fork dsh-tavern-message-illustrate", "aria-label": label, disabled: busy, onClick: draw },
+						React.createElement("svg", { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
+							React.createElement("rect", { x: 2, y: 3, width: 12, height: 10, rx: 2 }),
+							React.createElement("circle", { cx: 6, cy: 6.5, r: 1.2 }),
+							React.createElement("path", { d: "M2.5 12 6.5 8.5 9 10.5 11 9 13.5 11" }))));
 			}
 			function register(input) {
 				// uiWorkspace 由 dsh-client-ui-workspace 提供；缺失时（老宿主/未加载）退化为 sessions.retain。

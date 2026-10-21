@@ -301,7 +301,7 @@ export function registerTavernHttpRoutes({
           }
           if (req.method === 'GET' && pathname === '/api/dsh-tavern/plugin-media') {
             const query = new URL(req.url, 'http://x').searchParams
-            const file = await readPluginMediaFile(query.get('sessionId'), query.get('id'))
+            const file = await readPluginMediaFile(query.get('sessionId'), query.get('id'), query.get('version'))
             const headers = { 'Content-Type': file.mediaType, 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }
             if (file.mediaType === 'application/octet-stream') headers['Content-Disposition'] = 'attachment; filename*=UTF-8\'\'' + encodeURIComponent(file.name || 'file')
             if (file.data) {

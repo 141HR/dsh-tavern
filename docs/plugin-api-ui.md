@@ -48,6 +48,21 @@ context = { gameId, turn, busy }
 
 读写插件自己的数据，和宿主侧 `tavern.readPluginData()`、`tavern.savePluginData({ data })` 是同一份（见[媒体与数据](plugin-api-data.md)）。都返回 Promise；`savePluginData` 传 `null` 清除。
 
+## `registerIllustrator({ kinds, draw, redraw?, editPrompt?, add?, cancel?, action? })`（第 5 版）
+
+生图插件接管 Tavern 自己的配图界面：每轮的「为这一轮配图」按钮，以及正文里包住插件图片的插图卡。插图卡负责显示、版本切换、删除、进度和取消按钮，插件只负责出图。`kinds` 是插件自己的媒体类型；这些类型的媒体项由插图卡显示，不再走 `registerMediaRenderer`。
+
+每个处理函数收到 `{ gameId, turn, textVersion, item }`，可以返回 Promise，抛错会显示在卡片上。只提供了哪个函数，卡片上就出现对应的按钮：
+
+- `draw`（必填）：为这一轮配图，通常 `attach` 一个 pending 占位，出图后 `update` 成 ready。
+- `redraw`：「重画」，按这张图的提示词再画；新图换上后旧图成为早期版本。
+- `editPrompt`：「改提示词」，多收到 `prompt`。
+- `add`：「新增插图」，多收到玩家写的 `instruction`（可能为空）。
+- `cancel`：pending 或 `activity.cancellable` 时的「取消」。
+- `action`：媒体项 `actions` 里的按钮，多收到 `actionId`。
+
+插图卡只读标准字段：`status`、`progress`、`error`、`prompt`、`activity`、`actions`，插件自己的 `data` 它不读。
+
 ## `listIllustrations()`（第 4 版）
 
 列出 Tavern 自带场景生图画过的全部插图（所有游戏，新的在前），只读。返回 Promise，每项是 `{ gameId, gameTitle, cardName, turn, gameDeleted, description, createdAt, url }`，`url` 可直接用作 `<img src>`。插件自己挂的媒体不在其中。

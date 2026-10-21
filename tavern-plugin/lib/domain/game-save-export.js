@@ -71,8 +71,7 @@ export function createGameSaveExporter({ chatForSession, gameSaveSnapshot, readC
     }
     const media = state.media ? { ...state.media, items: state.media.items.filter(item => shown.has(item.turn + '\u0000' + item.key)) } : null
     const attachments = [], seen = new Set(), store = getAttachments()
-    for (const item of media?.items || []) {
-      const ref = item.attachment
+    for (const ref of (media?.items || []).flatMap(item => [item.attachment, ...(item.history || []).map(entry => entry.attachment)])) {
       if (!ref || seen.has(ref.attachmentId) || !store) continue
       seen.add(ref.attachmentId)
       try {

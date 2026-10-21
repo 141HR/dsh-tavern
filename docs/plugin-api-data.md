@@ -16,6 +16,10 @@ item = {
   caption,       // 可选：图注
   error,         // 可选：failed 时显示的原因
   data,          // 可选：插件自己的数据（JSON，≤ 64 KB），Tavern 原样保存、原样返还
+  // 以下三项给 Tavern 的插图卡用（见 registerIllustrator）：
+  prompt,        // 可选：这张图的提示词，「改提示词」的初始内容（≤ 12000 字）
+  activity,      // 可选：图还在、但正在处理时的说明，{ label, progress?, cancellable? }；null 表示没有
+  actions,       // 可选：插图卡上额外的按钮，[{ id, label }]，最多 4 个；点了交给 illustrator.action
 }
 ```
 
@@ -29,6 +33,8 @@ item = {
 ## `update(id, changes)`
 
 修改自己挂的媒体项，`changes` 只需写要改的字段，返回修改后的媒体项。不能修改 `id`、`turn`、`textVersion`。
+
+图片换成新的 `attachment` 时（比如重画），旧图自动保留为早期版本，最多 8 个，在返回值的 `history` 里（`{ caption, prompt, createdAt }`）。玩家可以在插图卡上翻看和删除这些版本。
 
 ## `remove(id)`
 

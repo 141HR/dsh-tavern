@@ -2742,18 +2742,28 @@ export async function apply(ctx) {
     if (settled) void pluginApi.turnSettled(id).catch(error => console.warn('dsh-tavern: 插件轮次通知失败:', str(error?.message || error)))
   }
   // Bytes of one item, only while it belongs to the text version on screen.
-  async function readPluginMediaFile(sessionId, itemId) {
+  // `version` picks an earlier picture of the item (its history index); without it, the current one.
+  async function readPluginMediaFile(sessionId, itemId, version) {
     const missing = () => Object.assign(new Error('媒体不存在或不属于当前正文版本'), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
     const game = await pluginTurns.resolveGame(str(sessionId))
     const item = game ? await pluginMedia.find(game.chatId, str(itemId)) : null
-    if (!item || !item.attachment || await pluginTurns.currentKey(game.sessionId, item.turn) !== item.key) throw missing()
+    if (!item || await pluginTurns.currentKey(game.sessionId, item.turn) !== item.key) throw missing()
+    const ref = version === undefined || version === null || version === '' ? item.attachment : item.history?.[Number(version)]?.attachment
     const attachments = ctx.get('attachments')
-    if (!attachments) throw missing()
-    if (item.attachment.mediaType) {
-      const image = await attachments.readImage(item.attachment)
-      return { mediaType: item.attachment.mediaType, data: image.data, length: image.data.byteLength }
+    if (!ref || !attachments) throw missing()
+    if (ref.mediaType) {
+      const image = await attachments.readImage(ref)
+      return { mediaType: ref.mediaType, data: image.data, length: image.data.byteLength }
     }
-    return { mediaType: pluginFileMediaType(item.attachment.name), length: Number(item.attachment.bytes) || 0, name: item.attachment.name, stream: signal => attachments.readFileStream(item.attachment, signal) }
+    return { mediaType: pluginFileMediaType(ref.name), length: Number(ref.bytes) || 0, name: ref.name, stream: signal => attachments.readFileStream(ref, signal) }
+  }
+  // The player removes one picture of a plugin illustration from the story (see pluginMedia.removeVersion).
+  async function removePluginMediaVersion(sessionId, itemId, version) {
+    const game = await pluginTurns.resolveGame(str(sessionId))
+    if (!game) throw new Error('当前游戏不存在')
+    const item = await pluginMedia.removeVersion({ chatId: game.chatId, itemId: str(itemId), version })
+    sessionSignals.publish(game.sessionId, { kind: 'plugin-media', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
+    return { item: item ? publicPluginMedia(item) : null }
   }
   // Turns that hold any plugin item, so the browser asks only those turns.
   async function pluginMediaTurns(sessionId) {
@@ -4313,6 +4323,7 @@ export async function apply(ctx) {
       case 'listSceneImageModels': return await enabledSceneIllustrations().listModels(args)
       case 'testSceneImageGeneration': return await enabledSceneIllustrations().testGenerate()
       case 'pluginMediaForTurn': return await pluginMediaForTurn(args && args.sessionId, args && args.turn)
+      case 'removePluginMediaVersion': return await removePluginMediaVersion(args && args.sessionId, args && args.itemId, args && args.version)
       // The lines come with the cast, so the story shows each speaker's picture for the line's emotion.
       case 'castForTurns': {
         const sessionId = str(args && args.sessionId)
