@@ -117,3 +117,41 @@ test('回执文本可覆盖，未提供时用默认值', () => {
   assert.equal(call.content[0].type, 'tool-call')
   assert.deepEqual(receipt.content, [{ type: 'text', text: '已保存' }])
 })
+
+test('bodies 布局只回放正文，玩家消息保持 user 轮次', () => {
+  const messages = [player('player-1', '玩家输入'), body('message-1', '第一轮正文'), player('player-2', '继续')]
+  const projected = projectHistoryAsToolCalls(messages, { toolName: TOOL, layout: 'bodies' })
+  assert.deepEqual(projected.map(message => message.role), ['user', 'assistant', 'tool', 'user'])
+  assert.equal(projected[0].content[0].text, '玩家输入')
+})
+
+test('all 布局把说明性文本也改成调用，系统提示仍是 system', () => {
+  const frame = { id: 'frame-1', role: 'user', source: { kind: 'plugin:dsh-tavern' }, content: [{ type: 'text', text: '共同创作虚构小说' }] }
+  const system = { id: 'system', role: 'system', source: { kind: 'system-prompt' }, content: [{ type: 'text', text: '规则' }] }
+  const messages = [system, frame, body('message-1', '正文'), player('player-2', '继续')]
+  const projected = projectHistoryAsToolCalls(messages, { toolName: TOOL, layout: 'all' })
+  assert.deepEqual(projected.map(message => message.role), ['system', 'assistant', 'tool', 'assistant', 'tool', 'user'])
+  assert.deepEqual(JSON.parse(projected[1].content[0].arguments), { content: '共同创作虚构小说' })
+})
+
+test('everything 布局连本轮输入一起回放，末尾是一条回执', () => {
+  const messages = [body('message-1', '正文'), player('player-2', '继续')]
+  const projected = projectHistoryAsToolCalls(messages, { toolName: TOOL, layout: 'everything' })
+  assert.deepEqual(projected.map(message => message.role), ['assistant', 'tool', 'assistant', 'tool'])
+  assert.equal(projected.at(-1).role, 'tool')
+  assert.deepEqual(JSON.parse(projected[2].content[0].arguments), { content: '继续' })
+})
+
+test('json 布局是纯文本对照：同样的 JSON 走 user 轮次，没有回执', () => {
+  const messages = [body('message-1', '正文'), player('player-2', '继续')]
+  const projected = projectHistoryAsToolCalls(messages, { toolName: TOOL, layout: 'json' })
+  assert.deepEqual(projected.map(message => message.role), ['user', 'user'])
+  assert.deepEqual(JSON.parse(projected[0].content[0].text), { content: '正文' })
+})
+
+test('echo 布局的回执重复正文，其余与 story 一致', () => {
+  const messages = [body('message-1', '正文'), player('player-2', '继续')]
+  const projected = projectHistoryAsToolCalls(messages, { toolName: TOOL, layout: 'echo' })
+  assert.deepEqual(projected.map(message => message.role), ['assistant', 'tool', 'user'])
+  assert.deepEqual(projected[1].content, [{ type: 'text', text: '正文' }])
+})

@@ -206,6 +206,7 @@ import { createForegroundOrchestrationStrategies } from './domain/foreground-orc
 import { clearFailedTurnSurface, rollbackAvailability, reshadowRolledBackRounds, interruptedSurfaceTurns } from './domain/rollback-surface.js'
 import { assistantResultForTurn } from './domain/session-turn-result.js'
 import { createStorySubmissionTool, foldStorySubmission, STORY_SUBMIT_TOOL_NAME } from './domain/story-tool-submission.js'
+import { readHistoryLayoutFile } from './domain/history-tool-call.js'
 import { forkTurnsByMessageId as forkTargetsFromSession } from './domain/conversation-fork-targets.js'
 import { createTavernRetryLimiter } from './domain/tavern-retry-limiter.js'
 import { lastTavernHelperVariables, projectTavernHelperContext, hydrateTavernHelperMessages, replaceTavernHelperVariables, HELPER_MESSAGE_COLD_WINDOW } from './domain/tavern-helper-context.js'
@@ -265,6 +266,12 @@ import { prompt as promptFile, SYSTEM_PROMPT_DEFINITIONS, SYSTEM_PROMPT_NAMES } 
 // dsh-tavern 宿主插件（profile 组合行）
 // RPC：同源 HTTP 路由 /api/dsh-tavern/<method>（客户端 fetch 调用）
 // DSH 生命周期负责回合状态；模型工具只处理按需读取和明确修改。
+
+// 历史回放排列的实验开关：文件里一个词，按请求读取，一次重启即可切完所有分组。
+// 没有这个文件时行为与发布版一致（story）。
+function historyLayoutFile() {
+  return path.join(process.env.DSH_HOME || path.join(process.env.HOME || '/', '.dsh'), 'tavern-history-layout.txt')
+}
 
 export async function apply(ctx) {
   // Per-turn paths must not load a whole save; see whole-read-guard.js.
@@ -5752,6 +5759,9 @@ export async function apply(ctx) {
     nativePlay: {
       // History is replayed as calls of the same submission tool, so it follows that switch.
       historyToolCall: async () => (await readTavernSettings()).storyToolCall,
+      // Experiment switch for the replay layout: a word in a file, read per request
+      // so one restart covers every arm. Absent or unreadable means the shipped one.
+      historyLayout: async () => readHistoryLayoutFile(process.env.DSH_TAVERN_HISTORY_LAYOUT_FILE || historyLayoutFile()),
       systemAppend: () => runtimePrompt('system-append'),
       stagedRequests: runtimePresetSnapshots,
       modeFor: async function (sessionId) { return await turnOrchestrator.modeFor(sessionId) },
