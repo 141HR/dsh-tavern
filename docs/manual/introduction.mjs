@@ -96,7 +96,7 @@ export const installation = `
 
 ### 第 1 步：下载安装包
 
-本分支的新一键包尚未发布。测试构建见 Actions 的 Windows Setup 产物；目前请使用下面 B 的官方桌面版安装方式。旧社区版一键包不适用于此分支。
+本分支的新一键包尚未发布。测试构建见 Actions 的 Windows Setup 产物；目前请使用下面 B 的官方桌面版安装方式。桌面版仅支持官方 DeepSeek Harness，不再支持社区 DSH Desktop / DSH NEXT。社区版用户请先备份，再按[数据导入说明](https://github.com/flizzywine/dsh-tavern/blob/main/docs/data-import.md)迁移。
 
 ### 第 2 步：安装并等待完成
 

@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { existsSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -30,28 +31,7 @@ test('Windows 官方 shim 不将中文路径写进批处理，并拒绝未知宿
     assert.match(shim, /DisableDelayedExpansion/)
   }
   await writeFile(path.join(unpacked, 'package.json'), JSON.stringify({name: 'dsh-desktop'}))
-  assert.throws(() => runtime.prepare({executable, home, platform: 'win32'}), /官方 DeepSeek Harness 或社区/)
-})
-
-test('社区版 DSH NEXT / DSH Desktop：用自带的 desktop-cli 与按架构的 pnpm，官方优先被发现', async t => {
-  const root = await mkdtemp(path.join(tmpdir(), 'community-desktop-'))
-  t.after(() => rm(root, {recursive: true, force: true}))
-  const executable = path.join(root, 'DSH NEXT', 'DSH NEXT.exe')
-  const app = path.join(root, 'DSH NEXT', 'resources', 'app')
-  await mkdir(path.join(app, 'lib'), {recursive: true})
-  await writeFile(path.join(app, 'package.json'), JSON.stringify({name: 'dsh-plugin-desktop'}))
-  await writeFile(path.join(app, 'lib', 'desktop-cli.js'), '')
-  const pnpm = path.join(root, 'DSH NEXT', 'resources', 'runtime', 'x64', 'primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.mjs')
-  await mkdir(path.dirname(pnpm), {recursive: true}); await writeFile(pnpm, '')
-  await writeFile(executable, '')
-  const paths = runtime.layout(executable, 'win32', 'arm64')
-  assert.equal(paths.bootstrap, path.join(app, 'lib', 'desktop-cli.js'))
-  assert.equal(paths.pnpm, pnpm, '缺当前架构时回退到已有的运行时')
-  const env = runtime.prepare({executable, home: path.join(root, 'home'), platform: 'win32', env: {Path: ''}})
-  assert.equal(env.DSH_DESKTOP_DSH_BOOTSTRAP, paths.bootstrap)
-  assert.equal(env.DSH_TAVERN_HOST_DEPENDENCY_ANCHOR, path.join(app, 'package.json'))
-  assert.equal(runtime.discover({DSH_DESKTOP_APP_EXECUTABLE: executable}, 'win32'), executable)
-  assert.deepEqual(runtime.APP_NAMES, ['DeepSeek Harness', 'DSH NEXT', 'DSH Desktop'])
+  assert.throws(() => runtime.prepare({executable, home, platform: 'win32'}), /仅支持官方 DeepSeek Harness/)
 })
 
 test('本机官方 Electron 可从中文目录运行 DSH 和 pnpm', async t => {
@@ -70,27 +50,6 @@ test('本机官方 Electron 可从中文目录运行 DSH 和 pnpm', async t => {
   }
 })
 
-// 社区版用自带的真 Node 跑校验，而真 Node 打不开 app.asar：包名读成空，DSH NEXT 被拒绝。
-// 包名要直接从 asar 的目录里读出来；仍读不到时，报错带上读到的包名与应用目录。
-test('应用打包成 app.asar 时，不用 Electron 也能读出包名；读不到时报错写明原因', async t => {
-  const root = await mkdtemp(path.join(tmpdir(), 'desktop-asar-'))
-  t.after(() => rm(root, {recursive: true, force: true}))
-  const executable = path.join(root, 'DSH NEXT.exe')
-  const archive = path.join(root, 'resources', 'app.asar')
-  await mkdir(path.dirname(archive), {recursive: true})
-  const body = Buffer.from(JSON.stringify({name: 'dsh-plugin-desktop'}))
-  const json = Buffer.from(JSON.stringify({files: {'package.json': {size: body.length, offset: '0'}}}))
-  const padded = Buffer.concat([json, Buffer.alloc((4 - json.length % 4) % 4)])
-  const header = Buffer.alloc(8); header.writeUInt32LE(4 + padded.length, 0); header.writeUInt32LE(json.length, 4)
-  const sizes = Buffer.alloc(8); sizes.writeUInt32LE(4, 0); sizes.writeUInt32LE(header.length + padded.length, 4)
-  await writeFile(archive, Buffer.concat([sizes, header, padded, body]))
-  assert.equal(runtime.layout(executable, 'win32').name, 'dsh-plugin-desktop')
-  await writeFile(archive, Buffer.from('not an archive'))
-  assert.throws(() => runtime.prepare({executable, home: path.join(root, 'home'), platform: 'win32'}), /读到的应用包名：无法读取，应用目录：.*app\.asar/)
-})
-
-// DSH NEXT 2.0.19 改了布局：包名 dsh-desktop-next，resources/app 只剩一个 package.json，
-// 应用和 DSH 入口都在 app.asar 里，必须用应用自己的 Electron 运行；node/pnpm 仍用自带的 Node。
 function asar(files) {
   const tree = {files: {}}, bodies = []
   let offset = 0
@@ -109,46 +68,50 @@ function asar(files) {
   return Buffer.concat([sizes, header, padded, ...bodies])
 }
 
-test('DSH NEXT 2.0.19：宿主在 app.asar 里，安装代码与 dsh 用 Electron 运行，只有 pnpm 用自带 Node', async t => {
-  const root = await mkdtemp(path.join(tmpdir(), 'desktop-next-'))
+for (const name of ['dsh-plugin-desktop', 'dsh-desktop-next']) {
+  for (const packed of [false, true]) test(`拒绝社区宿主 ${name} (${packed ? 'asar' : 'unpacked'})，不写入用户目录`, async t => {
+    const root = await mkdtemp(path.join(tmpdir(), 'unsupported-desktop-'))
+    t.after(() => rm(root, {recursive: true, force: true}))
+    const executable = path.join(root, 'DeepSeek Harness.exe') // Renaming cannot bypass the package check.
+    const resources = path.join(root, 'resources'), home = path.join(root, 'home')
+    await mkdir(resources, {recursive: true})
+    if (packed) await writeFile(path.join(resources, 'app.asar'), asar({'package.json': JSON.stringify({name})}))
+    else {
+      await mkdir(path.join(resources, 'app'))
+      await writeFile(path.join(resources, 'app/package.json'), JSON.stringify({name}))
+    }
+    assert.throws(() => runtime.prepare({executable, home, platform: 'win32'}), /仅支持官方 DeepSeek Harness/)
+    assert.equal(existsSync(home), false)
+  })
+}
+
+test('自动发现只搜索官方桌面，社区应用不会作为后备宿主', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'official-discovery-'))
   t.after(() => rm(root, {recursive: true, force: true}))
-  const executable = path.join(root, 'DSH NEXT.exe')
-  const resources = path.join(root, 'resources')
-  await mkdir(path.join(resources, 'app'), {recursive: true})
-  await writeFile(path.join(resources, 'app', 'package.json'), JSON.stringify({name: 'dsh-desktop-next'}))
-  await writeFile(path.join(resources, 'app.asar'), asar({'package.json': JSON.stringify({name: 'dsh-desktop-next'}), 'lib/desktop-cli.js': ''}))
-  const deps = path.join(resources, 'runtime', process.arch, 'primary-runtime', 'dependencies')
-  await mkdir(path.join(deps, 'node'), {recursive: true}); await writeFile(path.join(deps, 'node', 'node.exe'), '')
-  await mkdir(path.join(deps, 'pnpm', 'bin'), {recursive: true}); await writeFile(path.join(deps, 'pnpm', 'bin', 'pnpm.mjs'), '')
-  const paths = runtime.layout(executable, 'win32')
-  assert.equal(paths.app, path.join(resources, 'app.asar'), '占位的 resources/app 不是应用目录')
-  assert.equal(paths.bootstrap, path.join(resources, 'app.asar', 'lib', 'desktop-cli.js'))
-  const env = runtime.prepare({executable, home: path.join(root, 'home'), platform: 'win32', env: {Path: 'p'}})
-  assert.equal(env.DSH_DESKTOP_DSH_RUNNER, executable, 'asar 里的入口只有 Electron 能加载')
-  assert.equal(env.DSH_DESKTOP_NODE_EXECUTABLE, executable, '安装代码要读 asar 里的宿主依赖，也用 Electron')
-  assert.equal(env.DSH_DESKTOP_PNPM_RUNNER, path.join(deps, 'node', 'node.exe'), 'pnpm 仍用自带 Node，避开 Electron 下挂住')
-  assert.equal(runtime.runner(executable, 'win32'), executable)
-  const dsh = await readFile(path.join(root, 'home/tools/official-desktop/bin/dsh.cmd'), 'utf8')
-  assert.match(dsh, /%DSH_DESKTOP_DSH_RUNNER%/)
-  const pnpm = await readFile(path.join(root, 'home/tools/official-desktop/bin/pnpm.cmd'), 'utf8')
-  assert.match(pnpm, /%DSH_DESKTOP_PNPM_RUNNER%/)
+  for (const app of ['DSH NEXT', 'DSH Desktop']) {
+    await mkdir(path.join(root, app))
+    await writeFile(path.join(root, app, app + '.exe'), '')
+  }
+  assert.deepEqual(runtime.APP_NAMES, ['DeepSeek Harness'])
+  assert.throws(() => runtime.discover({ProgramFiles: root}, 'win32'), /找不到官方 DeepSeek Harness/)
+  const executable = path.join(root, 'DeepSeek Harness/DeepSeek Harness.exe')
+  await mkdir(path.dirname(executable)); await writeFile(executable, '')
+  assert.equal(runtime.discover({ProgramFiles: root}, 'win32'), executable)
 })
 
-test('DSH NEXT 2.0.19 Windows 发行版：没有 resources/app，Node 在 bin 下；Windows 上 "app.asar\\" 对文件也存在', async t => {
-  const root = await mkdtemp(path.join(tmpdir(), 'desktop-next-win-'))
+test('官方 asar 包可用纯 Node 识别并生成运行环境', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'official-asar-'))
   t.after(() => rm(root, {recursive: true, force: true}))
-  const executable = path.join(root, 'DSH NEXT.exe')
-  const resources = path.join(root, 'resources')
-  await mkdir(resources, {recursive: true})
-  await writeFile(path.join(resources, 'app.asar'), asar({'package.json': JSON.stringify({name: 'dsh-desktop-next'}), 'lib/desktop-cli.js': ''}))
-  const deps = path.join(resources, 'runtime', 'x64', 'primary-runtime', 'dependencies')
-  await mkdir(path.join(deps, 'node', 'bin'), {recursive: true}); await writeFile(path.join(deps, 'node', 'bin', 'node.exe'), '')
-  await mkdir(path.join(deps, 'pnpm', 'bin'), {recursive: true}); await writeFile(path.join(deps, 'pnpm', 'bin', 'pnpm.mjs'), '')
-  // Windows path handling ignores a trailing separator, so the archive file also "exists" as "app.asar\".
-  const fs = (await import('node:fs')).default, existsSync = fs.existsSync
-  fs.existsSync = file => existsSync(String(file).replace(/[\\/]+$/, ''))
-  t.after(() => { fs.existsSync = existsSync })
-  const env = runtime.prepare({executable, home: path.join(root, 'home'), platform: 'win32', env: {Path: 'p'}})
-  assert.equal(env.DSH_DESKTOP_DSH_BOOTSTRAP, path.join(resources, 'app.asar', 'lib', 'desktop-cli.js'))
-  assert.equal(env.DSH_DESKTOP_PNPM_RUNNER, path.join(deps, 'node', 'bin', 'node.exe'))
+  const executable = path.join(root, 'DeepSeek Harness.exe'), resources = path.join(root, 'resources')
+  await mkdir(resources)
+  await writeFile(path.join(resources, 'app.asar'), asar({
+    'package.json': JSON.stringify({name: '@deepseek-ai/dsh-desktop'}),
+    'dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js': '',
+  }))
+  const pnpm = runtime.layout(executable, 'win32').pnpm
+  await mkdir(path.dirname(pnpm), {recursive: true}); await writeFile(pnpm, '')
+  const env = runtime.prepare({executable, home: path.join(root, 'home'), platform: 'win32', env: {Path: ''}})
+  for (const key of ['DSH_DESKTOP_NODE_EXECUTABLE', 'DSH_DESKTOP_DSH_RUNNER', 'DSH_DESKTOP_PNPM_RUNNER']) assert.equal(env[key], executable)
+  await writeFile(path.join(resources, 'app.asar'), 'invalid')
+  assert.throws(() => runtime.prepare({executable, home: path.join(root, 'home'), platform: 'win32'}), /读到的应用包名：无法读取/)
 })

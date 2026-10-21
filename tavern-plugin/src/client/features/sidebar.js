@@ -1029,10 +1029,10 @@
 				: updateStatus.phase === "installed-restart-required"
 					? (updateStatus.error || "程序文件已更新，但自动重启失败。请手动重启 DSH Tavern。")
 				: updateStatus.phase === "restart-required"
-					? "请重启 DSH Desktop 以加载新版插件。"
+					? "请重启 DeepSeek Harness 以加载新版插件。"
 				: updateStatus.phase === "completed"
 					? (updateStatus.host === "desktop"
-						? "更新完成，请重启 DSH Desktop。"
+						? "更新完成，请重启 DeepSeek Harness。"
 						: updateStatus.host === "android"
 							? "Android 更新完成，3088 服务已重启；如移动端界面未更新，请重启 DSHA。"
 							: "更新完成，请刷新页面。")

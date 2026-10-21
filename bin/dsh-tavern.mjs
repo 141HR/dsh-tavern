@@ -43,7 +43,7 @@ async function main() {
   // Desktop hosts run DSH through the app's own runtime; every command that touches the service needs it.
   if (RUNTIME_HOST === 'desktop' && ['install', 'update', 'start', 'stop', 'restart', 'status', 'open', 'window'].includes(action)) {
     const executable = officialDesktop.discover()
-    // Official: the app's Electron in Node mode. Community: its bundled Node.
+    // Run installation and updates under the official app's Electron in Node mode.
     const runner = officialDesktop.runner(executable)
     if (path.resolve(process.execPath) !== path.resolve(runner)) {
       updateDiagnostic('updater.relaunch', { executable, runner })

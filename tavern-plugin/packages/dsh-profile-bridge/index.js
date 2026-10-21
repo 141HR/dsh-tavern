@@ -4,7 +4,6 @@ import { basename } from 'node:path'
 import { relaunchApp, scheduleSwitch } from './lib/helper.mjs'
 import { createTavernShortcut } from './lib/shortcut.mjs'
 import { detectAppExe, fail, resolvePaths, statusPayload, validateTarget } from './lib/state.mjs'
-import { usesDesktopNext } from './lib/next.mjs'
 
 /** Shared RPC channel owned by this plugin; the browser half calls it by name. */
 const CHANNEL = '/profile-bridge'
@@ -33,8 +32,6 @@ function runSwitch(mode, paths, payload) {
   }
   const target = mode === 'link' ? validateTarget(paths, request.target) : undefined
   const relaunch = detectAppExe()
-  // DSH NEXT has its own Profile switcher; the page offers no switch there (an older page may still ask).
-  if (usesDesktopNext(paths.home, relaunch)) fail('next', 'DSH NEXT 请用自带的 Profile 切换')
   if (!process.versions.electron || !process.send || process.ppid <= 1) {
     fail('not-desktop', '请在官方桌面中执行切换')
   }

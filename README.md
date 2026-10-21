@@ -1,6 +1,6 @@
 <p align="center">
 
-> **当前版本适配 DSH 0.2.1-rc.2**（官方 DeepSeek Harness、DSH NEXT、DSHA v0.2.0-rc2 或独立命令行），安装见[快速开始](#快速开始)。还在用 DSH 0.1.5 的，请用[稳定版](#稳定版dsh-015)。
+> **当前版本适配 DSH 0.2.1-rc.2**（官方 DeepSeek Harness、DSHA v0.2.0-rc2 或独立命令行），安装见[快速开始](#快速开始)。还在用 DSH 0.1.5 的，请用[稳定版](#稳定版dsh-015)。
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/docs/assets/brand/dsh-tavern-lockup-on-dark.svg">
     <img src="docs/assets/brand/dsh-tavern-lockup.svg" width="360" alt="DSH 酒馆">
@@ -117,11 +117,13 @@
 
 ## 快速开始
 
+**桌面版仅支持官方 DeepSeek Harness，不再支持社区 DSH Desktop 或 DSH NEXT。** 从社区版迁移前请备份数据，再按[数据导入说明](docs/data-import.md)导入；Android 和独立命令行版继续支持。
+
 当前版本适配 **DSH 0.2.1**。还在用 DSH 0.1.5（DSH Desktop 2.0.13、旧一键安装包）的，请用[稳定版](#稳定版dsh-015)。安装前建议备份 `.dsh` 目录。
 
 ### Windows
 
-1. 安装 [DeepSeek Harness 0.2.1-rc.2](https://deepseek.com/harness/)（或社区版 [DSH NEXT](https://github.com/anywhere-labs/dsh-desktop/releases)），打开一次后从托盘退出。
+1. 安装 [DeepSeek Harness 0.2.1-rc.2](https://deepseek.com/harness/)，打开一次后从托盘退出。
 2. 安装酒馆，以下两种方式**任选其一**：
    - **方式 A：双击安装**。[下载安装程序](https://github.com/flizzywine/dsh-tavern/releases/download/v3.0/dsh-tavern-install.cmd)，双击运行（安全提示点「更多信息 → 仍要运行」）。
    - **方式 B：命令安装**。打开 PowerShell，粘贴下面这行并按回车执行：

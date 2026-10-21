@@ -1,6 +1,8 @@
 # 安装、更新与数据备份
 
-> 当前版本适配 DSH **0.2.1-rc.2**（官方 DeepSeek Harness、DSH NEXT、DSHA v0.2.0-rc2 内置的 0.2.0-rc.2、独立命令行）。Android 独立 APK 内置 DSH **0.2.0-rc.2**。Windows 一键安装版和 DSHA 0.1.5-rc2 说明属于[稳定版](https://github.com/flizzywine/dsh-tavern/blob/stable/docs/installation.md)（DSH 0.1.5，`stable` 分支）。
+> 当前版本适配 DSH **0.2.1-rc.2**（官方 DeepSeek Harness、DSHA v0.2.0-rc2 内置的 0.2.0-rc.2、独立命令行）。Android 独立 APK 内置 DSH **0.2.0-rc.2**。Windows 一键安装版和 DSHA 0.1.5-rc2 说明属于[稳定版](https://github.com/flizzywine/dsh-tavern/blob/stable/docs/installation.md)（DSH 0.1.5，`stable` 分支）。
+
+**桌面版仅支持官方 DeepSeek Harness，不再适配社区 DSH Desktop / DSH NEXT。** 社区版用户请先备份，再按[数据导入说明](data-import.md)迁移到官方版。
 
 ## Android 独立 APK（首选，Android 11+ / ARM64）
 
