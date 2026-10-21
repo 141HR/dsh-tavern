@@ -225,8 +225,8 @@ export function applyTavernSettingsPatch(current, patch) {
     next.backgroundTasks = normalizeBackgroundTasks({ ...normalizeBackgroundTasks(next.backgroundTasks), ...object(input.backgroundTasks) })
   }
   if (input.sillyModeEnabled === true || input.compatibilityMode === true) throw new Error('silly 模式已停用')
-  if (Object.prototype.hasOwnProperty.call(input, 'sillyModeEnabled')) next.sillyModeEnabled = false
-  if (Object.prototype.hasOwnProperty.call(input, 'compatibilityMode')) next.compatibilityMode = input.compatibilityMode === true
+  delete next.sillyModeEnabled
+  delete next.compatibilityMode
   if (Object.hasOwn(input, 'promptSet')) applyPromptSetChange(next, object(input.promptSet))
   if (Object.hasOwn(input, 'systemAppendEnabled')) next.systemAppendEnabled = input.systemAppendEnabled === true
   if (Object.prototype.hasOwnProperty.call(input, 'webSearchEnabled')) next.webSearchEnabled = input.webSearchEnabled === true
@@ -302,8 +302,6 @@ export function presentTavernSettings(document, defaults) {
     // Library edits reach a running game on its next turn; only an explicit
     // reload still refreshes the card definition, initvars and MVU state.
     worldbookAutoSync: object(document).worldbookAutoSync !== false,
-    compatibilityMode: false,
-    sillyModeEnabled: false,
     webSearchEnabled: object(document).webSearchEnabled === true,
     systemAppendEnabled: object(document).systemAppendEnabled !== false,
     backgroundModel: normalizeBackgroundModel(object(document).backgroundModel),

@@ -254,15 +254,12 @@ body.dsh-tavern-shell-active span:has(.dsh-tavern-hero-lockup) + span { display:
 .dsh-tavern-side-new { height: 40px; flex: none; border: 1px solid var(--dsw-alias-border-l2); border-radius: 11px; background: var(--dsw-alias-button-elevated-fill); color: inherit; cursor: pointer; font-weight: 650; }
 .dsh-tavern-side-new:hover { background: var(--dsw-alias-button-floating-hover); }
 .dsh-tavern-mode-switch { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px; margin-bottom: 8px; padding: 3px; border-radius: 10px; background: var(--dsw-alias-interactive-bg-hover); }
-.dsh-tavern-mode-switch.compatibility-enabled { grid-template-columns: repeat(3, 1fr); }
 .dsh-tavern-mode-switch button { height: 30px; border: 0; border-radius: 7px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; font-size: 12px; }
 .dsh-tavern-mode-switch button.active { background: var(--dsw-specific-input-major); color: var(--dsh-tavern-accent-active); box-shadow: var(--dsw-shadow-lv1); font-weight: 700; }
 .dsh-tavern-picker-tabs { display: flex; gap: 6px; margin: 2px 0 8px; }
 .dsh-tavern-picker-tabs button { flex: 1; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: transparent; color: var(--dsw-alias-label-secondary); padding: 6px 8px; cursor: pointer; font-size: 12px; }
 .dsh-tavern-picker-tabs button.active { border-color: var(--dsh-tavern-accent); color: var(--dsh-tavern-accent); background: color-mix(in srgb, var(--dsh-tavern-accent) 10%, transparent); font-weight: 700; }
 .dsh-tavern-side-title { margin: 16px 4px 7px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
-.dsh-tavern-compatibility-notice { margin: 10px 2px 0; padding: 10px 11px; border: 1px solid color-mix(in srgb, var(--dsh-tavern-accent) 28%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--dsh-tavern-accent) 8%, transparent); color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1.55; }
-.dsh-tavern-compatibility-notice strong { color: var(--dsw-alias-label-primary); }
 .dsh-tavern-side-list { min-height: 0; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
 .dsh-tavern-side-row { position: relative; display: flex; align-items: center; border: 0; border-radius: 8px; background: transparent; color: inherit; }
 .dsh-tavern-side-row:hover { background: var(--dsw-alias-interactive-bg-hover); }

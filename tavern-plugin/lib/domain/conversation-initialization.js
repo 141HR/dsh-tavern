@@ -35,7 +35,7 @@ export function createConversationInitialization(options) {
     return operation.finally(function () { if (pending.get(key) === operation) pending.delete(key) })
   }
 
-  function newChat(card, mode, requestMode) {
+  function newChat(card, mode) {
     const chatMode = mode === 'card' ? 'card' : (mode === 'script' ? 'script' : 'story')
     const hasCard = card !== null && card !== undefined && str(card.path) !== ''
     const chat = {
@@ -43,7 +43,7 @@ export function createConversationInitialization(options) {
       cardPath: hasCard ? card.path : '',
       cardName: hasCard ? card.name : '卡片工作台',
       mode: chatMode,
-      requestMode: requestMode === 'sillytavern' && chatMode !== 'card' ? 'sillytavern' : 'dsh',
+      requestMode: 'dsh',
       scriptState: chatMode === 'script' ? { cursor: 0, recalledChunkIds: [], prepared: null, lastReference: null, totalChunks: 0, title: '', scriptVersion: 0 } : null,
       workspace: chatMode === 'card' ? emptyCardWorkspace() : null,
       messages: [],
@@ -89,7 +89,6 @@ export function createConversationInitialization(options) {
     if (requestMode === 'sillytavern') throw new Error('silly 模式已停用')
     const currentSettings = await trace.stage('settings', () => settings())
     let defaults = normalizePlayDefaults(currentSettings.defaultPlaySettings)
-    const effectiveRequestMode = requestMode === 'sillytavern' ? 'sillytavern' : 'dsh'
     const requestedMode = mode === 'card' || mode === 'revision' || mode === 'extract' ? 'card' : (mode === 'script' ? 'script' : (mode === 'story' ? 'story' : null))
     const card = str(cardPath) === '' && requestedMode === 'card' ? null : await trace.stage('card', () => cards.read(cardPath))
     if (card === undefined) throw new Error('人物卡不存在: ' + cardPath)
@@ -154,7 +153,7 @@ export function createConversationInitialization(options) {
     // connectWorkspace 返回时，Agent 注册偶尔仍在异步完成。先等到原生会话可写，
     // 再落盘 Tavern 对话，避免失败时留下只有映射、没有原生开场白的半初始化记录。
     const openingTarget = typeof sessionId === 'string' && sessionId !== '' ? await trace.stage('waitSession', () => native.wait(sessionId)) : undefined
-    const chat = newChat(card, chatMode || 'story', effectiveRequestMode)
+    const chat = newChat(card, chatMode || 'story')
     chat.bypassPlanId = runtimePresetSnapshot && runtimePresetSnapshot.planId || ''
     chat.runtimePresetSnapshot = runtimePresetSnapshot
     chat.runtimePresetPath = str(runtimePresetSnapshot && runtimePresetSnapshot.presetPath)

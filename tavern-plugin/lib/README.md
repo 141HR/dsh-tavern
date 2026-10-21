@@ -8,7 +8,6 @@
 - `hooks/model-stream.js`：导入上下文检查、模板投影、压缩请求和模型日志。
 - `hooks/turn-lifecycle.js`：回合结束、失败清理、正文提交和 system 提示词组装。
 - `http/routes.js`：HTTP 路由、资源响应、请求校验和 RPC 错误封装。
-- `domain/compatibility-turn.js`：SillyTavern 世界书匹配与兼容请求编译。
 - `domain/chat-writes.js`：存档提交后的候选失效、摘要同步、状态通知、模板和压缩调度；
   各种写入口的豁免规则集中在此，原始导入写入不触发这些处理。
 - `domain/game-save-export.js`：在稳定快照内收集存档历史、人物卡、剧本、图片和当前分支插件媒体。
