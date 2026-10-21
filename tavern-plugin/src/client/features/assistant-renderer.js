@@ -324,7 +324,7 @@
 				const location = props.node.location;
 				const turnRef = location && (location.kind === "turn" || location.kind === "step") ? location.turn : null;
 				const turn = turnRef ? Number(turnRef.turn) : 0;
-				const liveState = useScopedLiveTavernView(props.sessionId, String(data.time || ""), [["mode"], ["canEditBody"], ["inputSources", String(turn)], ["inputTemplateDisplays", String(turn)], ["userInputEdits", String(turn)]]);
+				const liveState = useScopedLiveTavernView(props.sessionId, String(data.time || ""), [["mode"], ["canEditBody"], ["replayFailedTurn"], ["editableUserInputTurns"], ["latestCommittedUserTurn"], ["inputSources", String(turn)], ["inputTemplateDisplays", String(turn)], ["userInputEdits", String(turn)]]);
 				const parts = userContentParts(data.content);
 				// The host keeps rendering the original append node; an edited player
 				// input is carried back by the view instead (see bodyEditor.saveUser).
@@ -353,7 +353,11 @@
 				const canFork = playView && forkTurn > 0;
 				// Only the latest player input offers the quick edit; earlier floors keep
 				// their text so an edit cannot move the current round.
-				const canEdit = playView && latestUserTurn > 0 && Number(turn) === Number(latestUserTurn) && !running && liveState.view?.canEditBody !== false;
+				const editableTurns = Array.isArray(liveState.view?.editableUserInputTurns) ? liveState.view.editableUserInputTurns : [];
+				const canEdit = playView && latestUserTurn > 0 && Number(turn) === Number(latestUserTurn) && !running
+					&& Number(liveState.view?.latestCommittedUserTurn || 0) === Number(turn)
+					&& liveState.view?.canEditBody !== false && Number(liveState.view?.replayFailedTurn || 0) !== Number(turn)
+					&& editableTurns.some(value => Number(value) === Number(turn));
 				async function fork() {
 					if (forking) return;
 					setForking(true);
@@ -365,7 +369,7 @@
 					if (editBusy) return;
 					setEditBusy(true);
 					try {
-						const result = await rpc("getBodyEdit", { role: "user" }, props.sessionId);
+						const result = await rpc("getBodyEdit", { role: "user", turn }, props.sessionId);
 						window.dispatchEvent(new CustomEvent("dsh-tavern-open-body-edit", { detail: { sessionId: props.sessionId, edit: result.edit,
 							texts: result.edit.parts.filter(function (part) { return part.kind === "text"; }).map(function (part) { return part.text; }) } }));
 					} catch (error) { tavernErrorHub.report("编辑输入", error); }

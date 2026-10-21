@@ -71,3 +71,46 @@ test('替换后的输入可能落在编辑回合里，最新楼层定位仍能�
   assert.equal(latest.event.data.content[0].text, '替换后的输入')
   assert.equal(latestUserInputFloor(h.session).seq, latest.seq)
 })
+
+function twoTurnFixture() {
+  const session = Session.create('user-input-turns')
+  for (const [turn, text] of [[2, '第一条输入'], [6, '生成视频']]) {
+    appendSessionEvent(session, 'turn/start', { turn })
+    appendSessionEvent(session, 'user/message', { id: 'u' + turn, role: 'user', content: [{ type: 'text', text }], source: { kind: 'user', rpcId: 'r' + turn } }, { surfaceOp: 'append' })
+    appendSessionEvent(session, 'assistant/message', { turn, step: 1, message: { id: 'a' + turn, role: 'assistant', content: [{ type: 'text', text: '回复' + turn }], source: { kind: 'model', provider: 'f', model: 'f' } } }, { surfaceOp: 'append', sourceEventSeqs: [] })
+    appendSessionEvent(session, 'turn/end', { turn, reason: { kind: 'completed' } })
+  }
+  // The newest input (turn 6) never reached Chat: it is a failed/pending turn.
+  let chat = { id: 'chat', sessionId: session.id, mode: 'story', _storageRevision: 1,
+    messages: [{ role: 'user', text: '第一条输入' }, { role: 'assistant', turn: 2, native: { turn: 2 }, text: '回复2' }] }
+  const agent = { get session() { return session }, phase: { kind: 'idle' } }
+  const editor = createBodyEditor({
+    chats: { forSession: async () => structuredClone(chat), update: async (_id, fn) => { chat = fn(structuredClone(chat)); chat._storageRevision++; return structuredClone(chat) } },
+    sessions: { get: () => agent, flush: async () => {} },
+    activity: () => ({ busy: false }), project: async () => ({}), present: async value => value
+  })
+  return { editor, session, get chat() { return chat } }
+}
+
+test('指定回合时读的是点击的那条输入，不是最后一条已提交的输入', async () => {
+  const h = twoTurnFixture()
+  const first = await h.editor.readUser(h.session.id, { turn: 2 })
+  assert.deepEqual(first.parts, [{ kind: 'text', text: '第一条输入' }])
+  const pending = await h.editor.readUser(h.session.id, { turn: 6 })
+  assert.deepEqual(pending.parts, [{ kind: 'text', text: '生成视频' }])
+})
+
+test('还没进 Chat 的输入只写表头编辑记录，模型上下文同步替换', async () => {
+  const h = twoTurnFixture()
+  const edit = await h.editor.readUser(h.session.id, { turn: 6 })
+  const saved = await h.editor.saveUser(h.session.id, { token: edit.token, turn: 6, texts: ['改成生成图片'] })
+  assert.equal(saved.messages.length, 2)
+  assert.deepEqual(saved.userInputEdits, { 6: { text: '改成生成图片', id: saved.userInputEdits[6].id, seq: saved.userInputEdits[6].seq } })
+  assert.deepEqual(userInputEditsOf(saved), { 6: '改成生成图片' })
+  assert.deepEqual(h.session.deriveMessages().filter(message => message.role === 'user').map(message => message.content[0].text), ['第一条输入', '改成生成图片'])
+  // 再编辑同一回合时，沿着替换链找到最新副本
+  const again = await h.editor.readUser(h.session.id, { turn: 6 })
+  assert.deepEqual(again.parts, [{ kind: 'text', text: '改成生成图片' }])
+  await h.editor.saveUser(h.session.id, { token: again.token, turn: 6, texts: ['再改成生成音频'] })
+  assert.deepEqual(h.session.deriveMessages().filter(message => message.role === 'user').map(message => message.content[0].text), ['第一条输入', '再改成生成音频'])
+})

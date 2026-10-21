@@ -116,7 +116,7 @@ import { createHelperGenerationTasks } from './domain/helper-generation-tasks.js
 import { createBodyEditor } from './domain/body-editor.js'
 import { userInputEditsOf } from './domain/input-floor.js'
 import { appendHelperUserSessionContext } from './domain/helper-user-session-context.js'
-import { userMessageForTurn, requestIdForTurn, requestIdForMessages } from './domain/session-turn-input.js'
+import { inputKind, userMessageForTurn, requestIdForTurn, requestIdForMessages } from './domain/session-turn-input.js'
 import { inspectStoryAlignment, nativeStoryTurns } from './domain/story-alignment.js'
 import { repairNativeSurface, recordNativeSurfaceRepair, planNativeSurfaceRepair } from './domain/native-surface-repair.js'
 import { sessionOpeningDescriptor, prepareSessionOpening } from './domain/session-opening.js'
@@ -2358,6 +2358,8 @@ export async function apply(ctx) {
       inputSources,
       inputTemplateDisplays,
       userInputEdits: userInputEditsOf(chat),
+      editableUserInputTurns: editableUserInputTurnsForChat(chat),
+      latestCommittedUserTurn: latestCommittedUserTurnForChat(chat),
       ...rollbackFields,
       ...transcriptPlan,
       presentation: null,
@@ -2514,6 +2516,51 @@ export async function apply(ctx) {
     const session = sessionStore.get(str(chat?.sessionId)) || agentRegistry.get(str(chat?.sessionId))?.session
     return forkTargetsFromSession(session, chat?.regeneratedDshTurns)
   }
+  // The newest player input that actually committed a Chat message. Failed or
+  // withdrawn turns keep only an append node in the transcript, so they must not
+  // offer in-place editing (their input is recovered with 「撤回这条输入」).
+  function latestCommittedUserTurnForChat(chat) {
+    const messages = Array.isArray(chat?.messages) ? chat.messages : []
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index]
+      if (!message || message.role !== 'user' || message.greeting === true) continue
+      const reply = messages[index + 1]
+      const turn = Number(reply?.native?.turn) || Number(reply?.nativeAnchor?.turn) || Number(message.bodyEdit?.turn) || 0
+      if (turn > 0) return turn
+    }
+    return 0
+  }
+  // Player inputs the page may edit: only those still on the model surface. A
+  // failed or withdrawn turn is removed from the surface while its append node
+  // stays in the transcript, so it must not offer in-place editing.
+  function editableUserInputTurnsForChat(chat) {
+    const session = sessionStore.get(str(chat?.sessionId)) || agentRegistry.get(str(chat?.sessionId))?.session
+    if (!session || !Array.isArray(session.surface?.nodes)) return []
+    const events = sessionEvents(session)
+    const bySeq = new Map(events.map(event => [Number(event.seq), event]))
+    const turnOf = new Map()
+    let current = 0
+    for (const event of events) {
+      if (event.type === 'turn/start') current = Number(event.data?.turn) || 0
+      turnOf.set(Number(event.seq), current)
+    }
+    const turns = new Set()
+    for (const seq of session.surface.nodes) {
+      const event = bySeq.get(Number(seq))
+      if (!event || event.type !== 'user/message' || inputKind(event.data) !== 'player') continue
+      turns.add(turnOf.get(Number(seq)) || 0)
+      let cursor = event
+      for (let guard = 0; guard < 32; guard += 1) {
+        const op = cursor.surfaceOp
+        if (!op || op.op !== 'replace') break
+        const original = bySeq.get(Number(op.startSeq))
+        if (!original) break
+        turns.add(turnOf.get(Number(op.startSeq)) || 0)
+        cursor = original
+      }
+    }
+    return [...turns].filter(turn => turn > 0).sort((left, right) => left - right)
+  }
   // The row plan (docs/design/transcript-row-plan.md) over what the view holds — the
   // window of floors, or the whole short history — and the log since its first round, as
   // turn-keyed exceptions. The page shows exactly the rows it plans. The log grows every
@@ -2530,7 +2577,7 @@ export async function apply(ctx) {
   }
   function volatileSessionViewFields(chat, activity, changes) {
     const fields = sessionStateView.volatile(chat, activity, changes)
-    return { ...fields, forkTurnsByMessageId: forkTurnsForChat(chat), userInputEdits: userInputEditsOf(chat),
+    return { ...fields, forkTurnsByMessageId: forkTurnsForChat(chat), userInputEdits: userInputEditsOf(chat), editableUserInputTurns: editableUserInputTurnsForChat(chat), latestCommittedUserTurn: latestCommittedUserTurnForChat(chat),
       ...transcriptPlanFields(chat, sessionDebugEvidence(chat.sessionId), fields.replacingDshTurns, fields.keptInputTurns) }
   }
 
@@ -5370,7 +5417,7 @@ export async function apply(ctx) {
       case 'loadGuideLibrary': return { guides: await conversationGuides.load(args?.sessionId, args?.id) }
       case 'addGuide': return { guides: await conversationGuides.add(args?.sessionId, args?.text) }
       case 'deleteGuide': return { guides: await conversationGuides.remove(args?.sessionId, args) }
-      case 'getBodyEdit': return { edit: args?.role === 'user' ? await bodyEditor.readUser(args && args.sessionId) : await bodyEditor.read(args && args.sessionId) }
+      case 'getBodyEdit': return { edit: args?.role === 'user' ? await bodyEditor.readUser(args && args.sessionId, args) : await bodyEditor.read(args && args.sessionId) }
       case 'listGamePlugins': return { plugins: await pluginApi.gamePlugins(str(args && args.sessionId)) }
       case 'setGamePlugin': return { plugins: await pluginApi.setGamePlugin(str(args && args.sessionId), { name: args && args.name, enabled: args && args.enabled, replace: args && args.replace, task: args && args.task, taskOrder: args && args.taskOrder, setting: args && args.setting }) }
       case 'pluginState': return { data: await pluginApi.pluginState(str(args && args.sessionId), str(args && args.plugin), str(args && args.name)) }

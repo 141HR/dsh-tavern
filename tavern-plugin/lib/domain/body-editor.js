@@ -7,7 +7,7 @@ import { locateRegenerationSurface } from './rollback-surface.js'
 import { sessionEvents } from './session-events.js'
 import { isScopedMessages } from './scoped-messages.js'
 import { diffJson } from './json-mutation.js'
-import { latestUserInputFloor, locateUserInputFloor } from './input-floor.js'
+import { locateUserEditFloor, locateUserInputFloor, userInputText } from './input-floor.js'
 
 function latest(chat) {
   const message = chat.messages?.at(-1)
@@ -201,20 +201,33 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
       return present(saved)
     } finally { pending.delete(sessionId) }
   }
-  // The last player input is a floor too: the model surface gets a replacement
+  // A player input is a floor too: the model surface gets a replacement
   // user/message, while the Chat keeps the new text so the page can render it.
   // Only that one message changes; no round is replayed and no settlement runs.
-  function latestUser(chat) {
+  function userMessageForTurn(chat, turn) {
+    const messages = chat.messages || []
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index]
+      if (!message || message.role !== 'user' || message.greeting === true) continue
+      const reply = messages[index + 1]
+      const native = Number(reply?.native?.turn) || Number(reply?.nativeAnchor?.turn) || Number(reply?.turn) || 0
+      if (native === turn || (message.bodyEdit && Number(message.bodyEdit.turn) === turn)) return { message, index }
+    }
+    return null
+  }
+  function userRecord(chat, turn) {
+    const all = chat.userInputEdits
+    const record = all && typeof all === 'object' && !Array.isArray(all) ? all[String(turn)] : undefined
+    return record && typeof record === 'object' && typeof record.text === 'string' ? record : null
+  }
+  function userFallbackTurn(chat) {
     const messages = chat.messages || []
     const index = messages.findLastIndex(message => message && message.role === 'user' && message.greeting !== true)
-    if (index < 0) throw new Error('找不到可编辑的玩家输入')
-    if (index !== messages.length - 1 && messages[index + 1]?.role !== 'assistant') throw new Error('最后一轮还没有回复，暂时不能编辑')
+    if (index < 0) return 0
     const reply = messages[index + 1]
-    const turn = Number(reply?.native?.turn) || Number(reply?.nativeAnchor?.turn) || 0
-    if (!Number.isSafeInteger(turn) || turn < 1) throw new Error('找不到这条输入对应的回合')
-    return { message: messages[index], index, turn }
+    return Number(reply?.native?.turn) || Number(reply?.nativeAnchor?.turn) || Number(reply?.turn) || 0
   }
-  async function userContext(sessionId) {
+  async function userContext(sessionId, input) {
     refuseClosedPatch()
     let chat = await chats.forSession(sessionId)
     if (!chat) throw new Error('会话不存在')
@@ -237,26 +250,41 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
     chat = await chats.forSession(sessionId)
     if (!chat) throw new Error('会话不存在')
     idle(chat, agent)
-    const { message, index, turn } = latestUser(chat)
-    const located = latestUserInputFloor(agent.session)
-    if (!located) throw new Error('这条输入已不在当前上下文中，无法编辑')
-    return { chat, agent, message, index, turn, located }
+    const requested = Number(input?.turn) || 0
+    const turn = requested > 0 ? requested : userFallbackTurn(chat)
+    if (!Number.isSafeInteger(turn) || turn < 1) throw new Error('找不到这条输入对应的回合')
+    const found = userMessageForTurn(chat, turn)
+    const record = userRecord(chat, turn)
+    const markerSeq = Number(record?.seq) || Number(found?.message?.bodyEdit?.seq) || 0
+    let located = markerSeq > 0 ? locateUserEditFloor(agent.session, markerSeq) : null
+    if (!located) located = locateUserInputFloor(agent.session, turn)
+    // Never fall back to "the newest input": that edits another message when the
+    // clicked one was removed from the model context (a failed or withdrawn turn).
+    if (!located) throw new Error('这条输入已不在当前上下文中，无法编辑；失败轮请用「撤回这条输入」放回输入框再改')
+    const text = record ? record.text : found ? String(found.message.text ?? '') : userInputText(located.event)
+    return { chat, agent, message: found?.message || null, index: found?.index ?? -1, turn, located, text, record }
   }
-  async function readUser(sessionId) {
-    const { chat, message, index, turn } = await userContext(sessionId)
-    return { token: token(chat, message), role: 'user', index, turn, parts: [{ kind: 'text', text: String(message.text ?? '') }] }
+  function userToken(chat, context) {
+    return createHash('sha256').update(JSON.stringify([chat.id, chat.timeline?.branchId, chat._storageRevision, context.turn, context.text,
+      context.record?.id || '', context.message?.bodyEdit?.id || ''])).digest('hex')
+  }
+  async function readUser(sessionId, input) {
+    const context = await userContext(sessionId, input)
+    return { token: userToken(context.chat, context), role: 'user', index: context.index, turn: context.turn,
+      parts: [{ kind: 'text', text: context.text }] }
   }
   async function saveUser(sessionId, input) {
     if (pending.has(sessionId)) throw new Error('正在保存正文，请稍候')
     pending.add(sessionId)
     try {
-      const { chat, agent, message, index, turn, located } = await userContext(sessionId)
-      if (input?.token !== token(chat, message)) throw new Error('输入或会话已变化，请重新打开编辑')
+      const context = await userContext(sessionId, input)
+      if (input?.token !== userToken(context.chat, context)) throw new Error('输入或会话已变化，请重新打开编辑')
       const texts = input.texts
       if (!Array.isArray(texts) || texts.length !== 1 || typeof texts[0] !== 'string') throw new Error('编辑文本格式无效')
       const text = texts[0]
       if (text.trim() === '') throw new Error('输入不能为空')
-      if (text === message.text) return present(chat)
+      if (text === context.text) return present(context.chat)
+      const { chat, agent, turn, located } = context
       const editId = 'tavern-user-edit:' + randomUUID()
       const source = located.event.data?.source && typeof located.event.data.source === 'object'
         ? { ...located.event.data.source, kind: 'user' }
@@ -268,12 +296,23 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
       replaceSessionSurface(preview, 'user/message', data, { start: located.seq, end: located.seq, sourceEventSeqs: [located.seq] })
       const saved = await chats.update(chat.id, current => {
         idle(current, agent)
-        const messages = current.messages || []
-        const at = messages.findLastIndex(item => item && item.role === 'user' && item.greeting !== true)
-        if (at < 0 || at !== index || messages[at].text !== message.text) throw new Error('输入或会话已变化，请重新打开编辑')
+        const existing = userMessageForTurn(current, turn)
+        const currentRecord = userRecord(current, turn)
+        const before = currentRecord ? currentRecord.text : existing ? String(existing.message.text ?? '') : userInputText(located.event)
+        if (before !== context.text) throw new Error('输入或会话已变化，请重新打开编辑')
         if (!agent.session.surface?.nodes.includes(located.seq)) throw new Error('模型上下文已变化，请重新打开编辑')
-        messages[at].text = text
-        messages[at].bodyEdit = { id: editId, seq: located.seq, turn, role: 'user' }
+        if (existing) {
+          existing.message.text = text
+          existing.message.bodyEdit = { id: editId, seq: located.seq, turn, role: 'user' }
+          if (current.userInputEdits && typeof current.userInputEdits === 'object' && !Array.isArray(current.userInputEdits) && current.userInputEdits[String(turn)]) {
+            const next = { ...current.userInputEdits }
+            delete next[String(turn)]
+            current.userInputEdits = next
+          }
+        } else {
+          current.userInputEdits = { ...(current.userInputEdits && typeof current.userInputEdits === 'object' && !Array.isArray(current.userInputEdits) ? current.userInputEdits : {}),
+            [String(turn)]: { text, id: editId, seq: located.seq } }
+        }
         return current
       }, { source: 'foreground.user-edit' })
       replaceSessionSurface(agent.session, 'user/message', data, { start: located.seq, end: located.seq, sourceEventSeqs: [located.seq] })
