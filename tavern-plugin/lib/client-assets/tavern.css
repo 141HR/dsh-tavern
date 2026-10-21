@@ -1025,6 +1025,11 @@ body.dsh-tavern-shell-active [data-dsh-panel-host] { overflow: clip; }
 .dsh-tavern-error-controls button.is-primary { border-color: rgba(166,107,53,.55); color: #a66b35; font-weight: 650; }
 .dsh-tavern-error-controls button.is-primary:hover { background: rgba(166,107,53,.18); }
 .dsh-tavern-error-controls button:disabled { opacity: .55; cursor: default; }
+/* Cleared failures from earlier attempts collapse into this one quiet line. */
+.dsh-tavern-error-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 4px 12px; font-size: 12px; opacity: .78; }
+.dsh-tavern-error-summary[hidden] { display: none; }
+.dsh-tavern-error-summary button { color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 5px; padding: 2px 8px; cursor: pointer; }
+.dsh-tavern-error-summary button:disabled { opacity: .55; cursor: default; }
 
 /* Conversation groups are a sidebar projection, not folders in stored chat data. */
 .dsh-tavern-history-group { flex-shrink: 0; min-width: 0; }

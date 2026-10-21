@@ -5372,7 +5372,7 @@ export async function apply(ctx) {
         const events = sessionEvents(session)
         let changedCount = 0
         await updateChat(chat.id, current => {
-          const result = setAllFailedErrorVisibility(current, events, args.hidden)
+          const result = setAllFailedErrorVisibility(current, events, args.hidden, args.turns)
           changedCount = result.changedCount
           return changedCount ? result.chat : undefined
         }, { source: 'ui.error-visibility.batch' })

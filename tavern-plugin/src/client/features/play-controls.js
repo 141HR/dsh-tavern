@@ -1166,9 +1166,21 @@
 
 		function TavernMoreActions(props) {
 			const [open, setOpen] = React.useState(false);
+            const [restoring, setRestoring] = React.useState(false);
 			const [placement, setPlacement] = React.useState(null);
 			const root = React.useRef(null);
 			const trigger = React.useRef(null);
+            // Removing cleared notices is a one-way quiet; this puts them back after
+            // the player changed their mind (or hid the tail the hard way).
+            async function restoreErrorNotices() {
+                if (restoring) return;
+                setRestoring(true);
+                try {
+                    const result = await rpc("setAllFailedErrorVisibility", { sessionId: props.sessionId, hidden: false });
+                    liveTavernView.setView(props.sessionId, result.view);
+                } catch (error) { tavernErrorHub.report("恢复错误提示", error); }
+                finally { setRestoring(false); }
+            }
 			// The mobile composer seat scrolls (overflow-y: auto), which clipped an absolutely
 			// positioned menu to a thin strip. Anchor it to the viewport above the trigger instead.
 			React.useLayoutEffect(function () {
@@ -1199,6 +1211,7 @@
 					React.createElement(TavernEditBodyAction, props),
 					React.createElement(TavernRollbackAction, props),
                     React.createElement(TavernUndoRollbackAction, props),
+                    React.createElement("button", { type: "button", role: "menuitem", disabled: restoring, title: "把已移除或已隐藏的失败提示显示回来，正文和历史不受影响", onClick: restoreErrorNotices }, "恢复全部错误提示"),
 					React.createElement(TavernCompactionAction, Object.assign({}, props, { inMenu: true })))
 			);
 		}
@@ -1288,6 +1301,12 @@
                     sessionId: props.sessionId, storage: window.localStorage, hiddenTurns: hiddenTurns, replayTurn: replayTurn,
                     onToggle: !Array.isArray(hiddenTurns) ? undefined : async function (turn, hidden) {
                         const result = await rpc("setFailedErrorVisibility", { sessionId: props.sessionId, turn: turn, hidden: hidden });
+                        liveTavernView.setView(props.sessionId, result.view);
+                    },
+                    // Clearing the stacked line only touches the cleared failures;
+                    // the tail failure keeps its replay and withdraw buttons.
+                    onRemoveStale: !Array.isArray(hiddenTurns) ? undefined : async function (turns) {
+                        const result = await rpc("setAllFailedErrorVisibility", { sessionId: props.sessionId, hidden: true, turns: turns });
                         liveTavernView.setView(props.sessionId, result.view);
                     },
                     onReplay: replayTurn === null ? undefined : async function () {
