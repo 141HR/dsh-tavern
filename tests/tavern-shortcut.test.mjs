@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { createTavernShortcut, icoFromPng, macLauncherScript, windowsLauncherScript } from '../tavern-plugin/packages/dsh-profile-bridge/lib/shortcut.mjs'
+import { ensureInitialTavernShortcut, createTavernShortcut, icoFromPng, macLauncherScript, windowsLauncherScript } from '../tavern-plugin/packages/dsh-profile-bridge/lib/shortcut.mjs'
 import { appWindowBrowser, desktopUsesTavern } from '../bin/tavern-window.mjs'
 
 async function setup(t) {
@@ -25,13 +25,13 @@ async function setup(t) {
 test('macOS：桌面生成 DSH 酒馆.app，指向本机酒馆脚本；已存在不覆盖；没装酒馆就说明', async t => {
   const { root, source, paths } = await setup(t)
   assert.throws(() => createTavernShortcut({ paths, platform: 'darwin', runner: '/App/Electron', home: root }), /还没有装好 DSH 酒馆/)
-  await symlink(path.join(source, 'tavern-plugin'), path.join(paths.profilesDir, 'tavern', 'node_modules', 'dsh-tavern-plugin'))
+  await symlink(path.join(source, 'tavern-plugin'), path.join(paths.profilesDir, 'tavern', 'node_modules', 'dsh-tavern-plugin'), 'junction')
   const created = createTavernShortcut({ paths, platform: 'darwin', runner: '/App/Electron', home: root })
   assert.equal(created.existed, false)
   assert.equal(created.path, path.join(root, 'Desktop', 'DSH 酒馆.app'))
   const launcher = await readFile(path.join(created.path, 'Contents', 'MacOS', 'launcher'), 'utf8')
   assert.match(launcher, /ELECTRON_RUN_AS_NODE=1 '\/App\/Electron' --expose-internals '.*dsh-tavern\.mjs' window --host desktop/)
-  assert.ok((await stat(path.join(created.path, 'Contents', 'MacOS', 'launcher'))).mode & 0o100, '可执行')
+  if (process.platform !== 'win32') assert.ok((await stat(path.join(created.path, 'Contents', 'MacOS', 'launcher'))).mode & 0o100, '可执行')
   assert.match(await readFile(path.join(created.path, 'Contents', 'Info.plist'), 'utf8'), /<string>launcher<\/string>/)
   assert.equal(createTavernShortcut({ paths, platform: 'darwin', runner: '/App/Electron', home: root }).existed, true)
 })
@@ -57,12 +57,33 @@ test('独立窗口：桌面版链接到酒馆时不另起一份；按平台挑�
   await mkdir(path.join(dsh, 'profiles', 'desktop'))
   assert.equal(desktopUsesTavern(dsh), false)
   await rm(path.join(dsh, 'profiles', 'desktop'), { recursive: true })
-  await symlink(path.join(dsh, 'profiles', 'tavern'), path.join(dsh, 'profiles', 'desktop'))
+  await symlink(path.join(dsh, 'profiles', 'tavern'), path.join(dsh, 'profiles', 'desktop'), 'junction')
   assert.equal(desktopUsesTavern(dsh), true)
 
-  const mac = appWindowBrowser('darwin', {}, file => file === '/Applications/Microsoft Edge.app', '/Users/me')
-  assert.deepEqual(mac.args('http://x/'), ['-na', '/Applications/Microsoft Edge.app', '--args', '--app=http://x/'])
+  const mac = appWindowBrowser('darwin', {}, file => file === path.join('/Applications', 'Microsoft Edge.app'), '/Users/me')
+  assert.deepEqual(mac.args('http://x/'), ['-na', path.join('/Applications', 'Microsoft Edge.app'), '--args', '--app=http://x/'])
   const windows = appWindowBrowser('win32', { PROGRAMFILES: 'C:\\PF' }, file => file === path.join('C:\\PF', 'Google\\Chrome\\Application\\chrome.exe'))
   assert.deepEqual(windows.args('http://x/'), ['--app=http://x/'])
   assert.equal(appWindowBrowser('darwin', {}, () => false, '/Users/me'), null)
+})
+
+
+test('首次安装创建快捷方式，用户删除后更新不再补回，仍可手动恢复', async t => {
+  const { root, source, paths } = await setup(t)
+  await symlink(path.join(source, 'tavern-plugin'), path.join(paths.profilesDir, 'tavern', 'node_modules', 'dsh-tavern-plugin'), 'junction')
+  const options = { paths, platform: 'darwin', runner: '/App/Electron', home: root }
+  const created = ensureInitialTavernShortcut(options)
+  assert.equal(created.existed, false)
+  await rm(created.path, { recursive: true })
+  assert.deepEqual(ensureInitialTavernShortcut(options), { skipped: true })
+  await assert.rejects(stat(created.path), { code: 'ENOENT' })
+  assert.equal(createTavernShortcut(options).existed, false)
+})
+
+test('创建失败不记录成功，后续仍可重试', async t => {
+  const { paths } = await setup(t)
+  assert.throws(() => ensureInitialTavernShortcut({ paths }, () => { throw new Error('desktop unavailable') }), /desktop unavailable/)
+  let calls = 0
+  assert.equal(ensureInitialTavernShortcut({ paths }, () => { calls++; return { path: 'shortcut' } }).path, 'shortcut')
+  assert.equal(calls, 1)
 })
