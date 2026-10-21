@@ -740,8 +740,7 @@ window.__ModuleLoader__.load({
         let lastScrollIntentAt = 0;
         const scrollIntentWaiters = new Set();
         const scrollKeys = new Set(["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown"]);
-        // Loaded outside a browser (unit tests) there is no scroll to watch; skip instead of
-        // failing the whole module at load.
+        // Hosts without a page (tests loading the bundle in a bare context) have no events.
         if (typeof window !== "undefined" && typeof window.addEventListener === "function") for (const type of ["wheel", "touchmove", "keydown", "pointerdown"]) window.addEventListener(type, function (event) {
             // Typing in the composer is not scrolling.
             if (type === "keydown" && (!scrollKeys.has(event.key) || event.target && event.target.closest && event.target.closest("input, textarea, [contenteditable]:not([contenteditable=\"false\"])"))) return;

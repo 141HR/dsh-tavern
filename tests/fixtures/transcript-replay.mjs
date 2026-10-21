@@ -111,18 +111,11 @@ export async function visibleRows(rows, view) {
         if (row.turn !== null) node.setAttribute('data-chat-turn', String(row.turn))
         root.append(node)
       }
-      const projection = client.createTurnHistoryProjection({ root: () => root, storage: () => ({ getItem: () => '{}', setItem() {} }) })
-      // The comparison log the client writes when the row plan would show rows differently.
-      const reported = []
-      const debug = console.debug
-      console.debug = (message, detail) => { if (String(message).includes('行计划对照')) reported.push(...detail.rows) }
-      try { projection.apply('replay', view.suppressedDshTurns, view.regeneratedDshTurns, view.replacingDshTurns, view.supersededDshTurns, { turns: view.transcriptTurns, from: view.transcriptFrom ?? null }) }
-      finally { console.debug = debug }
-      return { visible: Array.from(root.children, node => getComputedStyle(node).display !== 'none'), reported }
+      const projection = client.createTurnHistoryProjection({ root: () => root, storage: () => ({ getItem: () => '{}', setItem() {}, removeItem() {} }) })
+      projection.apply('replay', view.transcriptTurns ? { turns: view.transcriptTurns, from: view.transcriptFrom ?? null } : null)
+      return { visible: Array.from(root.children, node => getComputedStyle(node).display !== 'none') }
     }, { rows, view })
-    const result = rows.map((row, index) => ({ ...row, visible: shown.visible[index] }))
-    result.planDiffsReported = shown.reported
-    return result
+    return rows.map((row, index) => ({ ...row, visible: shown.visible[index] }))
   } finally { await tab.close() }
 }
 
@@ -196,10 +189,13 @@ export async function replayTranscript(chat, session) {
   const fold = createTranscriptFold()
   fold.setFloors(0, (chat.messages || []).map(message => ({ role: message?.role, turn: message?.turn, greeting: message?.greeting })))
   fold.addEvents(events, 0)
+  const fields = serverView(chat, session)
+  fold.setRegeneration({ replacing: fields.replacingDshTurns, inProgress: chat.regenInProgress === true })
+  fold.setKeepInput(fields.keptInputTurns)
   const plan = fold.result()
-  const view = { ...serverView(chat, session), transcriptTurns: plan }
+  const view = { ...fields, transcriptTurns: plan }
   const rows = await visibleRows(hostRows(events), view)
   const planned = rows.map(row => ({ ...row, visible: planShowsRow(plan, row) }))
-  return { view, rows, clientPlanDiffs: rows.planDiffsReported, ...transcriptReport(chat, rows, view),
+  return { view, rows, ...transcriptReport(chat, rows, view, turn => planStoryTurn(plan, turn), fold.open),
     plan: { plan, open: fold.open, rows: planned, ...transcriptReport(chat, planned, view, turn => planStoryTurn(plan, turn), fold.open) } }
 }

@@ -5,7 +5,7 @@ import { canUndoRollback, restoreSurface, preflightSurfaceRestore, unchangedSinc
 import { rewindBackgroundSurface } from './background-surface.js'
 import { releaseOpeningTurn, sessionEvents, withSurfaceEditTurn } from './session-events.js'
 import { randomUUID } from 'node:crypto'
-import { createRegenerationRecovery } from './regeneration-recovery.js'
+import { createRegenerationRecovery, projectedReplacingTurns } from './regeneration-recovery.js'
 import { isDeepStrictEqual } from 'node:util'
 import { createScopedMessages, isScopedMessages } from './scoped-messages.js'
 import { diffJson } from './json-mutation.js'
@@ -307,13 +307,8 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
         next.settleStatus = 'pending'
         next.settleError = null
         next.tavernHelperLifecycleRevision = lifecycleRevision + 1
-        // 撤销生成期对旧正文的临时隐藏；它此后由 regeneratedDshTurns 的键负责。
-        const temporaryTurn = Number(next.regenRecovery && next.regenRecovery.temporaryReplacingTurn)
-        const keptReplacing = (Array.isArray(next.replacingDshTurns) ? next.replacingDshTurns : [])
-          .filter(function (turn) { return !Number.isSafeInteger(temporaryTurn) || Number(turn) !== temporaryTurn })
-        if (keptReplacing.length) next.replacingDshTurns = keptReplacing
-        else delete next.replacingDshTurns
-        if (next.regenRecovery) delete next.regenRecovery.temporaryReplacingTurn
+        // 旧正文的临时隐藏留到投影写入时（regenerationRecovery.complete）才撤：此刻日志里还没有
+        // 投影，行计划会把旧轮和生成轮都画出来，同一段正文显示两份（#312）。
         next.suppressedDshTurns = Array.from(new Set((Array.isArray(next.suppressedDshTurns) ? next.suppressedDshTurns : []).concat([syntheticTurn]))).sort(function (left, right) { return left - right })
         next.regeneratedDshTurns = next.regeneratedDshTurns && typeof next.regeneratedDshTurns === 'object' && !Array.isArray(next.regeneratedDshTurns)
           ? structuredClone(next.regeneratedDshTurns) : {}
@@ -486,13 +481,8 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
       next.settleStatus = 'pending'
       next.settleError = null
       next.tavernHelperLifecycleRevision = lifecycleRevision + 1
-      // 撤销生成期对旧正文的临时隐藏；它此后由 regeneratedDshTurns 的键负责。
-      const temporaryTurn = Number(next.regenRecovery && next.regenRecovery.temporaryReplacingTurn)
-      const keptReplacing = (Array.isArray(next.replacingDshTurns) ? next.replacingDshTurns : [])
-        .filter(function (turn) { return !Number.isSafeInteger(temporaryTurn) || Number(turn) !== temporaryTurn })
-      if (keptReplacing.length) next.replacingDshTurns = keptReplacing
-      else delete next.replacingDshTurns
-      if (next.regenRecovery) delete next.regenRecovery.temporaryReplacingTurn
+      // 旧正文的临时隐藏留到投影写入时（regenerationRecovery.complete）才撤：此刻日志里还没有
+      // 投影，行计划会把旧轮和生成轮都画出来，同一段正文显示两份（#312）。
       next.suppressedDshTurns = Array.from(new Set((Array.isArray(next.suppressedDshTurns) ? next.suppressedDshTurns : []).concat([syntheticTurn]))).sort(function (left, right) { return left - right })
       next.regeneratedDshTurns = next.regeneratedDshTurns && typeof next.regeneratedDshTurns === 'object' && !Array.isArray(next.regeneratedDshTurns)
         ? structuredClone(next.regeneratedDshTurns) : {}
@@ -540,10 +530,12 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     }
     applyRegenerationProjection(session, saved.projection)
     if (typeof sessions.flush === 'function') await sessions.flush(session)
-    const head = await chats.patch(chat.id, chat._storageRevision, [{ op: 'delete', path: ['regenRecovery'] }, { op: 'delete', path: ['regenInProgress'] }], { source: 'foreground.regen-projected' })
+    const replacing = projectedReplacingTurns(chat)
+    const head = await chats.patch(chat.id, chat._storageRevision, [{ op: 'delete', path: ['regenRecovery'] }, { op: 'delete', path: ['regenInProgress'] },
+      replacing ? { op: 'set', path: ['replacingDshTurns'], value: replacing } : { op: 'delete', path: ['replacingDshTurns'] }], { source: 'foreground.regen-projected' })
     if (head) {
-      const { regenRecovery: _recovery, regenInProgress: _flag, ...rest } = chat
-      return { ...rest, _storageRevision: head._storageRevision, updatedAt: head.updatedAt }
+      const { regenRecovery: _recovery, regenInProgress: _flag, replacingDshTurns: _replacing, ...rest } = chat
+      return { ...rest, ...(replacing ? { replacingDshTurns: replacing } : {}), _storageRevision: head._storageRevision, updatedAt: head.updatedAt }
     }
     return await regenerationRecovery.complete({ chatId: chat.id, session, operationId }) || chat
   }

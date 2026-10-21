@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Memory-recall benchmark: does the model look things up in the story's history, and does it help?
-//   node bin/bench-history-recall.mjs --import 吞噬星空-前60轮.jsonl --card 吞噬星空 --quiz 题库.json
-//     [--form ask|probe|both] [--repeat 1] [--only 1,5,9] [--out 结果.jsonl] [--home ~/.dsh-tavern] [--keep]
-// Every question gets a fresh game: the chat file is imported anew (no model, same start every time),
-// one player input is sent, and the turn is read back from the session log. No compaction — the whole
-// story may still be in context; the question is whether the model notices and whether recall helps.
-// --form ask puts the question off-stage without hinting at recall; probe sends the item's in-story line.
+//   node bin/bench-history-recall.mjs (--import 吞噬星空-前60轮.jsonl --card 吞噬星空 | --save 已压缩.dshsave) --quiz 题库.json
+//     [--form ask|hint|probe|both，默认 ask] [--repeat 1] [--only 1,5,9] [--out 结果.jsonl] [--home ~/.dsh-tavern] [--keep]
+// Every question gets a fresh game, the same start every time: the chat file imported anew (no model,
+// no compaction: the whole story may still be in context), or a frozen save — e.g. one compacted once —
+// imported anew. One player input is sent and the turn is read back from the session log.
+// --form ask puts the question off-stage without hinting at recall (does the model look things up?);
+// hint asks it to check the story's history first (once it looks, does it find it?); probe sends the item's in-story line.
 // Per answer it records: the recalls made, whether any recall result held the answer, whether the reply
 // held it. Quiz items: { id, question, probe, keywords: [["809"], ["杨武", "杨哥"]] } — every group must
 // match, any word within a group counts. The game is deleted afterwards unless --keep.
@@ -17,21 +18,21 @@ import { parseSessionLog } from '../tavern-plugin/lib/domain/session-log-codec.j
 
 const args = process.argv.slice(2)
 const option = name => { const at = args.indexOf('--' + name); return at >= 0 ? args[at + 1] : undefined }
-const importFile = option('import'), cardName = option('card'), quizFile = option('quiz')
-if (!importFile || !cardName || !quizFile) {
-  console.error('用法：node bin/bench-history-recall.mjs --import 聊天记录.jsonl --card <人物卡名> --quiz 题库.json [--form ask|probe|both] [--repeat 次数] [--only 1,5,9] [--out 结果.jsonl] [--home DSH 主目录，默认 ~/.dsh-tavern] [--keep]')
+const importFile = option('import'), cardName = option('card'), saveFile = option('save'), quizFile = option('quiz')
+if (!(importFile && cardName || saveFile) || !quizFile) {
+  console.error('用法：node bin/bench-history-recall.mjs (--import 聊天记录.jsonl --card <人物卡名> | --save 存档.dshsave) --quiz 题库.json [--form ask|probe|both] [--repeat 次数] [--only 1,5,9] [--out 结果.jsonl] [--home DSH 主目录，默认 ~/.dsh-tavern] [--keep]')
   process.exit(1)
 }
 const home = path.resolve((option('home') || process.env.DSH_HOME || path.join(os.homedir(), '.dsh-tavern')).replace(/^~(?=$|\/)/, os.homedir()))
 const tavern = path.join(home, 'profile-data', 'tavern')
 const json = file => JSON.parse(readFileSync(file, 'utf8'))
-const forms = { ask: ['ask'], probe: ['probe'], both: ['ask', 'probe'] }[option('form') || 'both']
-if (!forms) throw new Error('--form 只能是 ask、probe 或 both')
+const forms = { ask: ['ask'], hint: ['hint'], probe: ['probe'], both: ['ask', 'probe'] }[option('form') || 'ask']
+if (!forms) throw new Error('--form 只能是 ask、hint、probe 或 both')
 const repeat = Math.max(1, Number(option('repeat')) || 1)
 const only = option('only') ? new Set(option('only').split(',').map(Number)) : null
 const quiz = json(quizFile).filter(item => !only || only.has(Number(item.id)))
 const outFile = option('out')
-const chatText = readFileSync(importFile, 'utf8')
+const origin = saveFile ? { fileB64: readFileSync(saveFile).toString('base64') } : { text: readFileSync(importFile, 'utf8') }
 
 function rpc(method, payload) {
   const { port } = json(path.join(home, 'logs', 'tavern.pid.json'))
@@ -63,16 +64,19 @@ function sessionEvents(id) {
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 const has = (text, item) => item.keywords.every(group => group.some(word => text.includes(word)))
 const textOf = content => (Array.isArray(content) ? content : []).map(block => block?.text || '').join('\n')
-const card = (await rpc('listCards', {})).cards.find(item => item.name === cardName || item.path === cardName)
-if (!card) throw new Error('找不到人物卡：' + cardName)
+const card = saveFile ? null : (await rpc('listCards', {})).cards.find(item => item.name === cardName || item.path === cardName)
+if (!saveFile && !card) throw new Error('找不到人物卡：' + cardName)
 
 async function play(item, form) {
-  const imported = await rpc('importChatHistoryText', { cardPath: card.path, text: chatText, fileName: path.basename(importFile) })
+  const imported = saveFile ? await rpc('importGameSave', origin)
+    : await rpc('importChatHistoryText', { cardPath: card.path, text: origin.text, fileName: path.basename(importFile) })
   const sessionId = imported.sessionId
   const chatId = json(path.join(tavern, 'data', 'sessions.json'))[sessionId]
   try {
     const start = sessionEvents(sessionId).length
-    const input = form === 'ask' ? `（场外提问，不要续写剧情）请直接简短回答：${item.question.replace(/[？?]$/, '')}？` : item.probe
+    const question = item.question.replace(/[？?]$/, '')
+    const input = form === 'ask' ? `（场外提问，不要续写剧情）请直接简短回答：${question}？`
+      : form === 'hint' ? `（场外提问，不要续写剧情）请先用历史检索查原文核实，再简短回答：${question}？` : item.probe
     const began = Date.now()
     await rpc('sendPlayerInput', { sessionId, text: input })
     let turn
@@ -91,7 +95,14 @@ async function play(item, form) {
     })
     // Score the reply only, not the model's reasoning.
     const reply = turn.filter(event => event.type === 'assistant/message').map(event => textOf((event.data.message.content || []).filter(block => block?.type === 'text'))).join('\n').trim()
-    return { id: item.id, form, input, recalls, recallHit: recalls.some(recall => recall.hit), correct: has(reply, item), reply, seconds: Math.round((Date.now() - began) / 1000) }
+    // The whole turn as the model lived it, for reading by hand: reasoning, recalls and what they returned.
+    const transcript = turn.flatMap(event => {
+      if (event.type === 'assistant/message') return (event.data.message.content || []).map(block => ({ [block.type]: block.text })).filter(entry => Object.values(entry)[0])
+      if (event.type === 'tool/call') return [{ call: event.data.name, arguments: event.data.arguments }]
+      if (event.type === 'tool/result') return [{ result: textOf(event.data.message?.content) }]
+      return []
+    })
+    return { id: item.id, form, input, recalls, recallHit: recalls.some(recall => recall.hit), correct: has(reply, item), reply, seconds: Math.round((Date.now() - began) / 1000), transcript }
   } finally {
     if (!args.includes('--keep') && chatId) await rpc('deleteChats', { chatIds: [chatId] }).catch(error => console.warn('删除测试对话失败：' + error.message))
   }

@@ -31,6 +31,8 @@ export function createTranscriptFold() {
   let folded = -1
   const turns = new Set()
   let last = null, running = false, playerInput = false, queuedInput = false, ended = ''
+  let inputSeq = null, queuedSeq = null // where the last turn's player input sits in the log
+  const inputTurns = new Set() // native turns a player's input opened
   const drawn = new Map() // story -> the native turn that draws its reply
   const pending = new Map() // step -> rewrites appended in it, decided when it ends
   const stepReplies = new Map() // step -> reply appends with text
@@ -42,6 +44,10 @@ export function createTranscriptFold() {
   const replyStories = new Map() // native turn -> rounds drawn there
   const dirty = new Set()
   let open = null
+  // From the save: a regeneration under way (docs step 3).
+  let replacing = new Set(), regenerating = false
+  // From the view: void turns that keep the player's own message (a retry adopted it).
+  let keepInput = new Set()
   let exceptions = turnFields.from({})
 
   const replyOf = story => drawn.get(story) ?? story
@@ -89,7 +95,10 @@ export function createTranscriptFold() {
       if (!event) continue
       if (event.type === 'turn/start') {
         // A player's message queued before its turn starts (the inbox splices it in) opens it.
+        if (last !== null) dirty.add(last)
         last = Number(event.data?.turn); running = true; playerInput = queuedInput; queuedInput = false; ended = ''
+        inputSeq = playerInput ? queuedSeq : null; queuedSeq = null
+        if (playerInput) inputTurns.add(last)
         if (!turns.has(last)) { turns.add(last); dirty.add(last) }
         continue
       }
@@ -100,9 +109,18 @@ export function createTranscriptFold() {
         continue
       }
       if (event.type === 'step/end') { flushStep(event.data?.turn + ':' + event.data?.step); continue }
-      if (event.type === 'user/message' && event.surfaceOp === 'append' && event.data?.source?.kind === 'user' && !event.data?.source?.repair) { if (running) playerInput = true; else queuedInput = true; continue }
+      if (event.type === 'user/message' && event.surfaceOp === 'append' && event.data?.source?.kind === 'user' && !event.data?.source?.repair) {
+        if (running) { playerInput = true; inputSeq = event.seq; inputTurns.add(last); dirty.add(last) } else { queuedInput = true; queuedSeq = event.seq }
+        continue
+      }
       if (event.type !== 'assistant/message') continue
       const story = storyOf(event)
+      // A rollback replaces the model's surface from a round's input on: when that covers
+      // the last turn's player input, the turn is rolled back, not failed and awaiting retry.
+      if (event.surfaceOp?.op === 'replace' && !(story > 0) && Number.isSafeInteger(inputSeq)) {
+        const range = surfaceReplacementRange(event.surfaceOp)
+        if (Number(range.start) <= inputSeq && inputSeq <= Number(range.end)) { playerInput = false; if (last !== null) dirty.add(last) }
+      }
       if (isAppendReply(event)) {
         if (textOf(event.data?.message) === '') continue
         const key = stepKey(event)
@@ -160,8 +178,35 @@ export function createTranscriptFold() {
     if (running) return last
     return playerInput && ended !== 'completed' && !rounds.has(last) && !replyStories.has(last) ? last : null
   }
+  /** A regeneration under way: the native turns whose old reply it replaces. */
+  function setRegeneration({ replacing: turnsReplaced = [], inProgress = false } = {}) {
+    const next = new Set(turnsReplaced.map(Number).filter(turn => Number.isSafeInteger(turn) && turn >= 0))
+    for (const turn of new Set([...replacing, ...next])) dirty.add(turn)
+    if (last !== null) dirty.add(last)
+    replacing = next; regenerating = inProgress === true
+  }
+  /** Turns whose player input stays visible although the round's reply is drawn elsewhere. */
+  function setKeepInput(turns = []) {
+    const next = new Set((Array.isArray(turns) ? turns : []).map(Number).filter(turn => Number.isSafeInteger(turn) && turn > 0))
+    for (const turn of new Set([...keepInput, ...next])) dirty.add(turn)
+    keepInput = next
+  }
   function classify(turn) {
+    // A regeneration's attempt (the save says one is under way) has no player's input,
+    // only the host's trigger card: show its reply alone, while it runs and until its
+    // body is drawn as the round's. Outside a regeneration a running turn shows as drawn:
+    // the log does not always mark the player's input as such.
+    const attempt = regenerating && turn === last && !playerInput && (turn === open || !rounds.has(turn) && !replyStories.has(turn))
+    if (attempt) return { input: 0, reply: 1 }
     if (turn === open) return undefined
+    // The old reply a regeneration is replacing: the round shows its input only, so the
+    // page does not read as two replies or as a regeneration that did nothing. The save
+    // may hold the round out while it regenerates: the player's input still shows.
+    if (replacing.has(turn)) return { input: rounds.has(turn) || inputTurns.has(turn) ? 1 : 0, reply: 0 }
+    // A failed turn's player input adopted by a retry: the round's reply is drawn in
+    // another native turn, but hiding this turn whole would take the player's own words
+    // with it. Draw his message only; the residue and trigger card stay hidden.
+    if (keepInput.has(turn) && !rounds.has(turn) && !replyStories.has(turn)) return { input: 1, reply: 0, kept: 1 }
     const input = rounds.has(turn)
     const stories = replyStories.get(turn)
     const reply = Boolean(stories?.size)
@@ -187,7 +232,7 @@ export function createTranscriptFold() {
     }
     return exceptions
   }
-  return { addEvents, setFloors, result, get floorCount() { return floors.length }, get folded() { return folded }, get open() { result(); return open } }
+  return { addEvents, setFloors, setRegeneration, setKeepInput, result, get floorCount() { return floors.length }, get folded() { return folded }, get open() { result(); return open } }
 }
 
 const floorOf = message => ({ role: message?.role, turn: message?.turn, greeting: message?.greeting })
@@ -200,10 +245,10 @@ const floorOf = message => ({ role: message?.role, turn: message?.turn, greeting
  * draws them until scrolling brings them into a wider window.
  * @returns {{ turns: object, from: number | null }}
  */
-export function planTranscriptWindow({ messages = [], events = [], partial = false }) {
+export function planTranscriptWindow({ messages = [], events = [], partial = false, regeneration, keepInput }) {
   const fold = createTranscriptFold()
   fold.setFloors(0, messages.map(floorOf))
-  if (!partial) { fold.addEvents(events, 0); return { turns: fold.result(), from: null } }
+  if (!partial) { fold.addEvents(events, 0); fold.setRegeneration(regeneration); fold.setKeepInput(keepInput); return { turns: fold.result(), from: null } }
   let from = Number.MAX_SAFE_INTEGER
   for (const message of messages) {
     const turn = Number(message?.turn)
@@ -224,14 +269,18 @@ export function planTranscriptWindow({ messages = [], events = [], partial = fal
     if (type === 'user/message') start = index
   }
   fold.addEvents(events.slice(start), 0)
+  fold.setRegeneration(regeneration)
+  fold.setKeepInput(keepInput)
   return { turns: fold.result(), from }
 }
 
 /** The whole plan at once, for tests and the replay: the same fold fed everything. */
-export function planTranscriptRows({ chat, events = [] }) {
+export function planTranscriptRows({ chat, events = [], regeneration, keepInput }) {
   const fold = createTranscriptFold()
   fold.setFloors(0, (Array.isArray(chat?.messages) ? chat.messages : []).map(floorOf))
   fold.addEvents(events, 0)
+  fold.setRegeneration(regeneration)
+  fold.setKeepInput(keepInput)
   return fold.result()
 }
 
@@ -244,12 +293,16 @@ const INPUT_ROWS = new Set(['user', 'turn-trigger'])
  */
 export function planShowsRow(plan, row, from = null) {
   if (!plan || row.turn === null || row.turn === undefined) return true
-  // Before a windowed plan's first round: not judged.
-  if (from !== null && Number(row.turn) < from) return null
+  // Before a windowed plan's first round: not judged, shown as the host draws it.
+  if (from !== null && Number(row.turn) < from) return true
   const entry = plan[String(row.turn)]
   if (!entry) return true
-  // Replies, tails, context and errors belong to the turn that draws the round's reply;
-  // a turn that only holds the input keeps the input and nothing else.
+  // A kept input turn draws the player's own message and nothing else.
+  if (entry.kept) return row.kind === 'user' || row.kind === 'steering'
+  // Host notes (context rows) of a turn that draws nothing go with it.
+  if (row.kind === 'context') return entry.input === 1 || entry.reply === 1
+  // Replies, tails and errors belong to the turn that draws the round's reply; a turn
+  // that only holds the input keeps the input and nothing else.
   return INPUT_ROWS.has(row.kind) ? entry.input === 1 : entry.reply === 1
 }
 

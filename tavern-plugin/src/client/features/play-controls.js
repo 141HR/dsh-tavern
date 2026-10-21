@@ -1156,7 +1156,7 @@
                 h("section", { className: "dsh-local-section" }, h("h3", null, "功能"),
                     features.mvuCard ? toggle("variables", "变量结算", "关闭后变量和状态栏不再更新。", tasks.variables, checked => ({ backgroundTasks: { variables: checked } })) : null,
                     toggle("posture", "人物姿势", "每轮总结人物的位置、动作和姿势，供前台保持一致。", tasks.posture, checked => ({ backgroundTasks: { posture: checked } })),
-                    toggle("styleReference", "文风联想", "仅自由模式。每轮后台凭记忆摘一段风格相近的经典小说原文，供下一轮正文借鉴笔调。多一次后台请求。", tasks.styleReference === true, checked => ({ backgroundTasks: { styleReference: checked } })),
+                    toggle("styleReference", "文风联想", "仅自由模式。每轮后台凭记忆摘一段风格相近的小说原文，供下一轮正文借鉴笔调。多一次后台请求。", tasks.styleReference === true, checked => ({ backgroundTasks: { styleReference: checked } })),
                     toggle("webSearchEnabled", "联网搜索", "前台和后台可按需搜索。", features.webSearchEnabled, checked => ({ webSearchEnabled: checked }))),
                 error || key && reasoning.key === key && reasoning.error ? h("p", { role: "alert", className: "dsh-tavern-prompt-error" }, error || reasoning.error) : null,
                 notice ? h("p", { role: "status" }, notice) : null,
@@ -1385,30 +1385,17 @@
 					result => setBackgroundTurns(result.turns || []),
 					error => console.warn("后台回退显示刷新失败", error));
 			}, [props.sessionId, latestMessageId, running, backgroundRevision]);
-			const foregroundTurns = suppressionState.view && Array.isArray(suppressionState.view.suppressedDshTurns) ? suppressionState.view.suppressedDshTurns : [];
-			const suppressedDshTurns = foregroundTurns.concat(backgroundTurns);
-			const suppressedDshTurnsRevision = suppressedDshTurns.join(",");
-			const regeneratedDshTurns = suppressionState.view && suppressionState.view.regeneratedDshTurns || {};
-			const regeneratedDshTurnsRevision = JSON.stringify(regeneratedDshTurns);
-			// 正在被重生成替换的那一楼：只藏旧正文，玩家输入留着。
-			const replacingDshTurns = suppressionState.view && Array.isArray(suppressionState.view.replacingDshTurns) ? suppressionState.view.replacingDshTurns : [];
-			const replacingDshTurnsRevision = replacingDshTurns.join(",");
-			// 正文已被替换掉、但宿主仍会画出来的原生回合（旧存档也要藏）。
-			const supersededDshTurns = suppressionState.view && Array.isArray(suppressionState.view.supersededDshTurns) ? suppressionState.view.supersededDshTurns : [];
-			const supersededDshTurnsRevision = supersededDshTurns.join(",");
-			// 行计划只做对照，不改显示（docs/design/transcript-row-plan.md 第 2 步）。
+			// Background Agent sessions have no row plan: their rolled-back turns hide whole.
+			const backgroundTurnsRevision = backgroundTurns.join(",");
+			// The row plan decides which rows show (docs/design/transcript-row-plan.md).
 			// Immutable and keyed by turn: a changed plan is a new object, never serialized here.
 			const transcriptTurns = suppressionState.view && suppressionState.view.transcriptTurns || null;
 			const transcriptFrom = suppressionState.view ? suppressionState.view.transcriptFrom : null;
-			// 被失败清理标成作废、但这轮正文和它共用一条玩家消息的原生回合：
-			// 照常藏错误和「收到执行请求」，只把玩家自己那句话留着。
-			const keptInputTurns = suppressionState.view && Array.isArray(suppressionState.view.keptInputTurns) ? suppressionState.view.keptInputTurns : [];
-			const keptInputTurnsRevision = keptInputTurns.join(",");
 			React.useEffect(function () {
 				let frame = null;
 				function applyProjectionState() {
 					frame = null;
-					historyProjection.apply(props.sessionId, suppressedDshTurns, regeneratedDshTurns, replacingDshTurns, supersededDshTurns, { turns: transcriptTurns, from: transcriptFrom, keepInput: keptInputTurns });
+					historyProjection.apply(props.sessionId, transcriptTurns ? { turns: transcriptTurns, from: transcriptFrom } : null, backgroundTurns);
 				}
 				function scheduleProjection() {
 					if (frame === null) frame = window.requestAnimationFrame(applyProjectionState);
@@ -1427,7 +1414,7 @@
 				});
 				observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-chat-flow-kind", "data-chat-turn", "data-turn-tail"] });
 				return function () { observer.disconnect(); if (frame !== null) window.cancelAnimationFrame(frame); };
-			}, [props.sessionId, latestMessageId, running, suppressedDshTurnsRevision, regeneratedDshTurnsRevision, replacingDshTurnsRevision, supersededDshTurnsRevision, transcriptTurns, transcriptFrom, keptInputTurnsRevision]);
+			}, [props.sessionId, latestMessageId, running, backgroundTurnsRevision, transcriptTurns, transcriptFrom]);
 			return null;
 		}
 		function CandidateQuestion(props) {

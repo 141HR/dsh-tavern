@@ -2324,12 +2324,7 @@ export async function apply(ctx) {
       : null
     const rollbackEvidence = sessionDebugEvidence(chat.sessionId, true)
     const rollbackFields = rollbackViewFields(chat, rollbackEvidence, options.inputChanges)
-    // The row plan (docs/design/transcript-row-plan.md) over what this view already
-    // holds — the window of floors and the log since its first round — sent as
-    // turn-keyed exceptions; the client only compares it with the hiding lists for now.
-    const transcriptPlan = rollbackEvidence.loaded && ['story', 'script'].includes(chat.mode || 'story') && Array.isArray(chat.messages) && !isScopedMessages(chat.messages)
-      ? await requestPerformance.stage('transcriptRowPlan', async () => planTranscriptWindow({ messages: chat.messages, events: rollbackEvidence.events, partial: chat.windowRevision !== undefined }))
-      : null
+    const transcriptPlan = await requestPerformance.stage('transcriptRowPlan', async () => transcriptPlanFields(chat, rollbackEvidence, rollbackFields.replacingDshTurns, rollbackFields.keptInputTurns))
     return {
       chatId: chat.id,
       contextCompaction: chat.contextCompaction || null,
@@ -2362,8 +2357,7 @@ export async function apply(ctx) {
       inputSources,
       inputTemplateDisplays,
       ...rollbackFields,
-      transcriptTurns: transcriptPlan ? transcriptPlan.turns : null,
-      transcriptFrom: transcriptPlan ? transcriptPlan.from : null,
+      ...transcriptPlan,
       presentation: null,
       replyProjections: replyDisplay.projections,
       // tavernStatusView duplicated tavernStatusViews[0] in every read; clients use the list.
@@ -2518,8 +2512,24 @@ export async function apply(ctx) {
     const session = sessionStore.get(str(chat?.sessionId)) || agentRegistry.get(str(chat?.sessionId))?.session
     return forkTargetsFromSession(session, chat?.regeneratedDshTurns)
   }
+  // The row plan (docs/design/transcript-row-plan.md) over what the view holds — the
+  // window of floors, or the whole short history — and the log since its first round, as
+  // turn-keyed exceptions. The page shows exactly the rows it plans. The log grows every
+  // turn without a save change, so every projection, cached or not, plans again; the cost
+  // follows the view's floors, never the length of the game.
+  function transcriptPlanFields(chat, evidence, replacing, keepInput) {
+    const messages = chat.messages
+    if (!evidence.loaded || !['story', 'script'].includes(chat.mode || 'story') || !messages || !Number.isSafeInteger(messages.length)) return { transcriptTurns: null, transcriptFrom: null }
+    const floors = new Array(messages.length)
+    for (let index = 0; index < messages.length; index++) floors[index] = messages[index]
+    const plan = planTranscriptWindow({ messages: floors, events: evidence.events, partial: chat.windowRevision !== undefined,
+      regeneration: { replacing, inProgress: chat.regenInProgress === true }, keepInput })
+    return { transcriptTurns: plan.turns, transcriptFrom: plan.from }
+  }
   function volatileSessionViewFields(chat, activity, changes) {
-    return { ...sessionStateView.volatile(chat, activity, changes), forkTurnsByMessageId: forkTurnsForChat(chat) }
+    const fields = sessionStateView.volatile(chat, activity, changes)
+    return { ...fields, forkTurnsByMessageId: forkTurnsForChat(chat),
+      ...transcriptPlanFields(chat, sessionDebugEvidence(chat.sessionId), fields.replacingDshTurns, fields.keptInputTurns) }
   }
 
   async function projectCachedSessionView(chat, previous, activity) {
@@ -2972,7 +2982,8 @@ export async function apply(ctx) {
   })
   const styleReferenceRecall = createStyleReferenceRecall({
     runAgent: input => backgroundAgentRunner.run(input), selection: backgroundModelSelection,
-    beginTask: chat => backgroundTasks.begin(chat, 'style-reference', { reuseSnapshot: true })
+    beginTask: chat => backgroundTasks.begin(chat, 'style-reference', { reuseSnapshot: true }),
+    systemPrompt: () => runtimePrompt('style-reference-recall')
   })
   // After each reply, prepare what that reply brings into the next turn, so sending never
   // waits for a model: the worldbook pool (usually below the threshold, no request at all),
@@ -2980,12 +2991,19 @@ export async function apply(ctx) {
   const worldbookPrefilter = createWorldbookPrefilter({
     run: (chatId, signal) => wholeReads.scope('回复后预备', () => prepareAfterReply(chatId, signal))
   })
+  // The replies each game prepared for (round and version, the latest few). Tavern's own
+  // turns — a rollback, a body edit, a repair — end like replies but bring no new one:
+  // preparing again would only rewrite the save (and void the rollback's undo point).
+  const preparedReplies = new Map()
   async function prepareAfterReply(chatId, signal) {
     const chat = await storyContext({ chatId })
     if (!chat || !['story', 'script'].includes(chat.mode || 'story') || chat.requestMode === 'sillytavern' || chat.regenInProgress) return
     const latest = chat.messages?.at(-1)
     if (latest?.role !== 'assistant' || latest.greeting === true || backgroundTasks.activity(chat).busy) return
     if (backgroundModelSelection(chat) === null) return
+    const reply = latest.turn + ':' + (Number(latest.swipeId) || 0), prepared = preparedReplies.get(chatId) || []
+    if (prepared.includes(reply)) return
+    preparedReplies.set(chatId, [...prepared, reply].slice(-16))
     const card = await readChatCard(chat)
     signal.throwIfAborted()
     await projectForegroundWorldbook({ chat, card, userText: '', purpose: 'prefilter', signal })
@@ -3016,6 +3034,8 @@ export async function apply(ctx) {
     if (target === 'regenerate') await cancelSettlement(header.id)
     else if (backgroundTasks.activity(header).busy) throw new Error('后台结算中，请稍后再换参考')
     const base = target === 'regenerate' ? 'previous' : 'latest'
+    // The background agent runs off the foreground session: load it when the page has not yet.
+    if (!agentRegistry.get(header.sessionId)?.session) await agentRegistry.resume({ resumeSessionId: header.sessionId })
     let chat = await storyContext({ chatId: header.id })
     // The bounded read may stop short of the reply before the latest one.
     if (base === 'previous' && (chat.messages || []).filter(message => message?.role === 'assistant').length < 2) chat = await readChat(header.id)
@@ -4280,6 +4300,8 @@ export async function apply(ctx) {
       const chat = window ? window.chat : await chatForSession(sessionId)
       if (chat === undefined) throw new Error('当前会话没有绑定人物卡')
       const activity = backgroundTasks.activity(chat)
+      // The next turn's preparation (worldbook pool, style reference) gives way.
+      if (activity.busy && ['worldbook-filter', 'style-reference'].includes(activity.role)) { await worldbookPrefilter.cancel(chat.id); continue }
       if (activity.busy) throw new Error('后台 Agent 正在运行，请稍候')
       if (Object.values(storyTimeline.inspect({ chat }).operations || {}).some(operation => operation.kind === 'body' && operation.status === 'running')) {
         throw new Error('正文正在生成，请等待完成后再重新结算')
@@ -4575,6 +4597,7 @@ export async function apply(ctx) {
     sessions: { get: id => ctx.get('agents')?.get(id), flush: session => sessionStore.flush(session) },
     timeline: storyTimeline,
     activity: chat => backgroundTasks.activity(chat),
+    cancelPreparation: chatId => worldbookPrefilter.cancel(chatId),
     project: async (text, chat) => {
       const extensions = await readCardExtensions(chat.cardPath, chat)
       return projectRuntimeReply(text, { charName: chat.cardName, macroState: chat.macroState,

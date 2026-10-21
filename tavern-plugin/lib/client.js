@@ -2625,8 +2625,7 @@ window.__ModuleLoader__.load({
         let lastScrollIntentAt = 0;
         const scrollIntentWaiters = new Set();
         const scrollKeys = new Set(["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown"]);
-        // Loaded outside a browser (unit tests) there is no scroll to watch; skip instead of
-        // failing the whole module at load.
+        // Hosts without a page (tests loading the bundle in a bare context) have no events.
         if (typeof window !== "undefined" && typeof window.addEventListener === "function") for (const type of ["wheel", "touchmove", "keydown", "pointerdown"]) window.addEventListener(type, function (event) {
             // Typing in the composer is not scrolling.
             if (type === "keydown" && (!scrollKeys.has(event.key) || event.target && event.target.closest && event.target.closest("input, textarea, [contenteditable]:not([contenteditable=\"false\"])"))) return;
@@ -14441,15 +14440,9 @@ function bindTavernFontZoom(node, win) {
 					t: props.t
 				});
 				const distantHeight = useTavernDistantFloor(historyNode, settled && !sessionTransitioning && storyTurn > 0 && latestProjectionTurn - storyTurn >= TAVERN_LIVE_FLOORS);
-				// 重新生成期间，被重做的这一楼只留宿主的"生成中"占位：旧正文还挂在
-				// 页面上会让玩家以为没有在生成、只是把新内容叠了上去。压制列表记的是
-				// native turn，这里要 native 与 story turn 都比一遍（重生成过的回合两者不同）。
-				// 提前 return 必须在所有 hook 之后。
-				const replacingTurns = liveState.view && Array.isArray(liveState.view.replacingDshTurns) ? liveState.view.replacingDshTurns : [];
-				const suppressedTurns = liveState.view && Array.isArray(liveState.view.suppressedDshTurns) ? liveState.view.suppressedDshTurns : [];
-				const regenerating = liveState.view && liveState.view.regenInProgress === true
-					&& replacingTurns.concat(suppressedTurns).some(function (value) { return Number(value) === Number(turn) || Number(value) === Number(storyTurn); });
-				if (regenerating) return null;
+				// A reply the row plan does not draw (an old body being regenerated, a repair
+				// copy): its row is hidden; render nothing into it either. After all hooks.
+				if (!tavernPlanShowsRow(tavernPlanOf(liveState.view), String(turn), "assistant-step")) return null;
 				if (!(data.status === "running" || data.status === "interrupted" || rendered.length > 0)) return null;
 				if (distantHeight > 0) return React.createElement("div", { ref:historyNode, className: "dsh-tavern-assistant", "data-distant-floor": true, style: { height: distantHeight + "px" } });
 				const mvuReceiptNode = settled && ownsTurn ? React.createElement(TavernTurnMvuReceipt, { sessionId: props.sessionId, turn: storyTurn }) : null;
@@ -17420,7 +17413,7 @@ function bindTavernFontZoom(node, win) {
                         h("label", { className: "dsh-local-field" }, "默认长期偏好", h("select", { disabled, value: data?.profile.defaultProfileId || "", onChange: event => save(null, "manageUserPreferenceProfile", { action: "default", profileId: event.target.value }) }, h("option", { value: "" }, "不启用"), (data?.profile.profiles || []).filter(item => item.hasConfirmed).map(item => h("option", { key: item.id, value: item.id }, item.name))))),
                     h("section", { className: "dsh-local-section" }, h("h3", null, "后台结算"),
                         toggle("variables", "变量结算", "MVU 卡建议开启；普通卡不执行此任务。", true), toggle("posture", "人物姿势结算", "总结本轮结束时人物的位置、动作和姿势。", true),
-                        toggle("styleReference", "文风联想", "仅自由模式。每轮后台凭记忆摘一段风格相近的经典小说原文，供下一轮正文借鉴笔调。多一次后台请求。", true)),
+                        toggle("styleReference", "文风联想", "仅自由模式。每轮后台凭记忆摘一段风格相近的小说原文，供下一轮正文借鉴笔调。多一次后台请求。", true)),
                     h("section", { className: "dsh-local-section" }, h("h3", null, "扩展功能"),
                         toggle("webSearchEnabled", "联网搜索", "允许新游戏的前台和后台按需搜索。")),
                     message ? h("p", { role: "status" }, message) : null);
@@ -20414,307 +20407,80 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 			}
 			return { apply: apply, dispose: dispose };
 		}
-		// One owner for persisted suppression and legacy browser-only history records.
-		// Kept in the loader bundle so DSH needs no new browser module protocol.
+		// The conversation page shows the rows the server's row plan names
+		// (docs/design/transcript-row-plan.md): for each saved round, the native turn that
+		// draws its input and the one that draws its reply. The plan lists exceptions only,
+		// keyed by native turn; a turn absent from it shows its own input and reply, and
+		// native turns before a windowed plan's first round are left as the host draws them.
+		// Same rule as planShowsRow in lib/domain/transcript-row-plan.js.
+		function tavernPlanShowsRow(plan, turnValue, kind) {
+			if (!plan || !plan.turns || turnValue === null || turnValue === "") return true;
+			if (plan.from !== null && plan.from !== undefined && Number(turnValue) < plan.from) return true;
+			const entry = plan.turns[String(turnValue)];
+			if (!entry) return true;
+			// A kept input turn draws the player's own message and nothing else.
+			if (entry.kept) return kind === "user" || kind === "steering";
+			// Host notes (context rows) of a turn that draws nothing go with it.
+			if (kind === "context") return entry.input === 1 || entry.reply === 1;
+			return kind === "user" || kind === "turn-trigger" ? entry.input === 1 : entry.reply === 1;
+		}
+		function tavernPlanOf(view) {
+			return view && view.transcriptTurns ? { turns: view.transcriptTurns, from: view.transcriptFrom } : null;
+		}
 		function createTurnHistoryProjection(options) {
 			options = options || {};
 			const root = options.root || function () { return document; };
 			const storage = options.storage || function () { return window.localStorage; };
-        const hiddenRows = new Map();
-        function hideRow(row) {
-            if (!hiddenRows.has(row)) hiddenRows.set(row, row.style.display);
-            row.style.display = "none";
-        }
-        function restoreHiddenRows() {
-            for (const [row, previous] of hiddenRows) {
-                if (row.style.display === "none") row.style.display = previous;
-            }
-            hiddenRows.clear();
-        }
-		const HIDDEN_TURNS_KEY = "dsh-tavern-hidden-turns";
-		const ROLLED_BACK_TURNS_KEY = "dsh-tavern-rolled-back-turns";
-		const HIDDEN_REGEN_USER_TURNS_KEY = "dsh-tavern-hidden-regen-user-turns";
-		function forgetHiddenTurn(storageKey, sessionId, turn) {
-			try {
-				const all = JSON.parse(storage().getItem(storageKey) || "{}");
-				const list = Array.isArray(all[sessionId]) ? all[sessionId].filter(function (item) { return Number(item) !== Number(turn); }) : [];
-				if (list.length) all[sessionId] = list;
-				else delete all[sessionId];
-				storage().setItem(storageKey, JSON.stringify(all));
-			} catch (err) {}
-		}
-		// Rows of the same turn before its tail, nearest first. Every DSH conversation row
-		// carries data-chat-flow-kind; anything without it (pagination, host controls)
-		// is outside the conversation and ends the turn as surely as the previous tail.
-		function turnRowsBefore(tail, owner) {
-			const rows = [];
-			for (let sib = tail.previousElementSibling; sib; sib = sib.previousElementSibling) {
-				const kind = sib.getAttribute("data-chat-flow-kind");
-				if (!kind || kind === "turn-tail") break;
-				const siblingTurn = sib.getAttribute("data-chat-turn");
-				if (owner && siblingTurn && siblingTurn !== owner) break;
-				rows.push(sib);
+			const hiddenRows = new Map();
+			function hideRow(row) {
+				if (!hiddenRows.has(row)) hiddenRows.set(row, row.style.display);
+				row.style.display = "none";
 			}
-			return rows;
-		}
-		// What opened a turn: the player's message, or the host's 「收到执行请求」 card
-		// for a turn a plugin message woke (a regeneration attempt is one).
-		function isTurnInputRow(row) {
-			const kind = row.getAttribute("data-chat-flow-kind");
-			return kind === "user" || kind === "turn-trigger";
-		}
-		// Rows up to, but not including, the turn's input.
-		function turnReplyRowsBefore(tail, owner) {
-			const rows = turnRowsBefore(tail, owner);
-			const user = rows.findIndex(isTurnInputRow);
-			return user === -1 ? rows : rows.slice(0, user);
-		}
-		// The player's own rows. A kept input turn may also carry a host trigger card;
-		// that card is not the player's message and stays hidden.
-		function isPlayerInputRow(row) {
-			const kind = row.getAttribute("data-chat-flow-kind");
-			return kind === "user" || kind === "steering";
-		}
-		function hideUserForTurnTail(tail, keepInput) {
-			if (!tail || keepInput) return;
-			const user = turnRowsBefore(tail, tailTurnOf(tail)).find(isTurnInputRow);
-			if (user) hideRow(user);
-		}
-		function applyHiddenRegenUserTurns(sessionId, keepInput) {
-			try {
-				const all = JSON.parse(storage().getItem(HIDDEN_REGEN_USER_TURNS_KEY) || "{}");
-				const turns = all[sessionId];
-				if (!Array.isArray(turns) || turns.length === 0) return;
-				const set = new Set(turns.map(String));
-				const tails = root().querySelectorAll('[data-chat-flow-kind="turn-tail"]');
-				for (let i = 0; i < tails.length; i++) {
-					const tail = tails[i];
-					if (!set.has(tailTurnOf(tail))) continue;
-					hideUserForTurnTail(tail, keepInput && keepInput.has(tailTurnOf(tail)));
+			function restoreHiddenRows() {
+				for (const [row, previous] of hiddenRows) {
+					if (row.style.display === "none") row.style.display = previous;
 				}
-			} catch (err) {}
-		}
-		function hideTurnTail(el) {
-			if (!el) return;
-			hideRow(el);
-			turnReplyRowsBefore(el, tailTurnOf(el)).forEach(hideRow);
-		}
-		function showTurnTail(el) {
-			if (!el) return;
-			el.style.display = "";
-			turnReplyRowsBefore(el, tailTurnOf(el)).forEach(function (row) { row.style.display = ""; });
-		}
-		// Hide a void turn's rows. A kept input turn is the round's own player message
-		// that the failed-turn cleanup marked void: hide its residue, keep his words.
-		function hideTurnRowsBefore(tail, owner, keepInput) {
-			turnRowsBefore(tail, owner).forEach(function (row) {
-				if (keepInput && isPlayerInputRow(row)) return;
-				hideRow(row);
-			});
-		}
-		function hideTurnTailWithUser(el, keepInput) {
-			if (!el) return;
-			hideRow(el);
-			// System prompts precede the user row. Hide through the turn boundary,
-			// not just through its input; alpha also supplies explicit ownership.
-			hideTurnRowsBefore(el, el.getAttribute("data-chat-turn"), keepInput);
-		}
-		function tailTurnOf(el) {
-			if (!el) return "";
-			if (el.getAttribute("data-chat-turn")) return el.getAttribute("data-chat-turn");
-			if (el.getAttribute("data-turn-tail")) return el.getAttribute("data-turn-tail");
-			const inner = el.querySelector("[data-turn-tail]");
-			return inner ? inner.getAttribute("data-turn-tail") : "";
-		}
-		function applyHiddenTurns(sessionId) {
-			try {
-				const all = JSON.parse(storage().getItem(HIDDEN_TURNS_KEY) || "{}");
-				const turns = all[sessionId];
-				if (!Array.isArray(turns) || turns.length === 0) return;
-				const set = new Set(turns.map(String));
-				const tails = root().querySelectorAll('[data-chat-flow-kind="turn-tail"]');
-				for (let i = 0; i < tails.length; i++) {
-					const tail = tails[i];
-					if (!set.has(tailTurnOf(tail))) continue;
-					hideTurnTail(tail);
+				hiddenRows.clear();
+			}
+			// Earlier versions kept hidden turns in this browser; the plan covers them now.
+			try { for (const key of ["dsh-tavern-hidden-turns", "dsh-tavern-rolled-back-turns", "dsh-tavern-hidden-regen-user-turns"]) storage().removeItem(key); } catch (err) {}
+			function tailTurnOf(el) {
+				if (el.getAttribute("data-chat-turn")) return el.getAttribute("data-chat-turn");
+				if (el.getAttribute("data-turn-tail")) return el.getAttribute("data-turn-tail");
+				const inner = el.querySelector("[data-turn-tail]");
+				return inner ? inner.getAttribute("data-turn-tail") : "";
+			}
+			// Every conversation row with its native turn. A row the host mounted without
+			// one belongs to the turn whose tail closes it.
+			function rowsWithTurns() {
+				const result = [];
+				let pending = [];
+				for (const row of root().querySelectorAll("[data-chat-flow-kind]")) {
+					const kind = row.getAttribute("data-chat-flow-kind");
+					const turn = row.getAttribute("data-chat-turn") || (kind === "turn-tail" ? tailTurnOf(row) : "");
+					if (!turn) { pending.push(row); continue; }
+					for (const owned of pending) result.push([owned, turn]);
+					pending = [];
+					result.push([row, turn]);
 				}
-			} catch (err) {}
-		}
-		function applyRolledBackTurns(sessionId) {
-			try {
-				const all = JSON.parse(storage().getItem(ROLLED_BACK_TURNS_KEY) || "{}");
-				const turns = all[sessionId];
-				if (!Array.isArray(turns) || turns.length === 0) return;
-				const set = new Set(turns.map(String));
-				const tails = root().querySelectorAll('[data-chat-flow-kind="turn-tail"]');
-				for (let i = 0; i < tails.length; i++) {
-					const tail = tails[i];
-					if (!set.has(tailTurnOf(tail))) continue;
-					hideTurnTailWithUser(tail);
+				return result;
+			}
+			// `wholeTurns`: background Agent sessions have no plan; their rolled-back turns hide whole.
+			function apply(sessionId, plan, wholeTurns) {
+				// Reconcile both directions: rows a previous plan hid may show now.
+				restoreHiddenRows();
+				const whole = new Set((Array.isArray(wholeTurns) ? wholeTurns : []).map(String));
+				for (const [row, turn] of rowsWithTurns()) {
+					const kind = row.getAttribute("data-chat-flow-kind");
+					if (whole.has(turn) || !tavernPlanShowsRow(plan, turn, kind)) hideRow(row);
 				}
-			} catch (err) {}
-		}
-		function applySuppressedDshTurns(turns, regeneratedDshTurns, keepInput) {
-			const set = new Set((Array.isArray(turns) ? turns : []).map(String));
-			if (set.size === 0) return;
-			const visibleRegenerations = new Set(Object.values(regeneratedDshTurns && typeof regeneratedDshTurns === "object" ? regeneratedDshTurns : {}).map(String));
-			const tails = root().querySelectorAll('[data-chat-flow-kind="turn-tail"]');
-			for (let i = 0; i < tails.length; i++) {
-				const tail = tails[i];
-				const turn = tailTurnOf(tail);
-				if (!set.has(turn)) continue;
-				const kept = Boolean(keepInput && keepInput.has(turn));
-				if (visibleRegenerations.has(turn)) {
-					showTurnTail(tail);
-					// A kept turn's trigger card hides like any other residue; the rest of
-					// the turn already draws the round's body and must stay.
-					if (kept) hideTurnRowsBefore(tail, turn, true);
-					else hideUserForTurnTail(tail);
-				} else hideTurnTailWithUser(tail, kept);
+				for (const row of root().querySelectorAll('[data-chat-flow-kind="context"]')) {
+					const source = row.querySelector('[data-context-source]');
+					if (source && source.textContent.trim() === "dsh-tavern-surface-restore") hideRow(row);
+				}
 			}
-		}
-		// 重生成期间的那一楼：只藏会被替代的旧正文（和它的尾行），玩家输入留着。
-		// 整轮隐掉输入会让页面看起来像"我刚发的那条被删了"，这是他自己的话。
-		function hideReplacingReply(tail, turn) {
-			hideRow(tail);
-			const rows = turnRowsBefore(tail, turn);
-			for (let i = 0; i < rows.length; i++) {
-				if (rows[i].getAttribute("data-chat-flow-kind") === "user") continue;
-				hideRow(rows[i]);
-			}
-		}
-		function applyReplacingDshTurns(turns) {
-			const set = new Set((Array.isArray(turns) ? turns : []).map(String));
-			if (set.size === 0) return;
-			const tails = root().querySelectorAll('[data-chat-flow-kind="turn-tail"]');
-			for (let i = 0; i < tails.length; i++) {
-				const tail = tails[i];
-				const turn = tailTurnOf(tail);
-				if (!set.has(turn)) continue;
-				hideReplacingReply(tail, turn);
-			}
-		}
-		function applyRegeneratedDshTurns(regeneratedDshTurns) {
-			const mappings = regeneratedDshTurns && typeof regeneratedDshTurns === "object" ? regeneratedDshTurns : {};
-			const hiddenStoryTurns = new Set(Object.keys(mappings).map(String));
-			if (hiddenStoryTurns.size === 0) return;
-			const tails = root().querySelectorAll('[data-chat-flow-kind="turn-tail"]');
-			for (let i = 0; i < tails.length; i++) {
-				const tail = tails[i];
-				if (hiddenStoryTurns.has(tailTurnOf(tail))) hideTurnTail(tail);
-			}
-		}
-		// 被替换掉的正文不会自己消失：宿主已经为那个原生回合画好了行，即使节点早已
-		// 从消息面移除，重渲染也会把它再画出来。replacingDshTurns 只管生成那一刻，
-		// regeneratedDshTurns 的键是剧情轮次、宿主行上是原生轮次，两边对不上。
-		// 这里按服务端从日志里算出的「曾被替换的正文所在原生回合」隐藏，只藏回复，
-		// 玩家输入永远留着。刷新后照样生效，因为它来自日志而不是内存标记。
-		function applySupersededDshTurns(turns) {
-			const set = new Set((Array.isArray(turns) ? turns : []).map(String));
-			if (set.size === 0) return;
-			const rows = root().querySelectorAll('[data-chat-turn]');
-			for (let i = 0; i < rows.length; i++) {
-				const row = rows[i];
-				if (!set.has(row.getAttribute("data-chat-turn"))) continue;
-				if (row.getAttribute("data-chat-flow-kind") === "user") continue;
-				hideRow(row);
-			}
-		}
-		// Row plan comparison (docs/design/transcript-row-plan.md, step 2): the page still
-		// follows the hiding lists; this only reports rows the plan would show differently.
-		// The plan holds exceptions only, keyed by native turn: an absent turn shows its own
-		// input and reply. Same rule as planShowsRow in lib/domain/transcript-row-plan.js.
-		function tavernPlanShowsRow(plan, turnValue, kind) {
-			if (!plan || !plan.turns || turnValue === null || turnValue === "") return true;
-			// Before a windowed plan's first round: not judged.
-			if (plan.from !== null && plan.from !== undefined && Number(turnValue) < plan.from) return null;
-			const entry = plan.turns[String(turnValue)];
-			if (!entry) return true;
-			return kind === "user" || kind === "turn-trigger" ? entry.input === 1 : entry.reply === 1;
-		}
-		const reportedPlanDiffs = new Map();
-		function compareRowPlan(sessionId, plan) {
-			if (!plan || !plan.turns) return;
-			const diffs = [];
-			for (const row of root().querySelectorAll('[data-chat-flow-kind][data-chat-turn]')) {
-				const kind = row.getAttribute("data-chat-flow-kind");
-				if (kind === "context") continue;
-				const planned = tavernPlanShowsRow(plan, row.getAttribute("data-chat-turn"), kind);
-				const shown = row.style.display !== "none";
-				if (planned !== null && planned !== shown) diffs.push(row.getAttribute("data-chat-turn") + ":" + kind + ":" + (shown ? "现行显示" : "现行隐藏"));
-			}
-			const key = diffs.join(",");
-			if (reportedPlanDiffs.get(sessionId) === key) return;
-			reportedPlanDiffs.set(sessionId, key);
-			if (diffs.length) console.debug("dsh-tavern 行计划对照：与现行隐藏不同的行", { sessionId: sessionId, rows: diffs });
-		}
-			function apply(sessionId, turns, regeneratedDshTurns, replacingTurns, supersededTurns, rowPlan) {
-                // Reconcile both directions: an older observer may have hidden a
-                // restored turn after the action's immediate DOM update.
-                restoreHiddenRows();
-                // The round's own player message can live in a turn the failed-turn
-                // cleanup marked void; the server names those turns so the page can
-                // keep the input while hiding the rest of the residue.
-                const keepInput = new Set((rowPlan && Array.isArray(rowPlan.keepInput) ? rowPlan.keepInput : []).map(String));
-				applySuppressedDshTurns(turns, regeneratedDshTurns, keepInput);
-				applyReplacingDshTurns(replacingTurns);
-				applyRegeneratedDshTurns(regeneratedDshTurns);
-				applySupersededDshTurns(supersededTurns);
-                // Native rows can mount without their turn tail. Explicit ownership
-                // must remain authoritative during streaming and partial hydration.
-                const suppressed = new Set((Array.isArray(turns) ? turns : []).map(String));
-                const replacing = new Set((Array.isArray(replacingTurns) ? replacingTurns : []).map(String));
-                const mappings = regeneratedDshTurns || {};
-                const replacements = new Set(Object.values(mappings).map(String));
-                for (const row of root().querySelectorAll('[data-chat-turn]')) {
-                    const turn = row.getAttribute("data-chat-turn");
-                    const kind = row.getAttribute("data-chat-flow-kind");
-                    if (!kind) continue;
-                    // 正在被替换的那一楼只藏回复，玩家的输入永远留着。
-                    if (replacing.has(turn) && kind === "user") continue;
-                    // The kept input turn is the round's own player message; its error
-                    // residue and trigger card still hide below.
-                    if (keepInput.has(turn) && isPlayerInputRow(row)) continue;
-                    // A void turn that now carries the round's body keeps its reply and
-                    // drops only what opened it (the player's input or the trigger card).
-                    if (suppressed.has(turn) && (!replacements.has(turn) || isTurnInputRow(row))) hideRow(row);
-                    // mappings 的键是剧情轮次，宿主行上是原生轮次；用键去匹配这里的
-                    // turn 只会在两个编号碰巧相等时误藏，真正的替换由 superseded 负责。
-                }
-				applyHiddenTurns(sessionId);
-				applyRolledBackTurns(sessionId);
-				applyHiddenRegenUserTurns(sessionId, keepInput);
-                for (const row of root().querySelectorAll('[data-chat-flow-kind="context"]')) {
-                    const source = row.querySelector('[data-context-source]');
-                    if (source && source.textContent.trim() === "dsh-tavern-surface-restore") hideRow(row);
-                }
-                compareRowPlan(sessionId, rowPlan);
-			}
-			function regenerated(sessionId, view, tail) {
-				const adopted = view && view.adopted;
-				if (adopted && Number(adopted.hiddenTurn) > 0) forgetHiddenTurn(HIDDEN_TURNS_KEY, sessionId, Number(adopted.hiddenTurn));
-				if (adopted && Number(adopted.syntheticTurn) > 0) forgetHiddenTurn(HIDDEN_REGEN_USER_TURNS_KEY, sessionId, Number(adopted.syntheticTurn));
-				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom, keepInput: view.keptInputTurns });
-			}
-            function restored(sessionId, view) {
-                const turn = Number(view && view.undoneRollback && view.undoneRollback.turn);
-                const turns = [turn].concat(Object.values(view && view.regeneratedDshTurns || {})).map(String);
-                for (const restoredTurn of turns) {
-                    forgetHiddenTurn(ROLLED_BACK_TURNS_KEY, sessionId, restoredTurn);
-                    forgetHiddenTurn(HIDDEN_TURNS_KEY, sessionId, restoredTurn);
-                }
-                const tails = root().querySelectorAll('[data-chat-flow-kind="turn-tail"]');
-                for (const tail of tails) {
-                    if (!turns.includes(tailTurnOf(tail))) continue;
-                    tail.style.display = "";
-                    turnRowsBefore(tail, tail.getAttribute("data-chat-turn")).forEach(function (row) { row.style.display = ""; });
-                }
-                apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom, keepInput: view.keptInputTurns });
-            }
-			function rolledBack(sessionId, view) {
-				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom, keepInput: view.keptInputTurns });
-			}
-			return Object.freeze({ apply: apply, regenerated: regenerated, rolledBack: rolledBack, restored: restored });
+			function refresh(sessionId, view) { apply(sessionId, tavernPlanOf(view)); }
+			return Object.freeze({ apply: apply, regenerated: refresh, rolledBack: refresh, restored: refresh });
 		}
 		function applyBodyRegenerationResult(options) {
 			options.liveTavernView.setView(options.sessionId, options.view);
@@ -22458,7 +22224,7 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
                 h("section", { className: "dsh-local-section" }, h("h3", null, "功能"),
                     features.mvuCard ? toggle("variables", "变量结算", "关闭后变量和状态栏不再更新。", tasks.variables, checked => ({ backgroundTasks: { variables: checked } })) : null,
                     toggle("posture", "人物姿势", "每轮总结人物的位置、动作和姿势，供前台保持一致。", tasks.posture, checked => ({ backgroundTasks: { posture: checked } })),
-                    toggle("styleReference", "文风联想", "仅自由模式。每轮后台凭记忆摘一段风格相近的经典小说原文，供下一轮正文借鉴笔调。多一次后台请求。", tasks.styleReference === true, checked => ({ backgroundTasks: { styleReference: checked } })),
+                    toggle("styleReference", "文风联想", "仅自由模式。每轮后台凭记忆摘一段风格相近的小说原文，供下一轮正文借鉴笔调。多一次后台请求。", tasks.styleReference === true, checked => ({ backgroundTasks: { styleReference: checked } })),
                     toggle("webSearchEnabled", "联网搜索", "前台和后台可按需搜索。", features.webSearchEnabled, checked => ({ webSearchEnabled: checked }))),
                 error || key && reasoning.key === key && reasoning.error ? h("p", { role: "alert", className: "dsh-tavern-prompt-error" }, error || reasoning.error) : null,
                 notice ? h("p", { role: "status" }, notice) : null,
@@ -22707,30 +22473,17 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 					result => setBackgroundTurns(result.turns || []),
 					error => console.warn("后台回退显示刷新失败", error));
 			}, [props.sessionId, latestMessageId, running, backgroundRevision]);
-			const foregroundTurns = suppressionState.view && Array.isArray(suppressionState.view.suppressedDshTurns) ? suppressionState.view.suppressedDshTurns : [];
-			const suppressedDshTurns = foregroundTurns.concat(backgroundTurns);
-			const suppressedDshTurnsRevision = suppressedDshTurns.join(",");
-			const regeneratedDshTurns = suppressionState.view && suppressionState.view.regeneratedDshTurns || {};
-			const regeneratedDshTurnsRevision = JSON.stringify(regeneratedDshTurns);
-			// 正在被重生成替换的那一楼：只藏旧正文，玩家输入留着。
-			const replacingDshTurns = suppressionState.view && Array.isArray(suppressionState.view.replacingDshTurns) ? suppressionState.view.replacingDshTurns : [];
-			const replacingDshTurnsRevision = replacingDshTurns.join(",");
-			// 正文已被替换掉、但宿主仍会画出来的原生回合（旧存档也要藏）。
-			const supersededDshTurns = suppressionState.view && Array.isArray(suppressionState.view.supersededDshTurns) ? suppressionState.view.supersededDshTurns : [];
-			const supersededDshTurnsRevision = supersededDshTurns.join(",");
-			// 行计划只做对照，不改显示（docs/design/transcript-row-plan.md 第 2 步）。
+			// Background Agent sessions have no row plan: their rolled-back turns hide whole.
+			const backgroundTurnsRevision = backgroundTurns.join(",");
+			// The row plan decides which rows show (docs/design/transcript-row-plan.md).
 			// Immutable and keyed by turn: a changed plan is a new object, never serialized here.
 			const transcriptTurns = suppressionState.view && suppressionState.view.transcriptTurns || null;
 			const transcriptFrom = suppressionState.view ? suppressionState.view.transcriptFrom : null;
-			// 被失败清理标成作废、但这轮正文和它共用一条玩家消息的原生回合：
-			// 照常藏错误和「收到执行请求」，只把玩家自己那句话留着。
-			const keptInputTurns = suppressionState.view && Array.isArray(suppressionState.view.keptInputTurns) ? suppressionState.view.keptInputTurns : [];
-			const keptInputTurnsRevision = keptInputTurns.join(",");
 			React.useEffect(function () {
 				let frame = null;
 				function applyProjectionState() {
 					frame = null;
-					historyProjection.apply(props.sessionId, suppressedDshTurns, regeneratedDshTurns, replacingDshTurns, supersededDshTurns, { turns: transcriptTurns, from: transcriptFrom, keepInput: keptInputTurns });
+					historyProjection.apply(props.sessionId, transcriptTurns ? { turns: transcriptTurns, from: transcriptFrom } : null, backgroundTurns);
 				}
 				function scheduleProjection() {
 					if (frame === null) frame = window.requestAnimationFrame(applyProjectionState);
@@ -22749,7 +22502,7 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 				});
 				observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-chat-flow-kind", "data-chat-turn", "data-turn-tail"] });
 				return function () { observer.disconnect(); if (frame !== null) window.cancelAnimationFrame(frame); };
-			}, [props.sessionId, latestMessageId, running, suppressedDshTurnsRevision, regeneratedDshTurnsRevision, replacingDshTurnsRevision, supersededDshTurnsRevision, transcriptTurns, transcriptFrom, keptInputTurnsRevision]);
+			}, [props.sessionId, latestMessageId, running, backgroundTurnsRevision, transcriptTurns, transcriptFrom]);
 			return null;
 		}
 		function CandidateQuestion(props) {

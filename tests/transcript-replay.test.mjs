@@ -130,7 +130,7 @@ test('回退最后一轮：页面回到上一轮', async () => {
 
 // #306：存档正文与模型上下文不一致时，修复把整轮重写进一个新的编辑轮。宿主照样把
 // 这一轮画出来，现有的隐藏名单都不认它，页面上就多出一份原文直出的副本。
-test('修复模型上下文写入的整轮不出现在页面上（#306）', { todo: '现行隐藏名单不认修复轮；行计划（第 2、3 步）解决' }, async () => {
+test('修复模型上下文写入的整轮不出现在页面上（#306）', async () => {
   const g = game('repair')
   g.round(1, '你好', '她点了点头。')
   g.round(2, '去花店', '花店的门开着。')
@@ -148,8 +148,27 @@ test('行计划下，修复写入的整轮只画一份（#306）', async () => {
   repairNativeSurface(g.session, g.chat, { repairId: 'r1' })
   const replay = await replayTranscript(g.chat, g.session)
   assert.deepEqual(replay.plan.problems, [])
-  // The page still follows the lists; the client reports where the plan differs.
-  const differs = replay.rows.filter((row, index) => row.kind !== 'context' && row.visible !== replay.plan.rows[index].visible)
-  assert.ok(differs.length > 0)
-  assert.deepEqual(replay.clientPlanDiffs, differs.map(row => row.turn + ':' + row.kind + ':' + (row.visible ? '现行显示' : '现行隐藏')))
+  // The page applies the plan itself: the client shows exactly the planned rows.
+  assert.deepEqual(replay.rows.map(row => row.visible), replay.plan.rows.map(row => row.visible))
+})
+
+// #312：正文已入档、投影还没写进日志的那一刻，旧轮的临时隐藏若已撤掉，行计划会把旧轮
+// 和生成轮都画出来——旧轮那一行渲染的是存档里的新正文，同一段显示两份。
+test('重新生成已入档、投影未写入时，这一轮只画一份正文（#312）', async () => {
+  const g = game('regen-committed')
+  g.round(1, '你好', '她点了点头。')
+  g.round(2, '去花店', '旧正文')
+  const put = (type, data, op = { surfaceOp: 'append' }) => appendSessionEvent(g.session, type, data, op || undefined)
+  put('turn/start', { turn: 3 }, null)
+  put('user/message', message('regen-3', 'user', '重新生成', { kind: 'plugin', plugin: 'dsh-tavern-regen' }))
+  put('assistant/message', { turn: 3, step: 1, message: { id: 'reply-3', role: 'assistant', source: model,
+    content: [{ type: 'reasoning', text: '构思' }, { type: 'text', text: '新正文' }] } })
+  put('turn/end', { turn: 3, reason: { kind: 'completed' } }, null)
+  // The save as the commit leaves it, before regenerationRecovery.complete projects.
+  g.chat.messages.at(-1).text = '新正文'
+  Object.assign(g.chat, { regenInProgress: true, replacingDshTurns: [2], suppressedDshTurns: [3], regeneratedDshTurns: { 2: 3 },
+    regenRecovery: { id: 'op', phase: 'committed', temporaryReplacingTurn: 2 } })
+  const replay = await replayTranscript(g.chat, g.session)
+  const replies = replay.rows.filter(row => row.visible && row.kind === 'assistant-step' && row.turn !== 1)
+  assert.deepEqual(replies.map(row => row.turn), [3])
 })
