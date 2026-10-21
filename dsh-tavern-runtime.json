@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "64a1366a683f177962651e59c1c4241cd6784af2",
-  "releaseSequence": 796,
+  "revision": "5e2f4f7468f9766d85516cad218cd7a0c61f018d",
+  "releaseSequence": 797,
   "version": "3.0.1",
   "files": [
     {
@@ -208,6 +208,11 @@
       "path": "bin/eval-compaction-memory.mjs",
       "sha256": "edc4b16dad5c6b573595a5001b6a79523620aa7742c174d70a125039b34e681b",
       "size": 11476
+    },
+    {
+      "path": "bin/exp-style-reference-web.mjs",
+      "sha256": "1b9bc7a56d73588b869092e4e5e8649266b6153b9317d7233bb1731a9f123348",
+      "size": 7191
     },
     {
       "path": "bin/import-user-home.mjs",
@@ -611,8 +616,8 @@
     },
     {
       "path": "tavern-plugin/lib/background-agent-sessions.js",
-      "sha256": "2219262f4585826cc5c3a6421c5f91ed00b9c15bc1d345f6db027d1d16fe3ca6",
-      "size": 22309
+      "sha256": "0effba6c66cb44774f6580d4a38f5c3513f62e18b9f55cc2735fbeea9e7c6af9",
+      "size": 22515
     },
     {
       "path": "tavern-plugin/lib/background-agent-task.js",
@@ -2471,8 +2476,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "f780cc8a4c823c032cbbdc939d16ce269af0d81c8655f42a5b04f4707b097e6d",
-      "size": 391692
+      "sha256": "31f31cfb4edcd3ef9a76afe9dd2b26807f7c9637d693c86c4b09b8e19b32e8e1",
+      "size": 391909
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
