@@ -1,5 +1,8 @@
 import { normalizeResourcePath, resourceKind } from './file-resources.js'
 
+// Set a list field only when its content changes, so untouched Chats are not rewritten.
+function setList(target, key, next) { if (JSON.stringify(next) !== JSON.stringify(target[key] || [])) target[key] = next }
+
 function str(value) { return typeof value === 'string' ? value : (value === undefined || value === null ? '' : String(value)) }
 
 /** Keep resource files, bindings, Chat references and indexes as one recoverable graph. */
@@ -11,7 +14,7 @@ export function createResourceGraph(options = {}) {
   const fault = typeof options.fault === 'function' ? options.fault : async function () {}
   let tail = Promise.resolve()
   for (const method of ['rename', 'remove']) if (!resources || typeof resources[method] !== 'function') throw new Error('Resource Graph 缺少 resources.' + method)
-  for (const method of ['readIndex', 'updateIndex', 'readChat', 'writeChat']) if (!chats || typeof chats[method] !== 'function') throw new Error('Resource Graph 缺少 chats.' + method)
+  for (const method of ['readIndex', 'updateIndex', 'updateRefs']) if (!chats || typeof chats[method] !== 'function') throw new Error('Resource Graph 缺少 chats.' + method)
   for (const method of ['read', 'write', 'remove']) if (!operations || typeof operations[method] !== 'function') throw new Error('Resource Graph 缺少 operations.' + method)
 
   async function checkpoint(operation, stage) {
@@ -35,38 +38,33 @@ export function createResourceGraph(options = {}) {
     if (kind === 'preset' && presets && typeof presets.rename === 'function') await presets.rename(renamed.oldPath, renamed.path)
     const replacements = new Map([[renamed.oldPath, renamed.path]])
     if (renamed.scriptOldPath && renamed.scriptPath) replacements.set(renamed.scriptOldPath, renamed.scriptPath)
+    // Only the reference header fields are read and patched: a full Chat read per save made
+    // renaming or deleting one preset replay every save's history.
     const index = await chats.readIndex()
     for (const row of index.chats || []) {
-      const chat = await chats.readChat(row.id)
-      if (chat === undefined) continue
-      let changed = false
-      if (replacements.has(chat.cardPath)) {
-        chat.cardPath = replacements.get(chat.cardPath)
-        row.cardPath = chat.cardPath
-        changed = true
-      }
-      if (kind === 'preset') {
-        if (chat.runtimePresetPath === renamed.oldPath) { chat.runtimePresetPath = renamed.path; changed = true }
-        if (chat.runtimePresetSnapshot && typeof chat.runtimePresetSnapshot === 'object') {
-          const snapshot = chat.runtimePresetSnapshot
-          if (snapshot.presetPath === renamed.oldPath) { snapshot.presetPath = renamed.path; changed = true }
-          for (const source of (snapshot.sources || []).concat(snapshot.regexSources || [])) {
-            if (source && source.path === renamed.oldPath) { source.path = renamed.path; changed = true }
+      await chats.updateRefs(row.id, function (chat) {
+        if (replacements.has(chat.cardPath)) chat.cardPath = replacements.get(chat.cardPath)
+        if (kind === 'preset') {
+          if (chat.runtimePresetPath === renamed.oldPath) chat.runtimePresetPath = renamed.path
+          if (chat.runtimePresetSnapshot && typeof chat.runtimePresetSnapshot === 'object') {
+            const snapshot = chat.runtimePresetSnapshot
+            if (snapshot.presetPath === renamed.oldPath) snapshot.presetPath = renamed.path
+            for (const source of (snapshot.sources || []).concat(snapshot.regexSources || [])) {
+              if (source && source.path === renamed.oldPath) source.path = renamed.path
+            }
           }
         }
-      }
-      if (chat.workspace && typeof chat.workspace === 'object') {
-        const nextSources = (chat.workspace.sourcePaths || []).map(function (item) { return replacements.get(item) || item })
-        if (JSON.stringify(nextSources) !== JSON.stringify(chat.workspace.sourcePaths || [])) { chat.workspace.sourcePaths = nextSources; changed = true }
-        const nextMounted = (chat.workspace.mountedResources || []).map(function (item) {
-          if (!item || !replacements.has(item.path)) return item
-          const nextPath = replacements.get(item.path)
-          const filename = nextPath.split('/').pop()
-          return Object.assign({}, item, { path: nextPath, label: filename.replace(/\.[^.]+$/, '') })
-        })
-        if (JSON.stringify(nextMounted) !== JSON.stringify(chat.workspace.mountedResources || [])) { chat.workspace.mountedResources = nextMounted; changed = true }
-      }
-      if (changed) await chats.writeChat(chat)
+        if (chat.workspace && typeof chat.workspace === 'object') {
+          setList(chat.workspace, 'sourcePaths', (chat.workspace.sourcePaths || []).map(function (item) { return replacements.get(item) || item }))
+          setList(chat.workspace, 'mountedResources', (chat.workspace.mountedResources || []).map(function (item) {
+            if (!item || !replacements.has(item.path)) return item
+            const nextPath = replacements.get(item.path)
+            const filename = nextPath.split('/').pop()
+            return Object.assign({}, item, { path: nextPath, label: filename.replace(/\.[^.]+$/, '') })
+          }))
+        }
+        return chat
+      })
     }
     await chats.updateIndex(current => ({ ...current,
       chats: (current?.chats || []).map(row => replacements.has(row.cardPath) ? { ...row, cardPath: replacements.get(row.cardPath) } : row)
@@ -83,15 +81,14 @@ export function createResourceGraph(options = {}) {
     if (resourceKind(normalized) === 'card') await options.cardOrganization?.movePath(normalized, null)
     if (resourceKind(normalized) === 'preset' && presets && typeof presets.remove === 'function') await presets.remove(normalized)
     const index = await chats.readIndex()
-    for (const row of index.chats || []) {
-      const chat = await chats.readChat(row.id)
-      if (chat === undefined || !chat.workspace || typeof chat.workspace !== 'object') continue
-      const nextSources = (chat.workspace.sourcePaths || []).filter(function (item) { return item !== normalized })
-      const nextMounted = (chat.workspace.mountedResources || []).filter(function (item) { return !item || item.path !== normalized })
-      if (JSON.stringify(nextSources) === JSON.stringify(chat.workspace.sourcePaths || []) && JSON.stringify(nextMounted) === JSON.stringify(chat.workspace.mountedResources || [])) continue
-      chat.workspace.sourcePaths = nextSources
-      chat.workspace.mountedResources = nextMounted
-      await chats.writeChat(chat)
+    // Only card workbenches mount resources; other Chats never need reading here.
+    for (const row of (index.chats || []).filter(function (row) { return row && row.mode === 'card' })) {
+      await chats.updateRefs(row.id, function (chat) {
+        if (!chat.workspace || typeof chat.workspace !== 'object') return chat
+        setList(chat.workspace, 'sourcePaths', (chat.workspace.sourcePaths || []).filter(function (item) { return item !== normalized }))
+        setList(chat.workspace, 'mountedResources', (chat.workspace.mountedResources || []).filter(function (item) { return !item || item.path !== normalized }))
+        return chat
+      })
     }
     await checkpoint(operation, 'projected')
     await operations.remove()

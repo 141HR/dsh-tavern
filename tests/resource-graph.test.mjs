@@ -6,7 +6,7 @@ import { createResourceGraph } from '../tavern-plugin/lib/domain/resource-graph.
 function harness(fault) {
   const resourcePaths = new Set(['cards/old.json'])
   let operation = null
-  let index = { chats: [{ id: 'chat-1', cardPath: 'cards/old.json' }] }
+  let index = { chats: [{ id: 'chat-1', cardPath: 'cards/old.json', mode: 'card' }] }
   let chat = {
     id: 'chat-1',
     cardPath: 'cards/old.json',
@@ -32,8 +32,7 @@ function harness(fault) {
       async readIndex() { return structuredClone(index) },
       async updateIndex(updater) { const next = await updater(await this.readIndex()); if (next !== undefined) await this.writeIndex(next); return next },
       async writeIndex(value) { index = structuredClone(value) },
-      async readChat() { return structuredClone(chat) },
-      async writeChat(value) { chat = structuredClone(value) }
+      async updateRefs(id, mutate) { const next = await mutate(structuredClone(chat)); chat = structuredClone(next) }
     },
     operations: {
       async read() { return structuredClone(operation) },

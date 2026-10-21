@@ -1062,7 +1062,7 @@ export async function apply(ctx) {
     cardOrganization,
     resources: fileResources,
     presets: runtimePresets,
-    chats: { readIndex, updateIndex, readChat, writeChat },
+    chats: { readIndex, updateIndex, updateRefs: (chatId, mutate) => updateChatHeader(chatId, ['cardPath', 'runtimePresetPath', 'runtimePresetSnapshot', 'workspace'], mutate, { source: 'resource-graph' }) },
     operations: {
       read: async function () { return await readJson('resource-graph-operation.json') },
       write: async function (operation) { await writeJson('resource-graph-operation.json', operation) },
