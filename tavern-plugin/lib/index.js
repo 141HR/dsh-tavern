@@ -1,3 +1,4 @@
+import { createConversationBackgroundSettings } from './domain/conversation-background-settings.js'
 import { createChatWrites } from './domain/chat-writes.js'
 import { upgradeReferences, upgradedAnchor } from './domain/session-upgrade-references.js'
 import { producerSource } from './domain/message-source.js'
@@ -92,7 +93,7 @@ import { estimateWorldBookTokens, historyScanDepth } from './domain/worldbook-ac
 import { createWorldbookFilter, WORLD_BOOK_FILTER_TOOLS } from './domain/worldbook-filter.js'
 import { createWorldbookPrefilter } from './domain/worldbook-prefilter.js'
 import { createStyleReferenceRecall, STYLE_REFERENCE_SUBMIT_TOOL, latestStyleReference } from './domain/style-reference.js'
-import { adoptConversationFeatures, adoptConversationBackground, patchConversationBackground } from './domain/conversation-background.js'
+import { adoptConversationFeatures, adoptConversationBackground } from './domain/conversation-background.js'
 import { clearLegacyTavernDefault } from './domain/legacy-agent-default.js'
 import { conversationStateAtTurn, conversationForkBoundary } from './domain/conversation-fork-point.js'
 import { createCardResponseTest } from './domain/card-response-test.js'
@@ -4325,6 +4326,14 @@ export async function apply(ctx) {
   })
   ctx.effect(() => () => saveUpgrade.dispose())
 
+  const conversationBackgroundSettings = createConversationBackgroundSettings({
+    readConfig: backgroundConfigForSession, readChat: chatForSession, updateChat,
+    modelCatalog: tavernModelCatalog, modelReasoning: selection => readBackgroundModelReasoning(llm, selection),
+    isPlayMode: mode => groupOfMode(mode) === 'play', sceneImagesAvailable: TAVERN_RELEASE_CAPABILITIES.sceneImages,
+    // Unloaded sessions recall after their next reply.
+    onStyleEnabled: (sessionId, chatId) => { if (agentRegistry.get(sessionId)?.session) void worldbookPrefilter.start(chatId) }
+  })
+
   async function dispatchMethod(method, args, serverTemplate = false) {
     if (method.startsWith('gameplay.')) return await gameplayApi.call(method.slice(9), args || {})
     switch (method) {
@@ -4568,33 +4577,9 @@ export async function apply(ctx) {
         return { card: change.card, changed: change.changed }
       }
       case 'getConversationBackgroundModel':
-      case 'getConversationBackgroundConfig': {
-        const chat = await backgroundConfigForSession(str(args?.sessionId))
-        if (!chat || groupOfMode(chat.mode) !== 'play') throw new Error('请先打开游玩会话')
-        return { backgroundModel: chat.backgroundModelSelection || null, imageModel: chat.imageModelSelection || null, backgroundTasks: normalizeBackgroundTasks(chat.backgroundTasks), webSearchEnabled: chat.webSearchEnabled === true, sceneImagesEnabled: chat.sceneImagesEnabled === true, sceneImagesAvailable: TAVERN_RELEASE_CAPABILITIES.sceneImages, mvuCard: chat.mvu?.enabled === true && chat.mvu.owner === 'official', modelCatalog: await tavernModelCatalog() }
-      }
+      case 'getConversationBackgroundConfig': return conversationBackgroundSettings.read(args?.sessionId)
       case 'setConversationBackgroundModel':
-      case 'setConversationBackgroundConfig': {
-        const sessionId = str(args?.sessionId)
-        const chat = await chatForSession(sessionId)
-        if (!chat || groupOfMode(chat.mode) !== 'play') throw new Error('请先打开游玩会话')
-        async function checkModel(value, label) {
-          const selection = normalizeBackgroundModel(value)
-          if (value !== null && !selection) throw new Error(label + '配置无效')
-          if (!selection) return
-          const catalog = await tavernModelCatalog()
-          if (!catalog.some(group => group.provider === selection.provider && group.models.some(model => model.id === selection.model))) throw new Error('所选' + label + '不可用')
-          const reasoning = await readBackgroundModelReasoning(llm, selection)
-          if (selection.reasoningEffort && !reasoning?.efforts?.some(effort => effort.id === selection.reasoningEffort)) throw new Error('所选推理强度不可用')
-        }
-        if (Object.hasOwn(args, 'backgroundModel')) await checkModel(args.backgroundModel, '后台模型')
-        if (Object.hasOwn(args, 'imageModel')) await checkModel(args.imageModel, '生图 Agent 模型')
-        const saved = await updateChat(chat.id, current => patchConversationBackground(current, args), { source: 'background-model.switch-conversation' })
-        // Turned on mid-game: recall from the latest reply now, so the very next turn has a reference. A game
-        // whose session is not loaded yet (never opened since import or restart) recalls after its next reply.
-        if (args.backgroundTasks?.styleReference === true && chat.backgroundTasks?.styleReference !== true && agentRegistry.get(sessionId)?.session) void worldbookPrefilter.start(chat.id)
-        return { backgroundModel: saved.backgroundModelSelection || null, imageModel: saved.imageModelSelection || null, backgroundTasks: normalizeBackgroundTasks(saved.backgroundTasks), webSearchEnabled: saved.webSearchEnabled === true, sceneImagesEnabled: saved.sceneImagesEnabled === true }
-      }
+      case 'setConversationBackgroundConfig': return conversationBackgroundSettings.save(args)
       case 'getBackgroundModelReasoning': return { reasoning: await readBackgroundModelReasoning(llm, args) }
       case 'getDisplayPreferences': { const settings = await readTavernSettings(); return { hideContextAndReasoning: settings.hideContextAndReasoning, renderDepth: settings.renderDepth, headerItems: settings.headerItems } }
       case 'getCandidatePreferences': return { candidateDismissMode: (await readTavernSettings()).candidateDismissMode }
