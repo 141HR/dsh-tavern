@@ -4258,7 +4258,7 @@ export async function apply(ctx) {
       case 'setConversationBackgroundModel':
       case 'setConversationBackgroundConfig': return conversationBackgroundSettings.save(args)
       case 'getBackgroundModelReasoning': return { reasoning: await readBackgroundModelReasoning(llm, args) }
-      case 'getDisplayPreferences': { const settings = await readTavernSettings(); return { hideContextAndReasoning: settings.hideContextAndReasoning, renderDepth: settings.renderDepth, headerItems: settings.headerItems } }
+      case 'getDisplayPreferences': { const settings = await readTavernSettings(); return { hideContextAndReasoning: settings.hideContextAndReasoning, headerItems: settings.headerItems } }
       case 'getCandidatePreferences': return { candidateDismissMode: (await readTavernSettings()).candidateDismissMode }
       case 'getTavernSettings': return { settings: await readTavernSettings(), modelCatalog: await tavernModelCatalog() }
       case 'pluginMediaForTurn': return await pluginMediaForTurn(args && args.sessionId, args && args.turn)

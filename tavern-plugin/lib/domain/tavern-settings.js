@@ -21,8 +21,6 @@ function promptSetName(value) {
   return name
 }
 
-export const DEFAULT_RENDER_DEPTH = 3
-function renderDepthOf(value) { return Number.isSafeInteger(value) && value >= 0 && value <= 100 ? value : DEFAULT_RENDER_DEPTH }
 
 // Header shortcuts: { display, items }. The items are page ids — a Tavern tab
 // (dsh-tavern:*), a plugin tab (tavern-plugin:*), the export menu (header:export)
@@ -203,10 +201,6 @@ export function applyTavernSettingsPatch(current, patch) {
     if (typeof input.autoOpenStatusPanel !== 'boolean') throw new Error('自动打开酒馆状态面板设置必须是布尔值')
     next.autoOpenStatusPanel = input.autoOpenStatusPanel
   }
-  if (Object.hasOwn(input, 'renderDepth')) {
-    if (!Number.isSafeInteger(input.renderDepth) || input.renderDepth < 0 || input.renderDepth > 100) throw new Error('渲染深度必须是 0 到 100 的整数')
-    next.renderDepth = input.renderDepth
-  }
   if (Object.hasOwn(input, 'headerItems')) {
     // null restores the shipped top bar.
     if (input.headerItems === null) delete next.headerItems
@@ -292,7 +286,6 @@ export function presentTavernSettings(document, defaults) {
     storyToolCall: object(document).storyToolCall === true || object(document).storyHistoryToolCall === true,
     castPresentation: object(document).castPresentation === true,
     // Only the latest floors run a card's HTML interface; 0 renders every floor.
-    renderDepth: renderDepthOf(object(document).renderDepth),
     autoOpenStatusPanel: object(document).autoOpenStatusPanel !== false,
     // Library edits reach a running game on its next turn; only an explicit
     // reload still refreshes the card definition, initvars and MVU state.

@@ -52,8 +52,8 @@ test('getDisplayPreferences 一并返回顶栏设置', async () => {
   const line = server.split('\n').find(source => source.includes("case 'getDisplayPreferences':"))
   const body = line.slice(line.indexOf('{') + 1, line.lastIndexOf('}'))
   const run = new Function('readTavernSettings', 'return async () => {' + body + '}')
-  const preferences = await run(async () => ({ hideContextAndReasoning: false, renderDepth: 5, headerItems: { display: 'icon', items: ['header:export'] } }))()
-  assert.deepEqual(preferences, { hideContextAndReasoning: false, renderDepth: 5, headerItems: { display: 'icon', items: ['header:export'] } })
+  const preferences = await run(async () => ({ hideContextAndReasoning: false, headerItems: { display: 'icon', items: ['header:export'] } }))()
+  assert.deepEqual(preferences, { hideContextAndReasoning: false, headerItems: { display: 'icon', items: ['header:export'] } })
 })
 
 test('客户端顶栏默认值与服务端一致，设置在首次读取前就用默认值', async () => {

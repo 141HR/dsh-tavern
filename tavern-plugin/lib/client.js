@@ -13779,7 +13779,7 @@ function bindTavernFontZoom(node, win) {
 				// Rounds past the render depth keep their prose; the card's HTML waits for one click.
 				if (typeof options.deferHtml === "function") {
 					if (parts.findIndex(function (item) { return item.kind === "html"; }) !== index) return null;
-					return h("button", { key: index, type: "button", className: "dsh-tavern-btn dsh-tavern-render-round", title: "超出渲染深度的轮次只显示文字；点击后渲染本轮的卡片界面", onClick: options.deferHtml }, "渲染此轮");
+					return h("button", { key: index, type: "button", className: "dsh-tavern-btn dsh-tavern-render-round", title: "只有最近 3 轮渲染卡片界面，更早的轮次只显示文字；点击后渲染本轮", onClick: options.deferHtml }, "渲染此轮");
 				}
 				// Plugin markers inside card HTML cannot be split out; show them after that part.
 				const pluginHtml = options.plugin && !options.openingPreview ? options.plugin.renderHtmlMarkers(String(part.content !== undefined ? part.content : part.html || "")) : null;
@@ -14410,11 +14410,10 @@ function bindTavernFontZoom(node, win) {
 				const ownsTurn = !tail || !tail.closing || !data.finalNode || tail.closing.finalNode.seq === data.finalNode.seq;
 					const projection = settled && ownsTurn ? tavernProjectionForTurn(liveState.view, storyTurn) : null;
 					const latestProjectionTurn = tavernLatestProjectionTurn(liveState.view);
-				// Render depth: only the latest rounds run a card's HTML interface (heavy status bars).
-				const displayPrefs = React.useSyncExternalStore(displayPreferences.subscribe, displayPreferences.snapshot, displayPreferences.snapshot);
+				// Only the latest 3 rounds run a card's HTML interface (heavy status bars);
+				// earlier ones show text and a 「渲染此轮」 button.
 				const [renderRound, setRenderRound] = React.useState(false);
-				const renderDepth = displayPrefs && Number.isSafeInteger(displayPrefs.renderDepth) ? displayPrefs.renderDepth : 3;
-				const deferHtml = !renderRound && renderDepth > 0 && storyTurn > 0 && latestProjectionTurn - storyTurn >= renderDepth ? function () { setRenderRound(true); } : null;
+				const deferHtml = !renderRound && storyTurn > 0 && latestProjectionTurn - storyTurn >= 3 ? function () { setRenderRound(true); } : null;
                 React.useEffect(function () {
                     if(!historyNode.current || !currentView?.historyWindow || !ownsTurn || projection || storyTurn<=0 || storyTurn>=tavernLatestProjectionTurn(currentView))return;
                     let cancelWait = null;
@@ -16821,8 +16820,7 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
                 return { display: input.display === "icon" ? "icon" : "icon-text", items: input.items.filter(item => typeof item === "string").slice(0, 24) };
             }
             function apply(settings) {
-                value = { hideContextAndReasoning: settings.hideContextAndReasoning === true, headerItems: headerItemsOf(settings),
-                    renderDepth: Number.isSafeInteger(settings.renderDepth) ? settings.renderDepth : 3 };
+                value = { hideContextAndReasoning: settings.hideContextAndReasoning === true, headerItems: headerItemsOf(settings) };
                 document.documentElement.classList.toggle("dsh-tavern-hide-process", value.hideContextAndReasoning);
                 listeners.forEach(listener => listener());
             }
@@ -16869,13 +16867,6 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
             return h("section", { className: "dsh-tavern-settings-group dsh-tavern-display-preferences" },
                 row("隐藏上下文注入和思考过程", "隐藏对话中的上下文注入、上下文压缩记录、收到执行请求的提示、已思考和思考过程。仅影响显示，正文、模型请求和存档内容不变。",
                     preferences?.hideContextAndReasoning === true, value => ({ hideContextAndReasoning: value })),
-                h("label", { className: "dsh-tavern-settings-row dsh-tavern-background-task" },
-                    h("div", { className: "dsh-tavern-settings-copy" }, h("strong", { className: "dsh-tavern-settings-title" }, "渲染深度"),
-                        h("p", { className: "dsh-tavern-settings-desc" }, "只有最近几轮渲染人物卡的 HTML 界面（状态栏、美化面板等），更早的轮次只显示文字，可点「渲染此轮」单独打开。重美化的卡渲染太多轮会很卡。")),
-                    h("select", { "aria-label": "渲染深度", value: String(preferences?.renderDepth ?? 3), disabled: preferences === null || busy,
-                        onChange: event => save({ renderDepth: Number(event.target.value) }) },
-                        [1, 2, 3, 5, 10, 20].map(depth => h("option", { key: depth, value: String(depth) }, "最近 " + depth + " 轮")),
-                        h("option", { value: "0" }, "不限"))),
                 notice ? h("p", { className: "dsh-tavern-settings-desc", role: "status" }, notice) : null);
         }
 
