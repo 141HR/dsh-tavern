@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "be85d378e4de5b179a99d80c122c58221b905391",
-  "releaseSequence": 811,
+  "revision": "e96ca3d7518e7da440763f6b67c0e2e83a204d03",
+  "releaseSequence": 812,
   "version": "3.0.1",
   "files": [
     {
@@ -341,8 +341,8 @@
     },
     {
       "path": "bin/tavern-window.mjs",
-      "sha256": "f1815af3963cfb0923ce15c1cc8aa3c5225f3de179d64eef9d57f8cb40372a21",
-      "size": 2787
+      "sha256": "6f2186efc887a79b031219a4fd39a195c692287792190fd9df1f487ac3243c6f",
+      "size": 3243
     },
     {
       "path": "bin/test-tavern.mjs",
