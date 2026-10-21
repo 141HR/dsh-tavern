@@ -136,6 +136,8 @@ test('profile 已装旧名包：跳过，避免同一插件出现第三份来源
   assert.equal(r.action, 'skipped')
   assert.match(r.reason, /单一来源/)
   assert.equal(existsSync(path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)), false)
+  assert.deepEqual(r.profilePackage, { name: LEGACY_SCENE_IMAGE_PACKAGE_NAME, version: '2.8.0' })
+  assert.match(r.hint, /dsh plugin --profile tavern remove dsh-tavern-comfy/, '旧版独立插件：说明怎样换成内置版')
 })
 
 test('profile 已装 canonical 包：跳过，避免同一插件重复来源', t => {
@@ -150,6 +152,7 @@ test('profile 已装 canonical 包：跳过，避免同一插件重复来源', t
   assert.equal(r.action, 'skipped')
   assert.match(r.reason, /单一来源/)
   assert.equal(existsSync(path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)), false)
+  assert.equal(r.hint, undefined, 'profile 里的版本不旧于内置版时不提示迁移')
 })
 
 test('readBundledSceneImage 校验版本标记、包名和委派契约', t => {

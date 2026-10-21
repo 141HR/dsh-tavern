@@ -312,6 +312,7 @@ async function installProfileOwned(host, { attemptId, runInstall, runDsh }) {
       const bundledPlugin = installBundledSceneImagePlugin({ sourceRoot: SOURCE_ROOT, dataRoot, profileDir: PROFILE_DIR })
       if (bundledPlugin.action === 'installed') console.log(`已内置剧情生图插件 ${bundledPlugin.version}：${bundledPlugin.target}`)
       else console.log(`内置剧情生图插件：${bundledPlugin.reason || bundledPlugin.action}`)
+      if (bundledPlugin.hint) console.warn('[Tavern 插件] ' + bundledPlugin.hint)
     } catch (error) {
       console.warn('[Tavern 插件] 内置剧情生图插件安装失败（不影响 Tavern 使用）：' + (error?.message || error))
     }

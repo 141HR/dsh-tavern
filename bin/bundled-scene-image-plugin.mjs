@@ -110,6 +110,17 @@ function copyTree(from, to, copied) {
   }
 }
 
+/** profile 里登记着旧版独立插件时，告诉用户怎样换成内置版。 */
+export function legacySceneImageHint(packageName, profileVersion, bundledVersion) {
+  return [
+    `profile 里还登记着独立安装的生图插件 ${packageName}${profileVersion ? ' ' + profileVersion : ''}，`,
+    `所以没有安装 Tavern 内置的 ${bundledVersion}，会继续使用旧版。`,
+    `要换成内置版：先备份旧插件目录（data/tools/dsh-tavern-image）的数据，`,
+    `再执行 dsh plugin --profile tavern remove ${packageName}，然后重新运行 Tavern 安装或更新；`,
+    '人物库等数据的迁移见 https://github.com/weixinlll/dsh-tavern-image/blob/master/MIGRATION.md',
+  ].join('')
+}
+
 /**
  * @param {object} options
  * @param {string} options.sourceRoot Tavern 安装源根目录（含 tavern-plugin/packages/...）
@@ -133,12 +144,19 @@ export function installBundledSceneImagePlugin({ sourceRoot, dataRoot, profileDi
   }
 
   // profile 侧已装同名包：让它做唯一来源，别再放一份永不加载的副本
-  const profileHasSceneImagePackage = profileDir && [SCENE_IMAGE_PACKAGE_NAME, LEGACY_SCENE_IMAGE_PACKAGE_NAME]
-    .some(name => existsSync(path.join(profileDir, 'node_modules', name, 'package.json')))
-  if (profileHasSceneImagePackage) {
+  const profilePackageName = profileDir && [SCENE_IMAGE_PACKAGE_NAME, LEGACY_SCENE_IMAGE_PACKAGE_NAME]
+    .find(name => existsSync(path.join(profileDir, 'node_modules', name, 'package.json')))
+  if (profilePackageName) {
+    const profileVersion = String(readJson(path.join(profileDir, 'node_modules', profilePackageName, 'package.json'))?.version ?? '').trim() || null
+    // 旧版独立插件还登记在 profile 里：Tavern 继续加载它，内置版永远装不上。
+    // 只跳过不说明的话，用户会一直停在旧版且不知道原因，所以给出换成内置版的做法。
+    const older = profilePackageName === LEGACY_SCENE_IMAGE_PACKAGE_NAME || !profileVersion || comparePluginVersions(profileVersion, bundled.version) < 0
+    const hint = older ? legacySceneImageHint(profilePackageName, profileVersion, bundled.version) : ''
     return {
       action: 'skipped', reason: 'profile 已安装同名插件包，保持单一来源',
       version: bundled.version, installedVersion, target,
+      profilePackage: { name: profilePackageName, version: profileVersion },
+      ...(hint ? { hint } : {}),
     }
   }
 
