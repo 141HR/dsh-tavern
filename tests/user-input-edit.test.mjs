@@ -106,7 +106,7 @@ test('还没进 Chat 的输入只写表头编辑记录，模型上下文同步�
   const edit = await h.editor.readUser(h.session.id, { turn: 6 })
   const saved = await h.editor.saveUser(h.session.id, { token: edit.token, turn: 6, texts: ['改成生成图片'] })
   assert.equal(saved.messages.length, 2)
-  assert.deepEqual(saved.userInputEdits, { 6: { text: '改成生成图片', id: saved.userInputEdits[6].id, seq: saved.userInputEdits[6].seq } })
+  assert.deepEqual(saved.userInputEdits, { 6: { text: '改成生成图片', id: saved.userInputEdits[6].id, seq: saved.userInputEdits[6].seq, role: 'user' } })
   assert.deepEqual(userInputEditsOf(saved), { 6: '改成生成图片' })
   assert.deepEqual(h.session.deriveMessages().filter(message => message.role === 'user').map(message => message.content[0].text), ['第一条输入', '改成生成图片'])
   // 再编辑同一回合时，沿着替换链找到最新副本

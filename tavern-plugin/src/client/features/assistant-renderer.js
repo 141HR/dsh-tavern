@@ -324,7 +324,7 @@
 				const location = props.node.location;
 				const turnRef = location && (location.kind === "turn" || location.kind === "step") ? location.turn : null;
 				const turn = turnRef ? Number(turnRef.turn) : 0;
-				const liveState = useScopedLiveTavernView(props.sessionId, String(data.time || ""), [["mode"], ["canEditBody"], ["replayFailedTurn"], ["editableUserInputTurns"], ["latestCommittedUserTurn"], ["failedUserInputTurns"], ["inputSources", String(turn)], ["inputTemplateDisplays", String(turn)], ["userInputEdits", String(turn)]]);
+				const liveState = useScopedLiveTavernView(props.sessionId, String(data.time || ""), [["mode"], ["canEditBody"], ["replayFailedTurn"], ["editableUserInputTurns"], ["failedUserInputTurns"], ["inputSources", String(turn)], ["inputTemplateDisplays", String(turn)], ["userInputEdits", String(turn)]]);
 				const parts = userContentParts(data.content);
 				// The host keeps rendering the original append node; an edited player
 				// input is carried back by the view instead (see bodyEditor.saveUser).
@@ -355,8 +355,7 @@
 				// their text so an edit cannot move the current round.
 				const editableTurns = Array.isArray(liveState.view?.editableUserInputTurns) ? liveState.view.editableUserInputTurns : [];
 				const failedTurns = Array.isArray(liveState.view?.failedUserInputTurns) ? liveState.view.failedUserInputTurns : [];
-				const committedEdit = Number(liveState.view?.latestCommittedUserTurn || 0) === Number(turn)
-					&& editableTurns.some(value => Number(value) === Number(turn));
+				const committedEdit = editableTurns.some(value => Number(value) === Number(turn));
 				const failedEdit = failedTurns.some(value => Number(value) === Number(turn));
 				const canEdit = playView && latestUserTurn > 0 && Number(turn) === Number(latestUserTurn) && !running
 					&& liveState.view?.canEditBody !== false && (committedEdit || failedEdit);

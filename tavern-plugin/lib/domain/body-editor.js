@@ -327,17 +327,13 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
         const before = currentRecord ? currentRecord.text : existing ? String(existing.message.text ?? '') : userInputText(located.event)
         if (before !== context.text) throw new Error('输入或会话已变化，请重新打开编辑')
         if (!agent.session.surface?.nodes.includes(located.seq)) throw new Error('模型上下文已变化，请重新打开编辑')
+        const edits = current.userInputEdits && typeof current.userInputEdits === 'object' && !Array.isArray(current.userInputEdits)
+          ? { ...current.userInputEdits } : {}
+        edits[String(turn)] = { text, id: editId, seq: located.seq, role: 'user' }
+        current.userInputEdits = edits
         if (existing) {
           existing.message.text = text
           existing.message.bodyEdit = { id: editId, seq: located.seq, turn, role: 'user' }
-          if (current.userInputEdits && typeof current.userInputEdits === 'object' && !Array.isArray(current.userInputEdits) && current.userInputEdits[String(turn)]) {
-            const next = { ...current.userInputEdits }
-            delete next[String(turn)]
-            current.userInputEdits = next
-          }
-        } else {
-          current.userInputEdits = { ...(current.userInputEdits && typeof current.userInputEdits === 'object' && !Array.isArray(current.userInputEdits) ? current.userInputEdits : {}),
-            [String(turn)]: { text, id: editId, seq: located.seq } }
         }
         return current
       }, { source: 'foreground.user-edit' })
