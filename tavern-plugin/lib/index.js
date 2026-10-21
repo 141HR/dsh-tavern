@@ -2973,12 +2973,19 @@ export async function apply(ctx) {
   const worldbookPrefilter = createWorldbookPrefilter({
     run: (chatId, signal) => wholeReads.scope('回复后预备', () => prepareAfterReply(chatId, signal))
   })
+  // The replies each game prepared for (round and version, the latest few). Tavern's own
+  // turns — a rollback, a body edit, a repair — end like replies but bring no new one:
+  // preparing again would only rewrite the save (and void the rollback's undo point).
+  const preparedReplies = new Map()
   async function prepareAfterReply(chatId, signal) {
     const chat = await storyContext({ chatId })
     if (!chat || !['story', 'script'].includes(chat.mode || 'story') || chat.requestMode === 'sillytavern' || chat.regenInProgress) return
     const latest = chat.messages?.at(-1)
     if (latest?.role !== 'assistant' || latest.greeting === true || backgroundTasks.activity(chat).busy) return
     if (backgroundModelSelection(chat) === null) return
+    const reply = latest.turn + ':' + (Number(latest.swipeId) || 0), prepared = preparedReplies.get(chatId) || []
+    if (prepared.includes(reply)) return
+    preparedReplies.set(chatId, [...prepared, reply].slice(-16))
     const card = await readChatCard(chat)
     signal.throwIfAborted()
     await projectForegroundWorldbook({ chat, card, userText: '', purpose: 'prefilter', signal })
