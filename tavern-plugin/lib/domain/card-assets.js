@@ -219,12 +219,6 @@ export function collectCardAssets(card, resolve) {
   return result
 }
 
-/** The main background first: named 'main', else the first one. */
-export function orderBackgrounds(backgrounds) {
-  const main = backgrounds.findIndex(item => item.name === 'main')
-  return main > 0 ? [backgrounds[main], ...backgrounds.slice(0, main), ...backgrounds.slice(main + 1)] : backgrounds.slice()
-}
-
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif'])
 
 /**

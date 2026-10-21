@@ -10,8 +10,6 @@ const MAX_DATA_BYTES = 64 * 1024
 const MAX_ISSUED_PER_TURN = 20
 const MAX_TEXT = 500
 
-export const PLUGIN_MEDIA_LIMITS = Object.freeze({ items: MAX_ITEMS, dataBytes: MAX_DATA_BYTES, text: MAX_TEXT })
-
 function invalid(message) { return Object.assign(new Error(message), { code: 'TAVERN_PLUGIN_INVALID' }) }
 
 function attachmentRef(value) {

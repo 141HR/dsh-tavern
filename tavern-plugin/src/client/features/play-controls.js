@@ -30,11 +30,7 @@
 						const blob = result.base64
 							? new Blob([Uint8Array.from(atob(result.base64), function (value) { return value.charCodeAt(0); })], { type: "application/zip" })
 							: new Blob([result.text], { type: "text/markdown;charset=utf-8" });
-						const url = URL.createObjectURL(blob);
-						const link = document.createElement("a");
-						link.href = url; link.download = result.filename || "对话记录.md";
-						document.body.appendChild(link); link.click(); link.remove();
-						window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+						downloadTavernBlob(blob, result.filename || "对话记录.md");
 					} catch (err) { tavernErrorHub.report("导出故事正文", err); }
 					finally { setBusy(false); }
 				}
@@ -43,11 +39,7 @@
 					try {
 						const result = await rpc("exportGameSave", { images: true }, props.sessionId);
 						const bytes = Uint8Array.from(atob(result.base64), function (value) { return value.charCodeAt(0); });
-						const url = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
-						const link = document.createElement("a");
-						link.href = url; link.download = result.filename;
-						document.body.appendChild(link); link.click(); link.remove();
-						window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+						downloadTavernBlob(new Blob([bytes], { type: "application/zip" }), result.filename);
 					} catch (err) { tavernErrorHub.report("导出存档", err); }
 					finally { setBusy(false); }
 				}
@@ -56,11 +48,7 @@
 					try {
 						const result = await rpc("exportTavernLogs", {}, props.sessionId);
 						const bytes = Uint8Array.from(atob(result.base64), function (value) { return value.charCodeAt(0); });
-						const url = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
-						const link = document.createElement("a");
-						link.href = url; link.download = result.filename;
-						document.body.appendChild(link); link.click(); link.remove();
-						window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+						downloadTavernBlob(new Blob([bytes], { type: "application/zip" }), result.filename);
 					} catch (err) { tavernErrorHub.report("导出日志", err); }
 					finally { setBusy(false); }
 				}

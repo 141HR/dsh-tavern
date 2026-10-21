@@ -344,6 +344,20 @@ window.__ModuleLoader__.load({
 		  if (Number(file.size) > 50 * 1024 * 1024) return Promise.reject(new Error('EPUB 文件不能超过 50 MB'));
 		  return file.arrayBuffer().then(buffer => ({ name, type: file.type || 'application/epub+zip', fileB64: bytesToBase64(new Uint8Array(buffer)), chunkSize: 500 }));
 		}
+		function downloadTavernBlob(blob, filename) {
+		    const url = URL.createObjectURL(blob);
+		    const link = document.createElement("a");
+		    try {
+		        link.href = url;
+		        link.download = filename;
+		        document.body.appendChild(link);
+		        link.click();
+		    } finally {
+		        link.remove();
+		        // Give the browser time to consume the URL before releasing its bytes.
+		        window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+		    }
+		}
 
 		/** Import one card file: PNG and JSON go as parsed JSON; archives (CHARX, DSH cards) and other
 		 * formats (a plugin's importer, tavern.cardImporter) go up as raw files. */
@@ -1366,11 +1380,6 @@ window.__ModuleLoader__.load({
 			return mainSessionId(snapshot);
 		}
 
-		function isBlankRow(row) {
-			if (!row) return false;
-			return row.blank === true;
-		}
-
 		// createSessionCompat(sessions) -> 兼容后的 sessions 视图
 		// 返回的新对象保留 list/binding/scope/create/fork/refresh 原样，并补回：
 		//   current    —— 主会话 id（0.1.5 语义，随列表快照推导）
@@ -1480,11 +1489,7 @@ window.__ModuleLoader__.load({
 		// conversation menu too: the structure goes to the developer, the story text stays home.
 		async function downloadSessionDiagnostics(args, sessionId) {
 			const result = await rpc("exportSessionDiagnostics", args, sessionId);
-			const url = URL.createObjectURL(new Blob([result.text], { type: "application/json;charset=utf-8" }));
-			const link = document.createElement("a");
-			link.href = url; link.download = result.filename;
-			document.body.appendChild(link); link.click(); link.remove();
-			window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+			downloadTavernBlob(new Blob([result.text], { type: "application/json;charset=utf-8" }), result.filename);
 		}
 
 		function rpc(method, args, sessionId, requestOptions) {
@@ -18507,8 +18512,7 @@ const tavernTextLayoutFeature = createTavernTextLayoutFeature();
 					setBusy(true); setError("");
 					try {
 						const result = await rpc("exportPreset", { path: item.path }, props.scope.sessionId);
-						const blob = new Blob([result.text], { type: "application/json" }); const url = URL.createObjectURL(blob); const link = document.createElement("a");
-						link.href = url; link.download = result.name || "preset.json"; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+						downloadTavernBlob(new Blob([result.text], { type: "application/json" }), result.name || "preset.json");
 					} catch (err) { setError(String(err && err.message || err)); } finally { setBusy(false); }
 				}
 				async function remove(item) {
@@ -18754,8 +18758,7 @@ const tavernTextLayoutFeature = createTavernTextLayoutFeature();
 
 		// Shared by the 预设 tab and its detail pages: save an {name, text} export as a download.
 		function saveTavernExport(result) {
-			const blob = new Blob([result.text], { type: "application/json" }); const url = URL.createObjectURL(blob); const link = document.createElement("a");
-			link.href = url; link.download = result.name || "dsh-tavern-preset.dshpreset.json"; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+			downloadTavernBlob(new Blob([result.text], { type: "application/json" }), result.name || "dsh-tavern-preset.dshpreset.json");
 		}
 
 
@@ -19090,7 +19093,7 @@ const tavernTextLayoutFeature = createTavernTextLayoutFeature();
 				} catch (err) { setError(String(err && err.message || err)); }
 				finally { setBusy(false); }
 			}
-			async function exportFile() { if (!record) return; try { const result = await rpc("exportWorldBook", { source: record.source }, props.scope.sessionId); const item = result.worldBook; const blob = new Blob([JSON.stringify(item.document, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = (item.name || "世界书") + ".json"; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url); } catch (err) { setError(String(err && err.message || err)); } }
+			async function exportFile() { if (!record) return; try { const result = await rpc("exportWorldBook", { source: record.source }, props.scope.sessionId); const item = result.worldBook; downloadTavernBlob(new Blob([JSON.stringify(item.document, null, 2)], { type: "application/json" }), (item.name || "世界书") + ".json"); } catch (err) { setError(String(err && err.message || err)); } }
 			async function bindCard() {
 				if (!record || !selectedCardPath || !associations) return;
 				const target = (associations.cards || []).find(function (card) { return card.path === selectedCardPath; });
@@ -20536,11 +20539,7 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 						const blob = result.base64
 							? new Blob([Uint8Array.from(atob(result.base64), function (value) { return value.charCodeAt(0); })], { type: "application/zip" })
 							: new Blob([result.text], { type: "text/markdown;charset=utf-8" });
-						const url = URL.createObjectURL(blob);
-						const link = document.createElement("a");
-						link.href = url; link.download = result.filename || "对话记录.md";
-						document.body.appendChild(link); link.click(); link.remove();
-						window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+						downloadTavernBlob(blob, result.filename || "对话记录.md");
 					} catch (err) { tavernErrorHub.report("导出故事正文", err); }
 					finally { setBusy(false); }
 				}
@@ -20549,11 +20548,7 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 					try {
 						const result = await rpc("exportGameSave", { images: true }, props.sessionId);
 						const bytes = Uint8Array.from(atob(result.base64), function (value) { return value.charCodeAt(0); });
-						const url = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
-						const link = document.createElement("a");
-						link.href = url; link.download = result.filename;
-						document.body.appendChild(link); link.click(); link.remove();
-						window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+						downloadTavernBlob(new Blob([bytes], { type: "application/zip" }), result.filename);
 					} catch (err) { tavernErrorHub.report("导出存档", err); }
 					finally { setBusy(false); }
 				}
@@ -20562,11 +20557,7 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 					try {
 						const result = await rpc("exportTavernLogs", {}, props.sessionId);
 						const bytes = Uint8Array.from(atob(result.base64), function (value) { return value.charCodeAt(0); });
-						const url = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
-						const link = document.createElement("a");
-						link.href = url; link.download = result.filename;
-						document.body.appendChild(link); link.click(); link.remove();
-						window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+						downloadTavernBlob(new Blob([bytes], { type: "application/zip" }), result.filename);
 					} catch (err) { tavernErrorHub.report("导出日志", err); }
 					finally { setBusy(false); }
 				}
@@ -23170,9 +23161,7 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
             // Contexts reach 100k+ characters; filter off the typing path.
             const deferredQuery = React.useDeferredValue(query.toLowerCase());
             function downloadJson() {
-                const url = URL.createObjectURL(new Blob([text], { type: "application/json;charset=utf-8" }));
-                const link = document.createElement("a"); link.href = url; link.download = "request-context.json";
-                document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+                downloadTavernBlob(new Blob([text], { type: "application/json;charset=utf-8" }), "request-context.json");
             }
             const visibleSections = React.useMemo(() => sections.filter(section => !deferredQuery || section.searchText.includes(deferredQuery)), [sections, deferredQuery]);
             return h("section", { className: "dsh-tavern-full-context" },

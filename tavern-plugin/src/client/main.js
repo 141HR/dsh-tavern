@@ -62,6 +62,7 @@ window.__ModuleLoader__.load({
 		const tavernInteractionDiagnostics = createInteractionDiagnostics(window);
 
 		// @include text-resource-file.js
+		// @include download.js
 
 		/** Import one card file: PNG and JSON go as parsed JSON; archives (CHARX, DSH cards) and other
 		 * formats (a plugin's importer, tavern.cardImporter) go up as raw files. */
@@ -395,11 +396,7 @@ window.__ModuleLoader__.load({
 		// conversation menu too: the structure goes to the developer, the story text stays home.
 		async function downloadSessionDiagnostics(args, sessionId) {
 			const result = await rpc("exportSessionDiagnostics", args, sessionId);
-			const url = URL.createObjectURL(new Blob([result.text], { type: "application/json;charset=utf-8" }));
-			const link = document.createElement("a");
-			link.href = url; link.download = result.filename;
-			document.body.appendChild(link); link.click(); link.remove();
-			window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+			downloadTavernBlob(new Blob([result.text], { type: "application/json;charset=utf-8" }), result.filename);
 		}
 
 		function rpc(method, args, sessionId, requestOptions) {
