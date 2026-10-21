@@ -2,13 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
+import { sourceFunction } from './fixtures/source-function.mjs'
 
 const source = readFileSync(new URL('../bin/service-lifecycle.mjs', import.meta.url), 'utf8')
-const alive = source.slice(source.indexOf('function isProcessAlive('), source.indexOf('export function isPortOpen('))
-// `legacyServiceOwnedHere` sits between serviceState and findLegacyService; the
-// sandbox supplies its own findLegacyService, so keep the slice free of exports.
-const state = source.slice(source.indexOf('async function serviceState('), source.indexOf('export function legacyServiceOwnedHere('))
-const stop = source.slice(source.indexOf('function stopPermissionMessage('), source.indexOf('export async function startService(')).replace('export ', '')
+const alive = sourceFunction(source, 'isProcessAlive')
+const state = sourceFunction(source, 'serviceState')
+const stop = sourceFunction(source, 'stopPermissionMessage') + sourceFunction(source, 'stopService')
 const denied = () => { throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' }) }
 
 function sandbox(identity, portOpen = false, host = 'android') {
