@@ -65,7 +65,7 @@ const dockSlots={};
 client.createPlayControlsFeatureModule().register({ctx:{get:()=>undefined,effect:fn=>fn(),betterSidebar:{registerTab:()=>()=>{}},sessions:{refresh:async()=>{},subagentAddress:()=>null},remote:{commands:{execute:async()=>({ok:true})}}},slots:{inject:(_name,fn)=>fn(),register:(spec,component)=>{dockSlots[spec.id]=component;return ()=>{};}}});
 const props={sessionId:'plugin-game',node:{data:{status:'completed',blocks:[],finalNode:{seq:1}},location:{kind:'turn',turn:{turn:1,status:'closed'}}},useTurnData:()=>null,fileMentions:()=>undefined};
 modules['react-dom/client'].createRoot(document.querySelector('#app')).render(React.createElement(components['assistant-step'],props));
-const dockProps={sessionId:'plugin-game',useSession:select=>select({running:false}),useChat:select=>select({legacy:{nodes:[{kind:'assistant',messageId:'fixture-reply'}]}})};
+const dockProps={sessionId:'plugin-game',useSession:select=>select({running:false}),useInput:select=>select({draft:''}),inputActions:{setDraft:()=>{}},useChat:select=>select({legacy:{nodes:[{kind:'assistant',messageId:'fixture-reply'}]}})};
 modules['react-dom/client'].createRoot(document.querySelector('#dock')).render(React.createElement(dockSlots['dsh-tavern-candidate-actions'],dockProps));
 `
 const server = createServer(async (req, res) => {
