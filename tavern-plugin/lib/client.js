@@ -17393,7 +17393,7 @@ function bindTavernFontZoom(node, win) {
                         h("label", { className: "dsh-local-field" }, "默认长期偏好", h("select", { disabled, value: data?.profile.defaultProfileId || "", onChange: event => save(null, "manageUserPreferenceProfile", { action: "default", profileId: event.target.value }) }, h("option", { value: "" }, "不启用"), (data?.profile.profiles || []).filter(item => item.hasConfirmed).map(item => h("option", { key: item.id, value: item.id }, item.name))))),
                     h("section", { className: "dsh-local-section" }, h("h3", null, "后台结算"),
                         toggle("variables", "变量结算", "MVU 卡建议开启；普通卡不执行此任务。", true), toggle("posture", "人物姿势结算", "总结本轮结束时人物的位置、动作和姿势。", true),
-                        toggle("styleReference", "文风联想", "仅自由模式。每轮后台凭记忆摘一段风格相近的经典小说原文，供下一轮正文借鉴笔调。多一次后台请求。", true)),
+                        toggle("styleReference", "文风联想", "仅自由模式。每轮后台凭记忆摘一段风格相近的小说原文，供下一轮正文借鉴笔调。多一次后台请求。", true)),
                     h("section", { className: "dsh-local-section" }, h("h3", null, "扩展功能"),
                         toggle("webSearchEnabled", "联网搜索", "允许新游戏的前台和后台按需搜索。")),
                     message ? h("p", { role: "status" }, message) : null);
@@ -22126,7 +22126,7 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
                 h("section", { className: "dsh-local-section" }, h("h3", null, "功能"),
                     features.mvuCard ? toggle("variables", "变量结算", "关闭后变量和状态栏不再更新。", tasks.variables, checked => ({ backgroundTasks: { variables: checked } })) : null,
                     toggle("posture", "人物姿势", "每轮总结人物的位置、动作和姿势，供前台保持一致。", tasks.posture, checked => ({ backgroundTasks: { posture: checked } })),
-                    toggle("styleReference", "文风联想", "仅自由模式。每轮后台凭记忆摘一段风格相近的经典小说原文，供下一轮正文借鉴笔调。多一次后台请求。", tasks.styleReference === true, checked => ({ backgroundTasks: { styleReference: checked } })),
+                    toggle("styleReference", "文风联想", "仅自由模式。每轮后台凭记忆摘一段风格相近的小说原文，供下一轮正文借鉴笔调。多一次后台请求。", tasks.styleReference === true, checked => ({ backgroundTasks: { styleReference: checked } })),
                     toggle("webSearchEnabled", "联网搜索", "前台和后台可按需搜索。", features.webSearchEnabled, checked => ({ webSearchEnabled: checked }))),
                 error || key && reasoning.key === key && reasoning.error ? h("p", { role: "alert", className: "dsh-tavern-prompt-error" }, error || reasoning.error) : null,
                 notice ? h("p", { role: "status" }, notice) : null,

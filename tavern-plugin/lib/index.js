@@ -2975,7 +2975,8 @@ export async function apply(ctx) {
   })
   const styleReferenceRecall = createStyleReferenceRecall({
     runAgent: input => backgroundAgentRunner.run(input), selection: backgroundModelSelection,
-    beginTask: chat => backgroundTasks.begin(chat, 'style-reference', { reuseSnapshot: true })
+    beginTask: chat => backgroundTasks.begin(chat, 'style-reference', { reuseSnapshot: true }),
+    systemPrompt: () => runtimePrompt('style-reference-recall')
   })
   // After each reply, prepare what that reply brings into the next turn, so sending never
   // waits for a model: the worldbook pool (usually below the threshold, no request at all),

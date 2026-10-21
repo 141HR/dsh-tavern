@@ -1,9 +1,12 @@
-// 文风联想：正文提交后，后台模型凭记忆找一部笔调接近当前场景的经典小说，
+// 文风联想：正文提交后，后台模型凭记忆找一部笔调接近当前场景的小说（按题材选，不限名家），
 // 摘一段原文；下一轮前台像剧本参考一样带上它，借人类作者的笔致压住 AI 腔。
+// 选段的提示词是系统提示词「文风联想选段」（prompts/style-reference-recall.md），可在面板修改。
+
+import { prompt } from '../prompt-catalog.js'
 
 export const STYLE_REFERENCE_SUBMIT_TOOL = {
   name: 'style_reference_submit',
-  description: '提交文风联想：一部经典小说的书名、作者，以及从中摘抄的一段原文。提交后任务完成。',
+  description: '提交文风联想：一部小说的书名、作者，以及从中摘抄的一段原文。提交后任务完成。',
   parameters: { type: 'object', properties: {
     book: { type: 'string', description: '书名，不带书名号' },
     author: { type: 'string' },
@@ -13,14 +16,6 @@ export const STYLE_REFERENCE_SUBMIT_TOOL = {
 
 const KEPT = 8
 const MAX_QUOTE = 400
-
-const SYSTEM = `你是文风联想员，不续写剧情，不修改变量。
-阅读刚写完的正文，判断它的场景、情绪和笔调；凭你的阅读记忆，找一部与之风格相近的经典小说，从中摘抄一段与当前场景气质相近的原文，约 100～300 字。
-要求：
-- 摘叙事或描写段落：人物的动作、神态、对话，环境与细节。不要名言警句、议论抒情或格言式的句子。
-- 只摘中文白话：中文小说或外国小说的通行中译本，不要外文原文，不要文言。
-- 必须是原作文字，不要仿写、改写或拼接；整段记不准就换一部你记得准的作品。
-最后调用 style_reference_submit 提交书名、作者和这段原文。`
 
 function str(value) {
   return typeof value === 'string' ? value : ''
@@ -77,7 +72,7 @@ function retryText(guidance, replaced) {
  * Recall a reference from a reply. `base: 'latest'` (after each reply) serves the next turn;
  * `base: 'previous'` re-recalls for the latest turn before it is regenerated.
  */
-export function createStyleReferenceRecall({ runAgent, selection, beginTask }) {
+export function createStyleReferenceRecall({ runAgent, selection, beginTask, systemPrompt = () => prompt('style-reference-recall') }) {
   return async ({ chat, signal, base = 'latest', guidance = '', retry = false }) => {
     const replies = (chat.messages || []).filter(message => message?.role === 'assistant')
     const latest = base === 'previous' ? replies.at(-2) : replies.at(-1)
@@ -101,7 +96,7 @@ export function createStyleReferenceRecall({ runAgent, selection, beginTask }) {
         turn: afterTurn + 1,
         selection: selection(chat), webSearchEnabled: false, signal,
         backgroundTasks: { variables: false, posture: false, characterDesign: false },
-        system: SYSTEM,
+        system: systemPrompt(),
         messages: [{ role: 'user', content: [{ type: 'text', text: '【刚写完的正文】\n' + str(latest.sourceText || latest.text).slice(-2400) + retryText(guidance, replaced) }] }],
         tools: [STYLE_REFERENCE_SUBMIT_TOOL],
         maxToolCalls: 3,

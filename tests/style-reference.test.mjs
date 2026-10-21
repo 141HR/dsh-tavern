@@ -89,3 +89,15 @@ test('换一段：按玩家要求重摘，并告诉模型上次选了什么；�
   assert.deepEqual(saved.styleReferences.map(item => [item.afterTurn, item.book]), [[3, '射雕英雄传']], '被重写那一轮之后的参考一并失效')
   await assert.rejects(recall({ chat: { ...chat, messages: [{ role: 'assistant', turn: 1, greeting: true }] }, signal: new AbortController().signal, base: 'previous', retry: true }), /之前没有可依据的回复/)
 })
+
+test('选段提示词来自系统提示词「文风联想选段」：按题材选书，不限名家', async () => {
+  const { prompt, SYSTEM_PROMPT_NAMES } = await import('../tavern-plugin/lib/prompt-catalog.js')
+  assert.ok(SYSTEM_PROMPT_NAMES.includes('style-reference-recall'))
+  assert.match(prompt('style-reference-recall'), /轻小说/)
+  let system
+  const recall = createStyleReferenceRecall({ selection: () => null, systemPrompt: () => '自定义选段要求',
+    beginTask: async () => ({ participantRequest: {}, participant: () => null, bindSession: async () => {}, commit: async () => ({ status: 'committed' }), fail: async () => {} }),
+    runAgent: async input => { system = input.system; input.onToolCall({ name: 'style_reference_submit', arguments: { book: '书', author: '作者', quote: '一段' } }); return {} } })
+  await recall({ chat: { sessionId: 's', messages: [{ role: 'assistant', turn: 2, text: '正文' }] } })
+  assert.equal(system, '自定义选段要求')
+})
