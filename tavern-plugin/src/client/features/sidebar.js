@@ -58,6 +58,14 @@
 				openingSettingsManual.current = false;
 				setOpeningSettingsCollapsed(false);
 			}, [openingPicker && openingPicker.card.path]);
+			// 选卡/开局准备页展开时收起卡片自带的悬浮应用（外置小手机挂在宿主 body 上，
+			// 会盖住开场白预览和 letter 列表）；进入对局后由「人物卡应用」面板停靠显示。
+			const pickerOpen = Boolean(openingPicker) || (picking && uiMode === "play");
+			React.useEffect(function () {
+				if (!pickerOpen) return;
+				document.body.classList.add("dsh-tavern-picker-open");
+				return function () { document.body.classList.remove("dsh-tavern-picker-open"); };
+			}, [pickerOpen]);
 			React.useEffect(function () {
 				const dialog = openingLayoutRef.current;
 				if (!openingPicker || !dialog || typeof ResizeObserver === "undefined") return;
@@ -894,6 +902,7 @@
 				selectedOpening ? h("div", {
 					key: selectedOpening.id,
 					className: "dsh-tavern-greeting-preview",
+                    "data-dsh-tavern-preview-busy": busy ? "true" : undefined,
                     style: { pointerEvents: busy ? "none" : undefined },
 					role: "region",
 					"aria-label": openingPicker.card.name + "开场白预览"
