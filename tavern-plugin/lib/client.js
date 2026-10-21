@@ -11489,7 +11489,7 @@ function bindTavernFontZoom(node, win) {
 				registerIllustrator(input) {
 					if (!input || !Array.isArray(input.kinds) || !input.kinds.length || input.kinds.some(function (kind) { return typeof kind !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}\/[a-z0-9][a-z0-9._-]{0,63}$/.test(kind); })) throw new TypeError("registerIllustrator 需要 kinds：插件自己的 <插件名>/<类型> 列表");
 					const handlers = {};
-					["draw", "redraw", "editPrompt", "add", "cancel", "action"].forEach(function (name) {
+					["draw", "redraw", "revise", "editPrompt", "add", "cancel", "action"].forEach(function (name) {
 						if (input[name] === undefined) return;
 						if (typeof input[name] !== "function") throw new TypeError("registerIllustrator 的 " + name + " 必须是函数");
 						handlers[name] = input[name];
@@ -12055,10 +12055,25 @@ function bindTavernFontZoom(node, win) {
 						h("button", { type: "button", className: "dsh-tavern-btn", "aria-label": "上一张插图", disabled: index <= 0, onClick: function () { setSelected(index - 1); } }, "‹"),
 						h("span", null, String(index + 1) + " / " + String(count)),
 						h("button", { type: "button", className: "dsh-tavern-btn", "aria-label": "下一张插图", disabled: index >= count - 1, onClick: function () { setSelected(index + 1); } }, "›")) : null,
-					illustrator.redraw ? h("button", { type: "button", className: "dsh-tavern-btn", title: "按这张图的提示词再画一张，旧图保留为上一个版本", disabled: busy || working, onClick: function () { return run("redraw"); } }, "重画") : null,
+					// With revise, 重画 opens a panel: the same prompt again, or a prompt rewritten by the wish (or freshly).
+					illustrator.revise ? h("button", { type: "button", className: "dsh-tavern-btn", disabled: busy || working, onClick: function () { open("redraw"); } }, "重画")
+						: illustrator.redraw ? h("button", { type: "button", className: "dsh-tavern-btn", title: "按这张图的提示词再画一张，旧图保留为上一个版本", disabled: busy || working, onClick: function () { return run("redraw"); } }, "重画") : null,
 					illustrator.editPrompt ? h("button", { type: "button", className: "dsh-tavern-btn", title: "自己改这张图的提示词再画", disabled: busy || working, onClick: function () { open("prompt"); } }, "改提示词") : null,
 					illustrator.add ? h("button", { type: "button", className: "dsh-tavern-btn", title: "为这一轮另选一个场景，再加一张插图", disabled: busy, onClick: function () { open("add"); } }, "新增插图") : null) : null,
-				panel ? h("div", { className: "dsh-tavern-image-adjust dsh-tavern-image-repaint", role: "region", "aria-label": panel === "prompt" ? "改提示词重画" : "新增插图" },
+				panel === "redraw" ? h("div", { className: "dsh-tavern-image-adjust dsh-tavern-image-repaint", role: "region", "aria-label": "重画插图" },
+					h("textarea", { value: draft, maxLength: 2000, rows: 2, autoFocus: true, disabled: busy, "aria-label": "重画意见（选填）",
+						placeholder: "想怎么改？例如：改成雨夜，镜头拉近。留空则重新构思画面，或用同一份提示词再画一张",
+						onChange: function (event) { setDraft(event.target.value); },
+						onKeyDown: function (event) {
+							if (event.key === "Escape" && !busy) setPanel(null);
+							else if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !busy) { event.preventDefault(); run("revise", { instruction: draft.trim() }); }
+						} }),
+					h("div", { className: "dsh-tavern-image-repaint-actions" },
+						h("button", { type: "button", className: "dsh-tavern-image-repaint-cancel", disabled: busy, onClick: function () { setPanel(null); } }, "取消"),
+						illustrator.redraw && !draft.trim() ? h("button", { type: "button", className: "dsh-tavern-btn", title: "提示词不变，只换随机种子再画一张", disabled: busy, onClick: function () { return run("redraw"); } }, "同提示词重画") : null,
+						h("button", { type: "button", className: "dsh-tavern-btn dsh-tavern-image-repaint-submit", title: draft.trim() ? "按意见改写这张图的提示词后重画" : "重新整理这张图的提示词再画，多跑一次文字模型", disabled: busy,
+							onClick: function () { return run("revise", { instruction: draft.trim() }); } }, draft.trim() ? "按意见重画" : "重新整理提示词"))) : null,
+				panel === "prompt" || panel === "add" ? h("div", { className: "dsh-tavern-image-adjust dsh-tavern-image-repaint", role: "region", "aria-label": panel === "prompt" ? "改提示词重画" : "新增插图" },
 					h("textarea", { value: draft, maxLength: 12000, rows: panel === "prompt" ? 6 : 2, autoFocus: true, disabled: busy,
 						"aria-label": panel === "prompt" ? "画面提示词" : "新插图想画什么（选填）",
 						placeholder: panel === "prompt" ? "直接写画面提示词" : "想画哪个场景？留空由插件另选一个不同的场景",

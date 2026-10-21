@@ -55,7 +55,8 @@ context = { gameId, turn, busy }
 每个处理函数收到 `{ gameId, turn, textVersion, item }`，可以返回 Promise，抛错会显示在卡片上。只提供了哪个函数，卡片上就出现对应的按钮：
 
 - `draw`：为这一轮配图（不提供就没有配图按钮，比如插件的配图功能被关掉时；已有插图照常由插图卡显示），通常 `attach` 一个 pending 占位，出图后 `update` 成 ready。等它返回期间，正文里显示「正在整理画面…」；返回 `{ notice }` 时把说明留在原处几秒（比如「本轮跳过配图：没有合适的画面」），抛错则显示失败原因。不必另弹提示。
-- `redraw`：「重画」，按这张图的提示词再画；新图换上后旧图成为早期版本。
+- `redraw`：按这张图的提示词再画；新图换上后旧图成为早期版本。
+- `revise`：重新整理提示词再画，多收到玩家写的 `instruction`（可能为空，空时重新构思画面）。提供了它，「重画」会打开面板，让玩家在「同提示词重画」（`redraw`）和「按意见重画 / 重新整理提示词」（`revise`）之间选。
 - `editPrompt`：「改提示词」，多收到 `prompt`。
 - `add`：「新增插图」，多收到玩家写的 `instruction`（可能为空）。
 - `cancel`：pending 或 `activity.cancellable` 时的「取消」。
