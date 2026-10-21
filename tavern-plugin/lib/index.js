@@ -1,7 +1,7 @@
 import { createChatWrites } from './domain/chat-writes.js'
 import { upgradeReferences, upgradedAnchor } from './domain/session-upgrade-references.js'
 import { producerSource } from './domain/message-source.js'
-import { sceneSaveKeyMap } from './domain/scene-save.js'
+import { createGameSaveImporter } from './domain/game-save-import.js'
 import { createGameSaveSnapshot } from './domain/game-save-snapshot.js'
 import { createGameSaveResources } from './domain/game-save-resources.js'
 import { createCardEditor } from './domain/card-editor.js'
@@ -231,7 +231,6 @@ import { createTavernSkillProvider } from './domain/tavern-skill-provider.js'
 import { canonicalTavernSkillName, createTavernSkillModule } from './domain/tavern-skills.js'
 import { readZipEntries, writeZipEntries } from './domain/zip-entries.js'
 import { createGameFootprint } from './domain/game-footprint.js'
-import { readGameSave, sessionTitleOf } from './domain/game-save.js'
 import { createGameSaveExporter } from './domain/game-save-export.js'
 import { readFileSync } from 'node:fs'
 import { mkdir, readdir, readFile, rm } from 'node:fs/promises'
@@ -395,13 +394,12 @@ export async function apply(ctx) {
       templateSync.unchanged(chat.sessionId,chat._storageRevision)
       return
     }
-    // Display work waits while a turn or a background task runs: it shares the template
-    // queue with their own template work, which reads the latest state itself. The turn's
-    // end and the task's last write let it run once.
+    // Display work waits while a foreground turn runs: it shares the template queue with the
+    // turn's own template work, which reads the latest state itself. The turn's end lets it run
+    // at once, so the new reply's template display does not wait for settlement.
     templateSync.schedule(chat.sessionId, chat._storageRevision, {
       enabled: groupOfMode(chat.mode || 'story') === 'play',
       blocked: ['pending', 'running'].includes(chat.settleStatus) || agentRegistry.get(chat.sessionId)?.phase?.kind === 'running'
-        || Object.values(chat.timeline?.operations || {}).some(operation => operation?.kind === 'agent' && operation.status === 'running')
     })
   }
   ctx.on('session/event', function (session, event) { if (event?.type === 'turn/end' && session?.id) templateSync.release(session.id) })
@@ -1544,149 +1542,25 @@ export async function apply(ctx) {
     exportPluginData: chatId => pluginApi.exportGame(chatId),
     tavernVersion: TAVERN_PACKAGE_VERSION
   })
-  // Imports always create a new game: new chat and session ids, the native session rebuilt
-  // for this install's paths, the history re-numbered, background agents rebuilt on demand.
-  const importingGameSaves = new Set()
-  function assertImportableSave(save) {
-    const states = [save.chat, ...save.revisions.map(item => item.state)]
-    if (states.some(state => !state || typeof state !== 'object' || !Array.isArray(state.messages))) throw new Error('存档包已损坏：存档内容不完整')
-    if (!['story', 'script'].includes(save.chat.mode || 'story')) throw new Error('存档包不是游玩对话')
-    const events = save.session?.events
-    if (!Array.isArray(events) || !events.some(event => event?.type === 'turn/end')) throw new Error('存档包已损坏：缺少模型会话记录')
-    if (events.some((event, index) => event?.seq !== index)) throw new Error('存档包已损坏：模型会话记录不连续')
-  }
-  const prepareGameSaveResources = createGameSaveResources({ resources: fileResources, cardPreparation })
-  async function importGameSave(args) {
-    if (typeof args?.fileB64 !== 'string' || !args.fileB64) throw new Error('请选择 .dshsave 存档文件')
-    const save = readGameSave(Buffer.from(args.fileB64, 'base64'), { tavernVersion: TAVERN_PACKAGE_VERSION })
-    assertImportableSave(save)
-    if (!save.card?.payload && !save.chat.cardDefinitionSnapshot && !await readCard(str(save.chat.cardPath)).catch(() => undefined)) throw new Error('存档包里没有人物卡，本机也没有这张卡，无法导入')
-    const sourceChatId = str(save.chat.id), sourceSessionId = str(save.session.header?.id || save.chat.sessionId)
-    if (!/^[a-zA-Z0-9_-]+$/.test(sourceChatId) || !/^[a-zA-Z0-9_-]+$/.test(sourceSessionId)) throw new Error('存档包里的游戏编号无效')
-    if (importingGameSaves.has(sourceChatId)) throw new Error('这份存档正在导入，请稍候')
-    importingGameSaves.add(sourceChatId)
-    let importedResources
-    try {
-      const chatId = uid('chat'), sessionId = 'session-' + randomUUID()
-      // 1. Reuse matching resources; isolate conflicting cards and scripts.
-      importedResources = await prepareGameSaveResources(save)
-      const { cardPath } = importedResources
-      // 2. Images: store each picture here, then point every reference at the stored copy.
-      const replacedRefs = new Map()
-      for (const attachment of save.scene?.attachments || []) {
-        if (!attachment.data) continue
-        try { replacedRefs.set(attachment.attachmentId, await ctx.get('attachments').saveImage({ data: new Uint8Array(attachment.data), mediaType: attachment.mediaType, name: 'imported-save' })) }
-        catch { /* An unreadable picture stays a dangling reference, like a deleted file. */ }
-      }
-      const withRefs = value => {
-        if (Array.isArray(value)) return value.map(withRefs)
-        if (!value || typeof value !== 'object') return value
-        if (typeof value.attachmentId === 'string' && replacedRefs.has(value.attachmentId)) return { ...value, ...replacedRefs.get(value.attachmentId) }
-        return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, withRefs(child)]))
-      }
-      // 3. Scene image keys hash the chat id; map the current branch's keys to the new id.
-      const keyMap = sceneSaveKeyMap([save.chat, ...save.revisions.map(item => item.state)], chatId)
-      const rename = text => {
-        let out = text.split(sourceChatId).join(chatId).split(sourceSessionId).join(sessionId)
-        for (const [from, to] of keyMap) out = out.split(from).join(to)
-        return out
-      }
-      const renameJson = value => JSON.parse(rename(JSON.stringify(withRefs(value))))
-      // 4. Save: history first (in order, renumbered), then the current state. Unpublished until
-      //    the native session exists, and removed again if anything later fails.
-      const background = { role: 'background', lifetime: 'chat', status: 'needs-session', sessionId: '', boundary: null }
-      const revisionMap = new Map()
-      let latestRevision = 0
-      const prepare = state => {
-        const next = renameJson(state)
-        next.id = chatId; next.sessionId = sessionId; next.cardPath = cardPath
-        // Background agents, candidates and undo points name the source install's sessions.
-        for (const key of ['forkedFrom', 'regenRecovery', 'regenInProgress', 'rollbackUndo', 'backgroundHistoryIds', 'candidateAgent']) delete next[key]
-        const scrub = value => {
-          if (Array.isArray(value)) { value.forEach(scrub); return }
-          if (!value || typeof value !== 'object') return
-          for (const key of ['traceSessionId', 'traceSessionIds', 'startedSessionId']) delete value[key]
-          Object.values(value).forEach(scrub)
-        }
-        scrub(next)
-        next.timeline = { ...(next.timeline || {}), participants: { background }, operations: {} }
-        next.timeline.checkpoints = (next.timeline.checkpoints || []).filter(checkpoint => revisionMap.has(Number(checkpoint.beforeRevision)))
-          .map(checkpoint => ({ ...checkpoint, beforeRevision: revisionMap.get(Number(checkpoint.beforeRevision)), ...(checkpoint.participants ? { participants: { background } } : {}) }))
-        next._storageRevision = latestRevision
-        return next
-      }
-      let written = false, created = false, saved
-      const cwd = path.join(dataRoot, 'resources')
-      try {
-        for (const { revision, state } of save.revisions) {
-          const historyState = await rawWriteChat(prepare(state), { source: 'game-save.import.history' })
-          written = true
-          latestRevision = historyState._storageRevision
-          revisionMap.set(revision, latestRevision)
-        }
-        const current = prepare(save.chat)
-        current.title = (sessionTitleOf(save.session.events) || str(save.chat.title) || str(save.chat.cardName) || '游戏') + '（导入）'
-        current.lastOpenedAt = Date.now()
-        current.importedSave = { sourceChatId, exportedAt: save.manifest.exportedAt, tavernVersion: save.manifest.tavernVersion }
-        saved = await rawWriteChat(current, { source: 'game-save.import' })
-        written = true
-        // 5. Native session: same events and sequence numbers under the new id and this install's cwd.
-        const events = renameJson(save.session.events)
+  const importGameSave = createGameSaveImporter({
+    tavernVersion: TAVERN_PACKAGE_VERSION, dataRoot, readCard,
+    prepareGameSaveResources: createGameSaveResources({ resources: fileResources, cardPreparation }),
+    getAttachments: () => ctx.get('attachments'), newChatId: () => uid('chat'),
+    rawWriteChat, conversationRegistry, profileData, sceneWorldbookArchive,
+    pluginApi: { importGame: input => pluginApi.importGame(input) },
+    sessions: {
+      create: ({ sessionId, events, cwd, preset }) => {
         const selection = agentDefaultModel?.currentSelection?.() || {}
-        let handle
-        try {
-          handle = await ctx.get('agents').create({ sessionId, seed: events, inheritedEventCount: events.length,
-            meta: { cwd, isSeeded: true, agentPreset: str(save.session.header?.agentPreset) || 'tavern' },
-            agentOptions: { provider: selection.provider, model: selection.model }, setup: tavernPresetSetup(str(save.session.header?.agentPreset) || 'tavern') })
-        } catch (error) { throw new Error('存档包已损坏：模型会话记录无法恢复（' + str(error?.message || error).slice(0, 200) + '）') }
-        created = true
-        await sessionStore.flush(handle.agent.session)
-        await handle.dispose()
-        const workspace = await ctx.get('workspaceRegistry')?.resolveByPath(cwd)
-        if (workspace) await workspace.attachSession(sessionId)
-        // 6. Scene image records under the new chat.
-        if (save.scene) {
-          for (const file of save.scene.files) await profileData.writeBytes('scene-images/' + createHash('sha256').update(chatId).digest('hex') + '/' + rename(file.path),
-            Buffer.from(JSON.stringify(renameJson(JSON.parse(file.content.toString('utf8'))))))
-          await sceneWorldbookArchive.importForSave(chatId, [save.chat, ...save.revisions.map(item => item.state)], save.scene.worldbooks)
-        }
-        // 7. Plugin data and media, re-keyed to the new game's text versions; their content is the plugins' own.
-        if (save.plugins) {
-          const files = new Map(), store = ctx.get('attachments')
-          for (const attachment of save.plugins.attachments) {
-            if (!attachment.data || !store) continue
-            try {
-              files.set(attachment.attachmentId, attachment.mediaType
-                ? await store.saveImage({ data: new Uint8Array(attachment.data), mediaType: attachment.mediaType, name: 'imported-save' })
-                : await store.saveFile({ data: new Uint8Array(attachment.data), name: attachment.name || 'file' }))
-            } catch { /* The item that needs it is left out. */ }
-          }
-          const pluginKeys = new Map()
-          for (const message of save.chat.messages || []) {
-            if (message?.role !== 'assistant') continue
-            const turn = Number(message.turn || (message.greeting ? 1 : 0))
-            try { pluginKeys.set(turn + '\u0000' + computeSceneTarget(save.chat, turn).key, computeSceneTarget({ ...save.chat, id: chatId }, turn).key) } catch {}
-          }
-          await pluginApi.importGame({ targetChatId: chatId, targetSessionId: sessionId, keyMap: pluginKeys, data: save.plugins.data, media: save.plugins.media,
-            attachment: ref => files.has(ref.attachmentId) ? { ...ref, ...files.get(ref.attachmentId) } : null })
-        }
-        await conversationRegistry.publish(saved)
-      } catch (error) {
-        if (created) {
-          try { await (await ctx.get('workspaceRegistry')?.resolveByPath(cwd))?.detachSession(sessionId) } catch {}
-          try { await rm(path.dirname(ctx.get('sessionPersistence').locate({ id: sessionId, cwd }).path), { recursive: true, force: true }) } catch {}
-        }
-        if (written) try { await conversationRegistry.remove(chatId) } catch {}
-        try { await sceneWorldbookArchive.forgetChat(chatId) } catch {}
-        try { await rm(path.join(dataRoot, 'scene-images', createHash('sha256').update(chatId).digest('hex')), { recursive: true, force: true }) } catch {}
-        throw error
-      }
-      return { chatId, sessionId, cardPath, title: saved.title, revisions: save.revisions.length, images: replacedRefs.size }
-    } catch (error) {
-      try { await importedResources?.rollback() } catch {}
-      throw error
-    } finally { importingGameSaves.delete(sourceChatId) }
-  }
+        return ctx.get('agents').create({ sessionId, seed: events, inheritedEventCount: events.length,
+          meta: { cwd, isSeeded: true, agentPreset: preset },
+          agentOptions: { provider: selection.provider, model: selection.model }, setup: tavernPresetSetup(preset) })
+      },
+      flush: session => sessionStore.flush(session),
+      attach: async (sessionId, cwd) => (await ctx.get('workspaceRegistry')?.resolveByPath(cwd))?.attachSession(sessionId),
+      detach: async (sessionId, cwd) => (await ctx.get('workspaceRegistry')?.resolveByPath(cwd))?.detachSession(sessionId),
+      remove: (sessionId, cwd) => rm(path.dirname(ctx.get('sessionPersistence').locate({ id: sessionId, cwd }).path), { recursive: true, force: true }),
+    }
+  })
   async function exportTavernLogs(sessionId) {
     const chat = await chatForSession(str(sessionId))
     if (!chat) throw new Error('当前 Session 没有绑定 Tavern 对话')
