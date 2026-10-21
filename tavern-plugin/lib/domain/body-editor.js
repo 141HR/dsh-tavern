@@ -8,6 +8,7 @@ import { sessionEvents } from './session-events.js'
 import { isScopedMessages } from './scoped-messages.js'
 import { diffJson } from './json-mutation.js'
 import { locateUserEditFloor, locateUserInputFloor, userInputText } from './input-floor.js'
+import { inputEventForTurn, inputKind, isFailedTurnEnd } from './session-turn-input.js'
 
 function latest(chat) {
   const message = chat.messages?.at(-1)
@@ -258,20 +259,36 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
     const markerSeq = Number(record?.seq) || Number(found?.message?.bodyEdit?.seq) || 0
     let located = markerSeq > 0 ? locateUserEditFloor(agent.session, markerSeq) : null
     if (!located) located = locateUserInputFloor(agent.session, turn)
+    let detached = false
+    if (!located) {
+      // A failed turn's input is removed from the model surface. Locate the
+      // original append event by seq/turn so the editor shows that exact text;
+      // saving this one withdraws the failed turn instead of editing another.
+      const events = sessionEvents(agent.session)
+      const seq = Number(input?.seq) || 0
+      const original = (seq > 0 ? events.find(event => Number(event.seq) === seq && event.type === 'user/message' && inputKind(event.data) === 'player') : null)
+        || inputEventForTurn(agent.session, turn)
+      const latest = events.reduce((highest, event) => event.type === 'turn/start' ? Math.max(highest, Number(event.data?.turn) || 0) : highest, 0)
+      const end = events.findLast(event => event.type === 'turn/end' && Number(event.data?.turn) === turn)
+      if (original && inputKind(original.data) === 'player' && latest === turn && end && isFailedTurnEnd(end.data?.reason?.kind)) {
+        located = { seq: Number(original.seq), event: original, turn, detached: true }
+        detached = true
+      }
+    }
     // Never fall back to "the newest input": that edits another message when the
-    // clicked one was removed from the model context (a failed or withdrawn turn).
-    if (!located) throw new Error('这条输入已不在当前上下文中，无法编辑；失败轮请用「撤回这条输入」放回输入框再改')
+    // clicked one was removed from the model context.
+    if (!located) throw new Error('这条输入已不在当前上下文中，无法编辑')
     const text = record ? record.text : found ? String(found.message.text ?? '') : userInputText(located.event)
-    return { chat, agent, message: found?.message || null, index: found?.index ?? -1, turn, located, text, record }
+    return { chat, agent, message: found?.message || null, index: found?.index ?? -1, turn, located, text, record, detached }
   }
   function userToken(chat, context) {
     return createHash('sha256').update(JSON.stringify([chat.id, chat.timeline?.branchId, chat._storageRevision, context.turn, context.text,
-      context.record?.id || '', context.message?.bodyEdit?.id || ''])).digest('hex')
+      context.record?.id || '', context.message?.bodyEdit?.id || '', context.detached === true ? 'detached' : ''])).digest('hex')
   }
   async function readUser(sessionId, input) {
     const context = await userContext(sessionId, input)
-    return { token: userToken(context.chat, context), role: 'user', index: context.index, turn: context.turn,
-      parts: [{ kind: 'text', text: context.text }] }
+    return { token: userToken(context.chat, context), role: 'user', index: context.index, turn: context.turn, seq: context.located.seq,
+      detached: context.detached === true, parts: [{ kind: 'text', text: context.text }] }
   }
   async function saveUser(sessionId, input) {
     if (pending.has(sessionId)) throw new Error('正在保存正文，请稍候')
@@ -283,6 +300,9 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
       if (!Array.isArray(texts) || texts.length !== 1 || typeof texts[0] !== 'string') throw new Error('编辑文本格式无效')
       const text = texts[0]
       if (text.trim() === '') throw new Error('输入不能为空')
+      // A failed turn has no surface to edit; the caller withdraws it and puts
+      // the new text into the composer. Return before touching Chat or Session.
+      if (context.detached) return { detached: true, text }
       if (text === context.text) return present(context.chat)
       const { chat, agent, turn, located } = context
       const editId = 'tavern-user-edit:' + randomUUID()

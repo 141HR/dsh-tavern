@@ -819,10 +819,20 @@
 			}, [props.sessionId]);
 			if (!panel || panel.sessionId !== props.sessionId) return null;
 			const label = panel.edit.role === "user" ? "编辑这条输入" : "编辑正文";
+			const detached = panel.edit.detached === true;
 			async function save() {
 				setBodyEditPanel(Object.assign({}, panel, { busy: true, error: "" }));
 				try {
-					const result = await rpc("saveBodyEdit", { token: panel.edit.token, role: panel.edit.role, index: panel.edit.index, turn: panel.edit.turn, texts: panel.texts }, props.sessionId);
+					const result = await rpc("saveBodyEdit", { token: panel.edit.token, role: panel.edit.role, index: panel.edit.index, turn: panel.edit.turn, seq: panel.edit.seq, texts: panel.texts }, props.sessionId);
+					if (result && typeof result.composerText === "string") {
+						// A failed turn was withdrawn; hand the edited text back to the composer.
+						if (result.view) liveTavernView.setView(props.sessionId, result.view);
+						notifyTavernDataChanged(["sessions"], "play-controls");
+						tavernCoordination.invalidate(props.sessionId);
+						setBodyEditPanel(null);
+						if (result.composerText.trim() !== "" && props.inputActions && typeof props.inputActions.setDraft === "function") props.inputActions.setDraft(result.composerText);
+						return;
+					}
 					liveTavernView.setView(props.sessionId, result.view);
 					notifyTavernDataChanged(["sessions"], "play-controls");
 					tavernCoordination.invalidate(props.sessionId);
@@ -832,7 +842,9 @@
 			let textIndex = 0;
 			return h("div", { className: "dsh-tavern-question", role: "region", "aria-label": label },
 				h("div", { className: "dsh-tavern-question-head" }, h("span", null, label)),
-				panel.edit.role === "user" ? h("div", { className: "dsh-tavern-question-sub" }, "只改这一条输入，不会自动重写已生成的回复；需要新回复时保存后再点「重新生成正文」。") : null,
+				panel.edit.role === "user" ? h("div", { className: "dsh-tavern-question-sub" }, detached
+					? "这一轮已失败并从模型上下文移除。保存会撤回这次失败，把修改后的输入放回输入框，不会自动发送。"
+					: "只改这一条输入，不会自动重写已生成的回复；需要新回复时保存后再点「重新生成正文」。") : null,
 				panel.error ? h("div", { className: "dsh-tavern-choice-error", role: "alert" }, panel.error) : null,
 				h("div", { style: { maxHeight: "50vh", overflowY: "auto" } }, panel.edit.parts.map(function (part, index) {
 					if (part.kind === "html") return h("div", { key: index, className: "dsh-tavern-question-sub" }, "HTML 内容保持原样");
@@ -844,7 +856,7 @@
 					} });
 				})),
 				h("div", { className: "dsh-tavern-question-foot" },
-					h("button", { className: "dsh-tavern-question-primary", disabled: panel.busy || running, onClick: save }, panel.busy ? "保存中…" : "保存"),
+					h("button", { className: "dsh-tavern-question-primary", disabled: panel.busy || running, onClick: save }, panel.busy ? "保存中…" : detached ? "撤回并放回输入框" : "保存"),
 					h("button", { className: "dsh-tavern-question-free", disabled: panel.busy, onClick: function () { setBodyEditPanel(null); } }, "取消")));
 		}
 

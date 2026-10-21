@@ -14003,7 +14003,7 @@ function bindTavernFontZoom(node, win) {
 				const location = props.node.location;
 				const turnRef = location && (location.kind === "turn" || location.kind === "step") ? location.turn : null;
 				const turn = turnRef ? Number(turnRef.turn) : 0;
-				const liveState = useScopedLiveTavernView(props.sessionId, String(data.time || ""), [["mode"], ["canEditBody"], ["replayFailedTurn"], ["editableUserInputTurns"], ["latestCommittedUserTurn"], ["inputSources", String(turn)], ["inputTemplateDisplays", String(turn)], ["userInputEdits", String(turn)]]);
+				const liveState = useScopedLiveTavernView(props.sessionId, String(data.time || ""), [["mode"], ["canEditBody"], ["replayFailedTurn"], ["editableUserInputTurns"], ["latestCommittedUserTurn"], ["failedUserInputTurns"], ["inputSources", String(turn)], ["inputTemplateDisplays", String(turn)], ["userInputEdits", String(turn)]]);
 				const parts = userContentParts(data.content);
 				// The host keeps rendering the original append node; an edited player
 				// input is carried back by the view instead (see bodyEditor.saveUser).
@@ -14033,10 +14033,12 @@ function bindTavernFontZoom(node, win) {
 				// Only the latest player input offers the quick edit; earlier floors keep
 				// their text so an edit cannot move the current round.
 				const editableTurns = Array.isArray(liveState.view?.editableUserInputTurns) ? liveState.view.editableUserInputTurns : [];
-				const canEdit = playView && latestUserTurn > 0 && Number(turn) === Number(latestUserTurn) && !running
-					&& Number(liveState.view?.latestCommittedUserTurn || 0) === Number(turn)
-					&& liveState.view?.canEditBody !== false && Number(liveState.view?.replayFailedTurn || 0) !== Number(turn)
+				const failedTurns = Array.isArray(liveState.view?.failedUserInputTurns) ? liveState.view.failedUserInputTurns : [];
+				const committedEdit = Number(liveState.view?.latestCommittedUserTurn || 0) === Number(turn)
 					&& editableTurns.some(value => Number(value) === Number(turn));
+				const failedEdit = failedTurns.some(value => Number(value) === Number(turn));
+				const canEdit = playView && latestUserTurn > 0 && Number(turn) === Number(latestUserTurn) && !running
+					&& liveState.view?.canEditBody !== false && (committedEdit || failedEdit);
 				async function fork() {
 					if (forking) return;
 					setForking(true);
@@ -14048,7 +14050,7 @@ function bindTavernFontZoom(node, win) {
 					if (editBusy) return;
 					setEditBusy(true);
 					try {
-						const result = await rpc("getBodyEdit", { role: "user", turn }, props.sessionId);
+						const result = await rpc("getBodyEdit", { role: "user", turn, seq: data.seq }, props.sessionId);
 						window.dispatchEvent(new CustomEvent("dsh-tavern-open-body-edit", { detail: { sessionId: props.sessionId, edit: result.edit,
 							texts: result.edit.parts.filter(function (part) { return part.kind === "text"; }).map(function (part) { return part.text; }) } }));
 					} catch (error) { tavernErrorHub.report("编辑输入", error); }
@@ -21918,10 +21920,20 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 			}, [props.sessionId]);
 			if (!panel || panel.sessionId !== props.sessionId) return null;
 			const label = panel.edit.role === "user" ? "编辑这条输入" : "编辑正文";
+			const detached = panel.edit.detached === true;
 			async function save() {
 				setBodyEditPanel(Object.assign({}, panel, { busy: true, error: "" }));
 				try {
-					const result = await rpc("saveBodyEdit", { token: panel.edit.token, role: panel.edit.role, index: panel.edit.index, turn: panel.edit.turn, texts: panel.texts }, props.sessionId);
+					const result = await rpc("saveBodyEdit", { token: panel.edit.token, role: panel.edit.role, index: panel.edit.index, turn: panel.edit.turn, seq: panel.edit.seq, texts: panel.texts }, props.sessionId);
+					if (result && typeof result.composerText === "string") {
+						// A failed turn was withdrawn; hand the edited text back to the composer.
+						if (result.view) liveTavernView.setView(props.sessionId, result.view);
+						notifyTavernDataChanged(["sessions"], "play-controls");
+						tavernCoordination.invalidate(props.sessionId);
+						setBodyEditPanel(null);
+						if (result.composerText.trim() !== "" && props.inputActions && typeof props.inputActions.setDraft === "function") props.inputActions.setDraft(result.composerText);
+						return;
+					}
 					liveTavernView.setView(props.sessionId, result.view);
 					notifyTavernDataChanged(["sessions"], "play-controls");
 					tavernCoordination.invalidate(props.sessionId);
@@ -21931,7 +21943,9 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 			let textIndex = 0;
 			return h("div", { className: "dsh-tavern-question", role: "region", "aria-label": label },
 				h("div", { className: "dsh-tavern-question-head" }, h("span", null, label)),
-				panel.edit.role === "user" ? h("div", { className: "dsh-tavern-question-sub" }, "只改这一条输入，不会自动重写已生成的回复；需要新回复时保存后再点「重新生成正文」。") : null,
+				panel.edit.role === "user" ? h("div", { className: "dsh-tavern-question-sub" }, detached
+					? "这一轮已失败并从模型上下文移除。保存会撤回这次失败，把修改后的输入放回输入框，不会自动发送。"
+					: "只改这一条输入，不会自动重写已生成的回复；需要新回复时保存后再点「重新生成正文」。") : null,
 				panel.error ? h("div", { className: "dsh-tavern-choice-error", role: "alert" }, panel.error) : null,
 				h("div", { style: { maxHeight: "50vh", overflowY: "auto" } }, panel.edit.parts.map(function (part, index) {
 					if (part.kind === "html") return h("div", { key: index, className: "dsh-tavern-question-sub" }, "HTML 内容保持原样");
@@ -21943,7 +21957,7 @@ const worldBookSwitcherFeature = createWorldBookSwitcherFeatureModule();
 					} });
 				})),
 				h("div", { className: "dsh-tavern-question-foot" },
-					h("button", { className: "dsh-tavern-question-primary", disabled: panel.busy || running, onClick: save }, panel.busy ? "保存中…" : "保存"),
+					h("button", { className: "dsh-tavern-question-primary", disabled: panel.busy || running, onClick: save }, panel.busy ? "保存中…" : detached ? "撤回并放回输入框" : "保存"),
 					h("button", { className: "dsh-tavern-question-free", disabled: panel.busy, onClick: function () { setBodyEditPanel(null); } }, "取消")));
 		}
 

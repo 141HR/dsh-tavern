@@ -3,6 +3,7 @@ import test from 'node:test'
 import { Session } from './fixtures/dsh-session-host.mjs'
 import { createBodyEditor, synchronizeBodyEdits } from '../tavern-plugin/lib/domain/body-editor.js'
 import { appendSessionEvent, sessionEvents } from '../tavern-plugin/lib/domain/session-events.js'
+import { replaceSessionSurface } from '../tavern-plugin/lib/domain/session-surface-mutations.js'
 import { latestUserInputFloor, locateUserInputFloor, userInputEditsOf } from '../tavern-plugin/lib/domain/input-floor.js'
 
 function fixture(text = '原输入') {
@@ -113,4 +114,34 @@ test('还没进 Chat 的输入只写表头编辑记录，模型上下文同步�
   assert.deepEqual(again.parts, [{ kind: 'text', text: '改成生成图片' }])
   await h.editor.saveUser(h.session.id, { token: again.token, turn: 6, texts: ['再改成生成音频'] })
   assert.deepEqual(h.session.deriveMessages().filter(message => message.role === 'user').map(message => message.content[0].text), ['第一条输入', '再改成生成音频'])
+})
+
+test('失败轮输入已移出模型上下文时，只读取原文并交给撤回流程，不写存档', async () => {
+  const session = Session.create('user-input-failed')
+  appendSessionEvent(session, 'turn/start', { turn: 2 })
+  appendSessionEvent(session, 'user/message', { id: 'u2', role: 'user', content: [{ type: 'text', text: '第一条输入' }], source: { kind: 'user' } }, { surfaceOp: 'append' })
+  appendSessionEvent(session, 'assistant/message', { turn: 2, step: 1, message: { id: 'a2', role: 'assistant', content: [{ type: 'text', text: '回复' }], source: { kind: 'model', provider: 'f', model: 'f' } } }, { surfaceOp: 'append', sourceEventSeqs: [] })
+  appendSessionEvent(session, 'turn/end', { turn: 2, reason: { kind: 'completed' } })
+  appendSessionEvent(session, 'turn/start', { turn: 6 })
+  appendSessionEvent(session, 'user/message', { id: 'u6', role: 'user', content: [{ type: 'text', text: '生成视频' }], source: { kind: 'user' } }, { surfaceOp: 'append' })
+  appendSessionEvent(session, 'assistant/message', { turn: 6, step: 1, message: { id: 'a6', role: 'assistant', content: [{ type: 'text', text: '失败' }], source: { kind: 'model', provider: 'f', model: 'f' } } }, { surfaceOp: 'append', sourceEventSeqs: [] })
+  appendSessionEvent(session, 'turn/end', { turn: 6, reason: { kind: 'error' } })
+  // The failed-turn cleanup replaces the input and reply with an empty plugin row.
+  const failedInput = sessionEvents(session).find(event => event.data?.id === 'u6').seq
+  replaceSessionSurface(session, 'user/message', { id: 'cleanup', role: 'user', content: [], source: { kind: 'plugin:dsh-tavern-failed-turn-cleanup' } },
+    { start: failedInput, end: failedInput, sourceEventSeqs: [failedInput] })
+  let chat = { id: 'chat', sessionId: session.id, mode: 'story', _storageRevision: 1,
+    messages: [{ role: 'user', text: '第一条输入' }, { role: 'assistant', turn: 2, native: { turn: 2 }, text: '回复' }] }
+  const agent = { get session() { return session }, phase: { kind: 'idle' } }
+  const editor = createBodyEditor({
+    chats: { forSession: async () => structuredClone(chat), update: async () => { throw new Error('失败轮不应写存档') } },
+    sessions: { get: () => agent, flush: async () => {} },
+    activity: () => ({ busy: false }), project: async () => ({}), present: async value => value
+  })
+  const edit = await editor.readUser(session.id, { turn: 6, seq: failedInput })
+  assert.equal(edit.detached, true)
+  assert.deepEqual(edit.parts, [{ kind: 'text', text: '生成视频' }])
+  const saved = await editor.saveUser(session.id, { token: edit.token, turn: 6, seq: failedInput, texts: ['改成生成图片'] })
+  assert.deepEqual(saved, { detached: true, text: '改成生成图片' })
+  assert.equal(chat.messages.length, 2)
 })

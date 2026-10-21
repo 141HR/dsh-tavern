@@ -116,7 +116,7 @@ import { createHelperGenerationTasks } from './domain/helper-generation-tasks.js
 import { createBodyEditor } from './domain/body-editor.js'
 import { userInputEditsOf } from './domain/input-floor.js'
 import { appendHelperUserSessionContext } from './domain/helper-user-session-context.js'
-import { inputKind, userMessageForTurn, requestIdForTurn, requestIdForMessages } from './domain/session-turn-input.js'
+import { inputEventForTurn, inputKind, isFailedTurnEnd, userMessageForTurn, requestIdForTurn, requestIdForMessages } from './domain/session-turn-input.js'
 import { inspectStoryAlignment, nativeStoryTurns } from './domain/story-alignment.js'
 import { repairNativeSurface, recordNativeSurfaceRepair, planNativeSurfaceRepair } from './domain/native-surface-repair.js'
 import { sessionOpeningDescriptor, prepareSessionOpening } from './domain/session-opening.js'
@@ -2360,6 +2360,7 @@ export async function apply(ctx) {
       userInputEdits: userInputEditsOf(chat),
       editableUserInputTurns: editableUserInputTurnsForChat(chat),
       latestCommittedUserTurn: latestCommittedUserTurnForChat(chat),
+      failedUserInputTurns: failedUserInputTurnsForChat(chat),
       ...rollbackFields,
       ...transcriptPlan,
       presentation: null,
@@ -2530,6 +2531,19 @@ export async function apply(ctx) {
     }
     return 0
   }
+  // The newest failed turn still has its input in the log but no surface node.
+  // Editing it withdraws that turn and hands the text back to the composer.
+  function failedUserInputTurnsForChat(chat) {
+    const session = sessionStore.get(str(chat?.sessionId)) || agentRegistry.get(str(chat?.sessionId))?.session
+    if (!session) return []
+    const events = sessionEvents(session)
+    const latest = events.reduce((highest, event) => event.type === 'turn/start' ? Math.max(highest, Number(event.data?.turn) || 0) : highest, 0)
+    if (!latest) return []
+    const end = events.findLast(event => event.type === 'turn/end' && Number(event.data?.turn) === latest)
+    if (!end || !isFailedTurnEnd(end.data?.reason?.kind)) return []
+    const input = inputEventForTurn(session, latest)
+    return input && inputKind(input.data) === 'player' ? [latest] : []
+  }
   // Player inputs the page may edit: only those still on the model surface. A
   // failed or withdrawn turn is removed from the surface while its append node
   // stays in the transcript, so it must not offer in-place editing.
@@ -2577,7 +2591,7 @@ export async function apply(ctx) {
   }
   function volatileSessionViewFields(chat, activity, changes) {
     const fields = sessionStateView.volatile(chat, activity, changes)
-    return { ...fields, forkTurnsByMessageId: forkTurnsForChat(chat), userInputEdits: userInputEditsOf(chat), editableUserInputTurns: editableUserInputTurnsForChat(chat), latestCommittedUserTurn: latestCommittedUserTurnForChat(chat),
+    return { ...fields, forkTurnsByMessageId: forkTurnsForChat(chat), userInputEdits: userInputEditsOf(chat), editableUserInputTurns: editableUserInputTurnsForChat(chat), latestCommittedUserTurn: latestCommittedUserTurnForChat(chat), failedUserInputTurns: failedUserInputTurnsForChat(chat),
       ...transcriptPlanFields(chat, sessionDebugEvidence(chat.sessionId), fields.replacingDshTurns, fields.keptInputTurns) }
   }
 
@@ -5425,7 +5439,19 @@ export async function apply(ctx) {
       case 'startPluginTask': return await startPluginTask(args && args.sessionId, args && args.key, args && args.input)
       case 'saveBodyEdit': {
         await reconcileStory(args && args.sessionId)
-        const view = args?.role === 'user' ? await bodyEditor.saveUser(args && args.sessionId, args) : await bodyEditor.save(args && args.sessionId, args)
+        if (args?.role === 'user') {
+          const saved = await bodyEditor.saveUser(args && args.sessionId, args)
+          if (saved && saved.detached === true) {
+            // The failed turn is not in the model surface; withdraw it and give
+            // the edited text back to the composer instead of rewriting history.
+            const view = await rollbackTurn(args.sessionId, args.chatId, null)
+            notifyPluginTimeline(args.sessionId, 'rollback', { turn: args.turn })
+            return { view, composerText: saved.text }
+          }
+          notifyPluginTimeline(args.sessionId, 'edit', { settled: true })
+          return { view: saved }
+        }
+        const view = await bodyEditor.save(args && args.sessionId, args)
         notifyPluginTimeline(args && args.sessionId, 'edit', { settled: true })
         return { view }
       }
