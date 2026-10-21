@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "5e2f4f7468f9766d85516cad218cd7a0c61f018d",
-  "releaseSequence": 797,
+  "revision": "9402f87ee74205864f8983e3f2309fc78281f7f1",
+  "releaseSequence": 798,
   "version": "3.0.1",
   "files": [
     {
@@ -111,8 +111,8 @@
     },
     {
       "path": "bin/bench-history-recall.mjs",
-      "sha256": "cc80067d36911cbe68b9a97ab04469a1ebd36863ae9960382f88a78b9846bdfe",
-      "size": 7871
+      "sha256": "d61e73e61d459eaad320d6df43859c24dba64d6695bee9553e2da98711a387d7",
+      "size": 9018
     },
     {
       "path": "bin/bench-transcript-plan.mjs",
@@ -1626,8 +1626,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/regeneration-recovery.js",
-      "sha256": "c2ef0decdac87063159588f78eca84f32173f191c4eb1a9a760eb31a97cecc70",
-      "size": 6330
+      "sha256": "55e7610d29ae04522a0ba1f3297af429744d30560bc73f03e6fcb66ba983e3cb",
+      "size": 7083
     },
     {
       "path": "tavern-plugin/lib/domain/regex-library.js",
@@ -1701,8 +1701,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/round-history.js",
-      "sha256": "b68abcead465501054116e7c4e271c97dfe4210da9ef89710223440b20690a17",
-      "size": 78378
+      "sha256": "a565b0d65bb768fdecf2603f01710c711d069b25e329a8f761a7c996b7dc55df",
+      "size": 77906
     },
     {
       "path": "tavern-plugin/lib/domain/runtime-content-projection.js",
