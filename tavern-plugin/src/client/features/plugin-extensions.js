@@ -85,7 +85,6 @@
 				// turn and the card around its pictures. Tavern shows a button only for a handler given.
 				registerIllustrator(input) {
 					if (!input || !Array.isArray(input.kinds) || !input.kinds.length || input.kinds.some(function (kind) { return typeof kind !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}\/[a-z0-9][a-z0-9._-]{0,63}$/.test(kind); })) throw new TypeError("registerIllustrator 需要 kinds：插件自己的 <插件名>/<类型> 列表");
-					if (typeof input.draw !== "function") throw new TypeError("registerIllustrator 需要 draw 函数");
 					const handlers = {};
 					["draw", "redraw", "editPrompt", "add", "cancel", "action"].forEach(function (name) {
 						if (input[name] === undefined) return;
@@ -410,8 +409,8 @@
 				stageViews: function () { return stageViews.slice(); },
 				statusSections: function () { return statusSections.slice(); },
 				turnViews: function () { return turnViews.slice(); },
-				// The latest registered illustrator handling `kind`, or any one when kind is omitted.
-				illustrator: function (kind) { for (let index = illustrators.length - 1; index >= 0; index -= 1) if (kind === undefined || illustrators[index].kinds.indexOf(kind) >= 0) return illustrators[index]; return null; },
+				// The latest registered illustrator handling `kind`; without a kind, the latest one that can draw.
+				illustrator: function (kind) { for (let index = illustrators.length - 1; index >= 0; index -= 1) if (kind === undefined ? illustrators[index].draw : illustrators[index].kinds.indexOf(kind) >= 0) return illustrators[index]; return null; },
 				startGroups: function () { return startGroups.map(function (group) { return { title: group.title, tabs: group.tabs.slice() }; }); }
 			};
 		}

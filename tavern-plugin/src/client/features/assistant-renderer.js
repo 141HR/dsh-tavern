@@ -830,6 +830,13 @@
 				const illustrator = play ? tavernUiExtensions.illustrator() : null;
 				return illustrator && tavernPluginAllowed(illustrator.owner, props.sessionId) ? React.createElement(TavernPluginIllustrateAction, { key: props.sessionId + ":" + turn, sessionId: props.sessionId, turn: turn, illustrator: illustrator }) : null;
 			}
+			// Drawn like DSH's own action icons (copy, branch): 16px, 1px strokes.
+			function TavernIllustrateIcon() {
+				return React.createElement("svg", { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", "aria-hidden": true, strokeWidth: 1 },
+					React.createElement("rect", { x: 1.5, y: 2.5, width: 13, height: 11, rx: 2, stroke: "currentColor" }),
+					React.createElement("circle", { cx: 5.5, cy: 6, r: 1.25, stroke: "currentColor" }),
+					React.createElement("path", { d: "M1.75 11.5 5.6 8.2C6 7.86 6.6 7.88 6.97 8.25L8.6 9.88 10.6 8.05C10.98 7.7 11.57 7.72 11.93 8.09L14.25 10.5", stroke: "currentColor", strokeLinejoin: "round" }));
+			}
 			function TavernPluginIllustrateAction(props) {
 				const [busy, setBusy] = React.useState(false);
 				// Progress and outcome show in the turn's text (TavernIllustrationDraft), not here.
@@ -842,10 +849,7 @@
 				const label = busy ? "正在整理画面…" : "为这一轮配图";
 				return React.createElement(DshUi.Tooltip, { label: label, side: "bottom" },
 					React.createElement("button", { type: "button", className: "dsh-tavern-message-fork dsh-tavern-message-illustrate", "aria-label": label, disabled: busy, onClick: draw },
-						React.createElement("svg", { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
-							React.createElement("rect", { x: 2, y: 3, width: 12, height: 10, rx: 2 }),
-							React.createElement("circle", { cx: 6, cy: 6.5, r: 1.2 }),
-							React.createElement("path", { d: "M2.5 12 6.5 8.5 9 10.5 11 9 13.5 11" }))));
+						React.createElement(TavernIllustrateIcon, null)));
 			}
 			function register(input) {
 				// uiWorkspace 由 dsh-client-ui-workspace 提供；缺失时（老宿主/未加载）退化为 sessions.retain。
