@@ -385,8 +385,19 @@ export function expandRosterCalls(text, scoped, mode, options = {}) {
           note({ macro: source, asked, result: outfit ? (owner ? 'character-outfit' : 'shared-outfit') : 'not-found', outfitId: outfit ? String(outfit.id ?? '') : '', ownerId: owner ? String(owner.id ?? '') : '' })
         }
 
-        // ③ 都没有：保留原名（总比空着好）
-        if (!bits.length) bits.push(asked)
+        // ③ 都没有：保留原名（总比空着好）。人物库里没有这个人时，规划在宏里直接写的
+        //    英文服装和角度是这张图仅有的外观信息，一并保留，不能只剩一个名字。
+        if (!bits.length) {
+          bits.push(asked)
+          if (!person && !matches.length) {
+            const outfitText = stripUsualSuffix(parsed.outfit ?? parsed.clothes ?? parsed['服装'])
+            const freeText = outfitText && /^[\x20-\x7e]+$/.test(outfitText) && /[a-z]/i.test(outfitText) && !PLACEHOLDER_VALUE.test(outfitText)
+            const wear = freeText ? (barefoot ? dropFootwear(outfitText) : outfitText) : ''
+            if (wear) bits.push(wear)
+            const angle = String(parsed.angle ?? '').trim()
+            if (angle && /front|back|side|behind|left|right|from/i.test(angle)) bits.push(angle)
+          }
+        }
         return bits.join(', ')
       })
     }
