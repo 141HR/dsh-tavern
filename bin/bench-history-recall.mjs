@@ -9,7 +9,8 @@
 // hint asks it to check the story's history first (once it looks, does it find it?); probe sends the item's in-story line.
 // Per answer it records: the recalls made, whether any recall result held the answer, whether the reply
 // held it. Quiz items: { id, question, probe, keywords: [["809"], ["杨武", "杨哥"]] } — every group must
-// match, any word within a group counts. The game is deleted afterwards unless --keep.
+// match, any word within a group counts. Optional decoyKeywords (same shape) spot a reply that took a
+// near-miss fact from the summary for the answer. The game is deleted afterwards unless --keep.
 import { appendFileSync, existsSync, readdirSync, readFileSync } from 'node:fs'
 import { request } from 'node:http'
 import os from 'node:os'
@@ -102,7 +103,7 @@ async function play(item, form) {
       if (event.type === 'tool/result') return [{ result: textOf(event.data.message?.content) }]
       return []
     })
-    return { id: item.id, form, input, recalls, recallHit: recalls.some(recall => recall.hit), correct: has(reply, item), reply, seconds: Math.round((Date.now() - began) / 1000), transcript }
+    return { id: item.id, form, input, recalls, recallHit: recalls.some(recall => recall.hit), correct: has(reply, item), decoy: !has(reply, item) && Array.isArray(item.decoyKeywords) && has(reply, { keywords: item.decoyKeywords }), reply, seconds: Math.round((Date.now() - began) / 1000), transcript }
   } finally {
     if (!args.includes('--keep') && chatId) await rpc('deleteChats', { chatIds: [chatId] }).catch(error => console.warn('删除测试对话失败：' + error.message))
   }
@@ -118,7 +119,7 @@ for (let round = 1; round <= repeat; round++) {
       if (outFile) appendFileSync(outFile, JSON.stringify({ round, ...row }) + '\n')
       if (row.error) { console.log(`  ${String(item.id).padStart(2)} ${form}  出错：${row.error}`); continue }
       const recalls = row.recalls.map(recall => (recall.query ? '「' + recall.query + '」' : '第 ' + recall.turn + ' 轮') + (recall.hit ? '✓' : '✗')).join(' ')
-      console.log(`  ${String(item.id).padStart(2)} ${form.padEnd(5)} ${row.correct ? '答对' : '答错'}  ${recalls ? '检索 ' + recalls : '未检索'}  ${row.seconds}s  —— ${item.question}`)
+      console.log(`  ${String(item.id).padStart(2)} ${form.padEnd(5)} ${row.correct ? '答对' : row.decoy ? '答成诱饵' : '答错'}  ${recalls ? '检索 ' + recalls : '未检索'}  ${row.seconds}s  —— ${item.question}`)
       console.log('        ' + row.reply.replace(/\s+/g, ' ').slice(0, 140))
     }
   }
