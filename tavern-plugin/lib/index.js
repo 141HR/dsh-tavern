@@ -3027,6 +3027,8 @@ export async function apply(ctx) {
     if (target === 'regenerate') await cancelSettlement(header.id)
     else if (backgroundTasks.activity(header).busy) throw new Error('后台结算中，请稍后再换参考')
     const base = target === 'regenerate' ? 'previous' : 'latest'
+    // The background agent runs off the foreground session: load it when the page has not yet.
+    if (!agentRegistry.get(header.sessionId)?.session) await agentRegistry.resume({ resumeSessionId: header.sessionId })
     let chat = await storyContext({ chatId: header.id })
     // The bounded read may stop short of the reply before the latest one.
     if (base === 'previous' && (chat.messages || []).filter(message => message?.role === 'assistant').length < 2) chat = await readChat(header.id)
