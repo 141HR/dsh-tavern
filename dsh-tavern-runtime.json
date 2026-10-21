@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "1db2614127cc3f344e6a84116c1f9ef2db1a7e12",
-  "releaseSequence": 817,
+  "revision": "e3281742b3cfb03d4ee5f77ca71133154d4538b0",
+  "releaseSequence": 818,
   "version": "3.1.0",
   "files": [
     {
@@ -5346,8 +5346,8 @@
     },
     {
       "path": "tavern-plugin/prompts/card-system.md",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "size": 0
+      "sha256": "76efa571679e6112871f538d5b34e232f1a598389f97afaf9c3c32090e4d076d",
+      "size": 5608
     },
     {
       "path": "tavern-plugin/prompts/card-task-debug-play.md",
