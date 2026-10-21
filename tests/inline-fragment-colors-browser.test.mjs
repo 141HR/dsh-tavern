@@ -28,3 +28,23 @@ test('trusted inline prose installs quote highlights and releases them on replac
   assert.equal(await page.locator('[data-dsh-tavern-text-colors]').count(), 0)
   assert.equal(await page.locator('#root').textContent(), '')
 })
+
+test('every message shares one stylesheet and four named highlights per document', { skip: !process.env.TAVERN_BROWSER_TESTS }, async t => {
+  const { chromium } = await import('playwright')
+  const browser = await chromium.launch({ headless: true })
+  t.after(() => browser.close())
+  const page = await browser.newPage()
+  await page.setContent('<style>body{color:rgb(30,30,30)}</style>' + Array.from({ length: 30 }, (_, i) => `<p id="m${i}">她说：“第${i}句。”</p>`).join(''))
+  await page.addScriptTag({ content: await readFile(new URL('../tavern-plugin/src/client/text-colors.js', import.meta.url), 'utf8') + `
+    window.ranges = () => [...CSS.highlights.values()].flatMap(h=>[...h].map(r=>r.toString()));
+    window.views = Array.from(document.querySelectorAll('p'), p => installTavernTextColors(p, {}, findTavernQuoteRanges));
+  ` })
+  await page.waitForFunction(() => window.ranges().length === 30)
+  assert.deepEqual(await page.evaluate(() => ({ names: CSS.highlights.size, styles: document.querySelectorAll('style[data-dsh-tavern-text-colors]').length })), { names: 4, styles: 1 })
+  // A refresh or dispose of one message must leave the other messages' ranges alone.
+  await page.evaluate(() => { document.querySelector('#m1').firstChild.data = '没有引号'; window.views[2].dispose() })
+  await page.waitForFunction(() => window.ranges().length === 28)
+  assert.equal((await page.evaluate(() => window.ranges())).includes('“第0句。”'), true)
+  await page.evaluate(() => window.views.forEach(view => view.dispose()))
+  assert.deepEqual(await page.evaluate(() => ({ names: CSS.highlights.size, styles: document.querySelectorAll('style[data-dsh-tavern-text-colors]').length })), { names: 0, styles: 0 })
+})
