@@ -6,6 +6,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { DSH_ROOT, RUNTIME_HOST } from './launcher-environment.mjs'
 import { browserOpenCommand, startService } from './service-lifecycle.mjs'
+import officialDesktopRuntime from './official-desktop-runtime.cjs'
+import { relaunchCommand } from '../tavern-plugin/packages/dsh-profile-bridge/lib/helper.mjs'
 
 // 桌面版固定读 profiles/desktop；它链接到 tavern 时，桌面版本身就是酒馆，再起一份会同写一份存档。
 export function desktopUsesTavern(root = DSH_ROOT) {
@@ -36,17 +38,26 @@ export function appWindowBrowser(platform = process.platform, env = process.env,
 }
 
 function launch(command, args) {
-  const child = spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true })
-  child.on('error', () => {})
-  child.unref()
+  // The shortcut runs Electron as Node; the opened desktop must run as a GUI.
+  const env = { ...process.env }
+  delete env.ELECTRON_RUN_AS_NODE
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true, env })
+    child.once('error', reject)
+    child.once('spawn', () => { child.unref(); resolve() })
+  })
 }
 
-export async function openTavernWindow() {
-  if (RUNTIME_HOST !== 'desktop') throw new Error('「DSH 酒馆」快捷方式只用于桌面版；命令行版请用 dsh-tavern open。')
-  if (desktopUsesTavern()) throw new Error('桌面版现在就是 DSH 酒馆，直接打开 DeepSeek Harness 即可。想让原版 DSH 和酒馆分成两个窗口，先在桌面版设置里点「原版DSH」。')
-  const state = await startService()
+export async function openTavernWindow({ host = RUNTIME_HOST, root = DSH_ROOT, findDesktop = officialDesktopRuntime.discover, start = startService, open = launch } = {}) {
+  if (host !== 'desktop') throw new Error('「DSH 酒馆」快捷方式只用于桌面版；命令行版请用 dsh-tavern open。')
+  if (desktopUsesTavern(root)) {
+    const [command, args] = relaunchCommand(findDesktop())
+    await open(command, args)
+    return
+  }
+  const state = await start()
   if (!state?.webUrl) throw new Error('酒馆已启动，但还没拿到访问地址，请稍后再点一次快捷方式。')
   const browser = appWindowBrowser()
-  if (browser) launch(browser.command, browser.args(state.webUrl))
-  else { const fallback = browserOpenCommand(state.webUrl); launch(fallback.command, fallback.args) }
+  if (browser) await open(browser.command, browser.args(state.webUrl))
+  else { const fallback = browserOpenCommand(state.webUrl); await open(fallback.command, fallback.args) }
 }

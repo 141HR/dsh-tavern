@@ -6,7 +6,7 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { ensureInitialTavernShortcut, createTavernShortcut, icoFromPng, macLauncherScript, windowsLauncherScript } from '../tavern-plugin/packages/dsh-profile-bridge/lib/shortcut.mjs'
-import { appWindowBrowser, desktopUsesTavern } from '../bin/tavern-window.mjs'
+import { appWindowBrowser, desktopUsesTavern, openTavernWindow } from '../bin/tavern-window.mjs'
 
 async function setup(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'tavern-shortcut-'))
@@ -86,4 +86,14 @@ test('创建失败不记录成功，后续仍可重试', async t => {
   let calls = 0
   assert.equal(ensureInitialTavernShortcut({ paths }, () => { calls++; return { path: 'shortcut' } }).path, 'shortcut')
   assert.equal(calls, 1)
+})
+
+
+test('快捷方式在 desktop 已是酒馆时打开桌面应用，不报错或启动第二个服务', async t => {
+  const { dsh } = await setup(t)
+  await symlink(path.join(dsh, 'profiles', 'tavern'), path.join(dsh, 'profiles', 'desktop'), 'junction')
+  const opened = []
+  await openTavernWindow({ host: 'desktop', root: dsh, findDesktop: () => 'D:/Apps/DeepSeek Harness.exe',
+    start: () => assert.fail('不能启动第二个酒馆服务'), open: (...args) => opened.push(args) })
+  assert.deepEqual(opened, [['D:/Apps/DeepSeek Harness.exe', []]])
 })
