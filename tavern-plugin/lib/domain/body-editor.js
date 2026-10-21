@@ -46,9 +46,12 @@ export async function synchronizeBodyEdits(session, chat, flush, persistChat) {
       continue
     }
     if (targetSeq !== seq) message.bodyEdit = { id, seq: targetSeq, turn, formatVersion: 4 }
+    // `turn` is the native turn that draws the reply; after a regeneration it differs from the
+    // story round, which the replacement names like a projection does (story alignment).
+    const story = Number(message.turn)
     replaceSessionSurface(session, 'assistant/message', {
       turn, step: 1,
-      message: { id, role: 'assistant', content: [{ type: 'text', text: message.text }], source: { kind: 'model', provider: 'dsh-tavern', model: 'body-edit' } }
+      message: { id, role: 'assistant', content: [{ type: 'text', text: message.text }], source: { kind: 'model', provider: 'dsh-tavern', model: 'body-edit', ...(Number.isSafeInteger(story) && story > 0 ? { tavernStoryTurn: story } : {}) } }
     }, { start: targetSeq, end: targetSeq, sourceEventSeqs: [targetSeq] })
     recorded.add(id)
     sessionDirty = true
