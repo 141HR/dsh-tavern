@@ -26,16 +26,17 @@ function pause(ms, signal) {
 
 // Tavern 5's illustration card reads standard fields, not this plugin's data: mirror the
 // replacement task into them (what is under way, which buttons apply).
-const TASK_FIELDS = {
-  pending: { activity: { label: '重画中', progress: null, cancellable: true }, actions: [] },
-  uncertain: { activity: null, actions: [{ id: 'recover', label: '查询结果' }] },
-  failed: { activity: null, actions: [{ id: 'retry', label: '重试' }] },
-  cancelled: { activity: null, actions: [{ id: 'retry', label: '重试' }] },
-  ready: { activity: null, actions: [] },
-}
+// The picture's own 重画 covers a plain retry; only a request the platform may still be running needs
+// more: look it up, or redraw anyway once the player accepts a possible second charge.
+const UNSETTLED_ACTIONS = [{ id: 'recover', label: '查询结果' }, { id: 'force-redraw', label: '仍然重画', confirm: '上一次请求可能仍在生图平台上处理，现在重画可能重复扣费。确定重画？' }]
 export function withTaskFields(changes) {
-  const state = changes?.data?.replacement?.state
-  return TASK_FIELDS[state] ? { ...changes, ...TASK_FIELDS[state] } : changes
+  const replacement = changes?.data?.replacement
+  const state = replacement?.state
+  if (state === 'pending') return { ...changes, activity: { label: '重画中', progress: null, cancellable: true }, actions: [] }
+  const unsettled = state === 'uncertain' || (state === 'cancelled' && (replacement.cancelMayHaveContinued === true || replacement.requestStarted === true))
+  if (unsettled) return { ...changes, activity: null, actions: UNSETTLED_ACTIONS }
+  if (['failed', 'cancelled', 'ready'].includes(state)) return { ...changes, activity: null, actions: changes.status === 'failed' ? [{ id: 'retry', label: '重试' }] : [] }
+  return changes
 }
 
 /**
@@ -188,7 +189,9 @@ export function createMediaActions({
   async function start(input, item) {
     const data = item.data || {}
     const existing = data.replacement
-    if (existing?.state === 'pending' || existing?.state === 'uncertain') {
+    // 玩家点了「仍然重画」：接受可能重复扣费，不再被上一次未确认的请求卡住。
+    const accepted = input.operation === 'redraw' && input.confirmUncertain === true
+    if (existing?.state === 'pending' || (existing?.state === 'uncertain' && !accepted)) {
       if (existing.state === 'uncertain') throw Object.assign(new Error('该图片上一次请求结果未知，请先确认生图平台；为避免重复扣费，暂不自动重试'), { code: 'UNCERTAIN' })
       if (existing.operation && (existing.operation !== input.operation || (existing.prompt || '') !== (input.prompt || '')
         || (existing.negative || '') !== (input.negative || '') || (existing.channelId || '') !== (input.channelId || ''))) {
@@ -212,11 +215,16 @@ export function createMediaActions({
     if (!sourceJobId) throw new Error('找不到原始作业号，不能重绘或重试')
     const sourceJob = await readJob(sourceJobId)
     const latestJob = existing?.jobId && existing.jobId !== sourceJobId ? await readJob(existing.jobId) : sourceJob
-    if ([sourceJob, latestJob].some(job => job?.state === 'cancelled' && (job.requestStarted === true || job.cancelMayHaveContinued === true))) {
-      throw Object.assign(new Error('取消时平台请求可能仍在处理；请先查询原任务结果，暂不能重新提交'), { code: 'UNCERTAIN' })
+    // Refusing marks the picture unsettled, so its card offers 查询结果 / 仍然重画 instead of a dead end.
+    const refuseUnsettled = async message => {
+      try { await tavern.update(item.id, { data: { ...data, replacement: { ...(existing || {}), state: 'uncertain', error: message } } }) } catch {}
+      throw Object.assign(new Error(message), { code: 'UNCERTAIN' })
     }
-    if (sourceJob?.state === 'uncertain' || sourceJob?.requestMayHaveSucceeded === true) {
-      throw Object.assign(new Error('原作业提交结果未知；请先确认生图平台，不能通过重绘绕过不确定状态'), { code: 'UNCERTAIN' })
+    if (!accepted && [sourceJob, latestJob].some(job => job?.state === 'cancelled' && (job.requestStarted === true || job.cancelMayHaveContinued === true))) {
+      await refuseUnsettled('取消时平台请求可能仍在处理；可以先查询结果，或确认后仍然重画')
+    }
+    if (!accepted && (sourceJob?.state === 'uncertain' || sourceJob?.requestMayHaveSucceeded === true)) {
+      await refuseUnsettled('原作业提交结果未知；可以先查询结果，或确认后仍然重画')
     }
     if (input.operation === 'retry' && !['failed', 'cancelled'].includes(existing?.state) && item.status !== 'failed') {
       throw new Error('只有已确认失败或已取消的单图任务可以重试')

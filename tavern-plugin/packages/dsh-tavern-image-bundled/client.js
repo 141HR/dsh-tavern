@@ -5479,7 +5479,9 @@ function versionsOf(jobId) {
                   editPrompt: context => mediaAction('redraw', context, { prompt: context.prompt }),
                   cancel: context => mediaAction('cancel', context),
                   // 图上的「重试」「查询结果」：由宿主侧按任务状态写进 item.actions。
-                  action: context => mediaAction(context.actionId, context),
+                  action: context => context.actionId === 'force-redraw'
+                    ? mediaAction('redraw', context, { confirmUncertain: true })
+                    : mediaAction(context.actionId, context),
                 })
               }
               refreshIllustrator()
