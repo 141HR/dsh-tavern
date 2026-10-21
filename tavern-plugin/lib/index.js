@@ -114,6 +114,7 @@ import { generateHelper, generateHelperRaw, generateHelperCompletion, identifyHe
 import { validateHelperGenerateConfig, resolveHelperGenerationPreset, helperGenerationHistory } from './domain/helper-generation-prompts.js'
 import { createHelperGenerationTasks } from './domain/helper-generation-tasks.js'
 import { createBodyEditor } from './domain/body-editor.js'
+import { userInputEditsOf } from './domain/input-floor.js'
 import { appendHelperUserSessionContext } from './domain/helper-user-session-context.js'
 import { userMessageForTurn, requestIdForTurn, requestIdForMessages } from './domain/session-turn-input.js'
 import { inspectStoryAlignment, nativeStoryTurns } from './domain/story-alignment.js'
@@ -2356,6 +2357,7 @@ export async function apply(ctx) {
       latestAssistantTurn: latestStoryTurn,
       inputSources,
       inputTemplateDisplays,
+      userInputEdits: userInputEditsOf(chat),
       ...rollbackFields,
       ...transcriptPlan,
       presentation: null,
@@ -2528,7 +2530,7 @@ export async function apply(ctx) {
   }
   function volatileSessionViewFields(chat, activity, changes) {
     const fields = sessionStateView.volatile(chat, activity, changes)
-    return { ...fields, forkTurnsByMessageId: forkTurnsForChat(chat),
+    return { ...fields, forkTurnsByMessageId: forkTurnsForChat(chat), userInputEdits: userInputEditsOf(chat),
       ...transcriptPlanFields(chat, sessionDebugEvidence(chat.sessionId), fields.replacingDshTurns, fields.keptInputTurns) }
   }
 
@@ -5368,7 +5370,7 @@ export async function apply(ctx) {
       case 'loadGuideLibrary': return { guides: await conversationGuides.load(args?.sessionId, args?.id) }
       case 'addGuide': return { guides: await conversationGuides.add(args?.sessionId, args?.text) }
       case 'deleteGuide': return { guides: await conversationGuides.remove(args?.sessionId, args) }
-      case 'getBodyEdit': return { edit: await bodyEditor.read(args && args.sessionId) }
+      case 'getBodyEdit': return { edit: args?.role === 'user' ? await bodyEditor.readUser(args && args.sessionId) : await bodyEditor.read(args && args.sessionId) }
       case 'listGamePlugins': return { plugins: await pluginApi.gamePlugins(str(args && args.sessionId)) }
       case 'setGamePlugin': return { plugins: await pluginApi.setGamePlugin(str(args && args.sessionId), { name: args && args.name, enabled: args && args.enabled, replace: args && args.replace, task: args && args.task, taskOrder: args && args.taskOrder, setting: args && args.setting }) }
       case 'pluginState': return { data: await pluginApi.pluginState(str(args && args.sessionId), str(args && args.plugin), str(args && args.name)) }
@@ -5376,7 +5378,7 @@ export async function apply(ctx) {
       case 'startPluginTask': return await startPluginTask(args && args.sessionId, args && args.key, args && args.input)
       case 'saveBodyEdit': {
         await reconcileStory(args && args.sessionId)
-        const view = await bodyEditor.save(args && args.sessionId, args)
+        const view = args?.role === 'user' ? await bodyEditor.saveUser(args && args.sessionId, args) : await bodyEditor.save(args && args.sessionId, args)
         notifyPluginTimeline(args && args.sessionId, 'edit', { settled: true })
         return { view }
       }

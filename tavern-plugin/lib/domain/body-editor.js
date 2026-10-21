@@ -7,6 +7,7 @@ import { locateRegenerationSurface } from './rollback-surface.js'
 import { sessionEvents } from './session-events.js'
 import { isScopedMessages } from './scoped-messages.js'
 import { diffJson } from './json-mutation.js'
+import { latestUserInputFloor, locateUserInputFloor } from './input-floor.js'
 
 function latest(chat) {
   const message = chat.messages?.at(-1)
@@ -23,7 +24,11 @@ function token(chat, message) {
 /** Reconcile a durable Chat edit to native Surface; retries never duplicate history. */
 export async function synchronizeBodyEdits(session, chat, flush, persistChat) {
   const references = upgradeReferences(sessionEvents(session))
-  const recorded = new Set(sessionEvents(session).filter(event => event.type === 'assistant/message').map(event => event.data?.message?.id))
+  const recorded = new Set()
+  for (const event of sessionEvents(session)) {
+    if (event.type === 'assistant/message' && event.data?.message?.id) recorded.add(event.data.message.id)
+    else if (event.type === 'user/message' && event.data?.id) recorded.add(event.data.id)
+  }
   const cleared = []
   let sessionDirty = false
   for (const message of chat.messages || []) {
@@ -31,12 +36,16 @@ export async function synchronizeBodyEdits(session, chat, flush, persistChat) {
     const { id, turn } = message.bodyEdit
     const seq = references.sequence(message.bodyEdit.seq, message.bodyEdit.formatVersion)
     if (recorded.has(id)) continue
+    const user = message.bodyEdit.role === 'user' || message.role === 'user'
     let targetSeq = session.surface?.nodes.includes(seq) ? seq : null
     // Migration renumbers seqs and may fold the body-edit injection onto its
     // target; Chat markers still hold the pre-migration seq. Recover by turn.
     if (targetSeq == null && turn != null) {
-      const located = locateRegenerationSurface({ events: sessionEvents(session), nodes: session.surface?.nodes, turn })
-      targetSeq = located?.assistantSeq ?? null
+      if (user) targetSeq = locateUserInputFloor(session, turn)?.seq ?? null
+      else {
+        const located = locateRegenerationSurface({ events: sessionEvents(session), nodes: session.surface?.nodes, turn })
+        targetSeq = located?.assistantSeq ?? null
+      }
     }
     if (targetSeq == null) {
       // Issue #72: orphaned marker after migration wiped the injection. Chat
@@ -45,14 +54,20 @@ export async function synchronizeBodyEdits(session, chat, flush, persistChat) {
       delete message.bodyEdit
       continue
     }
-    if (targetSeq !== seq) message.bodyEdit = { id, seq: targetSeq, turn, formatVersion: 4 }
-    // `turn` is the native turn that draws the reply; after a regeneration it differs from the
-    // story round, which the replacement names like a projection does (story alignment).
-    const story = Number(message.turn)
-    replaceSessionSurface(session, 'assistant/message', {
-      turn, step: 1,
-      message: { id, role: 'assistant', content: [{ type: 'text', text: message.text }], source: { kind: 'model', provider: 'dsh-tavern', model: 'body-edit', ...(Number.isSafeInteger(story) && story > 0 ? { tavernStoryTurn: story } : {}) } }
-    }, { start: targetSeq, end: targetSeq, sourceEventSeqs: [targetSeq] })
+    if (targetSeq !== seq) message.bodyEdit = user ? { id, seq: targetSeq, turn, role: 'user' } : { id, seq: targetSeq, turn, formatVersion: 4 }
+    if (user) {
+      replaceSessionSurface(session, 'user/message', {
+        id, role: 'user', content: [{ type: 'text', text: String(message.text ?? '') }], source: { kind: 'user' }
+      }, { start: targetSeq, end: targetSeq, sourceEventSeqs: [targetSeq] })
+    } else {
+      // `turn` is the native turn that draws the reply; after a regeneration it differs from the
+      // story round, which the replacement names like a projection does (story alignment).
+      const story = Number(message.turn)
+      replaceSessionSurface(session, 'assistant/message', {
+        turn, step: 1,
+        message: { id, role: 'assistant', content: [{ type: 'text', text: message.text }], source: { kind: 'model', provider: 'dsh-tavern', model: 'body-edit', ...(Number.isSafeInteger(story) && story > 0 ? { tavernStoryTurn: story } : {}) } }
+      }, { start: targetSeq, end: targetSeq, sourceEventSeqs: [targetSeq] })
+    }
     recorded.add(id)
     sessionDirty = true
   }
@@ -186,6 +201,86 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
       return present(saved)
     } finally { pending.delete(sessionId) }
   }
+  // The last player input is a floor too: the model surface gets a replacement
+  // user/message, while the Chat keeps the new text so the page can render it.
+  // Only that one message changes; no round is replayed and no settlement runs.
+  function latestUser(chat) {
+    const messages = chat.messages || []
+    const index = messages.findLastIndex(message => message && message.role === 'user' && message.greeting !== true)
+    if (index < 0) throw new Error('找不到可编辑的玩家输入')
+    if (index !== messages.length - 1 && messages[index + 1]?.role !== 'assistant') throw new Error('最后一轮还没有回复，暂时不能编辑')
+    const reply = messages[index + 1]
+    const turn = Number(reply?.native?.turn) || Number(reply?.nativeAnchor?.turn) || 0
+    if (!Number.isSafeInteger(turn) || turn < 1) throw new Error('找不到这条输入对应的回合')
+    return { message: messages[index], index, turn }
+  }
+  async function userContext(sessionId) {
+    refuseClosedPatch()
+    let chat = await chats.forSession(sessionId)
+    if (!chat) throw new Error('会话不存在')
+    const agent = sessions.get(sessionId)
+    if (!agent?.session) throw new Error('无法访问原生会话')
+    idle(chat, agent)
+    await synchronizeBodyEdits(agent.session, chat, sessions.flush, async (dirty, cleared) => {
+      const drop = new Set(cleared)
+      await chats.update(dirty.id, current => {
+        let changed = false
+        for (const message of current.messages || []) {
+          if (message.bodyEdit && drop.has(message.bodyEdit.id)) {
+            delete message.bodyEdit
+            changed = true
+          }
+        }
+        return changed ? current : undefined
+      }, { source: 'body-edit.stale-clear' })
+    })
+    chat = await chats.forSession(sessionId)
+    if (!chat) throw new Error('会话不存在')
+    idle(chat, agent)
+    const { message, index, turn } = latestUser(chat)
+    const located = latestUserInputFloor(agent.session)
+    if (!located) throw new Error('这条输入已不在当前上下文中，无法编辑')
+    return { chat, agent, message, index, turn, located }
+  }
+  async function readUser(sessionId) {
+    const { chat, message, index, turn } = await userContext(sessionId)
+    return { token: token(chat, message), role: 'user', index, turn, parts: [{ kind: 'text', text: String(message.text ?? '') }] }
+  }
+  async function saveUser(sessionId, input) {
+    if (pending.has(sessionId)) throw new Error('正在保存正文，请稍候')
+    pending.add(sessionId)
+    try {
+      const { chat, agent, message, index, turn, located } = await userContext(sessionId)
+      if (input?.token !== token(chat, message)) throw new Error('输入或会话已变化，请重新打开编辑')
+      const texts = input.texts
+      if (!Array.isArray(texts) || texts.length !== 1 || typeof texts[0] !== 'string') throw new Error('编辑文本格式无效')
+      const text = texts[0]
+      if (text.trim() === '') throw new Error('输入不能为空')
+      if (text === message.text) return present(chat)
+      const editId = 'tavern-user-edit:' + randomUUID()
+      const source = located.event.data?.source && typeof located.event.data.source === 'object'
+        ? { ...located.event.data.source, kind: 'user' }
+        : { kind: 'user' }
+      const data = { id: editId, role: 'user', content: [{ type: 'text', text }], source }
+      // A rejected host event must not publish a Chat text that future requests
+      // keep trying to synchronize. Validate on an isolated copy first.
+      const preview = agent.session.constructor.fromRestore(agent.session.id, structuredClone(sessionEvents(agent.session)), structuredClone(agent.session.header), agent.session.inheritedEventCount, 'detached')
+      replaceSessionSurface(preview, 'user/message', data, { start: located.seq, end: located.seq, sourceEventSeqs: [located.seq] })
+      const saved = await chats.update(chat.id, current => {
+        idle(current, agent)
+        const messages = current.messages || []
+        const at = messages.findLastIndex(item => item && item.role === 'user' && item.greeting !== true)
+        if (at < 0 || at !== index || messages[at].text !== message.text) throw new Error('输入或会话已变化，请重新打开编辑')
+        if (!agent.session.surface?.nodes.includes(located.seq)) throw new Error('模型上下文已变化，请重新打开编辑')
+        messages[at].text = text
+        messages[at].bodyEdit = { id: editId, seq: located.seq, turn, role: 'user' }
+        return current
+      }, { source: 'foreground.user-edit' })
+      replaceSessionSurface(agent.session, 'user/message', data, { start: located.seq, end: located.seq, sourceEventSeqs: [located.seq] })
+      await sessions.flush(agent.session)
+      return present(saved)
+    } finally { pending.delete(sessionId) }
+  }
   // A whole new text (plugins): its HTML and markers must equal the current ones, in order;
   // only the prose between them changes, through the same checks as a player's edit.
   async function replaceText(sessionId, text) {
@@ -209,5 +304,5 @@ export function createBodyEditor({ chats, sessions, timeline, activity, project,
     if (gaps.some(rest => rest.trim())) throw new Error('只能修改原有的文字段落，不能在 HTML 块之间新增段落')
     return await save(sessionId, { token: token(chat, message), texts })
   }
-  return Object.freeze({ read, save, replaceText })
+  return Object.freeze({ read, save, readUser, saveUser, replaceText })
 }

@@ -56,6 +56,38 @@
 			}
 			return null;
 		}
+		function nodeTurn(node) {
+			// Legacy flat nodes carry the native turn directly; layout nodes keep it
+			// under location.turn.
+			const direct = Number(node && node.turn);
+			if (Number.isSafeInteger(direct) && direct > 0) return direct;
+			const location = node && node.location;
+			return location && (location.kind === "turn" || location.kind === "step") ? Number(location.turn && location.turn.turn) || 0 : 0;
+		}
+		// The last player input is the only message the quick edit action offers.
+		// The user node has no turn of its own; the next assistant/step node does.
+		function latestTavernUserTurn(snapshot) {
+			const nodes = snapshot && snapshot.legacy && snapshot.legacy.nodes || [];
+			let turn = 0;
+			for (let index = nodes.length - 1; index >= 0; index -= 1) {
+				const node = nodes[index];
+				turn = nodeTurn(node) || turn;
+				if (node.kind === "user") return turn;
+			}
+			return 0;
+		}
+		// A user message belongs to the round drawn by the assistant of the same
+		// native turn; its closing message carries the fork target.
+		function tavernAssistantMessageIdForTurn(snapshot, turn) {
+			const expected = Number(turn) || 0;
+			const nodes = snapshot && snapshot.legacy && snapshot.legacy.nodes || [];
+			for (let index = nodes.length - 1; index >= 0; index -= 1) {
+				const node = nodes[index];
+				if (node.kind !== "assistant" || !node.messageId) continue;
+				if (nodeTurn(node) === expected) return node.messageId;
+			}
+			return null;
+		}
 
 		// @include turn-error-controls.js
 

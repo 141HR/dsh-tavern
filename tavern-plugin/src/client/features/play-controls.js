@@ -806,11 +806,23 @@
 			const panel = useBodyEditPanel();
 			const running = props.useSession(function (snapshot) { return snapshot.running === true; });
 			const h = React.createElement;
+			// The user-message edit button lives in another feature module; it opens
+			// this panel through a page event instead of reaching into this closure.
+			React.useEffect(function () {
+				function open(event) {
+					const detail = event && event.detail ? event.detail : {};
+					if (!detail.edit || detail.sessionId !== props.sessionId) return;
+					setBodyEditPanel({ sessionId: detail.sessionId, edit: detail.edit, texts: Array.isArray(detail.texts) ? detail.texts : [], busy: false, error: "" });
+				}
+				window.addEventListener("dsh-tavern-open-body-edit", open);
+				return function () { window.removeEventListener("dsh-tavern-open-body-edit", open); };
+			}, [props.sessionId]);
 			if (!panel || panel.sessionId !== props.sessionId) return null;
+			const label = panel.edit.role === "user" ? "编辑这条输入" : "编辑正文";
 			async function save() {
 				setBodyEditPanel(Object.assign({}, panel, { busy: true, error: "" }));
 				try {
-					const result = await rpc("saveBodyEdit", { token: panel.edit.token, texts: panel.texts }, props.sessionId);
+					const result = await rpc("saveBodyEdit", { token: panel.edit.token, role: panel.edit.role, index: panel.edit.index, turn: panel.edit.turn, texts: panel.texts }, props.sessionId);
 					liveTavernView.setView(props.sessionId, result.view);
 					notifyTavernDataChanged(["sessions"], "play-controls");
 					tavernCoordination.invalidate(props.sessionId);
@@ -818,8 +830,9 @@
 				} catch (error) { setBodyEditPanel(Object.assign({}, panel, { busy: false, error: String(error.message || error) })); }
 			}
 			let textIndex = 0;
-			return h("div", { className: "dsh-tavern-question", role: "region", "aria-label": "编辑正文" },
-				h("div", { className: "dsh-tavern-question-head" }, h("span", null, "编辑正文")),
+			return h("div", { className: "dsh-tavern-question", role: "region", "aria-label": label },
+				h("div", { className: "dsh-tavern-question-head" }, h("span", null, label)),
+				panel.edit.role === "user" ? h("div", { className: "dsh-tavern-question-sub" }, "只改这一条输入，不会自动重写已生成的回复；需要新回复时保存后再点「重新生成正文」。") : null,
 				panel.error ? h("div", { className: "dsh-tavern-choice-error", role: "alert" }, panel.error) : null,
 				h("div", { style: { maxHeight: "50vh", overflowY: "auto" } }, panel.edit.parts.map(function (part, index) {
 					if (part.kind === "html") return h("div", { key: index, className: "dsh-tavern-question-sub" }, "HTML 内容保持原样");
