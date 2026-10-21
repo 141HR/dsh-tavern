@@ -4409,6 +4409,16 @@ export async function apply(ctx) {
         return { card: archive ? await importCardArchiveFile(archive.file, archive.name) : await importCard(await mobileCardImport.read(args && args.id)) }
       }
       case 'importCard': return { card: await importCard(args && args.payload) }
+      // Names of games by id, for plugin pages that list several games (tavernUi.getGames).
+      case 'gameTitles': {
+        const ids = [...new Set((Array.isArray(args?.gameIds) ? args.gameIds : []).map(str).filter(Boolean))].slice(0, 500)
+        const games = {}
+        for (const id of ids) {
+          const chat = await chatForSession(id).catch(() => undefined)
+          if (chat) games[id] = { title: str(chat.title), cardName: str(chat.cardName) }
+        }
+        return { games }
+      }
       // The page side of a plugin reads and writes the same data as its host side (tavernUi.savePluginData).
       case 'pluginData': {
         const plugin = str(args && args.plugin)

@@ -50,7 +50,11 @@ context = { gameId, turn, busy }
 
 ## `listIllustrations()`（第 4 版）
 
-列出 Tavern 自带场景生图画过的全部插图（所有游戏，新的在前），只读。返回 Promise，每项是 `{ gameTitle, cardName, turn, gameDeleted, description, createdAt, url }`，`url` 可直接用作 `<img src>`。插件自己挂的媒体不在其中。
+列出 Tavern 自带场景生图画过的全部插图（所有游戏，新的在前），只读。返回 Promise，每项是 `{ gameId, gameTitle, cardName, turn, gameDeleted, description, createdAt, url }`，`url` 可直接用作 `<img src>`。插件自己挂的媒体不在其中。
+
+## `getGames(gameIds)`（第 4 版）
+
+按 `gameId` 查游戏名称，返回 Promise `{ [gameId]: { title, cardName } }`；已删除或不存在的游戏不在结果里。一次最多 500 个。
 
 ## `callHost(name, args)`（第 2 版）
 

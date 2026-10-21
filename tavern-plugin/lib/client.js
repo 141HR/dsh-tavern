@@ -11488,12 +11488,16 @@ function bindTavernFontZoom(node, win) {
 					return rpc("listSceneImageHistory", {}).then(function (reply) {
 						return ((reply && reply.items) || []).flatMap(function (item) {
 							return item.versions.map(function (version) {
-								return { gameTitle: item.title || item.cardName || "", cardName: item.cardName || "", turn: item.turn, gameDeleted: item.deleted === true,
+								return { gameId: item.sessionId || "", gameTitle: item.title || item.cardName || "", cardName: item.cardName || "", turn: item.turn, gameDeleted: item.deleted === true,
 									description: version.description, createdAt: version.createdAt,
 									url: "/api/dsh-tavern/scene-image-stored?" + new URLSearchParams({ chatId: item.chatId, key: item.key, versionId: version.id }).toString() };
 							});
 						}).sort(function (a, b) { return b.createdAt - a.createdAt; });
 					});
+				},
+				// Names of the given games, { [gameId]: { title, cardName } }; deleted games are left out (apiVersion 4).
+				getGames(gameIds) {
+					return rpc("gameTitles", { gameIds: Array.isArray(gameIds) ? gameIds : [] }).then(function (reply) { return (reply && reply.games) || {}; });
 				},
 				// The plugin's own data, not tied to a game; the same copy its host side reads (tavern.readPluginData).
 				readPluginData() {

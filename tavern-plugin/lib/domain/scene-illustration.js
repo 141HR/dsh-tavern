@@ -820,7 +820,7 @@ export function createSceneIllustrations(deps) {
         const versions = versionsOf(record).filter(item => item.attachment)
         if (typeof chatId !== 'string' || !versions.length || record.key + '.json' !== file.name || onlyChatId && chatId !== onlyChatId) continue
         const game = games.get(chatId)
-        items.push({ chatId, key: record.key, turn: Number(record.turn) || 0, cardName: game?.cardName || '', title: game?.title || '', deleted: !game,
+        items.push({ chatId, sessionId: typeof record.diagnosticContext?.sessionId === 'string' ? record.diagnosticContext.sessionId : '', key: record.key, turn: Number(record.turn) || 0, cardName: game?.cardName || '', title: game?.title || '', deleted: !game,
           versions: versions.map(item => ({ id: item.id, description: item.plan?.description || item.description || '', createdAt: Number(item.createdAt) || 0 })) })
       }
     }
