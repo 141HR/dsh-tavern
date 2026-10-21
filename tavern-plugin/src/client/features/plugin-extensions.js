@@ -591,10 +591,16 @@
 			tavernIllustrationDrafts.set(sessionId, turn, draft);
 			if (draft) setTimeout(function () { if (tavernIllustrationDrafts.get(sessionId, turn) === draft) tavernIllustrationDrafts.set(sessionId, turn, null); }, TAVERN_ILLUSTRATION_NOTICE_MS);
 		}
+		// `items` are the turn's plugin media: once the illustrator attaches a new one, planning is
+		// over and that item's own card shows the drawing, so the placeholder goes.
 		function TavernIllustrationDraft(props) {
 			const subscribe = React.useCallback(function (listener) { return tavernIllustrationDrafts.subscribe(listener); }, []);
 			const draft = React.useSyncExternalStore(subscribe, function () { return tavernIllustrationDrafts.get(props.sessionId, props.turn); });
+			const known = React.useRef({ draft: null, ids: null });
+			const ids = (props.items || []).map(function (item) { return item.id; });
+			if (known.current.draft !== draft) known.current = { draft: draft, ids: new Set(ids) };
 			if (!draft) return null;
+			if (draft.planning && ids.some(function (id) { return !known.current.ids.has(id); })) return null;
 			return React.createElement("figure", { className: "dsh-tavern-plugin-media dsh-tavern-illustration" },
 				React.createElement("div", { className: draft.failed ? "dsh-tavern-plugin-media-failed" : "dsh-tavern-plugin-media-pending", role: draft.failed ? "alert" : "status" }, draft.planning ? "正在整理画面…" : draft.text));
 		}
