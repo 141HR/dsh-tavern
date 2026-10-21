@@ -113,35 +113,18 @@
 				} catch (error) { setError(String(error.message || error)); await refresh(); }
 				finally { setBusy(false); }
 			}
-			const [updateStatus, setUpdateStatus] = React.useState({ phase: "loading", host: "cli" });
-			const updateStatusRef = React.useRef(updateStatus);
-			const updateActionRef = React.useRef({ pending: false, generation: 0 });
-			function publishUpdateStatus(next) {
-				updateStatusRef.current = next;
-				// Polls return fresh objects; unchanged status must not re-render the sidebar.
-				setUpdateStatus(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
-			}
-			function isUpdateBusy(status) {
-				return ["loading", "checking", "running", "cancelling", "blocked"].includes(status.phase);
-			}
-			async function callUpdate(method) {
-				const controller = new AbortController();
-				let timer;
-				try {
-					// Stop waiting for a lost response, never replay a mutation. The next status read reconciles it.
-					const timeout = new Promise(function (_resolve, reject) {
-						timer = window.setTimeout(function () {
-							const error = new Error("更新服务请求超时，正在核实状态");
-							error.retryable = true;
-							reject(error);
-							controller.abort();
-						}, 30000);
-					});
-					return await Promise.race([call(method, undefined, { signal: controller.signal }), timeout]);
-				} finally { window.clearTimeout(timer); }
-			}
-			const updateStartedAtRef = React.useRef(0);
-			const updateRecoveryRef = React.useRef({ sawOffline: false, reloading: false });
+            const [updateStatus, setUpdateStatus] = React.useState({ phase: "loading", host: "cli" });
+            const updater = React.useRef(null);
+            React.useEffect(function () {
+                const controller = createUpdateStatusController({ call, confirm: askConfirm, errors: tavernErrorHub, browser: window });
+                updater.current = controller;
+                const unsubscribe = controller.subscribe(() => setUpdateStatus(controller.getSnapshot()));
+                controller.start();
+                return () => { unsubscribe(); controller.stop(); updater.current = null; };
+            }, []);
+            const checkUpdate = () => updater.current?.check();
+            const performUpdate = () => updater.current?.perform();
+            const cancelUpdate = () => updater.current?.cancel();
 			const lastModeSession = React.useRef(null);
 			const fileRef = React.useRef(null);
 			const saveImportFile = React.useRef(null);
@@ -191,9 +174,6 @@
 					|| (latest.message && latest.message.indexOf("已不在宿主列表中") >= 0 && latest.message.indexOf(current) >= 0)) setError("");
 			}, [current, summaries]);
 			function call(method, args, requestOptions) { return rpc(method, args, undefined, requestOptions); }
-			function isMissingUpdateApiError(error) {
-				return String(error && error.message || error || "").indexOf("未知方法: getUpdateStatus") >= 0;
-			}
 			function notifyDataChanged(kinds) {
 				notifyTavernDataChanged(kinds, "sidebar");
 			}
@@ -228,63 +208,6 @@
 			React.useEffect(function () {
 				return function () { playPrewarmRef.current.cancel(); };
 			}, []);
-			React.useEffect(function () {
-				let stopped = false;
-				let received = false;
-				let pending = false;
-				let failures = 0;
-				async function refreshUpdateStatus() {
-					if (stopped || pending || updateActionRef.current.pending) return;
-					const generation = updateActionRef.current.generation;
-					pending = true;
-					try {
-						const result = await callUpdate("getUpdateStatus");
-						if (!stopped && generation === updateActionRef.current.generation && !updateActionRef.current.pending && result && result.status) {
-							received = true;
-							failures = 0;
-							tavernErrorHub.resolve("更新状态");
-							const status = result.status;
-							const completedInThisPage = status.phase === "completed" && updateStartedAtRef.current > 0 && Number(status.completedAt || 0) >= updateStartedAtRef.current;
-							const next = status.phase === "completed" && !completedInThisPage ? { ...status, phase: "idle", host: status.host || "cli" } : status;
-							// Ignore reads begun before an update action, even if they finish afterward.
-							publishUpdateStatus(next);
-						}
-					} catch (err) {
-							if (stopped || generation !== updateActionRef.current.generation || updateActionRef.current.pending) return;
-							failures += 1;
-							// Only this read-only poll gets a startup grace period. Never replay startUpdate.
-							if ((err && err.retryable || err instanceof TypeError) && failures < 3) return;
-							if (isMissingUpdateApiError(err)) {
-								if (!received) publishUpdateStatus({ phase: "restart-required", host: "desktop" });
-							} else {
-								if (!received && !["running", "cancelling", "blocked"].includes(updateStatusRef.current.phase)) publishUpdateStatus({ phase: "failed", host: "cli", error: String(err && err.message || err) });
-								tavernErrorHub.report("更新状态", err);
-							}
-						} finally { pending = false; }
-				}
-				refreshUpdateStatus();
-				const timer = window.setInterval(refreshUpdateStatus, 2500);
-				return function () { stopped = true; window.clearInterval(timer); };
-			}, []);
-			React.useEffect(function () {
-				if (updateStatus.phase !== "running" || updateStatus.host === "desktop") return;
-				let stopped = false;
-				const recovery = updateRecoveryRef.current;
-				async function probeRestartedService() {
-					try {
-						const response = await window.fetch(window.location.origin + "/?tavern-update-probe=" + Date.now(), { cache: "no-store" });
-						if (!stopped && response.ok && recovery.sawOffline && !recovery.reloading) {
-							recovery.reloading = true;
-							window.location.reload();
-						}
-					} catch (error) {
-						if (!stopped) recovery.sawOffline = true;
-					}
-				}
-				probeRestartedService();
-				const timer = window.setInterval(probeRestartedService, 400);
-				return function () { stopped = true; window.clearInterval(timer); };
-			}, [updateStatus.phase, updateStatus.host]);
 			React.useEffect(function () {
 				if (!currentSummary || currentSummary.blank) return;
 				notifyDataChanged(["sessions"]);
@@ -884,65 +807,6 @@
 					return forkConversation(item, title, request.turn);
 				});
 			}, [history, summaries, busy]);
-			async function checkUpdate() {
-				const status = updateStatusRef.current;
-				if (updateActionRef.current.pending || isUpdateBusy(status) || ["restart-required", "installed-restart-required", "package-managed"].includes(status.phase)) return;
-				updateActionRef.current.pending = true;
-				updateActionRef.current.generation += 1;
-				publishUpdateStatus({ ...status, phase: "checking", host: status.host || "cli", checkedAt: Date.now(), error: "" });
-				try {
-					const result = await callUpdate("checkUpdate");
-					if (result && result.status) publishUpdateStatus(result.status);
-				} catch (err) {
-					publishUpdateStatus({ ...status, phase: "check-failed", host: status.host || "cli", error: String(err && err.message || err) });
-					tavernErrorHub.report("检查更新", err);
-				} finally {
-					updateActionRef.current.pending = false;
-					updateActionRef.current.generation += 1;
-				}
-			}
-			async function performUpdate() {
-				const status = updateStatusRef.current;
-				if (updateActionRef.current.pending || !["update-available", "repair-required"].includes(status.phase)) return;
-				// Lock before opening the confirmation so repeated clicks cannot launch two requests.
-				updateActionRef.current.pending = true;
-				updateActionRef.current.generation += 1;
-				try {
-					const repairing = status.phase === "repair-required";
-					if (!await askConfirm(repairing
-						? "将重新安装当前构建以修复上次未完成的更新，期间会短暂断开。人物卡、资料和对话数据会保留。\n确定修复安装吗？"
-						: "更新期间会短暂断开，人物卡、资料和对话数据不会受到影响。\n确定更新到 GitHub 最新版吗？")) return;
-					updateStartedAtRef.current = Date.now();
-					updateRecoveryRef.current = { sawOffline: false, reloading: false };
-					publishUpdateStatus({ ...status, phase: "running", host: status.host || "cli", startedAt: updateStartedAtRef.current, cancellable: false, error: "" });
-					const result = await callUpdate("startUpdate");
-					if (result && result.status) publishUpdateStatus(result.status);
-				} catch (err) {
-					// A lost response does not prove that the installer stopped. Let the read-only poll reconcile it.
-					publishUpdateStatus({ ...updateStatusRef.current, error: "更新请求结果尚未确认，正在核实状态：" + String(err && err.message || err) });
-					tavernErrorHub.report("插件更新", err);
-				} finally {
-					updateActionRef.current.pending = false;
-					updateActionRef.current.generation += 1;
-				}
-			}
-			async function cancelUpdate() {
-				const status = updateStatusRef.current;
-				if (updateActionRef.current.pending || status.phase !== "running" || status.cancellable !== true) return;
-				updateActionRef.current.pending = true;
-				updateActionRef.current.generation += 1;
-				publishUpdateStatus({ ...status, phase: "cancelling", error: "" });
-				try {
-					const result = await callUpdate("cancelUpdate");
-					if (result && result.status) publishUpdateStatus(result.status);
-				} catch (err) {
-					publishUpdateStatus({ ...updateStatusRef.current, error: "取消请求结果尚未确认，正在核实状态：" + String(err && err.message || err) });
-					tavernErrorHub.report("取消更新", err);
-				} finally {
-					updateActionRef.current.pending = false;
-					updateActionRef.current.generation += 1;
-				}
-			}
 			const h = React.createElement;
 			const collapsedSidebar = collapsed ? h(React.Fragment, null,
 				h("div", { className: "dsh-tavern-sidebar collapsed" },
@@ -1180,7 +1044,7 @@
 			const updateHostLabel = updateStatus.phase === "package-managed" ? "插件安装版" : updateStatus.host === "desktop" ? "Desktop 版" : (updateStatus.host === "android" ? "Android 版" : "命令行版");
 			// 已是最新且无警告时，结果直接写在按钮上，不再单占一行（手机侧栏高度紧张）。
 			const upToDateQuiet = updateStatus.phase === "up-to-date" && !updateStatus.checkWarning;
-			const checkingOrRunning = isUpdateBusy(updateStatus);
+			const checkingOrRunning = updater.current?.isBusy(updateStatus) ?? true;
 			const cancelSupported = ["running", "cancelling"].includes(updateStatus.phase) && updateStatus.cancellable === true;
 			const updateActions = updateStatus.phase === "package-managed"
 				? h("details", { className: "dsh-tavern-update-actions" },

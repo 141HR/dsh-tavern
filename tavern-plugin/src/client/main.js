@@ -841,6 +841,7 @@ window.__ModuleLoader__.load({
 
 // @include features/card-list.js
 
+// @include-domain update-status-controller.js
 // @include features/sidebar.js
 
 // @include features/scene-images.js
