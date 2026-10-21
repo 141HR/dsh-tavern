@@ -21,6 +21,36 @@ function str(value) {
   return typeof value === 'string' ? value : ''
 }
 
+// Only recognized panels are removed: details may also contain actual story prose.
+function stripReplyPanels(raw) {
+  let text = raw.replace(/<(状态栏|status_bar|UpdateVariable|visual_cards|thinking|think)(?=[\s>])[^>]*>[\s\S]*?<\/\s*\1\s*>/gi, '')
+    .replace(/<StatusPlaceHolder(?:Impl)?\b[^>]*\/?>/gi, '')
+  const stack = [], panels = []
+  for (const match of text.matchAll(/<\/?details\b[^>]*>/gi)) {
+    if (!/^<\//.test(match[0])) stack.push(match.index)
+    else if (stack.length) {
+      const start = stack.pop(), end = match.index + match[0].length
+      const block = text.slice(start, end)
+      const summary = block.match(/<summary\b[^>]*>([\s\S]*?)<\/summary\s*>/i)?.[1] || ''
+      if (/状态|属性|面板|库存|物品栏|status|stats|inventory/i.test(summary)) panels.push([start, end])
+    }
+  }
+  let end = 0, result = ''
+  for (const [start, stop] of panels.sort((a, b) => a[0] - b[0])) {
+    if (start < end) continue
+    result += text.slice(end, start)
+    end = stop
+  }
+  return (result + text.slice(end)).replace(/(?:[ \t]*\r?\n){3,}/g, '\n\n').trim()
+}
+
+export function styleReferenceReplyText(value) {
+  const raw = str(value).trim()
+  const text = stripReplyPanels(raw) || raw
+  const limit = 6000, head = 4000, separator = '\n……\n'
+  return text.length <= limit ? text : text.slice(0, head) + separator + text.slice(-(limit - head - separator.length))
+}
+
 export function readStyleReference(args) {
   const book = str(args?.book).trim().replace(/^《|》$/g, '')
   const author = str(args?.author).trim()
@@ -105,7 +135,7 @@ export function createStyleReferenceRecall({ runAgent, selection, beginTask, sys
         selection: selection(chat), webSearchEnabled: false, signal,
         backgroundTasks: { variables: false, posture: false, characterDesign: false },
         system: systemPrompt(),
-        messages: [{ role: 'user', content: [{ type: 'text', text: '【刚写完的正文】\n' + str(latest.sourceText || latest.text).slice(-2400) + retryText(guidance, replaced) }] }],
+        messages: [{ role: 'user', content: [{ type: 'text', text: '【刚写完的正文】\n' + styleReferenceReplyText(latest.sourceText || latest.text) + retryText(guidance, replaced) }] }],
         tools: [STYLE_REFERENCE_SUBMIT_TOOL],
         maxToolCalls: 3,
         stopToolsWhen: () => submitted !== undefined,

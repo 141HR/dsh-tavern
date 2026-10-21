@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createStyleReferenceRecall, latestStyleReference, readStyleReference, rememberStyleReference, styleReferenceFor } from '../tavern-plugin/lib/domain/style-reference.js'
+import { styleReferenceReplyText, createStyleReferenceRecall, latestStyleReference, readStyleReference, rememberStyleReference, styleReferenceFor } from '../tavern-plugin/lib/domain/style-reference.js'
 import { createContextPlanner } from '../tavern-plugin/lib/domain/context-planner.js'
 import { normalizeBackgroundTasks, normalizePlayDefaults } from '../tavern-plugin/lib/domain/tavern-settings.js'
 
@@ -56,11 +56,12 @@ test('后台回忆提交后写入本局，供下一轮使用', async () => {
       return { traceSessionId: 'bg' }
     }
   })
-  const chat = { sessionId: 's', messages: [{ role: 'user', text: '走吧' }, { role: 'assistant', turn: 4, sourceText: '雨落在河面上。' }] }
+  const chat = { sessionId: 's', messages: [{ role: 'user', text: '走吧' }, { role: 'assistant', turn: 4, sourceText: '雨落在河面上。\n<details><summary>人物状态</summary>' + '视线：窗外。'.repeat(1000) + '<details><summary>物品</summary>库存</details></details><状态栏>心情：平静</状态栏>' }] }
   const result = await recall({ chat, signal: new AbortController().signal })
   assert.equal(result.book, '边城')
   assert.equal(request.task, 'style-reference')
   assert.match(request.messages[0].content[0].text, /雨落在河面上/)
+  assert.doesNotMatch(request.messages[0].content[0].text, /视线|库存|心情|details|状态栏/)
   assert.deepEqual(saved.styleReferences, [{ book: '边城', author: '沈从文', quote: '小溪流下去，绕山岨流。', afterTurn: 4 }])
 })
 
@@ -101,4 +102,17 @@ test('选段提示词来自系统提示词「文风联想选段」：按题材�
     runAgent: async input => { system = input.system; input.onToolCall({ name: 'style_reference_submit', arguments: { book: '书', author: '作者', quote: '一段' } }); return {} } })
   await recall({ chat: { sessionId: 's', messages: [{ role: 'assistant', turn: 2, text: '正文' }] } })
   assert.equal(system, '自定义选段要求')
+})
+
+
+test('文风正文保留普通折叠剧情、首尾和空内容兜底', () => {
+  const prose = '开场。<details><summary>回忆</summary>“那年下着雨。”</details>结尾。'
+  assert.equal(styleReferenceReplyText(prose + '<状态栏>心情</状态栏>'), prose)
+  assert.equal(styleReferenceReplyText('<details><summary>正文</summary>故事</details>'), '<details><summary>正文</summary>故事</details>')
+  assert.equal(styleReferenceReplyText(''), '')
+  assert.equal(styleReferenceReplyText('<状态栏>只有状态</状态栏>'), '<状态栏>只有状态</状态栏>')
+  assert.equal(styleReferenceReplyText('正文<UpdateVariable>patch</UpdateVariable><visual_cards>panel</visual_cards><StatusPlaceHolderImpl/>'), '正文')
+  const long = styleReferenceReplyText('开场' + '文'.repeat(7000) + '结尾')
+  assert.equal(long.length, 6000)
+  assert.ok(long.startsWith('开场') && long.endsWith('结尾'))
 })
