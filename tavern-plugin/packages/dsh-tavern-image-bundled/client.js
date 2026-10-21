@@ -1974,11 +1974,24 @@ function versionsOf(jobId) {
       surface: { background: 'transparent', color: 'var(--dsw-alias-label-primary)' },
       row: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' },
       label: { fontSize: '13px', color: 'var(--dsw-alias-label-secondary)', minWidth: '92px' },
-      input: { background: 'var(--dsw-specific-input-major)', color: 'var(--dsw-alias-label-primary)', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '7px', padding: '6px 9px', fontSize: '13px' },
+      input: { backgroundColor: 'var(--dsw-specific-input-major)', color: 'var(--dsw-alias-label-primary)', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '8px', padding: '7px 10px', fontSize: '13px', lineHeight: '18px' },
       card: { border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '10px', padding: '12px 14px', margin: '10px 0', background: 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 2%, transparent)' },
       tab: (on) => ({ padding: '5px 13px', borderRadius: '8px', border: '1px solid ' + (on ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-border-l2)'), background: on ? 'color-mix(in srgb, var(--dsw-alias-brand-primary) 20%, transparent)' : 'color-mix(in srgb, var(--dsw-alias-label-tertiary) 4%, transparent)', color: on ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-secondary)', cursor: 'pointer', fontSize: '13px' }),
       badge: (ok) => ({ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: ok ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-error-primary)', marginRight: '6px' }),
     }
+
+    // 设置页的原生控件统一外观：自画下拉箭头、焦点用强调色描边（行内样式管不到伪类和 appearance）。
+    const SETTINGS_CSS = `
+.dti-settings select { appearance: none; -webkit-appearance: none; padding-right: 30px !important; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%238a8f98' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; text-overflow: ellipsis; }
+.dti-settings select:disabled { cursor: default; opacity: .6; }
+.dti-settings select:focus, .dti-settings input:focus, .dti-settings textarea:focus { outline: none;
+  border-color: var(--dsw-alias-brand-primary) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); }
+.dti-settings input[type=checkbox] { accent-color: var(--dsw-alias-brand-primary); }
+.dti-field-label { font-size: 12px; color: var(--dsw-alias-label-secondary); margin-bottom: 6px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.dti-field-label small { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+`
 
     function WorkflowGraphEditor(props) {
       const file = String(props?.file || '')
@@ -2593,33 +2606,10 @@ function versionsOf(jobId) {
       const workflows = data.workflows || []
       const effective = config.plannerEffective || {}
 
-      // ---- 顶部状态 ----
-      // ---- 顶部状态 ----
+      // ---- 当前渠道 ----
       const imageBackend = String(config.imageBackend || 'comfyui')
       const providers = Array.isArray(data.imageProviders) ? data.imageProviders : []
       const selectedChannel = (Array.isArray(config.imageChannels) ? config.imageChannels : []).find(channel => channel.id === config.activeImageChannel && channel.provider === imageBackend)
-      const comfyOnline = imageBackend === 'comfyui' && Boolean(data.comfy && data.comfy.ok)
-      const externalStatus = selectedChannel ? channelTestStatuses[selectedChannel.id] : null
-      const externalConnected = Boolean(externalStatus?.ok && externalStatus.status === 'reachable')
-      const backendLabel = imageBackend === 'comfyui'
-        ? 'ComfyUI'
-        : ((providers.find(item => item.id === imageBackend) || {}).label || imageBackend)
-      const head = h('div', { style: Object.assign({}, S.card, { marginTop: 0 }) },
-        h('div', { style: { fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
-          h('span', { style: imageBackend === 'comfyui' ? S.badge(comfyOnline) : Object.assign({}, S.badge(externalConnected), (!externalStatus || externalStatus.status === 'configured') ? { background: 'var(--dsw-alias-label-tertiary)' } : {}) }),
-          h('span', null, imageBackend === 'comfyui'
-            ? (comfyOnline ? ('ComfyUI 在线' + (data.comfy.version ? ' ' + data.comfy.version : '') + (data.comfy.device ? '　' + data.comfy.device : '')) : ('ComfyUI 没开' + (data.comfy && data.comfy.error ? '：' + data.comfy.error : '')))
-            : (selectedChannel ? selectedChannel.name : backendLabel + ' · 尚未选择渠道') + (externalStatus?.checking ? ' · 检测中…' : externalConnected ? ' · 连接可用' : externalStatus?.status === 'configured' ? ' · 已配置，尚未验证' : externalStatus ? ' · 连接失败'
-              : !selectedChannel ? '' : selectedChannel.authMode !== 'none' && !selectedChannel.hasApiKey && !selectedChannel.hasPassword ? ' · 还没填密钥' : ' · 已配置，尚未验证')),
-          imageBackend === 'comfyui' ? h('button', {
-            style: { fontSize: '11px', padding: '3px 10px', borderRadius: '7px', border: '1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 45%, transparent)', background: 'transparent', color: 'var(--dsw-alias-label-tertiary)', cursor: 'pointer' },
-            onClick: loadComfyStatus,
-          }, comfyStatus?.checking ? '检测中…' : '测试连接') : null,
-          imageBackend === 'comfyui' && comfyStatus && !comfyStatus.checking ? h('span', { style: { fontSize: '11px', color: comfyStatus.ok ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-error-primary)' } },
-            comfyStatus.ok ? ('✓ ' + (comfyStatus.ms || 0) + 'ms') : ('✗ ' + String(comfyStatus.error || '').slice(0, 60))) : null,
-        ),
-        note ? h('div', { style: { fontSize: '12px', marginTop: '6px', color: 'var(--dsw-alias-brand-primary)' } }, note) : null,
-      )
 
       // ---- 后台任务（正在跑什么、能不能取消）----
       function taskPanel() {
@@ -3065,26 +3055,24 @@ function versionsOf(jobId) {
                 h('span', { style: { fontSize: '13px', opacity: Number(config.tavernApi?.apiVersion) < 2 ? .65 : 1 } }, Number(config.tavernApi?.apiVersion) < 2 ? '自动记录明确的永久外貌变化（需要 Tavern API v2）' : '自动记录明确的永久外貌变化'),
               ),
             ),
-            h('div', { style: S.row },
-              h('span', { style: S.label }, '一轮几张'),
-              h('input', { type: 'number', min: 1, max: 8, value: config.plannerCount || 3, style: Object.assign({}, S.input, { width: '78px' }), onChange: e => save({ plannerCount: Number(e.target.value) || 3 }) }),
-              ['comfyui', 'sdwebui'].includes(imageBackend) ? h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '本地出图慢，建议 2-3') : null,
-            ),
-            h('div', { style: S.row },
-              h('span', { style: S.label }, '人物块'),
-              h('select', { value: config.traitMode || 'auto', style: S.input, onChange: e => save({ traitMode: e.target.value }) },
-                h('option', { value: 'auto' }, '自动（画面露才带露出版本）'),
-                h('option', { value: 'sfw' }, '只带常规版本'),
-                h('option', { value: 'all' }, '全都带上'),
-              ),
-            ),
+            h('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr)', gap: '8px 12px', marginTop: '14px' } },
+              h('div', null,
+                h('div', { className: 'dti-field-label' }, '一轮几张', ['comfyui', 'sdwebui'].includes(imageBackend) ? h('small', null, '本地出图慢，建议 2–3') : null),
+                h('input', { 'aria-label': '一轮几张', type: 'number', min: 1, max: 8, value: config.plannerCount || 3, style: Object.assign({}, S.input, { width: '100%', boxSizing: 'border-box' }), onChange: e => save({ plannerCount: Number(e.target.value) || 3 }) })),
+              h('div', null,
+                h('div', { className: 'dti-field-label' }, '人物块'),
+                h('select', { 'aria-label': '人物块', value: config.traitMode || 'auto', style: Object.assign({}, S.input, { width: '100%', boxSizing: 'border-box' }), onChange: e => save({ traitMode: e.target.value }) },
+                  h('option', { value: 'auto' }, '自动（画面露才带露出版本）'),
+                  h('option', { value: 'sfw' }, '只带常规版本'),
+                  h('option', { value: 'all' }, '全都带上'),
+                ))),
             h(ModelPicker, {
               label: '规划模型', providerKey: 'plannerProvider', modelKey: 'plannerModel', effortKey: 'plannerEffort',
-              hint: '不选 = 跟随 Tavern 后台模型',
+              hint: '写每张图的画面和提示词；不选就跟随 Tavern 后台模型',
             }),
             h(ModelPicker, {
               label: '看图模型', providerKey: 'visionProvider', modelKey: 'visionModel', effortKey: 'visionEffort',
-              onlyVision: true, hint: '只列支持看图的模型；设计角色读参考图时用它',
+              onlyVision: true, hint: '设计角色时读参考图用，只列支持看图的模型',
             }),
           ),
           imageDisplayCard(),
@@ -4741,46 +4729,39 @@ function versionsOf(jobId) {
         const reason = llmReasoning[pv + '/' + md]
         const optStyle = {}
         const set = (patch) => setData(current => Object.assign({}, current, { config: Object.assign({}, current?.config || {}, patch) }))
-        return h('div', { style: { marginBottom: '8px' } },
-          h('div', { style: S.row },
-            h('span', { style: Object.assign({}, S.label, { minWidth: '86px' }) }, label),
+        const select = extra => Object.assign({}, S.input, { width: '100%', minWidth: 0, boxSizing: 'border-box' }, extra || {})
+        return h('div', { style: { marginTop: '14px' } },
+          h('div', { className: 'dti-field-label' }, label, hint ? h('small', null, hint) : null),
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr) minmax(88px, .6fr)', gap: '8px' } },
             h('select', {
-              value: pv, style: Object.assign({}, S.input, { flex: 1, minWidth: '150px' }),
+              'aria-label': label + ' 服务商', value: pv, style: select(),
               onChange: e => { const v = e.target.value; set({ [providerKey]: v, [modelKey]: '' }); save({ [providerKey]: v, [modelKey]: '' }); loadModels(v) },
             },
-              h('option', { value: '', style: optStyle }, '（不指定，跟随 Tavern 后台模型）'),
-              llmProviders.map(p => h('option', { key: p.id, value: p.id, style: optStyle }, p.name + '（' + p.id + '）')),
+              h('option', { value: '', style: optStyle }, '跟随 Tavern'),
+              llmProviders.map(p => h('option', { key: p.id, value: p.id, style: optStyle }, p.name)),
               pv && !llmProviders.some(p => p.id === pv) ? h('option', { value: pv, style: optStyle }, pv + '（当前值）') : null,
             ),
             h('select', {
-              value: md, style: Object.assign({}, S.input, { flex: 1, minWidth: '150px' }),
+              'aria-label': label + ' 模型', value: md, style: select(),
               onChange: e => { const v = e.target.value; set({ [modelKey]: v }); save({ [modelKey]: v }); if (v) loadReasoning(pv, v) },
               disabled: !pv,
             },
-              h('option', { value: '', style: optStyle }, pv ? '（选一个模型）' : '（先选提供商）'),
-              models.map(m => h('option', { key: m.id, value: m.id, style: optStyle }, m.name + (onlyVision ? (m.vision ? '　👁' : '') : '') + (m.id !== m.name ? '　' + m.id : ''))),
+              h('option', { value: '', style: optStyle }, pv ? '选择模型' : '跟随 Tavern 后台模型'),
+              models.map(m => h('option', { key: m.id, value: m.id, style: optStyle }, m.name + (onlyVision && m.vision ? '　👁' : ''))),
               md && !models.some(m => m.id === md) ? h('option', { value: md, style: optStyle }, md + '（当前值）') : null,
             ),
-          ),
-          h('div', { style: S.row },
-            h('span', { style: Object.assign({}, S.label, { minWidth: '86px' }) }, '推理等级'),
             h('select', {
-              value: ef, style: Object.assign({}, S.input, { width: '170px' }),
+              'aria-label': label + ' 推理等级', title: '推理等级', value: ef, style: select(),
               onChange: e => { set({ [effortKey]: e.target.value }); save({ [effortKey]: e.target.value }) },
               disabled: !reason,
             },
-              h('option', { value: '', style: optStyle }, reason ? '默认' : '（选模型后可选）'),
-              (reason?.efforts || []).map(x => h('option', { key: x.id, value: x.id, style: optStyle }, x.name + (x.id !== x.name ? '　' + x.id : ''))),
+              h('option', { value: '', style: optStyle }, '默认推理'),
+              (reason?.efforts || []).map(x => h('option', { key: x.id, value: x.id, style: optStyle }, x.name)),
             ),
-            hint ? h('span', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' } }, hint) : null,
           ),
         )
       }
 
-      /**
-       * 首次配置引导：新装的人打开设置页，按三步走就能用。
-       * 三件都办好了就自己消失。
-       */
       function stylePresetCard() {
         const presets = Array.isArray(config.stylePresets) ? config.stylePresets : []
         const active = String(config.activePreset ?? '')
@@ -5120,8 +5101,10 @@ function versionsOf(jobId) {
 
       const tabs = [['plan', '设置'], ['people', '人物库'], ['worldbook', '世界书'], ['gallery', '历史图']]
       const section = text => h('div', { style: { fontSize: '14px', fontWeight: 600, margin: '18px 0 2px', color: 'var(--dsw-alias-label-primary)' } }, text)
-      return h('div', { style: Object.assign({}, S.surface, { padding: '4px 2px 20px', fontSize: '13px' }) },
-        head,
+      return h('div', { className: 'dti-settings', style: Object.assign({}, S.surface, { padding: '4px 2px 20px', fontSize: '13px' }) },
+        h('style', null, SETTINGS_CSS),
+        // 连接状态就在「渠道」里的测试按钮旁边，顶部不再单放一个状态框；这里只留保存等操作的提示。
+        note ? h('div', { role: 'status', style: { fontSize: '12px', margin: '0 0 8px', color: 'var(--dsw-alias-brand-primary)' } }, note) : null,
         taskPanel(),
         h('div', { style: S.row }, tabs.map(([key, label]) => h('button', { key, style: S.tab(tab === key), onClick: () => setTab(key) }, label))),
         // 设置页按第一次配置的顺序排：先接渠道，再定每轮怎么配图，最后是画风。
