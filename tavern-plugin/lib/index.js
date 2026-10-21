@@ -1,3 +1,4 @@
+import { createChatWrites } from './domain/chat-writes.js'
 import { upgradeReferences, upgradedAnchor } from './domain/session-upgrade-references.js'
 import { producerSource } from './domain/message-source.js'
 import { sceneSaveKeyMap } from './domain/scene-save.js'
@@ -1013,14 +1014,6 @@ export async function apply(ctx) {
     return chat
   }
   async function readChatRevision(chatId, revision) { return await chatPersistence.readRevision(chatId, revision) }
-  async function rawWriteChat(chat, metadata) {
-    if (deletedChatIds.has(chat.id)) throw new Error('对话已删除')
-    return await chatPersistence.write(chat, metadata)
-  }
-  async function rawUpdateChat(chatId, mutation, metadata) {
-    if (deletedChatIds.has(chatId)) throw new Error('对话已删除')
-    return await chatPersistence.update(chatId, mutation, metadata)
-  }
   let conversationRegistry
   async function syncChatSummary(chat) {
     if (!conversationRegistry || chat === undefined) return
@@ -1028,54 +1021,15 @@ export async function apply(ctx) {
     catch (error) { console.warn('dsh-tavern: 会话摘要索引同步失败，将在下次启动修复:', str(error && error.message || error)) }
   }
   const deletedChatIds = new Set()
-  async function writeChat(chat, metadata) {
-    if (deletedChatIds.has(chat.id)) throw new Error('对话已删除')
-    const saved = await rawWriteChat(chat, metadata)
-    candidateWorldbookPreparation?.changed(saved,metadata)
-    if (!str(metadata?.source).startsWith('candidate.mailbox.')) await syncChatSummary(saved)
-    void coordinationEvents?.publish(saved.sessionId)
-    scheduleTemplateSync(saved, metadata)
-    if (!str(metadata?.source).startsWith('compaction.')) queueAutoCompaction(saved.sessionId)
-    return saved
-  }
-  async function writeChatHeader(chat, baseline, metadata) {
-    if (deletedChatIds.has(chat.id)) throw new Error('对话已删除')
-    const saved = await chatPersistence.writeHeader(chat, baseline, metadata)
-    candidateWorldbookPreparation?.changed(saved,metadata)
-    await syncChatSummary(chat)
-    void coordinationEvents?.publish(saved.sessionId)
-    scheduleTemplateSync(saved, metadata)
-    queueAutoCompaction(saved.sessionId)
-    return saved
-  }
-  async function updateChat(chatId, mutation, metadata) {
-    if (deletedChatIds.has(chatId)) throw new Error('对话已删除')
-    const saved = await rawUpdateChat(chatId, mutation, metadata)
-    candidateWorldbookPreparation?.changed(saved,metadata)
-    await syncChatSummary(saved)
-    if (saved !== undefined) {
-      void coordinationEvents?.publish(saved.sessionId)
-      // A Skill switch changes future availability, not story/template data.
-      // Do not let this settings write trigger maintenance that rewrites history.
-      if (metadata?.source !== 'writing-skill.switch') {
-        scheduleTemplateSync(saved, metadata)
-        if (!str(metadata?.source).startsWith('compaction.')) queueAutoCompaction(saved.sessionId)
-      }
-    }
-    return saved
-  }
-  async function patchChat(chatId, revision, changes, metadata) {
-    if (deletedChatIds.has(chatId)) throw new Error('对话已删除')
-    const saved = await chatPersistence.patch(chatId, revision, changes, metadata)
-    candidateWorldbookPreparation?.changed(saved,metadata)
-    if (saved) {
-      if (!str(metadata?.source).startsWith('candidate.mailbox.')) await syncChatSummary(saved)
-      void coordinationEvents?.publish(saved.sessionId)
-      scheduleTemplateSync(saved, metadata)
-      queueAutoCompaction(saved.sessionId)
-    }
-    return saved
-  }
+  const { write: writeChat, writeHeader: writeChatHeader, update: updateChat, patch: patchChat, writeRaw: rawWriteChat } = createChatWrites({
+    persistence: chatPersistence,
+    isDeleted: id => deletedChatIds.has(id),
+    candidatesChanged: (saved, metadata) => candidateWorldbookPreparation?.changed(saved, metadata),
+    syncSummary: syncChatSummary,
+    publish: sessionId => coordinationEvents?.publish(sessionId),
+    syncTemplates: scheduleTemplateSync,
+    queueCompaction: queueAutoCompaction
+  })
   // Header fields only: `mutate` gets and returns those fields; the difference is patched,
   // never the history. A concurrent write retries; storage without slices, a write outside
   // `fields` or a lasting race falls back to the whole-Chat update.
