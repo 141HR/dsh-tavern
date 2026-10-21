@@ -91,6 +91,7 @@
 			const [busy, setBusy] = React.useState(false);
 			const [notice, setNotice] = React.useState("");
 			const loadRevision = React.useRef(0);
+			const galleryRevision = React.useRef(0);
 			const load = React.useCallback(async function () {
 				const requested = ++loadRevision.current;
 				const sessionId = props.gallerySessionId;
@@ -103,13 +104,14 @@
 				finally { if (requested === loadRevision.current) setBusy(false); }
 			}, [props.gallerySessionId]);
 			React.useEffect(function () {
+				++galleryRevision.current;
 				++loadRevision.current;
 				setItems(null); setPicked({}); setPicking(false); setNotice(""); void load();
 				function changed() { void load(); }
 				window.addEventListener("dsh-tavern-image-changed", changed);
 				// A plugin attached or removed a picture.
 				const stopPlugin = props.gallerySessionId ? tavernPluginMediaIndex.subscribe(props.gallerySessionId, changed) : function () {};
-				return function () { ++loadRevision.current; window.removeEventListener("dsh-tavern-image-changed", changed); stopPlugin(); };
+				return function () { ++galleryRevision.current; ++loadRevision.current; window.removeEventListener("dsh-tavern-image-changed", changed); stopPlugin(); };
 			}, [load]);
 			const currentItems = items && items.sessionId === props.gallerySessionId ? items : null;
 			const rows = [];
@@ -135,21 +137,26 @@
 			const chosen = shots.filter(function (shot) { return picked[shot.id]; });
 			function toggle(shot, on) { setPicked(function (value) { const next = Object.assign({}, value); if (on) next[shot.id] = true; else delete next[shot.id]; return next; }); }
 			async function remove(list) {
+				const revision = galleryRevision.current;
+				const sessionId = props.gallerySessionId;
 				if (!list.length || !await askConfirm(list.length === 1 ? "删除第 " + list[0].item.turn + " 轮的这张图片？只移除图片，不影响正文与存档。" : "删除选中的 " + list.length + " 张图片？只移除图片，不影响正文与存档。")) return;
+				if (revision !== galleryRevision.current) return;
 				setBusy(true); setNotice("");
 				try {
 					const results = (await rpc("removeSceneImageHistory", {
-						sessionId: props.gallerySessionId,
+						sessionId: sessionId,
 						items: list.filter(function (shot) { return !shot.plugin; }).map(function (shot) { return { chatId: shot.item.chatId, key: shot.item.key, versionId: shot.version.id }; }),
 						pluginItems: list.filter(function (shot) { return shot.plugin; }).map(function (shot) { return shot.item.id; })
-					}, props.gallerySessionId)).results;
+					}, sessionId)).results;
 					const failed = results.filter(function (row) { return !row.ok; });
-					if (failed.length || list.length > 1) setNotice("已删除 " + (results.length - failed.length) + " 张" + (failed.length ? "，" + failed.length + " 张失败：" + failed[0].error : ""));
-					setPicked({}); setPicking(false);
+					if (revision === galleryRevision.current) {
+						if (failed.length || list.length > 1) setNotice("已删除 " + (results.length - failed.length) + " 张" + (failed.length ? "，" + failed.length + " 张失败：" + failed[0].error : ""));
+						setPicked({}); setPicking(false);
+					}
 					// Turns showing a removed picture refresh; this listener reloads the gallery too.
 					window.dispatchEvent(new CustomEvent("dsh-tavern-image-changed"));
-				} catch (e) { setNotice(String(e.message || e)); }
-				finally { setBusy(false); }
+				} catch (e) { if (revision === galleryRevision.current) setNotice(String(e.message || e)); }
+				finally { if (revision === galleryRevision.current) setBusy(false); }
 			}
 			return h("section", { className: "dsh-tavern-full-context dsh-tavern-gallery" + (picking ? " is-picking" : "") },
 				h("header", { className: "dsh-context-header" },
