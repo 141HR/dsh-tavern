@@ -23,3 +23,26 @@ test('隐藏注入、执行请求和思考时保留正文、工具、错误，�
   assert.equal(document.body.innerHTML, before)
   dom.window.close()
 })
+
+test('正文底栏保留宿主复制和酒馆分叉，只藏原生分支与酒馆之外的插件动作', () => {
+  const dom = new JSDOM(`<style>${css}</style><body class="dsh-tavern-shell-active">
+    <div data-turn-tail="21">
+      <div data-slot="conversation.chat.turnTail" style="display:contents"></div>
+      <div class="actions">
+        <button id="copy" type="button" aria-label="复制">复制</button>
+        <div data-slot="conversation.chat.assistant-actions" style="display:contents">
+          <button id="fork" type="button" class="dsh-tavern-message-fork" aria-label="从这一轮分叉">分叉</button>
+          <button id="feedback" type="button" aria-label="好的回答">反馈</button>
+        </div>
+        <button id="native-branch" type="button" aria-label="在新对话中分支">在新对话中分支</button>
+        <span>19:09</span>
+      </div>
+    </div></body>`)
+  const {document} = dom.window
+  const display = id => dom.window.getComputedStyle(document.getElementById(id)).display
+  assert.notEqual(display('copy'), 'none', '宿主的复制按钮应该留在正文底栏')
+  assert.notEqual(display('fork'), 'none', '酒馆的分叉按钮应该留在正文底栏')
+  assert.equal(display('feedback'), 'none', '酒馆之外的插件动作不进入游玩底栏')
+  assert.equal(display('native-branch'), 'none', '宿主的原生分支会绕开游戏状态，仍应藏掉')
+  dom.window.close()
+})
