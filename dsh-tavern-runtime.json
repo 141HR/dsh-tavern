@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "ec0e27defc8d3abdee367d38b3b2c35c3f3a2952",
-  "releaseSequence": 803,
+  "revision": "71de7e5bd8f96ddcdae94bae4b327901b0114bdb",
+  "releaseSequence": 804,
   "version": "3.0.1",
   "files": [
     {
@@ -226,8 +226,8 @@
     },
     {
       "path": "bin/installation-process.mjs",
-      "sha256": "37495f8116b21afce9fa0e60af059989b9155ea8f1ecc7f034c54b4d37101362",
-      "size": 38127
+      "sha256": "9c55828162a2f900b44b991f72a4695ace3060cd8accb7f717d95c41ec22bb3a",
+      "size": 38407
     },
     {
       "path": "bin/installation-receipt.mjs",
