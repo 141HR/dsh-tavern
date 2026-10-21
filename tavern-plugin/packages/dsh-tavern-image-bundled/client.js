@@ -5774,7 +5774,7 @@ function versionsOf(jobId) {
           ctx.slots?.inject?.('settings.section', () => ctx.slots.register({
             name: 'settings.section',
             id: 'dsh-tavern-image',
-            order: 47,
+            order: 111,
             label: () => '配图',
           }, SettingsPanel))
         } catch (error) {
