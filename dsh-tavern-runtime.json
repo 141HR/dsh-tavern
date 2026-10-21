@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "c88309f55053a1481e1fa7c841c9c10ad4766b4d",
-  "releaseSequence": 808,
+  "revision": "5f44d8cca227fa8a5ccc8aa43d3172738267921e",
+  "releaseSequence": 809,
   "version": "3.0.1",
   "files": [
     {
@@ -4831,13 +4831,13 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/BUNDLED-VERSION.json",
-      "sha256": "5fe607eae7de0b89e3f0d9806a74af7f484ee8064458d628699d34bae19f9e2b",
-      "size": 428
+      "sha256": "a0b90bf9071a13c7a8e047fd14a17b424af29f8304e18d555ec79f3e75ab561e",
+      "size": 243
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/client.js",
-      "sha256": "cd6dbbc58805aeaeff56d5b04aaca58a02d50b9433fe4d1084b1d10330a409a1",
-      "size": 417548
+      "sha256": "fadfd62dc178608036b2823013ee4b2c0a20092e347150fef1d6277a53f08010",
+      "size": 450429
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/console.html",
@@ -4871,8 +4871,8 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/character-import.js",
-      "sha256": "2d69b43e8c39be625db701a03caa124202af3ad36ea6febc8c0cc0671c4cfe53",
-      "size": 24083
+      "sha256": "529c5a1347c9ff043cd4cd197fbaee084d1449b3fd68d24d4342aef87c9caac9",
+      "size": 28081
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/comfy-simple.js",
@@ -4916,8 +4916,8 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/index.js",
-      "sha256": "d456189f42bafc0acc0a4d62dc277bc03293586c06443f367d3b5e6a418431de",
-      "size": 305424
+      "sha256": "19cf9069b7d9bdb66709b52ddb5fec1964e18808a1f97d23963ddfe2b488c84b",
+      "size": 315067
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/media-actions.js",
@@ -5131,28 +5131,13 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/package.json",
-      "sha256": "e8564011d20ec06803d79c41bfc73811c4a31ce7b49bf1b02b3561d696b8e1dc",
+      "sha256": "536547405ce99c0f825900fd8a193bab9078ae5f5d79db6d59b0c399467c6387",
       "size": 1609
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/README.md",
       "sha256": "f04f523954f4d963fa5815a12f2d377d3e2aa58bd6ebadd86ab9dac7869b94ac",
       "size": 30099
-    },
-    {
-      "path": "tavern-plugin/packages/dsh-tavern-image-bundled/scripts/Install-DshTavernImage.cmd",
-      "sha256": "87f75a651728742f07551f63acc5d4e7887c3cdec505029364d670cfec3b51e8",
-      "size": 276
-    },
-    {
-      "path": "tavern-plugin/packages/dsh-tavern-image-bundled/scripts/install-plugin.ps1",
-      "sha256": "c0bd2ae482d0fcf4f7ed093f44431817737ab9142b6e8926cf93149a5d6d8c3a",
-      "size": 32722
-    },
-    {
-      "path": "tavern-plugin/packages/dsh-tavern-image-bundled/scripts/Package-DshTavernImage.ps1",
-      "sha256": "2c8823cc9f4626e7181fb5adbc4fd6a509a9a3276c9238b3878a11522c7ddf96",
-      "size": 5363
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/workflows/.gitkeep",
@@ -5168,6 +5153,11 @@
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/世界书-通用生图规则.json",
       "sha256": "84412e7ac897f817e64b9465e8d14f73829d16cbeb6f9ce2206c51c0c32c119c",
       "size": 12112
+    },
+    {
+      "path": "tavern-plugin/packages/dsh-tavern-image-bundled/世界书-通用生图规则.txt",
+      "sha256": "1d94301ccc90994251d937997125c8c9833b94360800f629370393311508155c",
+      "size": 11141
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-remote/.gitignore",
