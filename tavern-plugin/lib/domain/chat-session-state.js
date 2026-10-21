@@ -2,7 +2,7 @@ import { createImmutableTurnFields } from './freeze-json.js'
 import { createMvuReceiptIndex } from './mvu-receipt-index.js'
 import { copyJsonTree } from './copy-json-tree.js'
 import { copyLazyHistoryHeader } from './lazy-history-read.js'
-import { rollbackAvailability, hasRollbackMessages, failedTurnReplayAvailability, foregroundSuppressedTurns, supersededRegenerationErrorTurns, supersededRegenerationTurns, projectedReplyTurns, regenerationInputTurns } from './rollback-surface.js'
+import { rollbackAvailability, hasRollbackMessages, failedTurnReplayAvailability, foregroundSuppressedTurns, supersededRegenerationErrorTurns, supersededRegenerationTurns, projectedReplyTurns, regenerationInputTurns, keptPlayerInputTurns } from './rollback-surface.js'
 import { isRescuedHistoryMessage } from './chat-history-rescue.js'
 import { canUndoRollback } from './surface-restoration.js'
 import { failedErrorTurnStates } from './failed-error-visibility.js'
@@ -182,10 +182,28 @@ export function createSessionStateView({ activity: activityOf, evidence: evidenc
     const shownTurns = new Set(Object.values(mappings || {}).map(Number))
     const attemptTurns = regenerationInputTurns(evidence.events || [])
       .filter(turn => shownTurns.has(turn) || chat.regenInProgress !== true)
+    const suppressedDshTurns = [...new Set([...foregroundSuppressedTurns(chat, evidence.events || []), ...attemptTurns])]
+      .filter(turn => !replacingTurns.includes(turn)).sort((left, right) => left - right)
+    // A failed input can be adopted by a retry: its native turn stays suppressed while
+    // the drawn body lives in another turn. Keep the player's nearest message visible
+    // for the last reply and for the attempt now running, so the page still shows what
+    // the round is answering. Older failed residue keeps the existing hiding rules.
+    const replyTurns = new Set(shownTurns)
+    for (const message of chat.messages || []) {
+      if (message?.role === 'assistant' && message.greeting !== true && Number(message.turn) > 0) replyTurns.add(Number(message.turn))
+    }
+    for (const turn of supersededTurns) replyTurns.delete(Number(turn))
+    for (const turn of replacingTurns) replyTurns.delete(Number(turn))
+    let openTurn = null
+    if (chat.regenInProgress === true) {
+      for (const event of evidence.events || []) if (event?.type === 'turn/start') openTurn = Number(event.data?.turn)
+    }
+    if (openTurn > 0) replyTurns.add(openTurn)
+    const keptInputTurns = keptPlayerInputTurns({ events: evidence.events || [], replyTurns: [...replyTurns], suppressed: suppressedDshTurns, openTurn })
     const result = {
       hiddenDshErrorTurns: chat.hiddenDshErrorTurns || [],
-      suppressedDshTurns: [...new Set([...foregroundSuppressedTurns(chat, evidence.events || []), ...attemptTurns])]
-        .filter(turn => !replacingTurns.includes(turn)).sort((left, right) => left - right),
+      suppressedDshTurns,
+      keptInputTurns,
       replacingDshTurns: replacingTurns,
       supersededDshTurns: supersededTurns,
       regeneratedDshTurns: mappings,

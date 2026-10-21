@@ -172,3 +172,27 @@ test('映射指向的回合不会被当成旧回合隐藏', () => {
   assert.equal(view.regeneratedDshTurns[4], 7)
   assert.deepEqual(view.supersededDshTurns, [9], '映射指向的第 7 轮保留；没有映射的旧流才隐藏')
 })
+
+// 失败轮的玩家输入被重试采用：输入和正文不在同一个原生回合，作废名单会连输入
+// 一起收掉。视图要指明保留哪一条输入，客户端只藏失败残留和触发卡。
+const adoptedEvents = [
+  { seq: 0, type: 'turn/start', data: { turn: 1 } },
+  { seq: 1, type: 'user/message', surfaceOp: 'append', data: { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '第一句' }] } },
+  { seq: 2, type: 'assistant/message', surfaceOp: 'append', data: { turn: 1, step: 1, message: { source: { kind: 'model', provider: 'p', model: 'm' }, content: [{ type: 'text', text: '第一段' }] } } },
+  { seq: 3, type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+  { seq: 4, type: 'turn/start', data: { turn: 2 } },
+  { seq: 5, type: 'user/message', surfaceOp: 'append', data: { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '第二句' }] } },
+  { seq: 6, type: 'turn/end', data: { turn: 2, reason: { kind: 'error' } } },
+  { seq: 7, type: 'turn/start', data: { turn: 3 } },
+  { seq: 8, type: 'user/message', surfaceOp: 'append', data: { role: 'user', source: { kind: 'plugin:dsh-tavern-regen' }, content: [{ type: 'text', text: '第二句' }] } },
+  { seq: 9, type: 'assistant/message', surfaceOp: 'append', data: { turn: 3, step: 1, message: { source: { kind: 'model', provider: 'p', model: 'm' }, content: [{ type: 'text', text: 'Pass' }] } } },
+  { seq: 10, type: 'turn/end', data: { turn: 3, reason: { kind: 'completed' } } }
+]
+const adoptedSession = { id: 's', events: adoptedEvents, surface: { nodes: [1, 2, 5, 8, 9] } }
+
+test('失败轮的输入被重试采用时，视图保留那一轮的玩家输入', () => {
+  const view = fields.rollback({ id: 'c', sessionId: 's', mode: 'story', regenInProgress: true,
+    messages: [{ role: 'assistant', turn: 1, text: '第一段' }], suppressedDshTurns: [2] }, { session: adoptedSession, events: adoptedEvents })
+  assert.deepEqual(view.keptInputTurns, [2])
+  assert.ok(view.suppressedDshTurns.includes(2), '作废轮仍然作废，只是输入不跟着藏')
+})

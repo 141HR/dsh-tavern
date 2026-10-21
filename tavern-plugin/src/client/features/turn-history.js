@@ -166,12 +166,18 @@
 			const user = rows.findIndex(isTurnInputRow);
 			return user === -1 ? rows : rows.slice(0, user);
 		}
-		function hideUserForTurnTail(tail) {
-			if (!tail) return;
+		// The player's own rows. A kept input turn may also carry a host trigger card;
+		// that card is not the player's message and stays hidden.
+		function isPlayerInputRow(row) {
+			const kind = row.getAttribute("data-chat-flow-kind");
+			return kind === "user" || kind === "steering";
+		}
+		function hideUserForTurnTail(tail, keepInput) {
+			if (!tail || keepInput) return;
 			const user = turnRowsBefore(tail, tailTurnOf(tail)).find(isTurnInputRow);
 			if (user) hideRow(user);
 		}
-		function applyHiddenRegenUserTurns(sessionId) {
+		function applyHiddenRegenUserTurns(sessionId, keepInput) {
 			try {
 				const all = JSON.parse(storage().getItem(HIDDEN_REGEN_USER_TURNS_KEY) || "{}");
 				const turns = all[sessionId];
@@ -181,7 +187,7 @@
 				for (let i = 0; i < tails.length; i++) {
 					const tail = tails[i];
 					if (!set.has(tailTurnOf(tail))) continue;
-					hideUserForTurnTail(tail);
+					hideUserForTurnTail(tail, keepInput && keepInput.has(tailTurnOf(tail)));
 				}
 			} catch (err) {}
 		}
@@ -195,12 +201,20 @@
 			el.style.display = "";
 			turnReplyRowsBefore(el, tailTurnOf(el)).forEach(function (row) { row.style.display = ""; });
 		}
-		function hideTurnTailWithUser(el) {
+		// Hide a void turn's rows. A kept input turn is the round's own player message
+		// that the failed-turn cleanup marked void: hide its residue, keep his words.
+		function hideTurnRowsBefore(tail, owner, keepInput) {
+			turnRowsBefore(tail, owner).forEach(function (row) {
+				if (keepInput && isPlayerInputRow(row)) return;
+				hideRow(row);
+			});
+		}
+		function hideTurnTailWithUser(el, keepInput) {
 			if (!el) return;
 			hideRow(el);
 			// System prompts precede the user row. Hide through the turn boundary,
 			// not just through its input; alpha also supplies explicit ownership.
-			turnRowsBefore(el, el.getAttribute("data-chat-turn")).forEach(hideRow);
+			hideTurnRowsBefore(el, el.getAttribute("data-chat-turn"), keepInput);
 		}
 		function tailTurnOf(el) {
 			if (!el) return "";
@@ -237,7 +251,7 @@
 				}
 			} catch (err) {}
 		}
-		function applySuppressedDshTurns(turns, regeneratedDshTurns) {
+		function applySuppressedDshTurns(turns, regeneratedDshTurns, keepInput) {
 			const set = new Set((Array.isArray(turns) ? turns : []).map(String));
 			if (set.size === 0) return;
 			const visibleRegenerations = new Set(Object.values(regeneratedDshTurns && typeof regeneratedDshTurns === "object" ? regeneratedDshTurns : {}).map(String));
@@ -246,10 +260,14 @@
 				const tail = tails[i];
 				const turn = tailTurnOf(tail);
 				if (!set.has(turn)) continue;
+				const kept = Boolean(keepInput && keepInput.has(turn));
 				if (visibleRegenerations.has(turn)) {
 					showTurnTail(tail);
-					hideUserForTurnTail(tail);
-				} else hideTurnTailWithUser(tail);
+					// A kept turn's trigger card hides like any other residue; the rest of
+					// the turn already draws the round's body and must stay.
+					if (kept) hideTurnRowsBefore(tail, turn, true);
+					else hideUserForTurnTail(tail);
+				} else hideTurnTailWithUser(tail, kept);
 			}
 		}
 		// 重生成期间的那一楼：只藏会被替代的旧正文（和它的尾行），玩家输入留着。
@@ -331,7 +349,11 @@
                 // Reconcile both directions: an older observer may have hidden a
                 // restored turn after the action's immediate DOM update.
                 restoreHiddenRows();
-				applySuppressedDshTurns(turns, regeneratedDshTurns);
+                // The round's own player message can live in a turn the failed-turn
+                // cleanup marked void; the server names those turns so the page can
+                // keep the input while hiding the rest of the residue.
+                const keepInput = new Set((rowPlan && Array.isArray(rowPlan.keepInput) ? rowPlan.keepInput : []).map(String));
+				applySuppressedDshTurns(turns, regeneratedDshTurns, keepInput);
 				applyReplacingDshTurns(replacingTurns);
 				applyRegeneratedDshTurns(regeneratedDshTurns);
 				applySupersededDshTurns(supersededTurns);
@@ -347,6 +369,9 @@
                     if (!kind) continue;
                     // 正在被替换的那一楼只藏回复，玩家的输入永远留着。
                     if (replacing.has(turn) && kind === "user") continue;
+                    // The kept input turn is the round's own player message; its error
+                    // residue and trigger card still hide below.
+                    if (keepInput.has(turn) && isPlayerInputRow(row)) continue;
                     // A void turn that now carries the round's body keeps its reply and
                     // drops only what opened it (the player's input or the trigger card).
                     if (suppressed.has(turn) && (!replacements.has(turn) || isTurnInputRow(row))) hideRow(row);
@@ -355,7 +380,7 @@
                 }
 				applyHiddenTurns(sessionId);
 				applyRolledBackTurns(sessionId);
-				applyHiddenRegenUserTurns(sessionId);
+				applyHiddenRegenUserTurns(sessionId, keepInput);
                 for (const row of root().querySelectorAll('[data-chat-flow-kind="context"]')) {
                     const source = row.querySelector('[data-context-source]');
                     if (source && source.textContent.trim() === "dsh-tavern-surface-restore") hideRow(row);
@@ -366,7 +391,7 @@
 				const adopted = view && view.adopted;
 				if (adopted && Number(adopted.hiddenTurn) > 0) forgetHiddenTurn(HIDDEN_TURNS_KEY, sessionId, Number(adopted.hiddenTurn));
 				if (adopted && Number(adopted.syntheticTurn) > 0) forgetHiddenTurn(HIDDEN_REGEN_USER_TURNS_KEY, sessionId, Number(adopted.syntheticTurn));
-				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom });
+				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom, keepInput: view.keptInputTurns });
 			}
             function restored(sessionId, view) {
                 const turn = Number(view && view.undoneRollback && view.undoneRollback.turn);
@@ -381,10 +406,10 @@
                     tail.style.display = "";
                     turnRowsBefore(tail, tail.getAttribute("data-chat-turn")).forEach(function (row) { row.style.display = ""; });
                 }
-                apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom });
+                apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom, keepInput: view.keptInputTurns });
             }
 			function rolledBack(sessionId, view) {
-				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom });
+				apply(sessionId, view && view.suppressedDshTurns, view && view.regeneratedDshTurns, view && view.replacingDshTurns, view && view.supersededDshTurns, view && { turns: view.transcriptTurns, from: view.transcriptFrom, keepInput: view.keptInputTurns });
 			}
 			return Object.freeze({ apply: apply, regenerated: regenerated, rolledBack: rolledBack, restored: restored });
 		}

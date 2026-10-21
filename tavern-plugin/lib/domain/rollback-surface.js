@@ -260,6 +260,58 @@ export function regenerationInputTurns(events) {
   return [...turns].sort((left, right) => left - right)
 }
 
+// A round's player input can sit in a different native turn than its reply: a failed
+// input is marked void, then a retry adopts its text and projects the body into another
+// turn. Suppression would hide that whole turn, taking the player's own words with it.
+// The input row of a drawn reply is the nearest human message before it, and the same
+// holds for the attempt currently running. Keep that turn's input visible; its failed
+// residue (error rows, trigger cards) is still hidden by the other lists.
+export function keptPlayerInputTurns(input = {}) {
+  const events = Array.isArray(input.events) ? input.events : []
+  const replyTurns = new Set((Array.isArray(input.replyTurns) ? input.replyTurns : [])
+    .map(Number).filter(turn => Number.isSafeInteger(turn) && turn > 0))
+  const suppressed = new Set((Array.isArray(input.suppressed) ? input.suppressed : [])
+    .map(Number).filter(turn => Number.isSafeInteger(turn) && turn > 0))
+  if (replyTurns.size === 0 || suppressed.size === 0) return []
+  const openTurn = Number(input.openTurn)
+  const bodies = new Map()
+  let turn = null
+  let lastInput = null
+  let queued = []
+  for (const event of events) {
+    if (!event) continue
+    if (event.type === 'turn/start') {
+      turn = Number(event.data?.turn)
+      // A message queued before its turn starts (the inbox splices it in) opens it.
+      for (const item of queued) item.turn = turn
+      queued = []
+      continue
+    }
+    if (event.type === 'turn/end') { turn = null; continue }
+    if (event.type === 'user/message' && event.surfaceOp === 'append' && event.data?.source?.kind === 'user') {
+      if (contentText(event.data) === '') continue
+      const item = { seq: Number(event.seq), turn }
+      // Deliveries before a turn starts still belong to the turn they wake.
+      if (turn === null) queued.push(item)
+      lastInput = item
+      continue
+    }
+    if (event.type !== 'assistant/message' || event.surfaceOp !== 'append') continue
+    if (contentText(event.data?.message) === '') continue
+    const owner = Number(event.data?.turn)
+    if (!Number.isSafeInteger(owner) || owner <= 0) continue
+    bodies.set(owner, { seq: Number(event.seq), input: lastInput })
+  }
+  const kept = new Set()
+  for (const reply of replyTurns) {
+    const body = bodies.get(reply)
+    const source = body ? body.input
+      : Number.isSafeInteger(openTurn) && openTurn > 0 && reply === openTurn ? lastInput : null
+    if (source && suppressed.has(Number(source.turn))) kept.add(Number(source.turn))
+  }
+  return [...kept].sort((left, right) => left - right)
+}
+
 export function foregroundSuppressedTurns(chat, events) {
   return Array.from(new Set((Array.isArray(chat?.suppressedDshTurns) ? chat.suppressedDshTurns : [])
     .concat(abortedRegenerationTurns({ events }), rolledBackSurfaceTurns(events))
