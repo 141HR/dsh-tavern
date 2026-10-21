@@ -12,6 +12,7 @@ export function createResourceGraph(options = {}) {
   const chats = options.chats
   const operations = options.operations
   const fault = typeof options.fault === 'function' ? options.fault : async function () {}
+  const logger = options.logger || console
   let tail = Promise.resolve()
   for (const method of ['rename', 'remove']) if (!resources || typeof resources[method] !== 'function') throw new Error('Resource Graph 缺少 resources.' + method)
   for (const method of ['readIndex', 'updateIndex', 'updateRefs']) if (!chats || typeof chats[method] !== 'function') throw new Error('Resource Graph 缺少 chats.' + method)
@@ -23,7 +24,7 @@ export function createResourceGraph(options = {}) {
     await fault({ operation, stage })
   }
 
-  async function projectRename(operation) {
+  async function projectRename(operation, committed) {
     const oldPath = operation.path
     const renamed = await resources.rename(oldPath, operation.name)
     operation.result = renamed
@@ -40,46 +41,50 @@ export function createResourceGraph(options = {}) {
     if (renamed.scriptOldPath && renamed.scriptPath) replacements.set(renamed.scriptOldPath, renamed.scriptPath)
     // Only the reference header fields are read and patched: a full Chat read per save made
     // renaming or deleting one preset replay every save's history.
-    const index = await chats.readIndex()
-    for (const row of index.chats || []) {
-      await chats.updateRefs(row.id, function (chat) {
-        if (replacements.has(chat.cardPath)) chat.cardPath = replacements.get(chat.cardPath)
-        if (kind === 'preset') {
-          if (chat.runtimePresetPath === renamed.oldPath) chat.runtimePresetPath = renamed.path
-          if (chat.runtimePresetSnapshot && typeof chat.runtimePresetSnapshot === 'object') {
-            const snapshot = chat.runtimePresetSnapshot
-            if (snapshot.presetPath === renamed.oldPath) snapshot.presetPath = renamed.path
-            for (const source of (snapshot.sources || []).concat(snapshot.regexSources || [])) {
-              if (source && source.path === renamed.oldPath) source.path = renamed.path
-            }
+    function project(chat) {
+      if (replacements.has(chat.cardPath)) chat.cardPath = replacements.get(chat.cardPath)
+      if (kind === 'preset') {
+        if (chat.runtimePresetPath === renamed.oldPath) chat.runtimePresetPath = renamed.path
+        if (chat.runtimePresetSnapshot && typeof chat.runtimePresetSnapshot === 'object') {
+          const snapshot = chat.runtimePresetSnapshot
+          if (snapshot.presetPath === renamed.oldPath) snapshot.presetPath = renamed.path
+          for (const source of (snapshot.sources || []).concat(snapshot.regexSources || [])) {
+            if (source && source.path === renamed.oldPath) source.path = renamed.path
           }
         }
-        if (chat.workspace && typeof chat.workspace === 'object') {
-          setList(chat.workspace, 'sourcePaths', (chat.workspace.sourcePaths || []).map(function (item) { return replacements.get(item) || item }))
-          setList(chat.workspace, 'mountedResources', (chat.workspace.mountedResources || []).map(function (item) {
-            if (!item || !replacements.has(item.path)) return item
-            const nextPath = replacements.get(item.path)
-            const filename = nextPath.split('/').pop()
-            return Object.assign({}, item, { path: nextPath, label: filename.replace(/\.[^.]+$/, '') })
-          }))
-        }
-        return chat
-      })
+      }
+      if (chat.workspace && typeof chat.workspace === 'object') {
+        setList(chat.workspace, 'sourcePaths', (chat.workspace.sourcePaths || []).map(function (item) { return replacements.get(item) || item }))
+        setList(chat.workspace, 'mountedResources', (chat.workspace.mountedResources || []).map(function (item) {
+          if (!item || !replacements.has(item.path)) return item
+          const nextPath = replacements.get(item.path)
+          const filename = nextPath.split('/').pop()
+          return Object.assign({}, item, { path: nextPath, label: filename.replace(/\.[^.]+$/, '') })
+        }))
+      }
+      return chat
     }
+    // A Chat opens by its cardPath, so Chats played on the renamed card or script are
+    // updated before answering; every other reference is updated in the background.
+    const rows = ((await chats.readIndex()).chats || []).filter(Boolean)
+    for (const row of rows.filter(row => replacements.has(row.cardPath))) await chats.updateRefs(row.id, project)
     await chats.updateIndex(current => ({ ...current,
       chats: (current?.chats || []).map(row => replacements.has(row.cardPath) ? { ...row, cardPath: replacements.get(row.cardPath) } : row)
     }))
+    committed({ kind, path: renamed.path })
+    for (const row of rows.filter(row => !replacements.has(row.cardPath))) await chats.updateRefs(row.id, project)
     await checkpoint(operation, 'projected')
     await operations.remove()
     return { kind, path: renamed.path }
   }
 
-  async function projectRemove(operation) {
+  async function projectRemove(operation, committed) {
     const normalized = normalizeResourcePath(operation.path, operation.expectedKind)
     await resources.remove(normalized)
     await checkpoint(operation, 'resource-removed')
     if (resourceKind(normalized) === 'card') await options.cardOrganization?.movePath(normalized, null)
     if (resourceKind(normalized) === 'preset' && presets && typeof presets.remove === 'function') await presets.remove(normalized)
+    committed({ kind: resourceKind(normalized), path: normalized })
     const index = await chats.readIndex()
     // Only card workbenches mount resources; other Chats never need reading here.
     for (const row of (index.chats || []).filter(function (row) { return row && row.mode === 'card' })) {
@@ -95,10 +100,10 @@ export function createResourceGraph(options = {}) {
     return { kind: resourceKind(normalized), path: normalized }
   }
 
-  async function execute(operation) {
-    if (operation.kind === 'rename') return await projectRename(operation)
+  async function execute(operation, committed = function () {}) {
+    if (operation.kind === 'rename') return await projectRename(operation, committed)
     if (operation.kind === 'remove') {
-      try { return await projectRemove(operation) }
+      try { return await projectRemove(operation, committed) }
       catch (error) {
         // This rejection happens before any file mutation. Keeping it as a
         // recoverable operation would block every later rename/remove forever.
@@ -123,25 +128,35 @@ export function createResourceGraph(options = {}) {
     })
   }
 
-  async function rename(path, name) {
-    return serialize(async function () {
-      const previous = await operations.read()
-      if (previous) await execute(previous)
-      const operation = { schemaVersion: 1, kind: 'rename', path: normalizeResourcePath(path), name: str(name), stage: 'prepared' }
-      await operations.write(operation)
-      return await execute(operation)
+  // The caller gets its answer once the resource itself has changed. Rewriting
+  // references in every Chat goes on in the background, still serialized: the next
+  // rename/remove waits for it, and the operation log finishes it after a crash.
+  function start(operation) {
+    return new Promise(function (resolve, reject) {
+      let answered = false
+      function answer(value) { if (!answered) { answered = true; resolve(value) } }
+      serialize(async function () {
+        const previous = await operations.read()
+        if (previous) await execute(previous)
+        await operations.write(operation)
+        return await execute(operation, answer)
+      }).then(answer, function (error) {
+        if (!answered) { answered = true; reject(error); return }
+        logger.warn('dsh-tavern: 后台更新存档中的资源引用失败，下次资源操作或启动时继续:', str(error && error.message || error))
+      })
     })
+  }
+
+  async function rename(path, name) {
+    return await start({ schemaVersion: 1, kind: 'rename', path: normalizeResourcePath(path), name: str(name), stage: 'prepared' })
   }
 
   async function remove(path, expectedKind) {
-    return serialize(async function () {
-      const previous = await operations.read()
-      if (previous) await execute(previous)
-      const operation = { schemaVersion: 1, kind: 'remove', path: normalizeResourcePath(path, expectedKind), expectedKind: str(expectedKind), stage: 'prepared' }
-      await operations.write(operation)
-      return await execute(operation)
-    })
+    return await start({ schemaVersion: 1, kind: 'remove', path: normalizeResourcePath(path, expectedKind), expectedKind: str(expectedKind), stage: 'prepared' })
   }
 
-  return Object.freeze({ recover, rename, remove })
+  /** Resolves once every queued operation, including background reference updates, has settled. */
+  function idle() { return tail.catch(function () {}).then(function () {}) }
+
+  return Object.freeze({ recover, rename, remove, idle })
 }
