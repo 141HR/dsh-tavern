@@ -24,6 +24,7 @@ window.__ModuleLoader__.load({
       toTavern: '切到 DSH 酒馆并重启',
       noTavern: '还没有装好 DSH 酒馆，装好后这里就能切过去。',
       noOriginal: '找不到原版 DSH 的备份，暂时切不回去。请看下面的「说明与日志」。',
+      nextExplain: 'DSH NEXT 自带 Profile 切换：选 tavern 进入 DSH 酒馆，选 desktop 回到原版 DSH。这里不再提供切换按钮。',
       standalone: '这是 DSH 酒馆的独立窗口，原版 DSH 就是 DeepSeek Harness 本身，不用切换、不用重启。',
       openOriginal: '打开原版 DSH',
       restarting: '正在重启…',
@@ -47,6 +48,7 @@ window.__ModuleLoader__.load({
       toTavern: 'Switch to DSH Tavern and restart',
       noTavern: 'DSH Tavern is not installed yet; once it is, you can switch from here.',
       noOriginal: 'The original DSH backup is missing, so switching back is not possible right now. See "Details and log" below.',
+      nextExplain: 'DSH NEXT has its own Profile switcher: pick tavern for DSH Tavern, desktop for the original DSH. This page no longer offers a switch.',
       standalone: 'This is the standalone DSH Tavern window. The original DSH is DeepSeek Harness itself; no switch or restart needed.',
       openOriginal: 'Open original DSH',
       restarting: 'Restarting…',
@@ -129,7 +131,7 @@ window.__ModuleLoader__.load({
       const tavernReady = (status?.profiles ?? []).some((profile) => profile.name === 'tavern' && (profile.bundles ?? []).includes('dsh-profile-bridge') && profile.hasNodeModules)
       // Back to the original needs its backup; into the tavern needs a tavern setup that can come back.
       const blocked = side === 'original' ? (tavernReady ? null : t('noTavern'))
-        : (status?.backups ?? []).length > 0 || status?.nextProfiles ? null : t('noOriginal')
+        : (status?.backups ?? []).length > 0 ? null : t('noOriginal')
       const target = side === 'original' ? 'tavern' : null
 
       const [shortcut, setShortcut] = React.useState(null)
@@ -177,12 +179,12 @@ window.__ModuleLoader__.load({
         h('style', null, CSS),
         h('header', { className: 'pb-head' },
           h('h2', { className: 'pb-title' }, title),
-          h('p', { className: 'pb-sub' }, status === null ? t('loading') : !isDesktop ? t('cliHint') : standalone ? t('standalone') : t('explain')),
+          h('p', { className: 'pb-sub' }, status === null ? t('loading') : !isDesktop ? t('cliHint') : standalone ? t('standalone') : status.nextProfiles ? t('nextExplain') : t('explain')),
         ),
         !isDesktop ? null : standalone ? h('div', { className: 'pb-bar' },
           h('span', { className: 'pb-bar-text' }),
           h('button', { type: 'button', className: 'pb-btn', disabled: busy, onClick: () => void openOriginal() }, t('openOriginal')),
-        ) : blocked ? h('p', { className: 'pb-error' }, blocked) : h('div', { className: 'pb-bar' },
+        ) : status.nextProfiles ? null : blocked ? h('p', { className: 'pb-error' }, blocked) : h('div', { className: 'pb-bar' },
           h('span', { className: 'pb-bar-text' },
             applied === null ? '' : applied.closesApp ? t('restarting') : t('quitHint'),
             ...(applied?.warnings ?? []).map((warning) => h('span', { key: warning, style: { display: 'block', opacity: 0.75 } }, `• ${warning}`)),

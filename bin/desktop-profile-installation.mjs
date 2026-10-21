@@ -5,7 +5,7 @@ import path from 'node:path'
 import { copyTreeSync, removeTreeSync } from './portable-fs.mjs'
 import { switchProfile } from '../tavern-plugin/packages/dsh-profile-bridge/lib/helper.mjs'
 import { assertDesktopStopped } from './import-user-home.mjs'
-import { isDesktopNext, readNextProfile, selectNextProfile } from '../tavern-plugin/packages/dsh-profile-bridge/lib/next.mjs'
+import { readNextProfile, selectNextProfile, usesDesktopNext } from '../tavern-plugin/packages/dsh-profile-bridge/lib/next.mjs'
 
 const present = file => { try { lstatSync(file); return true } catch (e) { if (e.code === 'ENOENT') return false; throw e } }
 const read = dir => JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'))
@@ -78,7 +78,7 @@ function recover(journalFile, journal) {
 // as in-app updates do while the desktop is running. Only the first bridging needs the desktop closed.
 // DSH NEXT (2.0.19+) selects its own Profile and refuses a linked profiles/desktop: there the original
 // stays a real directory (with the bridge, so it can switch into the tavern) and the tavern is selected.
-export function beginDesktopProfileInstallation({ home, sourceRoot, checkStopped = () => assertDesktopStopped([home], { requireGuiClosed: true }), next = isDesktopNext(process.env.DSH_DESKTOP_APP_EXECUTABLE) }) {
+export function beginDesktopProfileInstallation({ home, sourceRoot, checkStopped = () => assertDesktopStopped([home], { requireGuiClosed: true }), next = usesDesktopNext(home, process.env.DSH_DESKTOP_APP_EXECUTABLE) }) {
   const profiles = path.join(home, 'profiles'), live = path.join(profiles, 'desktop'), tavern = path.join(profiles, 'tavern')
   const interrupted = (() => { try { return JSON.parse(readFileSync(path.join(home, 'profile-bridge', 'install.json'), 'utf8')).phase === 'preparing' } catch { return false } })()
   const linkedToTavern = present(live) && lstatSync(live).isSymbolicLink() && present(tavern) && realpathSync(live) === realpathSync(tavern)

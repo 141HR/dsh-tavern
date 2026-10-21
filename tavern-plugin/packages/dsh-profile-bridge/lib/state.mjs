@@ -13,7 +13,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync, realpathSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
-import { isDesktopNext, readNextProfile } from './next.mjs'
+import { readNextProfile, usesDesktopNext } from './next.mjs'
 
 /** Throw a coded bridge error the RPC layer turns into a structured failure. */
 export function fail(code, message) {
@@ -192,7 +192,7 @@ export function statusPayload(paths) {
   const profiles = listProfiles(paths)
   const appExe = detectAppExe()
   // DSH NEXT runs the selected profile itself (profiles/tavern, not a desktop link).
-  const nextProfiles = isDesktopNext(appExe)
+  const nextProfiles = usesDesktopNext(paths.home, appExe)
   return {
     platform: process.platform,
     dshHome: paths.home,
