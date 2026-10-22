@@ -17,8 +17,11 @@ function harness() {
   })
   const modules = ['../tavern-plugin/lib/domain/indexed-array.js', '../tavern-plugin/src/client/modules/session-view-sync.js']
   vm.runInContext(modules.map(path => fs.readFileSync(new URL(path, import.meta.url), 'utf8').replace(/^export .*$/gm, '')).join('\n') + '\nconst beginSessionViewRead = createSessionViewReader(1);', scope)
+  // Take exactly rpc(): from its declaration to its own closing brace, independent of neighbours.
   const start = source.indexOf('\t\tfunction rpc(method,')
-  vm.runInContext(source.slice(start, source.indexOf('\n\t\tfunction recordImageInteraction', start)), scope)
+  const end = source.indexOf('\n\t\t}\n', start)
+  assert.ok(start >= 0 && end > start, 'client rpc() boundaries exist')
+  vm.runInContext(source.slice(start, end + 4), scope)
   return { rpc: scope.rpc, reads, generations }
 }
 for (const outcome of ['old success', 'network error', 'server error']) test(`real RPC suppresses ${outcome} after a newer accepted session response`, async () => {
