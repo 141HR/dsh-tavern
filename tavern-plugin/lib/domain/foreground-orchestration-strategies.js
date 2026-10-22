@@ -2,7 +2,8 @@ import { createHash, randomBytes } from 'node:crypto'
 import { projectPlayerContent } from './player-input-content.js'
 import { resolveRuntimePresetMacros } from './runtime-presets.js'
 import { projectRuntimePresetRequest } from './runtime-preset-lifecycle.js'
-import { STORY_SUBMIT_PROMPT, STORY_SUBMIT_TOOL_NAME } from './story-tool-submission.js'
+import { STORY_SUBMIT_PROMPT, STORY_SUBMIT_PROMPT_STRICT, STORY_SUBMIT_TOOL_NAME } from './story-tool-submission.js'
+import { NO_FOREGROUND_TOOLS_PROMPT } from './foreground-tools.js'
 import { projectHistoryAsToolCalls } from './history-tool-call.js'
 import { markRequestHandled, requestHandledBy } from './request-lineage.js'
 import { inputKind } from './session-turn-input.js'
@@ -419,6 +420,7 @@ export function createNativePlayOrchestrationStrategy(options) {
   async function assembleSystemPrompt(assembly, input) {
     const mode = await options.modeFor(input.sessionId)
     const visible = new Set(await options.visibleTools(input.sessionId))
+    const playMode = mode === 'story' || mode === 'script'
     // Play rules arrive in the foreground frame. Still replace the inherited
     // sections explicitly so removing play-mode cannot restore DSH's persona.
     const cardEdit = mode === 'card' && input.chat?.cardEditContext?.version === 1
@@ -437,17 +439,13 @@ export function createNativePlayOrchestrationStrategy(options) {
       const workspace = options.workspaceContext(input.cwd, input.workspaceProjection)
       if (workspace !== '') sections.push({ name: 'tavern:resource-workspace', text: workspace })
     }
-    if (mode === 'story' || mode === 'script') {
+    if (playMode) {
       const raw = await options.resolvePreset(input.chat)
       const front = presetFrontSections(resolveRuntimePresetMacros(raw, { charName: input.chat?.cardName, macroState: input.chat?.macroState }).snapshot)
       sections.unshift(...front)
       frontTexts.set(input.sessionId, front.map(section => section.text))
       renderedFronts.set(input.sessionId, createHash('sha256').update(JSON.stringify(front.map(section => section.text))).digest('hex'))
-      // The submission contract travels with the tool, not with the preset: it is
-      // appended after the front so turning the switch off restores the saved prompt.
-      if (visible.has(STORY_SUBMIT_TOOL_NAME)) sections.push({ name: 'tavern:story-tool-submission', text: STORY_SUBMIT_PROMPT })
     }
-    assembly.sections = sections
     if (Array.isArray(assembly.contexts)) assembly.contexts = assembly.contexts.filter(section => section.name !== 'approval:policy')
     // A plugin's own tool shows everywhere unless the plugin scoped it (tavern.toolModes).
     const group = mode === 'card' ? 'card' : 'play'
@@ -456,6 +454,16 @@ export function createNativePlayOrchestrationStrategy(options) {
       const modes = options.pluginToolModes ? options.pluginToolModes(schema.name) : null
       return !modes || modes.includes(group)
     })
+    // The submission contract follows the tools that actually survived the
+    // per-game switches and the plugin scopes. The strict wording is only true
+    // when submit_story is the single model-facing tool.
+    if (playMode) {
+      const toolNames = new Set(assembly.tools.map(schema => schema.name))
+      if (toolNames.size === 0) sections.push({ name: 'tavern:no-foreground-tools', text: NO_FOREGROUND_TOOLS_PROMPT })
+      else if (toolNames.size === 1 && toolNames.has(STORY_SUBMIT_TOOL_NAME)) sections.push({ name: 'tavern:story-tool-submission', text: STORY_SUBMIT_PROMPT_STRICT })
+      else if (toolNames.has(STORY_SUBMIT_TOOL_NAME)) sections.push({ name: 'tavern:story-tool-submission', text: STORY_SUBMIT_PROMPT })
+    }
+    assembly.sections = sections
     return assembly
   }
 

@@ -1,5 +1,6 @@
 import { patchConversationBackground } from './conversation-background.js'
 import { normalizeBackgroundModel } from './background-model-selection.js'
+import { foregroundToolCatalog, normalizeDisabledForegroundTools } from './foreground-tools.js'
 import { normalizeBackgroundTasks } from './tavern-settings.js'
 
 /** Validate model choices, patch only current configuration and trigger newly enabled work. */
@@ -11,11 +12,12 @@ export function createConversationBackgroundSettings({ readConfig, readChat, upd
   }
   function present(chat) {
     return { backgroundModel: chat.backgroundModelSelection || null,
-      backgroundTasks: normalizeBackgroundTasks(chat.backgroundTasks), webSearchEnabled: chat.webSearchEnabled === true }
+      backgroundTasks: normalizeBackgroundTasks(chat.backgroundTasks), webSearchEnabled: chat.webSearchEnabled === true,
+      disabledForegroundTools: normalizeDisabledForegroundTools(chat.disabledForegroundTools) }
   }
   async function read(sessionId) {
     const chat = requirePlay(await readConfig(String(sessionId || '')))
-    return { ...present(chat), mvuCard: chat.mvu?.enabled === true && chat.mvu.owner === 'official', modelCatalog: await modelCatalog() }
+    return { ...present(chat), foregroundTools: foregroundToolCatalog(chat.mode), mvuCard: chat.mvu?.enabled === true && chat.mvu.owner === 'official', modelCatalog: await modelCatalog() }
   }
   async function checkModel(value, label) {
     const selection = normalizeBackgroundModel(value)

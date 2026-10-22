@@ -12,6 +12,7 @@ import { normalizeResourcePath } from './file-resources.js'
 import { diffJson } from './json-mutation.js'
 import { hasTavernCredit, withTavernCredit } from './card-credit.js'
 import { STORY_SUBMIT_TOOL_NAME, storyToolCallEnabled } from './story-tool-submission.js'
+import { normalizeDisabledForegroundTools } from './foreground-tools.js'
 import { styleReferenceFor } from './style-reference.js'
 import { variableUpdateFor } from './variable-update.js'
 import { replyProse } from './reply-prose.js'
@@ -884,16 +885,20 @@ export function createTurnOrchestrator(options) {
   }
 
   async function visibleTools(sessionId) {
-    // Every model call asks: mode and the web-search switch live in the header.
-    const chat = store.headerForSession ? await store.headerForSession(sessionId, ['mode', 'webSearchEnabled'])
+    // Every model call asks: mode, the web-search switch and the disabled tools live in the header.
+    const chat = store.headerForSession ? await store.headerForSession(sessionId, ['mode', 'webSearchEnabled', 'disabledForegroundTools'])
       : await (store.stateForSession || store.chatForSession)(sessionId)
     if (chat === undefined || chat === null) return []
     const mode = chat.mode || 'story'
     const webTools = chat.webSearchEnabled === true ? ['web_search'] : []
     const storyTools = storyToolCallEnabled(chat, await options.storyToolCall?.()) ? [STORY_SUBMIT_TOOL_NAME] : []
-    if (mode === 'script') return ['tavern_read_variables', 'skill', 'tavern_read_skill_reference', 'tavern_read_script', 'tavern_recall_history', 'worldbook_search', ...webTools, ...storyTools]
+    // Card workbenches keep their fixed editing tools; the per-game switches are play-only.
     if (mode === 'card') return [...CARD_MEMORY_TOOLS, 'web_search', shellToolName, ...dshFileToolNames, 'skill', 'tavern_read_skill_reference', 'tavern_save_skill', ...cordisToolNames, 'tavern_user_profile_read', 'tavern_user_profile_save', 'tavern_read_card', 'tavern_read_card_raw', 'tavern_search_card', 'tavern_replace_card_text', 'tavern_mvu_overview', 'tavern_apply_mvu', 'tavern_read_play_chat', 'tavern_read_worldbook', 'tavern_update_worldbook', 'tavern_read_preset', 'tavern_update_preset', 'tavern_read_regex_library', 'tavern_copy_card', 'tavern_set_card_cover', 'tavern_export_card_png', 'tavern_update_card', 'tavern_restore_card', 'tavern_validate_card', 'tavern_test_response']
-    return ['tavern_read_variables', 'skill', 'tavern_read_skill_reference', 'tavern_recall_history', 'worldbook_search', ...webTools, ...storyTools]
+    const names = mode === 'script'
+      ? ['tavern_read_variables', 'skill', 'tavern_read_skill_reference', 'tavern_read_script', 'tavern_recall_history', 'worldbook_search', ...webTools, ...storyTools]
+      : ['tavern_read_variables', 'skill', 'tavern_read_skill_reference', 'tavern_recall_history', 'worldbook_search', ...webTools, ...storyTools]
+    const disabled = new Set(normalizeDisabledForegroundTools(chat.disabledForegroundTools))
+    return names.filter(name => !disabled.has(name))
   }
 
   // Asked by request hooks on every model call: the header answers it, not the history.

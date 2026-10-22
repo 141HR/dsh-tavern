@@ -1,4 +1,5 @@
 import { createConversationBackgroundSettings } from '../tavern-plugin/lib/domain/conversation-background-settings.js'
+import { projectChatBackgroundConfig } from '../tavern-plugin/lib/domain/chat-session-state.js'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -49,4 +50,23 @@ test('configuration read stays narrow and enabling style recall runs only after 
   await settings.save({ sessionId: 'game', backgroundTasks: { styleReference: true } })
   await settings.save({ sessionId: 'game', backgroundTasks: { styleReference: true } })
   assert.deepEqual(calls.filter(Array.isArray), [['style', 'game', 'one']])
+})
+
+test('前台工具逐项保存，默认全开并过滤未知名称', async () => {
+  let chat = { id: 'one', mode: 'story', backgroundConfigVersion: 1, conversationFeaturesVersion: 1 }
+  const settings = createConversationBackgroundSettings({
+    readConfig: async () => chat, readChat: async () => chat,
+    updateChat: async (_id, mutation) => { chat = mutation(chat); return chat },
+    isPlayMode: mode => mode === 'story',
+    modelCatalog: async () => [], modelReasoning: async () => null
+  })
+  const read = await settings.read('game')
+  assert.deepEqual(read.disabledForegroundTools, [])
+  assert.equal(read.foregroundTools.some(tool => tool.name === 'worldbook_search'), true)
+  const saved = await settings.save({ sessionId: 'game', disabledForegroundTools: ['worldbook_search', 'unknown', 'worldbook_search'] })
+  assert.deepEqual(saved.disabledForegroundTools, ['worldbook_search'])
+  assert.deepEqual(chat.disabledForegroundTools, ['worldbook_search'])
+  assert.deepEqual(projectChatBackgroundConfig({ id: 'one', mode: 'story', disabledForegroundTools: ['submit_story'] }).disabledForegroundTools, ['submit_story'])
+  await assert.rejects(settings.save({ sessionId: 'game', disabledForegroundTools: 'worldbook_search' }), /前台工具配置无效/)
+  assert.deepEqual(chat.disabledForegroundTools, ['worldbook_search'])
 })

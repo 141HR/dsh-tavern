@@ -274,3 +274,35 @@ test('Anthropic：去掉本轮输入之前各轮回复的签名思考块，本�
     ? { ...message, source: { ...message.source, replayState: { ...message.source.replayState, response: { ...message.source.replayState.response, api: 'openai-completions' } } } } : message)
   assert.equal(projectAnthropicPriorThinking(deepseek), deepseek)
 })
+
+test('提交提示词按最终工具列表选择：只有提交工具时用严格版', async () => {
+  let visibleNames = ['submit_story']
+  const run = strategies({ nativePlay: {
+    async modeFor() { return 'story' },
+    filterMessages(messages) { return messages },
+    async resolvePreset() { return null },
+    async prepareTurn() { return { text: '' } },
+    appendFrame(input) { return { messages: input.messages, receipt: {} } },
+    recordFrame() {},
+    async visibleTools() { return visibleNames },
+    modePrompt() { return 'story' },
+    workspaceContext() { return '' },
+    async ensureSessionPrefix() {},
+    controlledToolNames: new Set(['submit_story'])
+  } })
+  const chat = run.chats.get('native')
+  const assemble = tools => run.value.assembleSystemPrompt({ sections: [], contexts: [], tools }, { sessionId: 'native', chat })
+
+  const strict = await assemble([{ name: 'submit_story' }])
+  assert.deepEqual(strict.tools.map(tool => tool.name), ['submit_story'])
+  assert.match(strict.sections.find(section => section.name === 'tavern:story-tool-submission').text, /不要调用任何其他工具/)
+
+  const normal = await assemble([{ name: 'submit_story' }, { name: 'plugin_tool' }])
+  assert.deepEqual(normal.tools.map(tool => tool.name), ['submit_story', 'plugin_tool'])
+  assert.match(normal.sections.find(section => section.name === 'tavern:story-tool-submission').text, /可以先使用已开放的历史查询/)
+
+  visibleNames = []
+  const none = await assemble([])
+  assert.deepEqual(none.tools, [])
+  assert.ok(none.sections.some(section => section.name === 'tavern:no-foreground-tools'))
+})

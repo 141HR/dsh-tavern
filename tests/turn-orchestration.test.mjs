@@ -344,3 +344,30 @@ test('漏写的一轮可以按它自己的请求号补记进存档（#196 自愈
   assert.deepEqual(run.chat().messages.map(message => message.text), ['推开窗', '雨水扑进房间。', '关上窗', '窗关上了。'])
   assert.equal(Number(run.chat().messages.at(-1).turn), 3)
 })
+
+test('本局前台工具可逐项关闭，卡片模式不受影响', async () => {
+  const all = harness('story', { storyToolCall: true, webSearchEnabled: true })
+  const names = await all.orchestrator.visibleTools('session-1')
+  assert.equal(names.includes('worldbook_search'), true)
+  assert.equal(names.includes('submit_story'), true)
+
+  const one = harness('story', { storyToolCall: true, webSearchEnabled: true, chatFields: { disabledForegroundTools: ['worldbook_search'] } })
+  const oneNames = await one.orchestrator.visibleTools('session-1')
+  assert.equal(oneNames.includes('worldbook_search'), false)
+  assert.equal(oneNames.includes('submit_story'), true)
+
+  const submitOff = harness('story', { storyToolCall: true, chatFields: { disabledForegroundTools: ['submit_story'] } })
+  assert.equal((await submitOff.orchestrator.visibleTools('session-1')).includes('submit_story'), false)
+
+  const disabled = ['tavern_read_variables', 'skill', 'tavern_read_skill_reference', 'tavern_recall_history', 'worldbook_search', 'web_search', 'submit_story']
+  const none = harness('story', { storyToolCall: true, webSearchEnabled: true, chatFields: { disabledForegroundTools: disabled } })
+  assert.deepEqual(await none.orchestrator.visibleTools('session-1'), [])
+
+  const script = harness('script', { storyToolCall: true, chatFields: { disabledForegroundTools: ['tavern_read_script'] } })
+  const scriptNames = await script.orchestrator.visibleTools('session-1')
+  assert.equal(scriptNames.includes('tavern_read_script'), false)
+  assert.equal(scriptNames.includes('submit_story'), true)
+
+  const card = harness('card', { chatFields: { disabledForegroundTools: disabled } })
+  assert.ok((await card.orchestrator.visibleTools('session-1')).includes('tavern_update_card'))
+})

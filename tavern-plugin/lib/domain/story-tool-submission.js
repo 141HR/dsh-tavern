@@ -12,6 +12,16 @@ export const STORY_SUBMIT_PROMPT = [
   '</output_method>'
 ].join('\n')
 
+// The strict policy hides every other tool; the prompt must not invite a lookup
+// the request cannot serve.
+export const STORY_SUBMIT_PROMPT_STRICT = [
+  '<output_method>',
+  '本轮最终正文必须直接调用 submit_story 工具，完整放入 content 字符串参数。',
+  '不要调用任何其他工具，也不要先查询资料；submit_story 是本轮唯一允许的工具调用，提交成功即结束本轮。',
+  '正文中的所有原有标签、格式和内容要求保持不变。',
+  '</output_method>'
+].join('\n')
+
 /** A global switch (Tavern settings); it applies to story and script play only. */
 export function storyToolCallEnabled(chat, enabled) {
   return enabled === true && !!chat && (!chat.mode || chat.mode === 'story' || chat.mode === 'script')
