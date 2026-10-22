@@ -128,13 +128,13 @@ function TavernMvuVariables(props) {
     const key = JSON.stringify(path);
     if (Array.isArray(value)) {
       return h('details', { key: key, className: 'dsh-mvu-node', open: depth < 1 },
-        h('summary', null, label, h('span', { className: 'dsh-mvu-kind' }, '数组 · ' + value.length)),
+        h('summary', null, h('span', { className: 'dsh-mvu-node-label' }, label), h('span', { className: 'dsh-mvu-kind' }, '数组 · ' + value.length)),
         value.length ? value.map(function (item, index) { return node(item, path.concat(index), String(index), depth + 1); }) : h('span', { className: 'dsh-mvu-empty' }, '空'));
     }
     if (value && typeof value === 'object') {
       const entries = Object.entries(value);
       return h('details', { key: key, className: 'dsh-mvu-node', open: depth < 1 },
-        h('summary', null, label, h('span', { className: 'dsh-mvu-kind' }, entries.length + ' 项')),
+        h('summary', null, h('span', { className: 'dsh-mvu-node-label' }, label), h('span', { className: 'dsh-mvu-kind' }, entries.length + ' 项')),
         entries.length ? entries.map(function ([childKey, child]) { return node(child, path.concat(childKey), childKey, depth + 1); }) : h('span', { className: 'dsh-mvu-empty' }, '空'));
     }
     return h('label', { key: key, className: 'dsh-mvu-field' },
@@ -153,7 +153,7 @@ function TavernMvuVariables(props) {
       !helper ? '当前会话没有可用的酒馆变量上下文。'
         : helper.mvuEnabled === false ? '本局没有启用 MVU 兼容运行时。'
           : !floor ? '还没有可编辑的楼层。'
-            : editable ? (floor.turn ? '第 ' + floor.turn + ' 轮楼层 #' + floor.messageId : '楼层 #' + floor.messageId) + ' 的 MVU 状态数据。保存后下一轮从这里的值接着走；更早的楼层不变，回退时会回到当时的值。保存不会触发重新结算。'
+            : editable ? (floor.turn ? '第 ' + floor.turn + ' 轮楼层 #' + floor.messageId : '楼层 #' + floor.messageId) + ' 的 MVU 状态数据。保存后下一轮从这些值接着走；更早的楼层不变，也不会重新结算。'
               : '当前楼层还没有 MVU 状态数据。首次变量结算后会出现。'),
     open && floor && editable ? h('div', null,
       h('div', { className: 'dsh-ledger-tabs dsh-mvu-tabs', role: 'tablist', 'aria-label': 'MVU 变量编辑方式' },
@@ -172,9 +172,9 @@ function TavernMvuVariables(props) {
       error ? h('div', { className: 'dsh-card-error', role: 'alert' }, error) : null,
       notice ? h('p', { className: 'dsh-tavern-status-empty', role: 'status' }, notice) : null,
       h('div', { className: 'dsh-mvu-actions' },
-        h('button', { type: 'button', className: 'dsh-card-primary', disabled: busy || !dirty, onClick: save }, busy ? '保存中…' : '保存修改'),
-        h('button', { type: 'button', className: 'dsh-tavern-btn', disabled: busy || !dirty, onClick: reset }, '还原'),
-        h('span', { className: 'dsh-mvu-floor' }, '#' + floor.messageId))
+        dirty ? h('span', { className: 'dsh-mvu-dirty' }, '有未保存的修改') : null,
+        h('button', { type: 'button', className: 'dsh-mvu-reset', disabled: busy || !dirty, onClick: reset }, '还原'),
+        h('button', { type: 'button', className: 'dsh-mvu-save', disabled: busy || !dirty, onClick: save }, busy ? '保存中…' : '保存修改'))
     ) : null);
 }
 
