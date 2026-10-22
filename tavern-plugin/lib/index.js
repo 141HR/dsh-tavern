@@ -16,7 +16,6 @@ import { createChatReads } from './domain/chat-reads.js'
 import { diffJson } from './domain/json-mutation.js'
 import { syncUserPlugins, watchUserPlugins, userPluginPaths } from './domain/user-plugins.js'
 import { createUserPluginInstaller } from './domain/user-plugin-install.js'
-import { listLegacyPlugins } from './domain/legacy-plugins.js'
 import { createPluginDataStore } from './domain/plugin-data-store.js'
 import { createPluginAssets } from './domain/plugin-assets.js'
 import { registerModelStreamHooks } from './hooks/model-stream.js'
@@ -224,8 +223,7 @@ import { readZipEntries, writeZipEntries } from './domain/zip-entries.js'
 import { createGameFootprint } from './domain/game-footprint.js'
 import { createGameSaveExporter } from './domain/game-save-export.js'
 import { readFileSync } from 'node:fs'
-import { mkdir, readdir, readFile, rm } from 'node:fs/promises'
-import { spawn } from 'node:child_process'
+import { readdir, readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 
 const TAVERN_PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
@@ -260,6 +258,7 @@ import { createOpeningHandlers } from './rpc/opening.js'
 import { createResourceHandlers } from './rpc/resources.js'
 import { createMediaHandlers } from './rpc/media.js'
 import { createSettingsHandlers } from './rpc/settings.js'
+import { createPluginHandlers } from './rpc/plugins.js'
 // dsh-tavern 宿主插件（profile 组合行）
 // RPC：同源 HTTP 路由 /api/dsh-tavern/<method>（客户端 fetch 调用）
 // DSH 生命周期负责回合状态；模型工具只处理按需读取和明确修改。
@@ -4029,16 +4028,16 @@ export async function apply(ctx) {
     importCard, importCardArchiveFile, importPluginCardFile, importPreset, importScript,
     importSettingsBundle, importSource, listCards, listTavernResources, llm, mobileCardImport,
     modelRequestLog, mvuDiagnostics, openingPreparation, pagesInFront, playCardSnapshots, pluginApi,
-    pluginGalleryItems, pluginMediaForTurn, pluginMediaTurns, preparedSaveSessions, presentSystemPrompts,
-    presentUserPreferenceProfile, presetLibrary, previewPreset, projectOpeningWindow, readCardExtensions,
-    readCardWorkspace, readChat, readChatCard, readOpeningWindow, readScript, readSessionMap,
-    readTavernSettings, regexLibrary, removePluginGalleryItems, removePluginMediaVersion, renameResource,
-    requestPerformance, runtimePresets, runtimePrompt, saveUpgrade, sceneIllustrations, scriptContinuity,
-    scriptNavigation, sessionActivity, sessionPatch, sessionStateForSession, sessionStore, sessionViews,
-    setCardPlugins, skillImportFiles, sleep, speakLine, speech, speechReply, startChat, str,
-    tavernModelCatalog, tavernScriptHostAdapter, tavernSkills, updateCard, updateChat, updateTavernSettings,
-    uploads, userPreferenceProfile, worldBooks, worldbookRecallLog,
-    get invalidateTavernSkills() { return invalidateTavernSkills },
+    pluginDataStore, pluginGalleryItems, pluginMediaForTurn, pluginMediaTurns, preparedSaveSessions,
+    presentSystemPrompts, presentUserPreferenceProfile, presetLibrary, previewPreset, projectOpeningWindow,
+    readCardExtensions, readCardWorkspace, readChat, readChatCard, readOpeningWindow, readScript,
+    readSessionMap, readTavernSettings, regexLibrary, removePluginGalleryItems, removePluginMediaVersion,
+    renameResource, requestPerformance, runtimePresets, runtimePrompt, saveUpgrade, sceneIllustrations,
+    scriptContinuity, scriptNavigation, sessionActivity, sessionPatch, sessionStateForSession, sessionStore,
+    sessionViews, setCardPlugins, skillImportFiles, sleep, speakLine, speech, speechReply, startChat,
+    startPluginTask, str, tavernModelCatalog, tavernScriptHostAdapter, tavernSkills, updateCard, updateChat,
+    updateTavernSettings, uploads, userPluginInstaller, userPreferenceProfile, worldBooks,
+    worldbookRecallLog, get invalidateTavernSkills() { return invalidateTavernSkills },
     get serverScripts() { return serverScripts } }
   const rpcHandlers = Object.assign(Object.create(null),
     createMaintenanceHandlers(rpcDeps),
@@ -4047,7 +4046,8 @@ export async function apply(ctx) {
     createOpeningHandlers(rpcDeps),
     createResourceHandlers(rpcDeps),
     createMediaHandlers(rpcDeps),
-    createSettingsHandlers(rpcDeps))
+    createSettingsHandlers(rpcDeps),
+    createPluginHandlers(rpcDeps))
 
   async function dispatchMethod(method, args, serverTemplate = false) {
     if (method.startsWith('gameplay.')) return await gameplayApi.call(method.slice(9), args || {})
@@ -4078,31 +4078,6 @@ export async function apply(ctx) {
           if (chat) games[id] = { title: str(chat.title), cardName: str(chat.cardName) }
         }
         return { games }
-      }
-      // The page side of a plugin reads and writes the same data as its host side (tavernUi.savePluginData).
-      case 'pluginData': {
-        const plugin = str(args && args.plugin)
-        if (args && args.op === 'save') { await pluginDataStore.save(plugin, args.data); return { ok: true } }
-        return { data: await pluginDataStore.read(plugin) }
-      }
-      case 'listUserPlugins': return { plugins: await userPluginInstaller.list(), dir: userPluginInstaller.pluginsDir }
-      case 'listLegacyPlugins': return listLegacyPlugins(userPluginPaths(dataRoot).profile)
-      case 'checkUserPluginUpdates': return { plugins: await userPluginInstaller.checkUpdates() }
-      case 'enableUserPlugin': return { plugin: await userPluginInstaller.enable(args && args.folder) }
-      case 'disableUserPlugin': return { plugin: await userPluginInstaller.disable(args && args.folder) }
-      case 'installUserPlugin': return { plugin: await userPluginInstaller.installFromGithub(args && args.url) }
-      case 'installUserPluginUpload': {
-        const upload = await uploads.take(args && args.uploadId)
-        try { return { plugin: await userPluginInstaller.installFromZip(await readFile(upload.file), args && args.name) } }
-        finally { await upload.remove() }
-      }
-      case 'updateUserPlugin': return { plugin: await userPluginInstaller.update(args && args.folder) }
-      case 'removeUserPlugin': return await userPluginInstaller.remove(args && args.folder)
-      case 'openUserPluginsFolder': {
-        await mkdir(userPluginInstaller.pluginsDir, { recursive: true })
-        const opener = process.platform === 'darwin' ? ['open', [userPluginInstaller.pluginsDir]] : process.platform === 'win32' ? ['explorer.exe', [userPluginInstaller.pluginsDir]] : ['xdg-open', [userPluginInstaller.pluginsDir]]
-        spawn(opener[0], opener[1], { detached: true, stdio: 'ignore', windowsHide: true }).on('error', () => {}).unref()
-        return { dir: userPluginInstaller.pluginsDir }
       }
       case 'prepareDeleteChats': return await deleteChats(args && args.chatIds, true)
       case 'deleteChats': return await deleteChats(args && args.chatIds)
@@ -4227,11 +4202,6 @@ export async function apply(ctx) {
       case 'addGuide': return { guides: await conversationGuides.add(args?.sessionId, args?.text) }
       case 'deleteGuide': return { guides: await conversationGuides.remove(args?.sessionId, args) }
       case 'getBodyEdit': return { edit: args?.role === 'user' ? await bodyEditor.readUser(args && args.sessionId, args) : await bodyEditor.read(args && args.sessionId) }
-      case 'listGamePlugins': return { plugins: await pluginApi.gamePlugins(str(args && args.sessionId)) }
-      case 'setGamePlugin': return { plugins: await pluginApi.setGamePlugin(str(args && args.sessionId), { setting: args && args.setting }) }
-      case 'pluginState': return { data: await pluginApi.pluginState(str(args && args.sessionId), str(args && args.plugin), str(args && args.name)) }
-      case 'pluginGameSettings': return { values: await pluginApi.pluginGameSettings(str(args && args.sessionId), str(args && args.plugin)) }
-      case 'startPluginTask': return await startPluginTask(args && args.sessionId, args && args.key, args && args.input)
       case 'saveBodyEdit': {
         await reconcileStory(args && args.sessionId)
         if (args?.role === 'user') {
@@ -4301,8 +4271,6 @@ export async function apply(ctx) {
         notifyPluginTimeline(args && args.sessionId, 'rollback', { turn: args && args.expectedTurn })
         return { view }
       }
-      case 'callPluginHandler': return { result: await pluginApi.callHandler(args && args.name, args && args.args) }
-      case 'pluginTurnState': return { state: await pluginApi.turnState(args && args.sessionId) }
       case 'getBackgroundProgress': return { progress: backgroundAgentRunner.progress(args && args.sessionId) || pluginSettlementProgress.snapshot(args && args.sessionId) }
       case 'stopBackground': return { view: await stopBackground(args && args.sessionId, args && args.operationId) }
       case 'retrySettlement': return { view: await retrySettlement(args && args.sessionId, args && args.turn, args && args.guidance) }
