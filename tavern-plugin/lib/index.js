@@ -123,7 +123,8 @@ import { createBackgroundAgentRunner, executeBackgroundCompaction } from './back
 import { createApplicationUpdater } from './application-updater.js'
 import { CANDIDATE_SUBMIT_TOOL, SCRIPT_POINT_TOOL, SCRIPT_READ_TOOL, createCandidateGenerator } from './domain/candidate-generation.js'
 import { computeSceneTarget, createSceneIllustrations, projectedSceneText } from './domain/scene-illustration.js'
-import { createPluginMedia, publicPluginMedia, pluginFileMediaType } from './domain/plugin-media.js'
+import { createPluginMedia } from './domain/plugin-media.js'
+import { createPluginMediaViews } from './domain/plugin-media-views.js'
 import { createPluginData } from './domain/plugin-data.js'
 import { createPluginTurnReader, RECENT_FLOORS } from './domain/plugin-turns.js'
 import { createPluginVariableWriter } from './domain/plugin-variables.js'
@@ -2429,74 +2430,8 @@ export async function apply(ctx) {
     pluginApi.timelineChanged(id, { kind, turn })
     if (settled) void pluginApi.turnSettled(id).catch(error => console.warn('dsh-tavern: 插件轮次通知失败:', str(error?.message || error)))
   }
-  // Bytes of one item, only while it belongs to the text version on screen.
-  // `version` picks an earlier picture of the item (its history index); without it, the current one.
-  async function readPluginMediaFile(sessionId, itemId, version) {
-    const missing = () => Object.assign(new Error('媒体不存在或不属于当前正文版本'), { code: 'TAVERN_PLUGIN_NOT_FOUND' })
-    const game = await pluginTurns.resolveGame(str(sessionId))
-    const item = game ? await pluginMedia.find(game.chatId, str(itemId)) : null
-    if (!item || await pluginTurns.currentKey(game.sessionId, item.turn) !== item.key) throw missing()
-    const ref = version === undefined || version === null || version === '' ? item.attachment : item.history?.[Number(version)]?.attachment
-    const attachments = ctx.get('attachments')
-    if (!ref || !attachments) throw missing()
-    if (ref.mediaType) {
-      const image = await attachments.readImage(ref)
-      return { mediaType: ref.mediaType, data: image.data, length: image.data.byteLength }
-    }
-    return { mediaType: pluginFileMediaType(ref.name), length: Number(ref.bytes) || 0, name: ref.name, stream: signal => attachments.readFileStream(ref, signal) }
-  }
-  // The player removes one picture of a plugin illustration from the story (see pluginMedia.removeVersion).
-  async function removePluginMediaVersion(sessionId, itemId, version) {
-    const game = await pluginTurns.resolveGame(str(sessionId))
-    if (!game) throw new Error('当前游戏不存在')
-    const item = await pluginMedia.removeVersion({ chatId: game.chatId, itemId: str(itemId), version })
-    sessionSignals.publish(game.sessionId, { kind: 'plugin-media', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
-    return { item: item ? publicPluginMedia(item) : null }
-  }
-  // Turns that hold any plugin item, so the browser asks only those turns.
-  async function pluginMediaTurns(sessionId) {
-    const game = await pluginTurns.resolveGame(str(sessionId))
-    if (!game) return { turns: [] }
-    return { turns: [...new Set((await pluginMedia.list({ chatId: game.chatId })).map(item => item.turn))].sort((a, b) => a - b) }
-  }
-  async function pluginMediaForTurn(sessionId, turn) {
-    const game = await pluginTurns.resolveGame(str(sessionId))
-    if (!game) return { key: null, items: [] }
-    const key = await pluginTurns.currentKey(game.sessionId, Number(turn))
-    if (!key) return { key: null, items: [] }
-    const items = (await pluginMedia.list({ chatId: game.chatId, turn: Number(turn) })).filter(item => item.key === key)
-    return { key, items: items.map(item => publicPluginMedia(item)) }
-  }
-  // The gallery also shows pictures plugins attached (dsh-tavern-image draws new ones there),
-  // limited to the current text version of each turn, the same rule the story view uses.
-  async function pluginGalleryItems(sessionId) {
-    const game = await pluginTurns.resolveGame(str(sessionId))
-    if (!game) return []
-    const keys = new Map(), items = []
-    for (const item of await pluginMedia.list({ chatId: game.chatId })) {
-      if (item.status !== 'ready' || !str(item.attachment?.mediaType).startsWith('image/')) continue
-      if (!keys.has(item.turn)) keys.set(item.turn, await pluginTurns.currentKey(game.sessionId, item.turn))
-      if (keys.get(item.turn) !== item.key) continue
-      items.push({ id: item.id, turn: Number(item.turn) || 0, caption: str(item.caption), createdAt: Number(item.createdAt) || 0, updatedAt: Number(item.updatedAt) || 0 })
-    }
-    return items
-  }
-  async function removePluginGalleryItems(sessionId, ids) {
-    if (!Array.isArray(ids) || !ids.length) return []
-    if (ids.length > 500) throw new Error('一次最多删除 500 张')
-    const game = await pluginTurns.resolveGame(str(sessionId))
-    const results = []
-    for (const id of ids) {
-      try {
-        const item = game ? await pluginMedia.find(game.chatId, str(id)) : null
-        if (!item) throw new Error('图片不存在或已删除')
-        await pluginMedia.remove({ chatId: game.chatId, owner: item.owner, itemId: item.id })
-        results.push({ versionId: str(id), ok: true })
-      } catch (error) { results.push({ versionId: str(id), ok: false, error: str(error?.message || error) }) }
-    }
-    if (game && results.some(row => row.ok)) sessionSignals.publish(game.sessionId, { kind: 'plugin-media', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
-    return results
-  }
+  const { readPluginMediaFile, removePluginMediaVersion, pluginMediaTurns, pluginMediaForTurn, pluginGalleryItems, removePluginGalleryItems } =
+    createPluginMediaViews({ pluginMedia, pluginTurns, sessionSignals, attachments: () => ctx.get('attachments') })
   const backgroundTasks = createBackgroundTaskCoordinator({
     store: { readChat, writeChat, updateChat, patchChat, readState: chatPersistence.readSessionState, readRecoveryState: taskStateReader.read, readSlice: chatPersistence.readSlice, readSettlementCheckpoint: chatPersistence.readSettlementCheckpoint },
     timeline: storyTimeline,

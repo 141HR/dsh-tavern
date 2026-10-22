@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import { createPluginMedia } from '../tavern-plugin/lib/domain/plugin-media.js'
+import { createPluginMediaViews } from '../tavern-plugin/lib/domain/plugin-media-views.js'
 import { registerTavernHttpRoutes } from '../tavern-plugin/lib/http/routes.js'
 import { createMediaHandlers } from '../tavern-plugin/lib/rpc/media.js'
 
@@ -18,15 +18,10 @@ function memoryStore() {
   }
 }
 
-const source = await readFile(new URL('../tavern-plugin/lib/index.js', import.meta.url), 'utf8')
-const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 const str = value => value == null ? '' : String(value)
 
 function productionGallery({ pluginMedia, pluginTurns, sessionSignals }) {
-  const start = source.indexOf('  async function pluginGalleryItems(sessionId) {')
-  const end = source.indexOf('  const backgroundTasks = createBackgroundTaskCoordinator({', start)
-  assert.ok(start >= 0 && end > start, 'production gallery function boundaries exist')
-  return new AsyncFunction('pluginMedia', 'pluginTurns', 'sessionSignals', 'str', `${source.slice(start, end)}\nreturn { pluginGalleryItems, removePluginGalleryItems }`)(pluginMedia, pluginTurns, sessionSignals, str)
+  return createPluginMediaViews({ pluginMedia, pluginTurns, sessionSignals, attachments: () => null })
 }
 
 function productionRemoveHistoryRpc({ illustrations, removePluginGalleryItems, backgroundConfigForSession = async () => null }) {
