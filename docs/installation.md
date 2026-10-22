@@ -27,7 +27,7 @@ Android 仅提供独立 APK，要求 Android 11 及以上、ARM64；不再提供
 
 1. 安装并打开 [DeepSeek Harness 0.2.1-rc.2](https://www.deepseek.com/harness/)。
 2. 点左侧栏的 **插件**，再点右上角 **添加插件**，填 `dsh-profile-tavern@3.1.3`，点「安装」。安装源保持「中国大陆镜像源」。版本号照抄即可：不写版本号的话，桌面版会跳过刚发布不满一天的版本，可能装到旧版；装好后在酒馆里点更新就能到最新版。
-3. 安装完成后重启 DeepSeek Harness，即进入酒馆。
+3. 安装完成后点「立即启用」，然后退出并重新打开 DeepSeek Harness，即进入酒馆。启用时如果弹出「启用失败 … Agent resolver is already registered」，不用管，重新打开后就好。
 
 酒馆以 npm 包 `dsh-profile-tavern` 装进桌面版的 `desktop` 配置，由桌面版的插件管理器下载和维护。更新：在酒馆左侧栏底部点「检查更新 → 进行更新」，完成后重启 DeepSeek Harness；它调用桌面版自带的 pnpm 重新安装 npm 上的新版本。人物卡、正文和会话保存在 `%USERPROFILE%\.dsh\profile-data\tavern\`，卸载插件不会删除。
 

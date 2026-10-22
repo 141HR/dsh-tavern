@@ -125,7 +125,7 @@
 
 1. 安装 [DeepSeek Harness 0.2.1-rc.2](https://deepseek.com/harness/) 并打开。
 2. 点左侧栏的 **插件**，再点右上角 **添加插件**，在输入框填 `dsh-profile-tavern@3.1.3`，点「安装」。安装源保持「中国大陆镜像源」即可。版本号照抄即可：不写版本号的话，桌面版会跳过刚发布不满一天的版本，可能装到旧版；装好后在酒馆里点更新就能到最新版。
-3. 安装完成后重启 DeepSeek Harness，即进入酒馆。
+3. 安装完成后点「立即启用」，然后退出并重新打开 DeepSeek Harness，即进入酒馆。启用时如果弹出「启用失败 … Agent resolver is already registered」，不用管，重新打开后就好。
 
 以后在酒馆里点「检查更新 → 进行更新」，完成后重启 DeepSeek Harness 即可。之前用安装命令或双击安装过的，照常在酒馆里更新，不用重装。
 

@@ -104,7 +104,7 @@ export const installation = `
 
 ### 第 3 步：重启进入酒馆
 
-安装完成后退出并重新打开 DeepSeek Harness，即进入酒馆。看到酒馆界面后，继续[配置模型并开始第一局](#a02--section-6)。
+安装完成后点 **立即启用**（不点的话插件不会生效），然后退出并重新打开 DeepSeek Harness，即进入酒馆。启用时如果弹出「启用失败 … Agent resolver is already registered」，不用管，重新打开后就好。看到酒馆界面后，继续[配置模型并开始第一局](#a02--section-6)。
 
 之前用 PowerShell 命令或一键安装包装过酒馆的，不用改装，照常在酒馆里点更新即可。
 
