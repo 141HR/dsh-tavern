@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Synthetic long games (every 5th round regenerated): the row plan's per-turn cost —
 // compute plus view-sync delta — must not grow with the game. No model, no app.
-//   node bin/bench-transcript-plan.mjs
-const R = new URL('../tavern-plugin/lib/domain/', import.meta.url).href
+//   node scripts/benchmarks/bench-transcript-plan.mjs
+const R = new URL('../../tavern-plugin/lib/domain/', import.meta.url).href
 const { planTranscriptWindow } = await import(R + 'transcript-row-plan.js')
 const { createSessionViewSync } = await import(R + 'session-view-sync.js')
 const model = { kind: 'model', provider: 'test', model: 'test' }

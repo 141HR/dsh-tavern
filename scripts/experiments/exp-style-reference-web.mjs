@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 // 文风联想：凭记忆（不联网）与联网搜索对照。每份样本导入两份副本，各自为最新一段正文选一次段
 // （这一轮还没有参考，不带「上一次选的是」），记录书名、作者、原文、耗时与搜索次数。
-//   node bin/exp-style-reference-web.mjs --card <人物卡名> --out 输出目录 样本1.jsonl [样本2.jsonl …]
+//   node scripts/experiments/exp-style-reference-web.mjs --card <人物卡名> --out 输出目录 样本1.jsonl [样本2.jsonl …]
 // 联网组运行期间临时改写系统提示词「文风联想选段」，结束（含出错）后恢复原值。对局保留不删。
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
-import { parseSessionLog } from '../tavern-plugin/lib/domain/session-log-codec.js'
+import { parseSessionLog } from '../../tavern-plugin/lib/domain/session-log-codec.js'
 
 const args = process.argv.slice(2)
 const option = name => { const at = args.indexOf('--' + name); return at >= 0 ? args[at + 1] : undefined }
 const cardName = option('card'), outDir = option('out')
 const samples = args.filter((arg, index) => !arg.startsWith('--') && !args[index - 1]?.startsWith('--'))
 if (!cardName || !outDir || !samples.length) {
-  console.error('用法：node bin/exp-style-reference-web.mjs --card <人物卡名> --out 输出目录 样本.jsonl …')
+  console.error('用法：node scripts/experiments/exp-style-reference-web.mjs --card <人物卡名> --out 输出目录 样本.jsonl …')
   process.exit(1)
 }
 const home = path.join(os.homedir(), '.dsh-tavern'), tavern = path.join(home, 'profile-data', 'tavern')

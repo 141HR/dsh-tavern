@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 // 文风联想 A/B（逐轮对照）：同一存档导入一局，A 为不参考的主线。每轮先开启文风联想生成 B，
 // 再关闭参考对这一轮重新生成得到 A，主线沿 A 继续。于是每轮的 A 与 B 前文完全相同，只差本轮是否注入参考。
-//   node bin/ab-style-reference.mjs --import 吞噬星空-前60轮.jsonl --card 吞噬星空 --inputs 输入.json --out 输出目录 [--home ~/.dsh-tavern]
+//   node scripts/experiments/ab-style-reference.mjs --import 吞噬星空-前60轮.jsonl --card 吞噬星空 --inputs 输入.json --out 输出目录 [--home ~/.dsh-tavern]
 // 输入文件是字符串数组，第一条是热身轮（只走主线，不对照）。对局保留不删；结果写入 <输出目录>/ab.json 与 ab.html（两栏并排）。
-// 只按 ab.json 重新生成网页：node bin/ab-style-reference.mjs --render-only --out 输出目录
+// 只按 ab.json 重新生成网页：node scripts/experiments/ab-style-reference.mjs --render-only --out 输出目录
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
-import { parseSessionLog } from '../tavern-plugin/lib/domain/session-log-codec.js'
+import { parseSessionLog } from '../../tavern-plugin/lib/domain/session-log-codec.js'
 
 const args = process.argv.slice(2)
 const option = name => { const at = args.indexOf('--' + name); return at >= 0 ? args[at + 1] : undefined }
 const importFile = option('import'), cardName = option('card'), inputsFile = option('inputs'), outDir = option('out')
 const renderOnly = args.includes('--render-only')
 if (!outDir || !renderOnly && (!importFile || !cardName || !inputsFile)) {
-  console.error('用法：node bin/ab-style-reference.mjs --import 聊天记录.jsonl --card <人物卡名> --inputs 输入.json --out 输出目录 [--home DSH 主目录]')
+  console.error('用法：node scripts/experiments/ab-style-reference.mjs --import 聊天记录.jsonl --card <人物卡名> --inputs 输入.json --out 输出目录 [--home DSH 主目录]')
   process.exit(1)
 }
 const home = path.resolve((option('home') || process.env.DSH_HOME || path.join(os.homedir(), '.dsh-tavern')).replace(/^~(?=$|\/)/, os.homedir()))

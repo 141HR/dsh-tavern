@@ -6,7 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { performance } from 'node:perf_hooks'
-import { createChatJournalStore } from '../tavern-plugin/lib/domain/chat-journal-store.js'
+import { createChatJournalStore } from '../../tavern-plugin/lib/domain/chat-journal-store.js'
 
 function fixture(count) {
   let seed = 123

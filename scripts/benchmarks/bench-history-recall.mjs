@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Memory-recall benchmark: does the model look things up in the story's history, and does it help?
-//   node bin/bench-history-recall.mjs (--import 吞噬星空-前60轮.jsonl --card 吞噬星空 | --save 已压缩.dshsave) --quiz 题库.json
+//   node scripts/benchmarks/bench-history-recall.mjs (--import 吞噬星空-前60轮.jsonl --card 吞噬星空 | --save 已压缩.dshsave) --quiz 题库.json
 //     [--form ask|hint|probe|both，默认 ask] [--repeat 1] [--only 1,5,9] [--out 结果.jsonl] [--home ~/.dsh-tavern] [--keep]
 // Every question gets a fresh game, the same start every time: the chat file imported anew (no model,
 // no compaction: the whole story may still be in context), or a frozen save — e.g. one compacted once —
@@ -15,13 +15,13 @@ import { appendFileSync, existsSync, readdirSync, readFileSync } from 'node:fs'
 import { request } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
-import { parseSessionLog } from '../tavern-plugin/lib/domain/session-log-codec.js'
+import { parseSessionLog } from '../../tavern-plugin/lib/domain/session-log-codec.js'
 
 const args = process.argv.slice(2)
 const option = name => { const at = args.indexOf('--' + name); return at >= 0 ? args[at + 1] : undefined }
 const importFile = option('import'), cardName = option('card'), saveFile = option('save'), quizFile = option('quiz')
 if (!(importFile && cardName || saveFile) || !quizFile) {
-  console.error('用法：node bin/bench-history-recall.mjs (--import 聊天记录.jsonl --card <人物卡名> | --save 存档.dshsave) --quiz 题库.json [--form ask|probe|both] [--repeat 次数] [--only 1,5,9] [--out 结果.jsonl] [--home DSH 主目录，默认 ~/.dsh-tavern] [--keep]')
+  console.error('用法：node scripts/benchmarks/bench-history-recall.mjs (--import 聊天记录.jsonl --card <人物卡名> | --save 存档.dshsave) --quiz 题库.json [--form ask|probe|both] [--repeat 次数] [--only 1,5,9] [--out 结果.jsonl] [--home DSH 主目录，默认 ~/.dsh-tavern] [--keep]')
   process.exit(1)
 }
 const home = path.resolve((option('home') || process.env.DSH_HOME || path.join(os.homedir(), '.dsh-tavern')).replace(/^~(?=$|\/)/, os.homedir()))
