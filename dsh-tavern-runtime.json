@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "42a2e51dd46a8fa23605fd8d597a5aeca3e23b5a",
-  "releaseSequence": 836,
+  "revision": "5deb1ef377240d0f41808a8e346040ff1def31d1",
+  "releaseSequence": 837,
   "version": "3.2.0",
   "files": [
     {
@@ -1531,8 +1531,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/package-managed-update.js",
-      "sha256": "e6108b2ff9a332ef44bbc46b290895d851b9c0c74a23852127123df4d9dd3544",
-      "size": 7957
+      "sha256": "e20b760b931301ac97613fe298c218c286838891bce3a99f6bd36827bbb6f049",
+      "size": 8366
     },
     {
       "path": "tavern-plugin/lib/domain/performance-diagnostics.js",
