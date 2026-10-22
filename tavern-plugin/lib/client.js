@@ -21373,12 +21373,12 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 			    }
 			    setBusy(true); setError(''); setNotice('');
 			    try {
-			      const result = await rpc('updateTavernHelperVariables', mvuVariablesUpdateRequest({
+			      const result = await rpc('updateTavernHelperVariables', Object.assign(mvuVariablesUpdateRequest({
 			        sessionId: props.sessionId,
 			        floor: floor,
 			        statData: statData,
 			        lifecycleRevision: helper && helper.lifecycleRevision
-			      }), props.sessionId);
+			      }), { variableUpdate: { afterTurn: floor.turn, before: floor.statData } }), props.sessionId);
 			      if (result && result.stale) {
 			        setError('对话已变化，变量未保存。请刷新后再试。');
 			        liveTavernView.invalidate(props.sessionId);
@@ -21437,7 +21437,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 			      !helper ? '当前会话没有可用的酒馆变量上下文。'
 			        : helper.mvuEnabled === false ? '本局没有启用 MVU 兼容运行时。'
 			          : !floor ? '还没有可编辑的楼层。'
-			            : editable ? (floor.turn ? '第 ' + floor.turn + ' 轮楼层 #' + floor.messageId : '楼层 #' + floor.messageId) + ' 的 MVU 状态数据。修改只影响这一层，不会重新结算，也不会发给正文模型。'
+			            : editable ? (floor.turn ? '第 ' + floor.turn + ' 轮楼层 #' + floor.messageId : '楼层 #' + floor.messageId) + ' 的 MVU 状态数据。保存后下一轮从这里的值接着走；更早的楼层不变，回退时会回到当时的值。保存不会触发重新结算。'
 			              : '当前楼层还没有 MVU 状态数据。首次变量结算后会出现。'),
 			    open && floor && editable ? h('div', null,
 			      h('div', { className: 'dsh-ledger-tabs dsh-mvu-tabs', role: 'tablist', 'aria-label': 'MVU 变量编辑方式' },

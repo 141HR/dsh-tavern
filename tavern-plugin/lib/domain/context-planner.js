@@ -2,6 +2,7 @@ import { postureForContext } from './posture-context.js'
 import { projectAgentContent } from './runtime-content-projection.js'
 import { cardSystemPromptText } from './card-system-prompt.js'
 import { styleReferenceSource } from './style-reference.js'
+import { variableUpdateText } from './variable-update.js'
 
 function str(value) {
   return typeof value === 'string' ? value : (value === undefined || value === null ? '' : String(value))
@@ -131,6 +132,7 @@ export function createContextPlanner(options = {}) {
         sections.push({ kind: 'script', required: true, text: '【本轮剧本参考' + position + '】\n' + projectText(input.scriptReference.text) })
         sections.push({ kind: 'script', required: true, text: prompt('script-story') })
       }
+      if (input.variableUpdate) sections.push({ kind: 'variable-update', required: true, text: variableUpdateText(input.variableUpdate) })
       const style = input.styleReference
       if (style && str(style.quote) !== '') {
         sections.push({ kind: 'style-reference', required: false, text: '【文风联想' + (styleReferenceSource(style) ? ' · ' + styleReferenceSource(style) : '') + '】\n' + str(style.quote) })

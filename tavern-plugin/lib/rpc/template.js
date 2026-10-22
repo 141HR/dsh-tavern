@@ -2,6 +2,7 @@ import { helperGenerationHistory, validateHelperGenerateConfig } from '../domain
 import { defaultOrderedRawConfig, generateHelper, generateHelperCompletion, generateHelperRaw } from '../domain/helper-generation.js'
 import { sanitizeRuntimeDiagnostics } from '../domain/mvu-diagnostics.js'
 import { hydrateTavernHelperMessages } from '../domain/tavern-helper-context.js'
+import { recordVariableUpdate } from '../domain/variable-update.js'
 import { estimateWorldBookTokens } from '../domain/worldbook-activation.js'
 import { randomUUID } from 'node:crypto'
 
@@ -11,7 +12,7 @@ export function createTemplateHandlers(deps) {
   const { agentRegistry, callModel, chatForSession, chatPersistence, commands, ctx, fullTemplateRuntime,
     helperGenerationPreset, helperGenerationTasks, helperHistoryAccess, openingPreparation, pagesInFront,
     projectOpeningWindow, readCardExtensions, readChatCard, readOpeningWindow, readSessionMap, sessionViews,
-    str, tavernScriptHostAdapter, worldBooks } = deps
+    str, tavernScriptHostAdapter, updateChat, worldBooks } = deps
   const handlers = {
     async generateTavernHelper(args, method) {
       return await helperGenerationTasks.run(args?.sessionId, args?.config?.generation_id, async signal => {
@@ -55,7 +56,13 @@ export function createTemplateHandlers(deps) {
       return await tavernScriptHostAdapter.updatePrompts(args && args.sessionId, args && args.operation, args && args.expectedLifecycleRevision, args && args.eventId)
     },
     async updateTavernHelperVariables(args) {
-      return await tavernScriptHostAdapter.updateVariables(args && args.sessionId, args && args.option, args && args.variables, args && args.expectedLifecycleRevision, args && args.eventId, args && args.contextBaseline)
+      const result = await tavernScriptHostAdapter.updateVariables(args && args.sessionId, args && args.option, args && args.variables, args && args.expectedLifecycleRevision, args && args.eventId, args && args.contextBaseline)
+      // The variable panel's edits; card scripts never send variableUpdate.
+      if (args?.variableUpdate && !result?.stale) {
+        await recordVariableUpdate({ chatForSession, updateChat }, args.sessionId, args.variableUpdate, args.variables?.stat_data)
+          .catch(error => console.warn('dsh-tavern: 记录变量更新失败:', error?.message || error))
+      }
+      return result
     },
     async updateTavernHelperMessages(args) {
       return await tavernScriptHostAdapter.updateMessages(args && args.sessionId, args && args.messages, args && args.expectedLifecycleRevision, args && args.eventId)
