@@ -78,6 +78,14 @@ export function createSettingsHandlers(deps) {
     async resetSystemPrompts(args) {
       return { systemPrompts: presentSystemPrompts(await updateTavernSettings({ resetSystemPrompts: SYSTEM_PROMPT_NAMES })) }
     },
+    async getCardPersonas(args) {
+      return { cardPersonas: (await readTavernSettings()).cardPersonas }
+    },
+    async manageCardPersona(args) {
+      const action = str(args && args.action)
+      if (!['select', 'create', 'duplicate', 'rename', 'delete', 'save', 'restore'].includes(action)) throw new Error('未知的性格操作')
+      return { cardPersonas: (await updateTavernSettings({ cardPersona: { action, id: args.id, name: args.name, text: args.text } })).cardPersonas }
+    },
     async manageSystemPromptSet(args) {
       const action = str(args && args.action)
       if (!['create', 'duplicate', 'select', 'rename', 'delete'].includes(action)) throw new Error('未知的系统提示词方案操作')

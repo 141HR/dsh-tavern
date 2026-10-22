@@ -249,6 +249,7 @@ import { createSystemPromptDocuments } from './domain/system-prompt-documents.js
 // Runtime reads go through runtimePrompt() so panel overrides apply; the raw
 // file catalog only supplies built-in defaults.
 import { prompt as promptFile, SYSTEM_PROMPT_NAMES } from './prompt-catalog.js'
+import { activeCardPersonaText } from './domain/card-personas.js'
 import { createMaintenanceHandlers } from './rpc/maintenance.js'
 import { createCardHandlers } from './rpc/cards.js'
 import { createTemplateHandlers } from './rpc/template.js'
@@ -3353,7 +3354,7 @@ export async function apply(ctx) {
         foregroundExtraTools.set(String(sessionId), extra)
         if (foregroundExtraTools.size > 300) foregroundExtraTools.delete(foregroundExtraTools.keys().next().value)
       },
-      cardSystemPrompt: function () { return runtimePrompt('card-system') },
+      cardSystemPrompt: function () { return activeCardPersonaText(tavernSettingsDocument) },
       cardReferencePrompt: function () { return runtimePrompt('card-reference') },
       workspaceContext: function (cwd, projection) { return resourceWorkspaceContext(cwd, projection, runtimePrompt('card-workspace')) },
       ensureSessionPrefix: async function (input) {

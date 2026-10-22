@@ -1,13 +1,14 @@
 import { compactionPolicy } from './auto-compaction.js'
 import { normalizeBackgroundModel } from './background-model-selection.js'
+import { applyCardPersonaChange, presentCardPersonas } from './card-personas.js'
 
 function object(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {}
 }
 
-// These prompts may be blank on purpose: a stored blank is the user's choice and
-// overrides the default; only resetting (deleting the key) restores it.
-const BLANK_ALLOWED_PROMPTS = new Set(['system-append', 'card-system'])
+// A stored blank here is the user's choice and overrides the default; only
+// resetting (deleting the key) restores it.
+const BLANK_ALLOWED_PROMPTS = new Set(['system-append'])
 
 function promptOverride(document, name) {
   const value = object(document.promptOverrides)[name]
@@ -222,6 +223,7 @@ export function applyTavernSettingsPatch(current, patch) {
   delete next.sillyModeEnabled
   delete next.compatibilityMode
   if (Object.hasOwn(input, 'promptSet')) applyPromptSetChange(next, object(input.promptSet))
+  if (Object.hasOwn(input, 'cardPersona')) applyCardPersonaChange(next, object(input.cardPersona))
   if (Object.hasOwn(input, 'systemAppendEnabled')) next.systemAppendEnabled = input.systemAppendEnabled === true
   if (Object.prototype.hasOwnProperty.call(input, 'webSearchEnabled')) next.webSearchEnabled = input.webSearchEnabled === true
   if (Object.prototype.hasOwnProperty.call(input, 'backgroundModel')) {
@@ -301,6 +303,7 @@ export function presentTavernSettings(document, defaults) {
     trustedCardMode: true,
     systemPrompts: prompts,
     promptSets: presentPromptSets(object(document)),
+    cardPersonas: presentCardPersonas(object(document)),
     storyPrompt: story.text,
     storyPromptCustomized: story.customized
   }

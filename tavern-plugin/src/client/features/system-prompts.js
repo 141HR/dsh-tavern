@@ -61,29 +61,13 @@
 				try { accept(await rpc("manageSystemPromptSet", { action: action, id: id, name: name }), action === "select" ? "已切换方案，将从下一次请求开始生效。" : action === "delete" ? "方案已删除，已切换到其他方案。" : action === "rename" ? "已重命名。" : "已新建方案并切换使用。"); }
 				catch (error) { setState(function (current) { return Object.assign({}, current, { busy: false, error: String(error && error.message || error) }); }); }
 			}
-			// Built-in personalities only fill the editor; saving makes them the user's override.
-			function personaPicker(item, value) {
-				const options = [{ id: "", label: "空白", text: "" }].concat(item.presets);
-				const match = options.find(function (option) { return option.text.trim() === value.trim(); });
-				async function pick(id) {
-					const option = options.find(function (entry) { return entry.id === id; });
-					if (!option) return;
-					if (value.trim() !== "" && !match && !await askConfirm("用“" + option.label + "”替换编辑框里的内容？")) return;
-					edit(item.name, option.text);
-				}
-				return h("label", { className: "dsh-tavern-prompt-editor-field full" }, "内置性格",
-					h("select", { "aria-label": "内置性格", value: match ? match.id : "custom", disabled: state.busy, onChange: function (event) { void pick(event.target.value); } },
-						options.map(function (option) { return h("option", { key: option.id || "blank", value: option.id }, option.label); }),
-						match ? null : h("option", { value: "custom", disabled: true }, "自定义")));
-			}
 			function row(item) {
 				const value = draft(item); const dirty = value !== String(item.text || "");
 				return h("details", { key: item.name, className: "dsh-tavern-prompt-row dsh-tavern-system-prompt-row role-system" },
 					h("summary", { className: "dsh-tavern-prompt-head" }, h("span", { className: "dsh-tavern-prompt-title" }, h("b", null, item.label), h("span", null, item.description)), item.name === "system-append" ? h("button", { type: "button", role: "switch", className: "dsh-tavern-prompt-state is-toggle " + (state.systemAppendEnabled ? "on" : "off"), disabled: state.busy, title: state.systemAppendEnabled ? "点击关闭附加指令" : "点击开启附加指令", "aria-label": "启用 system 附加指令", "aria-checked": state.systemAppendEnabled === true, onClick: function (event) { event.preventDefault(); event.stopPropagation(); void toggleSystemAppend(!state.systemAppendEnabled); } }) : h("span", { className: "dsh-tavern-prompt-state " + (item.customized ? "on" : "off") }, item.customized ? "已修改" : "默认")),
 					h("div", { className: "dsh-tavern-prompt-editor" },
-						Array.isArray(item.presets) && item.presets.length > 0 ? personaPicker(item, value) : null,
 						h("label", { className: "dsh-tavern-prompt-editor-field full" }, "内容", h("textarea", { value: value, disabled: state.busy, onChange: function (event) { edit(item.name, event.target.value); }, "aria-label": item.label })),
-						h("div", { className: "dsh-tavern-prompt-editor-actions" }, h("button", { className: "dsh-tavern-btn", disabled: state.busy || (!item.customized && !dirty), onClick: function () { void restore(item); } }, "恢复默认"), h("button", { className: "dsh-tavern-btn", disabled: state.busy || !dirty || (value.trim() === "" && item.name !== "system-append" && item.name !== "card-system"), onClick: function () { void save(item); } }, "保存此项"))));
+						h("div", { className: "dsh-tavern-prompt-editor-actions" }, h("button", { className: "dsh-tavern-btn", disabled: state.busy || (!item.customized && !dirty), onClick: function () { void restore(item); } }, "恢复默认"), h("button", { className: "dsh-tavern-btn", disabled: state.busy || !dirty || (value.trim() === "" && item.name !== "system-append"), onClick: function () { void save(item); } }, "保存此项"))));
 			}
 			return h("div", { className: "dsh-tavern-presets" },
 				h("div", { className: "dsh-tavern-status-head dsh-tavern-system-prompt-head" },

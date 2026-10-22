@@ -2,7 +2,6 @@ import { readFileSync, statSync } from 'node:fs'
 
 export const SYSTEM_PROMPT_DEFINITIONS = Object.freeze([
   ['system-append', 'system附加指令', '默认开启，可按需关闭。内容会添加到前台、后台及卡片 Agent 的 system 提示词最前面（位于酒馆预设之前），修改后从下一次请求生效。'],
-  ['card-system', '卡片 Agent 系统指令', '默认空白，可选一个内置性格再按需修改，或自行填写；非空时仅注入卡片 Agent。'],
   ['story', '正文 Agent 核心提示词', '控制普通游玩正文的续写规则。'],
   ['script-story', '剧本模式正文补充', '控制绑定剧本时追加给正文 Agent 的规则。'],
   ['style-reference-recall', '文风联想选段', '开启「文风联想」后，后台每轮按这段要求挑一部笔调相近的小说并摘一段原文。可在这里调整选书范围（如偏好轻小说、某类题材），修改后下一次选段生效。'],
@@ -35,7 +34,7 @@ export function createPromptCatalog(directory = new URL('../prompts/', import.me
     const previous = cache.get(name)
     if (previous?.stamp === stamp) return previous.text
     const text = read(file, 'utf8').trim()
-    if (text === '' && name !== 'card-system' && name !== 'system-append') throw new Error('提示词文件不能为空: ' + name + '.md')
+    if (text === '' && name !== 'system-append') throw new Error('提示词文件不能为空: ' + name + '.md')
     if (version(file) === stamp) cache.set(name, { stamp, text })
     return text
   }
@@ -43,8 +42,7 @@ export function createPromptCatalog(directory = new URL('../prompts/', import.me
 
 export const prompt = createPromptCatalog()
 
-// Built-in personalities offered for 卡片 Agent 系统指令. Picking one only fills
-// the editor; saving stores it as an ordinary override.
+// Built-in 卡片工作台性格; the library itself lives in domain/card-personas.js.
 export const CARD_PERSONA_DEFINITIONS = Object.freeze([
   ['zhumi', '猫娘助手 · 煮米'],
   ['editor', '冷静专业编辑'],

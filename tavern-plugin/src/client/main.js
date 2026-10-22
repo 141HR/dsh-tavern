@@ -851,6 +851,7 @@ window.__ModuleLoader__.load({
 // @include features/regex-library.js
 
 // @include features/system-prompts.js
+// @include features/card-personas.js
 
 // @include features/resources-library.js
 

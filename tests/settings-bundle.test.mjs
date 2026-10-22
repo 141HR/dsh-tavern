@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { buildSettingsBundle } from '../tavern-plugin/lib/domain/settings-bundle.js'
-import { applyTavernSettingsPatch, presentTavernSettings, resolveSystemPrompt } from '../tavern-plugin/lib/domain/tavern-settings.js'
+import { applyTavernSettingsPatch, presentTavernSettings } from '../tavern-plugin/lib/domain/tavern-settings.js'
 import { createUserPreferenceProfile } from '../tavern-plugin/lib/domain/user-preference-profile.js'
 
 import { createSettingsTransfer } from '../tavern-plugin/lib/domain/settings-transfer.js'
@@ -101,26 +101,4 @@ test('系统提示词校验失败时不先导入预设或切换长期偏好', as
   assert.equal(h.presets.size, 0)
   assert.equal(h.active(), '')
   assert.deepEqual(h.settings(), {})
-})
-
-test('卡片 Agent 系统指令：用户保存空白即覆盖默认，恢复默认才回到文件内容', () => {
-  const defaults = { 'card-system': '默认人设' }
-  const cleared = applyTavernSettingsPatch({}, { systemPrompt: { name: 'card-system', text: '  ' } })
-  const shown = presentTavernSettings(cleared, defaults).systemPrompts.find(item => item.name === 'card-system')
-  assert.deepEqual([shown.text, shown.customized], ['', true])
-  assert.equal(resolveSystemPrompt(cleared, 'card-system', name => defaults[name]), '')
-  const restored = applyTavernSettingsPatch(cleared, { systemPrompt: { name: 'card-system', text: null } })
-  assert.equal(resolveSystemPrompt(restored, 'card-system', name => defaults[name]), '默认人设')
-  assert.throws(() => applyTavernSettingsPatch({}, { systemPrompt: { name: 'story', text: '' } }), /不能为空/)
-})
-
-test('内置性格随卡片 Agent 系统指令下发，导出方案时不带出', async () => {
-  const { cardPersonas, CARD_PERSONA_DEFINITIONS } = await import('../tavern-plugin/lib/prompt-catalog.js')
-  const personas = cardPersonas()
-  assert.equal(personas.length, CARD_PERSONA_DEFINITIONS.length)
-  for (const item of personas) assert.ok(item.text.length > 0, item.id)
-  const documents = createSystemPromptDocuments({ definitions: [{ name: 'card-system', label: 'c' }, { name: 'story', label: 's' }], prompt: () => '', personas: () => [{ id: 'x', label: 'X', text: 'x' }] })
-  const settings = { systemPrompts: [], promptSets: { sets: [] } }
-  assert.deepEqual(documents.present(settings).prompts.map(item => item.presets), [[{ id: 'x', label: 'X', text: 'x' }], undefined])
-  assert.deepEqual(documents.export(settings).prompts, { 'card-system': '', story: '' })
 })
