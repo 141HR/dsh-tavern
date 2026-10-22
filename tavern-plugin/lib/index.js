@@ -46,8 +46,6 @@ import { storedSessionVersion } from './domain/session-upgrade.js'
 import { createTaskStateReader, taskStateFields } from './domain/task-state-reader.js'
 import { installHostProjectionReplay } from './domain/host-projection-replay.js'
 import { createBoundedHistory, readRecentWindow, readRowsAt } from './domain/bounded-history.js'
-import { readSettlementInput } from './domain/settlement-input.js'
-import { applySettlement } from './domain/settlement-turn.js'
 import { createHelperHistoryAccess } from './domain/helper-history-access.js'
 import { isScopedMessages } from './domain/scoped-messages.js'
 import {registerVariableReadTool} from './domain/read-variables.js'
@@ -61,8 +59,7 @@ import { createCardSummaryCache } from './domain/card-summary-cache.js'
 import { openingPreviewPayload } from './domain/opening-transport.js'
 import { createLiveCardUpdate } from './domain/live-card-update.js'
 import { createSessionViewReader, createSessionChatReader } from './domain/session-view-reader.js'
-import { settlementTurn, pendingMvuSettlementState } from './domain/chat-session-state.js'
-import { createSettlementProgressGuard } from './domain/settlement-progress-guard.js'
+import { settlementTurn } from './domain/chat-session-state.js'
 import { createSettlementJobs } from './domain/settlement-jobs.js'
 import { createTurnSettledEvents } from './domain/turn-settled-events.js'
 import { createPluginSettlementProgress } from './domain/plugin-settlement-progress.js'
@@ -163,7 +160,9 @@ import { createDisplayRuntimeCoalescer } from './domain/display-runtime-coalesce
 import { MVU_SUBMIT_UPDATE_TOOL, createMvuSettlementModule } from './domain/mvu-background-settlement.js'
 import { createMvuSettlementEngine } from './domain/mvu-settlement-engine.js'
 import { createPlainSettlementEngine } from './domain/plain-settlement-engine.js'
-import { createMvuSettlementReconciler } from './domain/mvu-settlement-reconciler.js'
+import { createSettlementRun } from './domain/settlement-run.js'
+import { createSettlementControls } from './domain/settlement-controls.js'
+import { createMvuSettlementResume } from './domain/mvu-settlement-resume.js'
 import {
   CHARACTER_DESIGN_READ_TOOL,
   CHARACTER_DESIGN_SAVE_TOOL,
@@ -182,7 +181,7 @@ import { createAssetPacks } from './domain/asset-packs.js'
 import { createUploads } from './domain/uploads.js'
 import { createCardPlugins } from './domain/card-plugins.js'
 import { createCardFiles } from './domain/card-files.js'
-import { createPostureItem, createSettlementItems, runPipelineStages } from './domain/background-pipeline.js'
+import { createPostureItem, createSettlementItems } from './domain/background-pipeline.js'
 import { createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
 import { createMvuDiagnosticStore, createMvuDiagnosticExport } from './domain/mvu-diagnostics.js'
 import { createPlayChatDebugReference, readPlayChatDebugTurn } from './domain/play-chat-debug.js'
@@ -616,7 +615,7 @@ export async function apply(ctx) {
 
   const turnSettled = createTurnSettledEvents()
   turnSettled.subscribe(({ latest }) => { if (latest) return gameTitles.afterTurn(latest.sessionId, latest.cardName) })
-  const settlementJobs = createSettlementJobs({ run: (...args) => wholeReads.scope('结算', () => runSettlementCycle(...args)), onSettled: onSettlementSettled })
+  const settlementJobs = createSettlementJobs({ run: (...args) => wholeReads.scope('结算', () => settlementRun.runCycle(...args)), onSettled: (...args) => settlementRun.onSettled(...args) })
   const scriptContinuity = createScriptContinuity()
   const storyTimeline = createStoryTimeline({ id: uid, now: Date.now })
   const cardPreparation = createCardPreparation({ id: function () { return uid('card') }, now: Date.now })
@@ -2638,7 +2637,7 @@ export async function apply(ctx) {
       isLive: function (sessionId) { return Boolean(agentRegistry.get(sessionId)?.session) },
       projectionRevision: cardProjectionRevision
     },
-    prepareLegacy: pullBackgroundCycle
+    prepareLegacy: sessionId => pullBackgroundCycle(sessionId)
   })
   const ledgerEditor = createLedgerEditor({
     chats: { forSession: chatForSession, update: updateChat }, timeline: storyTimeline,
@@ -2745,277 +2744,25 @@ export async function apply(ctx) {
   }
   const mvuSettlementEngine = createMvuSettlementEngine({ mvuSettlement, mvuUpdateRules, backgroundModelSelection, postureItem, tavernScriptDispatch })
   const plainSettlementEngine = createPlainSettlementEngine({ pluginApi, pluginSettlementProgress, settlementItems, backgroundModelSelection, postureItem, backgroundAgentRunner, agentRegistry, sessionStore })
-  async function runSettlement(chatId, signal) {
-    const retryStale = createSettlementProgressGuard({ backgroundTasks, onStopped: ({ operationId, error }) => {
-      console.error('dsh-tavern: 结算连续三次未能提交且剧情状态未前进，已停止，可重新结算', chatId, operationId, str(error?.message || error || '提交已过期'))
-    } })
-    while (true) {
-      signal?.throwIfAborted()
-      let snapshot = await readSettlementInput(chatId, {readWindow:chatPersistence.readWindow,readChat,scanDepth:worldBookScanDepth})
-      signal?.throwIfAborted()
-      if (snapshot === undefined) return
-      snapshot = await prepareNextWorldBookContext(snapshot, signal)
-      signal?.throwIfAborted()
-      if (snapshot === null) return
-      const taskRun = await backgroundTasks.begin(snapshot, 'settlement', { reuseSnapshot: true })
-      snapshot = taskRun.chat
-      const trace = { sessionId: str(taskRun.participantRequest.sessionId), boundary: null }
-      try {
-        signal?.throwIfAborted()
-        const card = await readChatCard(snapshot)
-        signal?.throwIfAborted()
-        const engine = await runSettlementEngine({ snapshot, taskRun, card, signal, trace })
-        if (engine.deferred) return
-        const { text, result, mvuResult, mvuTarget, backgroundTasksSettings } = engine
-        signal?.throwIfAborted()
-        let stat = { postureUpdated: false }
-        const mvuCompletion = mvuSettlementEngine.completion({ mvuTarget, mvuResult, backgroundTasksSettings })
-        const completion = {
-          ...(mvuCompletion.messageIndices ? { messageIndices: mvuCompletion.messageIndices } : {}),
-          stateChanged: mvuCompletion.stateChanged || str(result && result.posture).trim() !== '',
-          participant: taskRun.participant({ sessionId: trace.sessionId, boundary: trace.boundary }),
-          apply(draft, scope) {
-            mvuCompletion.apply(draft, scope)
-            stat = applySettlement(draft, result)
-            draft.settleStatus = 'done'
-            draft.settleError = null
-            draft.lastSettle = { ts: Date.now(), posture: stat.postureUpdated, raw: text.slice(0, 200) }
-          }
-        }
-        const completed = await taskRun.commit(completion)
-        if (completed.status === 'missing') return
-        if (completed.status === 'stale') {
-          signal?.throwIfAborted()
-          if (await retryStale(completed.chat)) continue
-          return
-        }
-        console.log('dsh-tavern: 结算完成', chatId, '姿势', stat.postureUpdated ? '已更新' : '未更新')
-        console.log('dsh-tavern: 结算原始输出:', text.slice(0, 200))
-        return
-      } catch (err) {
-        if (signal?.aborted) return
-        const failedSessionId = str(err && err.traceSessionId)
-        if (failedSessionId && failedSessionId !== trace.sessionId) {
-          trace.sessionId = failedSessionId
-          trace.boundary = null
-        }
-        if (trace.boundary === null && Number.isSafeInteger(err && err.traceBoundary)) trace.boundary = err.traceBoundary
-        const failed = await taskRun.commit({
-          status: 'failed',
-          stateChanged: false,
-          participant: taskRun.participant({ sessionId: trace.sessionId, boundary: trace.boundary })
-        })
-        if (failed.status === 'missing') return
-        if (failed.status === 'stale') {
-          signal?.throwIfAborted()
-          console.warn('dsh-tavern: 结算失败结果已过期', chatId, str(err?.message || err))
-          if (await retryStale(failed.chat, err)) continue
-          return
-        }
-        const latest = await readChat(chatId)
-        if (latest === undefined) return
-        const message = str(err && err.message || err) || '后台结算失败'
-        const mvuFailed = mvuSettlementEngine.recordFailure(latest, err, message)
-        latest.settleStatus = 'failed'
-        latest.settleError = message
-        await writeChat(latest, { source: mvuFailed ? 'settlement.mvu-failed' : 'settlement.posture-failed' })
-        console.error('dsh-tavern: 结算失败', chatId, str(err && err.message || err))
-        return
-      }
-    }
-  }
-  // ---------- 插件任务：结算前后的任务、玩家手动运行的任务（docs/plugin-api.md） ----------
-  // A settlement job: plugin tasks before Tavern's settlement, the settlement, plugin tasks after it.
-  // Running inside the job, they hold the next turn back (foreground handoff waits for the job).
-  // The main settlement's engine (docs/design/background-task-pipeline.md): official MVU
-  // variables carry the posture in their own run; every other game settles the plain way.
-  // `trace` carries the background session the run used, also when it throws.
-  async function runSettlementEngine({ snapshot, taskRun, card, signal, trace }) {
-    const backgroundTasksSettings = mvuSettlementEngine.settings(snapshot)
-    const mvuTarget = mvuSettlementEngine.target(snapshot)
-    if (mvuSettlementEngine.runs(mvuTarget, backgroundTasksSettings)) {
-      const settled = await mvuSettlementEngine.run({ snapshot, taskRun, card, signal, trace, backgroundTasksSettings, mvuTarget })
-      if (settled.deferred) return settled
-      return { text: settled.text, result: { posture: settled.posture }, mvuResult: settled.mvuResult, mvuTarget, backgroundTasksSettings }
-    }
-    const { text, result } = await plainSettlementEngine.run({ snapshot, taskRun, card, signal, trace, backgroundTasksSettings })
-    return { text, result, mvuResult: null, mvuTarget, backgroundTasksSettings }
-  }
-  async function runSettlementCycle(chatId, signal) {
-    const state = await taskStateReader.read(chatId).catch(() => null)
-    const gameId = str(state?.sessionId)
-    const onStart = label => pluginSettlementProgress.begin(gameId, label)
-    const activity = state ? backgroundTasks.activity(state) : null
-    const turnPending = () => Boolean(gameId) && activity?.role === 'settlement' && ['pending', 'running'].includes(activity.phase)
-    // A new turn may have replaced versions plugins are still working on.
-    if (gameId) await pluginApi.checkVersions(gameId).catch(() => {})
-    // The turn's pipeline (docs/design/background-task-pipeline.md): before-tasks, the main settlement
-    // with the parallel tasks running alongside it, after-tasks.
-    await runPipelineStages([
-      { id: 'before', when: turnPending,
-        run: () => pluginApi.runSettlementTasks({ gameId, phase: 'before', signal, onStart }) },
-      { id: 'settle', run: async () => {
-        const alongside = turnPending() && !signal?.aborted ? pluginApi.runSettlementTasks({ gameId, phase: 'parallel', signal, onStart })
-          .catch(error => console.warn('dsh-tavern: 插件并行任务失败:', str(error?.message || error))) : null
-        try { await runSettlement(chatId, signal) } finally { await alongside }
-      } },
-      // Tavern's settlement is committed by now: a plugin-task operation keeps the game busy (and stoppable).
-      { id: 'after', when: () => Boolean(gameId) && !signal?.aborted,
-        run: () => pluginApi.runSettlementTasks({ gameId, phase: 'after', signal, onStart, around: work => inPluginTaskOperation(chatId, work) }) }
-    ])
-  }
-  async function inPluginTaskOperation(chatId, work) {
-    const taskRun = await backgroundTasks.begin(await taskStateReader.read(chatId), 'plugin-task')
-    try { await work(taskRun.operationId) }
-    finally { await taskRun.commit({ stateChanged: false }).catch(error => console.warn('dsh-tavern: 插件任务收尾失败:', str(error?.message || error))) }
-  }
-
-  const pluginTaskJobs = new Map()
-  // A manual plugin task: an exclusive background task, like the ledger; returns once started.
-  async function startPluginTask(sessionId, key, input) {
-    const chat = await taskStateReader.forSession(str(sessionId))
-    if (!chat || !['story', 'script'].includes(chat.mode)) throw new Error('当前没有游玩对话')
-    if (agentRegistry.get(chat.sessionId)?.phase?.kind === 'running' || chat.regenInProgress) throw new Error('请等待正文生成完成后再运行插件任务')
-    if (pluginTaskJobs.has(chat.id)) throw new Error('已有插件任务在运行，请等它完成')
-    await pluginApi.manualTaskFor(chat.sessionId, key, input)
-    const taskRun = await backgroundTasks.begin(chat, 'plugin-task')
-    const job = pluginApi.runManualTask({ gameId: chat.sessionId, key, input, operationId: taskRun.operationId, signal: new AbortController().signal,
-      onStart: label => pluginSettlementProgress.begin(chat.sessionId, label) })
-      .catch(error => console.warn('dsh-tavern: 插件任务失败:', str(error?.message || error)))
-      .finally(async () => {
-        pluginTaskJobs.delete(chat.id)
-        await taskRun.commit({ stateChanged: false }).catch(error => console.warn('dsh-tavern: 插件任务收尾失败:', str(error?.message || error)))
-      })
-    pluginTaskJobs.set(chat.id, job)
-    return { started: true }
-  }
-  async function onSettlementSettled(chatId, signal) {
-    let latest
-    try { latest = (await chatPersistence.readSlice(chatId, [], ['_storageRevision', 'sessionId', 'cardName']))?.chat } catch { latest = null }
-    if (!signal.aborted && latest !== undefined) turnSettled.emit({ chatId, latest })
-  }
+  const settlementRun = createSettlementRun({
+    backgroundTasks, chatPersistence, readChat, writeChat, readChatCard, taskStateReader, worldBookScanDepth, prepareNextWorldBookContext,
+    mvuSettlementEngine, plainSettlementEngine, pluginApi, pluginSettlementProgress, agentRegistry, turnSettled
+  })
+  const { startPluginTask } = settlementRun
   function queueSettlement(chatId) { return settlementJobs.start(chatId) }
   function cancelSettlement(chatId, options) { return settlementJobs.cancel(chatId, options) }
-  const mvuSettlementReconciler = createMvuSettlementReconciler({
-    list: () => conversationRegistry.list(),
-    resolve: async sessionId => {
-      const state = await taskStateReader.forSession(sessionId)
-      // Pending delivery may need old message receipts. Idle eligibility does not.
-      return state && backgroundTasks.activity(state).phase === 'pending'
-        ? sessionStateForSession(sessionId) : state
-    },
-    shouldResume: function (chat) {
-      return Boolean(pendingMvuSettlementState(chat)?.hasSubmission
-        && backgroundTasks.activity(chat).phase === 'pending')
-    },
-    isReady: function (sessionId, chat) {
-      if (pendingMvuSettlementState(chat)?.prepared) return true
-      const state = tavernScriptDispatch.status(sessionId)
-      // A waiting settlement with no page in front keeps (or starts) the
-      // server runtime until it finishes.
-      if (serverScripts && !pageInFront(sessionId)) serverScripts.demand(sessionId)
-      return state.ready === true || Boolean(state.initializationError)
-    },
-    resume: chatId => queueSettlement(chatId),
-    retryDelayMs: 10000,
-    onError: function (error) {
-      console.error('dsh-tavern: 接续等待中的 MVU 变量结算失败，将自动重试', str(error && error.message || error))
-    }
-  })
-  // An unreadable save after a settlement: scan every game for waiting MVU work instead.
-  turnSettled.subscribe(({ latest }) => latest ? mvuSettlementReconciler.wake(latest.sessionId) : mvuSettlementReconciler.scan())
-  const unsubscribeMvuRuntimeReady = tavernScriptDispatch.subscribeSettled(function (sessionId) {
-    void mvuSettlementReconciler.wake(sessionId)
+  const mvuSettlementReconciler = createMvuSettlementResume({
+    conversationRegistry, taskStateReader, sessionStateForSession, backgroundTasks, tavernScriptDispatch, pageInFront, queueSettlement, turnSettled,
+    get serverScripts() { return serverScripts }
   })
   ctx.effect(() => function () {
-    unsubscribeMvuRuntimeReady()
     mvuSettlementReconciler.dispose()
     settlementJobs.dispose()
   }, 'dsh-tavern: reconcile deferred MVU settlement')
-  async function stopBackground(sessionId, operationId) {
-    const chat = await chatForSession(sessionId)
-    if (!chat) throw new Error('对话不存在')
-    const activity = backgroundTasks.activity(chat)
-    if (!operationId || activity.operationId !== operationId || (!activity.busy && activity.phase !== 'pending')) return view(chat, await readChatCard(chat))
-    // Abort the provider request first; interrupted operations reject late commits.
-    pluginApi.stopTasks(chat.sessionId)
-    backgroundAgentRunner.cancel(chat.sessionId)
-    await cancelSettlement(chat.id, { wait: false })
-    const stopped = await backgroundTasks.recover(chat, { operationId })
-    return view(stopped.chat, await readChatCard(stopped.chat))
-  }
-
-  async function retrySettlement(sessionId, turn, guidance) {
-    for (let attempt=0;attempt<5;attempt++) {
-      const recent = await readOpeningWindow(sessionId)
-      const window = recent && recent.chat.timeline?.schemaVersion === 1
-        && !Object.values(recent.chat.timeline.operations || {}).some(op => op?.kind === 'body' && op.status === 'foreground-completed')
-        && recent.chat.messages.some(message => message.role === 'assistant' && message.greeting !== true) ? recent : null
-      const chat = window ? window.chat : await chatForSession(sessionId)
-      if (chat === undefined) throw new Error('当前会话没有绑定人物卡')
-      const activity = backgroundTasks.activity(chat)
-      // The next turn's preparation (worldbook pool, style reference) gives way.
-      if (activity.busy && ['worldbook-filter', 'style-reference'].includes(activity.role)) { await worldbookPrefilter.cancel(chat.id); continue }
-      if (activity.busy) throw new Error('后台 Agent 正在运行，请稍候')
-      if (Object.values(storyTimeline.inspect({ chat }).operations || {}).some(operation => operation.kind === 'body' && operation.status === 'running')) {
-        throw new Error('正文正在生成，请等待完成后再重新结算')
-      }
-      const messages = Array.isArray(chat.messages) ? chat.messages : []
-      let target = null
-      for (let messageId = messages.length - 1; messageId >= 0; messageId--) {
-        const message = messages[messageId]
-        if (!message || message.role !== 'assistant' || message.greeting === true) continue
-        target = { messageId: messageId + (window?.from || 0), message }
-        break
-      }
-      if (target === null || Math.max(0, Number(target.message.turn) || 0) !== Math.max(0, Number(turn) || 0)) {
-        throw new Error('只能重试当前最新正文的后台结算')
-      }
-      const mvuRetry = mvuSettlementEngine.prepareRetry({ chat, target, guidance, activity })
-      if (mvuRetry === 'redeliver') {
-        void queueSettlement(chat.id).catch(error => console.error('dsh-tavern: 重新投递变量结算失败', str(error?.message || error)))
-        return window ? await projectOpeningWindow(window) : await view(chat, await readChatCard(chat))
-      }
-      if (mvuRetry === 'none' && (activity.phase !== 'failed' || activity.role !== 'settlement')) {
-        throw new Error('当前最新正文没有失败的后台结算')
-      }
-      chat.settleStatus = 'pending'
-      chat.settleError = null
-      chat.updatedAt = Date.now()
-      // Historical display backfill must not turn a retry into a full-history
-      // merge. CAS the requested fields; on conflict re-read and revalidate the
-      // latest body, activity and MVU baseline before trying again.
-      const saved = await patchChat(chat.id, chat._storageRevision, [
-        ...(mvuRetry === 'reset' ? [{op:'set',path:['messages',target.messageId,'mvu'],value:target.message.mvu}] : []),
-        {op:'set',path:['settleStatus'],value:'pending'}, {op:'set',path:['settleError'],value:null}
-      ], { source: 'settlement.retry' })
-      if (!saved) continue
-      chat._storageRevision = saved._storageRevision
-      chat.updatedAt = saved.updatedAt
-      if (window) window.revision = saved._storageRevision
-      void queueSettlement(chat.id).catch(function (error) {
-        console.error('dsh-tavern: 重试后台结算失败', str(error && error.message || error))
-      })
-      return window ? await projectOpeningWindow(window) : await view(chat, await readChatCard(chat))
-    }
-    throw new Error('对话正在被其他操作更新，请稍后重新结算')
-  }
-  async function pullBackgroundCycle(sessionId) {
-    let chat = await chatForSession(sessionId)
-    if (chat === undefined) throw new Error('当前会话没有绑定人物卡')
-    let shouldRun = false
-    if (isOpeningAwaitingSettlement(chat)) {
-      chat.settleStatus = 'running'
-      chat.settleError = null
-      await writeChat(chat, { source: 'settlement.opening-prepare' })
-      shouldRun = true
-    }
-    const activity = backgroundTasks.activity(chat)
-    if (activity.role === 'settlement' && (activity.phase === 'pending' || activity.phase === 'running')) shouldRun = true
-    if (!shouldRun) return true
-    void queueSettlement(chat.id)
-    return false
-  }
+  const { stopBackground, retrySettlement, pullBackgroundCycle } = createSettlementControls({
+    chatForSession, readOpeningWindow, projectOpeningWindow, view, readChatCard, backgroundTasks, worldbookPrefilter, storyTimeline,
+    patchChat, writeChat, queueSettlement, cancelSettlement, mvuSettlementEngine, pluginApi, backgroundAgentRunner
+  })
   // ---------- 卡片工作台：剧本素材与新卡创建 ----------
   async function sourceWindowOf(chat) {
     const out = []
@@ -3132,7 +2879,7 @@ export async function apply(ctx) {
     store: { chatForSession, readChat, readState: taskStateReader.read, stateForSession: taskStateReader.forSession, openingStateForSession },
     tasks: backgroundTasks,
     queueBackground: queueSettlement,
-    waitBackground: chatId => Promise.all([settlementJobs.pending(chatId), pluginTaskJobs.get(chatId)]),
+    waitBackground: chatId => Promise.all([settlementJobs.pending(chatId), settlementRun.pluginTaskJob(chatId)]),
     prefilterWorldbook: chatId => worldbookPrefilter.start(chatId),
     cancelPrefilter: chatId => worldbookPrefilter.cancel(chatId),
     waitReconcile: storyReconciliation.waitReconcile,
