@@ -34,7 +34,7 @@ import { IMAGE_PROVIDERS, generateImage, testImageChannel } from './image-provid
 import { normalizeChannels, publicChannels, activeChannel, channelConfigPatch } from './image-channels.js'
 import { createCredentialStore } from './credential-store.js'
 import { patchWorkflowGraph, workflowRevision } from './workflow-graph.js'
-import { parseImagePlan, parsePlannerDecision, characterRoster, buildPlannerSystem, runPlanner, normalizePrompts, parseDesign, parsePromptsBlock, formatPromptsBlock, preserveCharacterMetadata } from './planner.js'
+import { parseImagePlan, parsePlannerDecision, characterRoster, buildPlannerSystem, runPlanner, normalizePrompts, dedupeTags, parseDesign, parsePromptsBlock, formatPromptsBlock, preserveCharacterMetadata } from './planner.js'
 import { normalizeEntryActivation, selectPlannerContext } from './planner-context.js'
 import { createDownloadPackage, PLUGIN_DOWNLOADS } from './download-package.js'
 import { createMediaActions } from './media-actions.js'
@@ -5575,7 +5575,9 @@ function prepareImagePrompt({ workflow, params, config, definitions, onStage = n
   const provenance = onStage ? [] : null
   const injected = injectDefinitions(base, definitions, config, { style: mode === 'natural' ? 'natural' : 'tags', provenance, raw: params.rawTag })
   // 自然语言模型（LLM 文本编码器）不认 (tag:1.2) 这种权重，总是去掉；tag 模型按设置处理。
-  const positive = formatPromptForBackend(applyWeights(injected.text, resolveWeightMode(config, channel?.provider ?? backend, mode)), backend, mode)
+  // 画风词和按名字补上的外貌是在规划提示词清理之后才拼进来的，tag 写法再去一次重。
+  const injectedText = mode === 'tags' ? dedupeTags(injected.text) : injected.text
+  const positive = formatPromptForBackend(applyWeights(injectedText, resolveWeightMode(config, channel?.provider ?? backend, mode)), backend, mode)
   stage('compile-positive', { mode, artistPosition: params.artistPosition ?? config.artistPosition, artist, rawBase, afterPreset: base, afterInjection: injected.text, final: positive, hits: injected.hits, provenance })
 
   const workflowNegative = String(
