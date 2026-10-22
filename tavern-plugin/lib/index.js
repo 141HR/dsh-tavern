@@ -259,6 +259,7 @@ import { createResourceHandlers } from './rpc/resources.js'
 import { createMediaHandlers } from './rpc/media.js'
 import { createSettingsHandlers } from './rpc/settings.js'
 import { createPluginHandlers } from './rpc/plugins.js'
+import { createConversationHandlers } from './rpc/conversations.js'
 // dsh-tavern 宿主插件（profile 组合行）
 // RPC：同源 HTTP 路由 /api/dsh-tavern/<method>（客户端 fetch 调用）
 // DSH 生命周期负责回合状态；模型工具只处理按需读取和明确修改。
@@ -4017,27 +4018,31 @@ export async function apply(ctx) {
   })
 
   // Request handlers by area live in rpc/; bindings assigned later are read through getters.
-  const rpcDeps = { TAVERN_PACKAGE_VERSION, agentRegistry, applicationUpdater, attachPlayChatDebug,
-    backgroundAgentRunner, backgroundConfigForSession, bindScript, callModel, cardMemory, cardOrganization,
-    cardPacksOf, cardPlugins, cardPreparation, cardTaskPrompts, castAssets, castCardOf, castEdit,
-    castPresentation, castStage, castView, chatForSession, chatHeaderForSession, chatPersistence, commands,
-    compatibilityDiagnostics, conversationBackgroundSettings, ctx, dataRoot, deleteCard, deletePreset,
-    deleteResource, deleteScript, displayRuntimeCaptures, ensureNativeCardWorkspace, ensureNativeOpening,
-    exportSettingsBundle, exportTavernLogs, fileResources, fullTemplateRuntime, getCardOpenings, groupOfMode,
-    guideLibrary, helperGenerationPreset, helperGenerationTasks, helperHistoryAccess, hostCompatibility,
-    importCard, importCardArchiveFile, importPluginCardFile, importPreset, importScript,
-    importSettingsBundle, importSource, listCards, listTavernResources, llm, mobileCardImport,
-    modelRequestLog, mvuDiagnostics, openingPreparation, pagesInFront, playCardSnapshots, pluginApi,
-    pluginDataStore, pluginGalleryItems, pluginMediaForTurn, pluginMediaTurns, preparedSaveSessions,
+  const rpcDeps = { TAVERN_PACKAGE_VERSION, agentRegistry, appendStoryRounds, applicationUpdater,
+    attachPlayChatDebug, backgroundAgentRunner, backgroundConfigForSession, bindScript, callModel,
+    cardMemory, cardOrganization, cardPacksOf, cardPlugins, cardPreparation, cardTaskPrompts, castAssets,
+    castCardOf, castEdit, castPresentation, castStage, castView, chatForSession, chatHeaderForSession,
+    chatHistoryImporter, chatPersistence, commands, compatibilityDiagnostics, conversationBackgroundSettings,
+    ctx, dataRoot, deleteCard, deleteChat, deleteChats, deletePreset, deleteResource, deleteScript,
+    displayRuntimeCaptures, ensureNativeCardWorkspace, ensureNativeOpening, exportConversation,
+    exportGameSave, exportSettingsBundle, exportTavernLogs, fileResources, forkChat, fullTemplateRuntime,
+    getCardOpenings, groupOfMode, guideLibrary, helperGenerationPreset, helperGenerationTasks,
+    helperHistoryAccess, hostCompatibility, importCard, importCardArchiveFile, importChatHistoryText,
+    importGameSave, importPluginCardFile, importPreset, importScript, importSettingsBundle, importSource,
+    listCards, listTavernResources, listTavernSessions, llm, mobileCardImport, modelRequestLog,
+    mvuDiagnostics, openingPreparation, pagesInFront, playCardSnapshots, pluginApi, pluginDataStore,
+    pluginGalleryItems, pluginMediaForTurn, pluginMediaTurns, prepareConversationFork, preparedSaveSessions,
     presentSystemPrompts, presentUserPreferenceProfile, presetLibrary, previewPreset, projectOpeningWindow,
     readCardExtensions, readCardWorkspace, readChat, readChatCard, readOpeningWindow, readScript,
     readSessionMap, readTavernSettings, regexLibrary, removePluginGalleryItems, removePluginMediaVersion,
     renameResource, requestPerformance, runtimePresets, runtimePrompt, saveUpgrade, sceneIllustrations,
-    scriptContinuity, scriptNavigation, sessionActivity, sessionPatch, sessionStateForSession, sessionStore,
-    sessionViews, setCardPlugins, skillImportFiles, sleep, speakLine, speech, speechReply, startChat,
-    startPluginTask, str, tavernModelCatalog, tavernScriptHostAdapter, tavernSkills, updateCard, updateChat,
-    updateTavernSettings, uploads, userPluginInstaller, userPreferenceProfile, worldBooks,
-    worldbookRecallLog, get invalidateTavernSkills() { return invalidateTavernSkills },
+    scriptContinuity, scriptNavigation, sessionActivity, sessionInventory, sessionPatch,
+    sessionStateForSession, sessionStore, sessionViews, setCardPlugins, skillImportFiles, sleep, speakLine,
+    speech, speechReply, startChat, startPluginTask, str, tavernModelCatalog, tavernScriptHostAdapter,
+    tavernSkills, updateCard, updateChat, updateTavernSettings, uploads, userPluginInstaller,
+    userPreferenceProfile, worldBooks, worldbookRecallLog,
+    get conversationRegistry() { return conversationRegistry },
+    get invalidateTavernSkills() { return invalidateTavernSkills },
     get serverScripts() { return serverScripts } }
   const rpcHandlers = Object.assign(Object.create(null),
     createMaintenanceHandlers(rpcDeps),
@@ -4047,53 +4052,14 @@ export async function apply(ctx) {
     createResourceHandlers(rpcDeps),
     createMediaHandlers(rpcDeps),
     createSettingsHandlers(rpcDeps),
-    createPluginHandlers(rpcDeps))
+    createPluginHandlers(rpcDeps),
+    createConversationHandlers(rpcDeps))
 
   async function dispatchMethod(method, args, serverTemplate = false) {
     if (method.startsWith('gameplay.')) return await gameplayApi.call(method.slice(9), args || {})
     const handler = rpcHandlers[method]
     if (handler) return await handler(args, method, serverTemplate)
     switch (method) {
-      case 'listSessions': {
-        const settings = await readTavernSettings()
-        return { sessions: (await listTavernSessions()).filter(chat => chat.requestMode !== 'sillytavern'), capabilities: { trustedCardMode: settings.trustedCardMode } }
-      }
-      case 'renameConversation': {
-        const chat = await chatForSession(args && args.sessionId)
-        if (!chat) throw new Error('当前会话没有绑定 Tavern 对话')
-        const title = str(args && args.title)
-        const saved = await updateChat(chat.id, current => ({ ...current, title }), { source: 'conversation.rename' })
-        // Renaming must not report success while the sidebar still has an old title.
-        // The normal updateChat summary sync is best effort; retry it strictly here.
-        await conversationRegistry.sync(saved)
-        return { title: saved.title }
-      }
-      case 'markConversationOpened': return await conversationRegistry.touch(args && args.sessionId, Date.now())
-      // Names of games by id, for plugin pages that list several games (tavernUi.getGames).
-      case 'gameTitles': {
-        const ids = [...new Set((Array.isArray(args?.gameIds) ? args.gameIds : []).map(str).filter(Boolean))].slice(0, 500)
-        const games = {}
-        for (const id of ids) {
-          const chat = await chatForSession(id).catch(() => undefined)
-          if (chat) games[id] = { title: str(chat.title), cardName: str(chat.cardName) }
-        }
-        return { games }
-      }
-      case 'prepareDeleteChats': return await deleteChats(args && args.chatIds, true)
-      case 'deleteChats': return await deleteChats(args && args.chatIds)
-      case 'deleteChat': return await deleteChat(args && args.chatId)
-      case 'prepareConversationFork': {
-        const plan = await prepareConversationFork(args?.chatId, args?.sessionId, args?.turn)
-        return { turn: plan.turn, atSeq: plan.atSeq, sourceRevision: plan.source._storageRevision }
-      }
-      case 'forkChat': return { fork: await forkChat(args?.chatId, args?.sessionId, args?.targetSessionId, args?.turn, args?.sourceRevision, args?.atSeq) }
-      case 'getSessionInventory': return await sessionInventory.read()
-      case 'exportConversation': return await exportConversation(args && args.chatId, args && args.sessionId, args && args.title)
-      case 'importGameSave': return await importGameSave(args)
-      case 'exportGameSave': return await exportGameSave(args && args.sessionId, { images: args && args.images !== false })
-      case 'previewChatImport': return await chatHistoryImporter.preview(args || {})
-      case 'importChatHistoryText': return await importChatHistoryText(args || {})
-      case 'appendStoryRounds': return await appendStoryRounds(args || {})
       // For tools: send a player input as the page does; the turn runs like any other.
       case 'sendPlayerInput': {
         const sessionId = str(args?.sessionId), text = str(args?.text).trim()
@@ -4102,8 +4068,6 @@ export async function apply(ctx) {
         await ctx.get('sessionController').prompt({ sessionId, requestId, content: [{ type: 'text', text }], mode: 'followup' }, new AbortController().signal)
         return { requestId }
       }
-      case 'rescueChatHistory': return await chatHistoryImporter.rescue(args || {})
-      case 'importChatHistory': return await chatHistoryImporter.import(args || {})
       case 'getBackgroundSuppressedTurns': {
         const id = str(args && args.sessionId)
         if (!id.startsWith('background-')) return { turns: [] }
