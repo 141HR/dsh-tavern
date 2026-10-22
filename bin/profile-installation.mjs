@@ -313,6 +313,7 @@ async function installProfileOwned(host, { attemptId, runInstall, runDsh }) {
       if (bundledPlugin.action === 'installed') console.log(`已内置剧情生图插件 ${bundledPlugin.version}：${bundledPlugin.target}`)
       else if (bundledPlugin.action === 'upgraded') console.log(`已把剧情生图插件从 ${bundledPlugin.installedVersion} 升级到 ${bundledPlugin.version}：${bundledPlugin.target}`)
       else console.log(`内置剧情生图插件：${bundledPlugin.reason || bundledPlugin.action}`)
+      if (bundledPlugin.hint) console.warn('[Tavern 插件] ' + bundledPlugin.hint)
     } catch (error) {
       console.warn('[Tavern 插件] 内置剧情生图插件安装失败（不影响 Tavern 使用）：' + (error?.message || error))
     }
