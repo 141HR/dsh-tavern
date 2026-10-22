@@ -258,6 +258,7 @@ import { createCardHandlers } from './rpc/cards.js'
 import { createTemplateHandlers } from './rpc/template.js'
 import { createOpeningHandlers } from './rpc/opening.js'
 import { createResourceHandlers } from './rpc/resources.js'
+import { createMediaHandlers } from './rpc/media.js'
 // dsh-tavern 宿主插件（profile 组合行）
 // RPC：同源 HTTP 路由 /api/dsh-tavern/<method>（客户端 fetch 调用）
 // DSH 生命周期负责回合状态；模型工具只处理按需读取和明确修改。
@@ -4017,29 +4018,32 @@ export async function apply(ctx) {
 
   // Request handlers by area live in rpc/; bindings assigned later are read through getters.
   const rpcDeps = { TAVERN_PACKAGE_VERSION, agentRegistry, applicationUpdater, attachPlayChatDebug,
-    backgroundAgentRunner, bindScript, callModel, cardMemory, cardOrganization, cardPacksOf, cardPlugins,
-    cardPreparation, cardTaskPrompts, castAssets, chatForSession, chatHeaderForSession, chatPersistence,
-    commands, compatibilityDiagnostics, ctx, dataRoot, deleteCard, deletePreset, deleteResource,
-    deleteScript, displayRuntimeCaptures, ensureNativeCardWorkspace, ensureNativeOpening,
-    exportSettingsBundle, exportTavernLogs, fileResources, fullTemplateRuntime, getCardOpenings, groupOfMode,
-    guideLibrary, helperGenerationPreset, helperGenerationTasks, helperHistoryAccess, hostCompatibility,
-    importCard, importCardArchiveFile, importPluginCardFile, importPreset, importScript,
-    importSettingsBundle, importSource, listCards, listTavernResources, mobileCardImport, modelRequestLog,
-    mvuDiagnostics, openingPreparation, pagesInFront, pluginApi, preparedSaveSessions, presetLibrary,
-    previewPreset, projectOpeningWindow, readCardExtensions, readCardWorkspace, readChat, readChatCard,
-    readOpeningWindow, readScript, readSessionMap, readTavernSettings, regexLibrary, renameResource,
-    requestPerformance, runtimePresets, runtimePrompt, saveUpgrade, scriptContinuity, scriptNavigation,
-    sessionActivity, sessionPatch, sessionStateForSession, sessionStore, sessionViews, setCardPlugins,
-    skillImportFiles, sleep, startChat, str, tavernScriptHostAdapter, tavernSkills, updateCard, updateChat,
-    updateTavernSettings, uploads, worldBooks, worldbookRecallLog,
-    get invalidateTavernSkills() { return invalidateTavernSkills },
+    backgroundAgentRunner, backgroundConfigForSession, bindScript, callModel, cardMemory, cardOrganization,
+    cardPacksOf, cardPlugins, cardPreparation, cardTaskPrompts, castAssets, castCardOf, castEdit,
+    castPresentation, castStage, castView, chatForSession, chatHeaderForSession, chatPersistence, commands,
+    compatibilityDiagnostics, ctx, dataRoot, deleteCard, deletePreset, deleteResource, deleteScript,
+    displayRuntimeCaptures, ensureNativeCardWorkspace, ensureNativeOpening, exportSettingsBundle,
+    exportTavernLogs, fileResources, fullTemplateRuntime, getCardOpenings, groupOfMode, guideLibrary,
+    helperGenerationPreset, helperGenerationTasks, helperHistoryAccess, hostCompatibility, importCard,
+    importCardArchiveFile, importPluginCardFile, importPreset, importScript, importSettingsBundle,
+    importSource, listCards, listTavernResources, mobileCardImport, modelRequestLog, mvuDiagnostics,
+    openingPreparation, pagesInFront, pluginApi, pluginGalleryItems, pluginMediaForTurn, pluginMediaTurns,
+    preparedSaveSessions, presetLibrary, previewPreset, projectOpeningWindow, readCardExtensions,
+    readCardWorkspace, readChat, readChatCard, readOpeningWindow, readScript, readSessionMap,
+    readTavernSettings, regexLibrary, removePluginGalleryItems, removePluginMediaVersion, renameResource,
+    requestPerformance, runtimePresets, runtimePrompt, saveUpgrade, sceneIllustrations, scriptContinuity,
+    scriptNavigation, sessionActivity, sessionPatch, sessionStateForSession, sessionStore, sessionViews,
+    setCardPlugins, skillImportFiles, sleep, speakLine, speech, speechReply, startChat, str,
+    tavernScriptHostAdapter, tavernSkills, updateCard, updateChat, updateTavernSettings, uploads, worldBooks,
+    worldbookRecallLog, get invalidateTavernSkills() { return invalidateTavernSkills },
     get serverScripts() { return serverScripts } }
   const rpcHandlers = Object.assign(Object.create(null),
     createMaintenanceHandlers(rpcDeps),
     createCardHandlers(rpcDeps),
     createTemplateHandlers(rpcDeps),
     createOpeningHandlers(rpcDeps),
-    createResourceHandlers(rpcDeps))
+    createResourceHandlers(rpcDeps),
+    createMediaHandlers(rpcDeps))
 
   async function dispatchMethod(method, args, serverTemplate = false) {
     if (method.startsWith('gameplay.')) return await gameplayApi.call(method.slice(9), args || {})
@@ -4085,46 +4089,6 @@ export async function apply(ctx) {
       case 'getDisplayPreferences': { const settings = await readTavernSettings(); return { hideContextAndReasoning: settings.hideContextAndReasoning, headerItems: settings.headerItems } }
       case 'getCandidatePreferences': return { candidateDismissMode: (await readTavernSettings()).candidateDismissMode }
       case 'getTavernSettings': return { settings: await readTavernSettings(), modelCatalog: await tavernModelCatalog() }
-      case 'pluginMediaForTurn': return await pluginMediaForTurn(args && args.sessionId, args && args.turn)
-      case 'removePluginMediaVersion': return await removePluginMediaVersion(args && args.sessionId, args && args.itemId, args && args.version)
-      // The lines come with the cast, so the story shows each speaker's picture for the line's emotion.
-      case 'castForTurns': {
-        const sessionId = str(args && args.sessionId)
-        const result = await castPresentation.forTurns(sessionId, args && args.turns)
-        const card = await castCardOf(sessionId).catch(() => null)
-        return { ...result, characters: card ? await castView(sessionId, card.path, await castAssets.read(card.path)) : [] }
-      }
-      case 'castStage': return await castStage(args && args.sessionId, args && args.count)
-      case 'castSetImage': return await castEdit(args && args.sessionId, cardPath => castAssets.setImage({ cardPath, name: args.name, slot: args.slot, bytes: Buffer.from(str(args.data), 'base64') }))
-      case 'castRemoveImage': return await castEdit(args && args.sessionId, cardPath => castAssets.removeImage({ cardPath, name: args.name, slot: args.slot }))
-      case 'castSetCharacter': return await castEdit(args && args.sessionId, cardPath => castAssets.setCharacter({ cardPath, name: args.name, rename: args.rename, aliases: args.aliases }))
-      case 'castSetVoice': return await castEdit(args && args.sessionId, cardPath => castAssets.setVoice({ cardPath, name: args.name, provider: args.provider, voice: args.voice }))
-      case 'getSpeechSettings': return await speech.present()
-      case 'updateSpeechSettings': return await speech.save({ enabled: args && args.enabled, provider: args && args.provider, config: args && args.config || {}, apiKey: args && args.apiKey })
-      case 'speechTest': return speechReply(await speech.synthesize({ provider: args && args.provider, text: str(args && args.text) || '你好，这是配音试听。', voice: args && args.voice, emotion: args && args.emotion }))
-      case 'speechForLine': return await speakLine(args && args.sessionId, args || {})
-      case 'castRemoveCharacter': return await castEdit(args && args.sessionId, cardPath => castAssets.removeCharacter({ cardPath, name: args.name }))
-      case 'castImportSpritePack': return await castEdit(args && args.sessionId, (cardPath, card) => castAssets.importSpritePack({ cardPath, name: str(args.name).trim() || card.name || undefined, bytes: Buffer.from(str(args.data), 'base64') }))
-      case 'pluginMediaTurns': return await pluginMediaTurns(args && args.sessionId)
-      case 'sceneImageStatus': return { illustration: await sceneIllustrations.status(args.sessionId, args.turn) }
-      case 'listSceneImageHistory': {
-        // The gallery shows only the session's own game.
-        if (!args?.sessionId) return { items: await sceneIllustrations.history() }
-        const chat = await backgroundConfigForSession(str(args.sessionId))
-        return { items: chat?.id ? await sceneIllustrations.history(chat.id) : [], pluginItems: await pluginGalleryItems(args.sessionId) }
-      }
-      case 'removeSceneImageHistory': {
-        const legacyItems = args && args.items || []
-        const pluginItems = args && args.pluginItems || []
-        if (!Array.isArray(legacyItems) || !Array.isArray(pluginItems) || legacyItems.length + pluginItems.length > 500) throw new Error('一次最多删除 500 张')
-        if (args && Object.hasOwn(args, 'sessionId')) {
-          const chat = await backgroundConfigForSession(str(args.sessionId))
-          if (!chat?.id) throw new Error('当前游戏不存在，未删除图片')
-          if (legacyItems.some(item => item?.chatId !== chat.id)) throw new Error('图片不属于当前游戏，未删除图片')
-        }
-        const results = await sceneIllustrations.removeStoredImages(legacyItems)
-        return { results: results.concat(await removePluginGalleryItems(args && args.sessionId, pluginItems)) }
-      }
       case 'updateTavernSettings': return { settings: await updateTavernSettings(args && args.patch) }
       case 'getSystemPrompts': return { systemPrompts: presentSystemPrompts(await readTavernSettings()) }
       case 'updateSystemPrompt': {

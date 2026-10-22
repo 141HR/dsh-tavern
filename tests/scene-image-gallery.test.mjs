@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { createPluginMedia } from '../tavern-plugin/lib/domain/plugin-media.js'
 import { registerTavernHttpRoutes } from '../tavern-plugin/lib/http/routes.js'
+import { createMediaHandlers } from '../tavern-plugin/lib/rpc/media.js'
 
 function memoryStore() {
   const files = new Map()
@@ -29,11 +30,8 @@ function productionGallery({ pluginMedia, pluginTurns, sessionSignals }) {
 }
 
 function productionRemoveHistoryRpc({ illustrations, removePluginGalleryItems, backgroundConfigForSession = async () => null }) {
-  const start = source.indexOf("      case 'removeSceneImageHistory': {")
-  const end = source.indexOf("      case 'updateTavernSettings':", start)
-  assert.ok(start >= 0 && end > start, 'production remove history RPC branch boundaries exist')
-  const branch = source.slice(start, end)
-  return new Function('sceneIllustrations', 'removePluginGalleryItems', 'backgroundConfigForSession', 'str', `return async function(args) { switch ('removeSceneImageHistory') {\n${branch}\n} }`)(illustrations, removePluginGalleryItems, backgroundConfigForSession, str)
+  const handlers = createMediaHandlers({ sceneIllustrations: illustrations, removePluginGalleryItems, backgroundConfigForSession, str })
+  return args => handlers.removeSceneImageHistory(args)
 }
 
 test('production plugin gallery filters by game, current text version, ready image status, and removes only that game', async () => {
