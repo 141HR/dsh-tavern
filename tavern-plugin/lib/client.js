@@ -4554,12 +4554,8 @@ const refusalTextPatterns = [
   /^(?:I(?:['’]m| am) sorry[,!.\s]*)?(?:but\s+)?I\s+(?:cannot|can['’]t|won['’]t|am unable to)\s+(?:help|assist|provide|comply|fulfill|generate|support)\b/imu,
   /^(?:作为|身为)(?:一个|一名)?(?:AI|人工智能|语言模型|助手)[^\n]{0,100}(?:无法|不能|不应|不可以)/imu,
 ]
-const refusalPolicySignal = /content[_ -]?filter|content[_ -]?policy|safety[_ -]?(?:filter|policy|violation)|内容审核(?:未通过|失败)|违反(?:内容|安全)政策/iu
 
-function refusalPatterns(custom = []) {
-  if (!Array.isArray(custom) || !custom.every(pattern => typeof pattern === 'string' && pattern.length > 0)) throw new Error('refusalPatterns 必须是非空正则字符串数组')
-  return [...refusalTextPatterns, ...custom.map(pattern => new RegExp(pattern, 'imu'))]
-}
+const refusalPolicySignal = /content[_ -]?filter|content[_ -]?policy|safety[_ -]?(?:filter|policy|violation)|内容审核(?:未通过|失败)|违反(?:内容|安全)政策/iu
 
 function classifyResponse({ text = '', error = '', finish = null, completed = true }, patterns = refusalTextPatterns) {
   const providerSignal = [error, typeof finish === 'string' ? finish : JSON.stringify(finish)].filter(Boolean).join('\n')
@@ -4574,15 +4570,6 @@ function classifyResponse({ text = '', error = '', finish = null, completed = tr
   }
   if (!completed || error) return { verdict: '执行异常', refused: null, method: 'execution-status', evidence: String(error || '未完成').slice(0, 500) }
   return { verdict: '通过', refused: false, method: 'no-refusal-signal', evidence: '' }
-}
-
-function requestChecks(requests, mode, patterns) {
-  return requests.map(request => ({
-    requestId: request.id,
-    agent: mode === 'card' ? 'card' : request.scope === 'foreground' ? 'foreground' : /image|scene|illustration/.test(request.task) ? 'image' : 'background',
-    task: request.task,
-    ...classifyResponse({ text: request.response?.text || '', error: request.response?.error || '', finish: request.response?.finish, completed: request.status === 'completed' }, patterns),
-  }))
 }
 // 批量导入聊天记录：每份记录各自建一个会话，按选择顺序逐份执行。单份失败只记录，不中断其余。
 // Shared with the browser bundle (@include-domain): keep top-level names specific.
@@ -4637,7 +4624,7 @@ function chatImportMergedPreview(entries) {
   }
 }
 // Players read a provider moderation stop or a model refusal as "Tavern is broken".
-// Say plainly what happened. Detection reuses the shared rules in response-refusal.js.
+// Say plainly what happened. Detection reuses the shared rules in response-classification.js.
 const TAVERN_REFUSAL_TOPIC = /内容|请求|政策|安全|露骨|色情|性|未成年|涉及|guideline|policy|content|explicit/i;
 function tavernProviderRefusalNotice(errorText) {
     return classifyResponse({ error: String(errorText || "") }).method === "provider-signal"
