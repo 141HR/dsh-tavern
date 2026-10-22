@@ -257,6 +257,7 @@ import { createMaintenanceHandlers } from './rpc/maintenance.js'
 import { createCardHandlers } from './rpc/cards.js'
 import { createTemplateHandlers } from './rpc/template.js'
 import { createOpeningHandlers } from './rpc/opening.js'
+import { createResourceHandlers } from './rpc/resources.js'
 // dsh-tavern 宿主插件（profile 组合行）
 // RPC：同源 HTTP 路由 /api/dsh-tavern/<method>（客户端 fetch 调用）
 // DSH 生命周期负责回合状态；模型工具只处理按需读取和明确修改。
@@ -4016,22 +4017,29 @@ export async function apply(ctx) {
 
   // Request handlers by area live in rpc/; bindings assigned later are read through getters.
   const rpcDeps = { TAVERN_PACKAGE_VERSION, agentRegistry, applicationUpdater, attachPlayChatDebug,
-    backgroundAgentRunner, callModel, cardMemory, cardOrganization, cardPacksOf, cardPlugins,
+    backgroundAgentRunner, bindScript, callModel, cardMemory, cardOrganization, cardPacksOf, cardPlugins,
     cardPreparation, cardTaskPrompts, castAssets, chatForSession, chatHeaderForSession, chatPersistence,
-    commands, compatibilityDiagnostics, ctx, deleteCard, displayRuntimeCaptures, ensureNativeCardWorkspace,
-    ensureNativeOpening, exportTavernLogs, fileResources, fullTemplateRuntime, getCardOpenings,
-    helperGenerationPreset, helperGenerationTasks, helperHistoryAccess, hostCompatibility, importCard,
-    importCardArchiveFile, importPluginCardFile, listCards, mobileCardImport, modelRequestLog,
-    mvuDiagnostics, openingPreparation, pagesInFront, pluginApi, preparedSaveSessions, projectOpeningWindow,
-    readCardExtensions, readCardWorkspace, readChat, readChatCard, readOpeningWindow, readSessionMap,
-    requestPerformance, runtimePresets, runtimePrompt, saveUpgrade, sessionPatch, sessionStateForSession,
-    sessionStore, sessionViews, setCardPlugins, sleep, startChat, str, tavernScriptHostAdapter, updateCard,
-    uploads, worldBooks, worldbookRecallLog, get serverScripts() { return serverScripts } }
+    commands, compatibilityDiagnostics, ctx, dataRoot, deleteCard, deletePreset, deleteResource,
+    deleteScript, displayRuntimeCaptures, ensureNativeCardWorkspace, ensureNativeOpening,
+    exportSettingsBundle, exportTavernLogs, fileResources, fullTemplateRuntime, getCardOpenings, groupOfMode,
+    guideLibrary, helperGenerationPreset, helperGenerationTasks, helperHistoryAccess, hostCompatibility,
+    importCard, importCardArchiveFile, importPluginCardFile, importPreset, importScript,
+    importSettingsBundle, importSource, listCards, listTavernResources, mobileCardImport, modelRequestLog,
+    mvuDiagnostics, openingPreparation, pagesInFront, pluginApi, preparedSaveSessions, presetLibrary,
+    previewPreset, projectOpeningWindow, readCardExtensions, readCardWorkspace, readChat, readChatCard,
+    readOpeningWindow, readScript, readSessionMap, readTavernSettings, regexLibrary, renameResource,
+    requestPerformance, runtimePresets, runtimePrompt, saveUpgrade, scriptContinuity, scriptNavigation,
+    sessionActivity, sessionPatch, sessionStateForSession, sessionStore, sessionViews, setCardPlugins,
+    skillImportFiles, sleep, startChat, str, tavernScriptHostAdapter, tavernSkills, updateCard, updateChat,
+    updateTavernSettings, uploads, worldBooks, worldbookRecallLog,
+    get invalidateTavernSkills() { return invalidateTavernSkills },
+    get serverScripts() { return serverScripts } }
   const rpcHandlers = Object.assign(Object.create(null),
     createMaintenanceHandlers(rpcDeps),
     createCardHandlers(rpcDeps),
     createTemplateHandlers(rpcDeps),
-    createOpeningHandlers(rpcDeps))
+    createOpeningHandlers(rpcDeps),
+    createResourceHandlers(rpcDeps))
 
   async function dispatchMethod(method, args, serverTemplate = false) {
     if (method.startsWith('gameplay.')) return await gameplayApi.call(method.slice(9), args || {})
@@ -4069,98 +4077,6 @@ export async function apply(ctx) {
         } }
       }
       case 'setUserPreferenceProfileDefaultEnabled': return { userProfile: presentUserPreferenceProfile(await userPreferenceProfile.setDefaultEnabled(args && args.enabled === true, args?.profileId)) }
-      case 'getResourceWorkspace': return { path: dataRoot + '/resources' }
-      case 'listResources': return await listTavernResources()
-      case 'getResource': {
-        const resourcePath = normalizeResourcePath(args && args.path, 'source')
-        const text = await fileResources.readText(resourcePath)
-        if (text === undefined) throw new Error('剧本不存在: ' + resourcePath)
-        return { path: resourcePath, text }
-      }
-      case 'setGlobalWorldBook': return await worldBooks.setGlobal(args && args.source, args && args.enabled)
-      case 'listWorldBooks': return await worldBooks.catalog()
-      case 'getWorldBook': return await worldBooks.get(args && args.source)
-      case 'getWorldBookBinding': return { binding: await worldBooks.binding(args && args.cardPath) }
-      case 'getWorldBookAssociations': return { associations: await worldBooks.associations(args && args.source) }
-      case 'bindWorldBook': return { binding: await worldBooks.bind(args && args.cardPath, args && args.source) }
-      case 'setWorldBookBindings': return { binding: await worldBooks.setBindings(args && args.cardPath, args && args.sources) }
-      case 'unbindWorldBook': return { binding: await worldBooks.unbind(args && args.cardPath, args && args.source) }
-      case 'importWorldBook': return { worldBook: await worldBooks.import(args && args.payload) }
-      case 'updateWorldBook': return await worldBooks.update(args && args.source, args && args.update)
-      case 'exportWorldBook': return { worldBook: await worldBooks.export(args && args.source) }
-      case 'deleteWorldBook': return await worldBooks.remove(args && (args.source || args.path))
-      case 'listPresets': return await presetLibrary.catalog()
-      case 'selectPreset': return await presetLibrary.select(args && args.path)
-      case 'applyConversationPreset': {
-        const sessionId = str(args?.sessionId)
-        const chat = await chatForSession(sessionId)
-        if (!chat || groupOfMode(chat.mode) !== 'play') throw new Error('请先打开游玩会话')
-        if (typeof args.path !== 'string') throw new Error('请选择预设')
-        if ((await sessionActivity(sessionId))?.busy || agentRegistry.get(sessionId)?.phase?.kind === 'running') throw new Error('请等待当前生成和后台任务完成后再应用预设')
-        const snapshot = args.path === '' ? null : await runtimePresets.fullSnapshot(args.path)
-        // Only a new turn while the preset loaded is a conflict; display receipts and the like keep writing the save.
-        const saved = await updateChat(chat.id, current => {
-          if ((current.messages || []).length !== (chat.messages || []).length) throw new Error('当前游戏已变化，请刷新后重试')
-          current.runtimePresetSnapshot = snapshot
-          return current
-        }, { source: 'preset.apply-conversation' })
-        return { runtimePreset: saved.runtimePresetSnapshot === null ? null : { id: saved.runtimePresetSnapshot.presetPath, name: saved.runtimePresetSnapshot.presetName } }
-      }
-      case 'getPreset': return { preset: await presetLibrary.detail(args && args.path) }
-      case 'exportPreset': return await presetLibrary.export(args && args.path)
-      case 'movePresetEntry': return { preset: await presetLibrary.moveEntry(args?.path, args?.entryKey, args?.phase, args?.beforeEntryKey, args?.revision) }
-      case 'updatePresetEntry': return { preset: await presetLibrary.updateEntry(args && args.path, args && args.entryKey, args && args.patch) }
-      case 'updatePresetRegex': return { preset: await presetLibrary.updateRegex(args && args.path, args && args.regexKey, args && args.patch !== undefined ? args.patch : args && args.enabled) }
-      case 'previewPresetConversion': {
-        const preview = await previewPreset(args && args.path, args && args.orderGroupIndex)
-        if (preview === undefined) throw new Error('预设不存在: ' + (args && args.path))
-        return { preview }
-      }
-      case 'renameResource': return { resource: await renameResource(args && args.path, args && args.name) }
-      case 'deleteResource': return await deleteResource(args && args.path)
-      case 'deletePreset': return await deletePreset(args && args.path)
-      case 'getDefaultWritingSkills': {
-        const settings = await readTavernSettings()
-        return { skills: (await tavernSkills.list()).filter(skill => skill.agents.includes('foreground')).map(skill => ({ name: skill.name, description: skill.description, enabled: !settings.defaultDisabledWritingSkills.includes(skill.name) })) }
-      }
-      case 'setDefaultWritingSkill': {
-        const skill = await tavernSkills.read(args?.name)
-        if (!skill?.agents.includes('foreground') || typeof args?.enabled !== 'boolean') throw new Error('无效的写作 Skill 配置')
-        await updateTavernSettings({ defaultWritingSkill: { name: skill.name, enabled: args.enabled } })
-        return { saved: true }
-      }
-      case 'getConversationWritingSkills': {
-        const chat = await chatHeaderForSession(str(args?.sessionId), ['disabledWritingSkills'])
-        if (!chat || groupOfMode(chat.mode) !== 'play') throw new Error('请先打开游玩会话')
-        return { skills: (await tavernSkills.list()).filter(skill => skill.agents.includes('foreground')).map(skill => ({ name: skill.name, description: skill.description, enabled: !(chat.disabledWritingSkills || []).map(canonicalTavernSkillName).includes(skill.name) })) }
-      }
-      case 'setConversationWritingSkill': {
-        const chat = await chatHeaderForSession(str(args?.sessionId), ['disabledWritingSkills'])
-        if (!chat || groupOfMode(chat.mode) !== 'play') throw new Error('请先打开游玩会话')
-        const skill = await tavernSkills.read(args.name)
-        if (!skill?.agents.includes('foreground') || typeof args.enabled !== 'boolean') throw new Error('无效的写作 Skill 配置')
-        await updateChat(chat.id, current => ({ ...current, disabledWritingSkills: args.enabled ? (current.disabledWritingSkills || []).map(canonicalTavernSkillName).filter(name => name !== skill.name) : [...new Set([...(current.disabledWritingSkills || []).map(canonicalTavernSkillName), skill.name])] }), { source: 'writing-skill.switch' })
-        invalidateTavernSkills()
-        return { saved: true }
-      }
-      case 'listSkills': return { skills: (await tavernSkills.list()).map(({ content, path, ...summary }) => summary) }
-      case 'editSkill': return { skill: await tavernSkills.edit(args) }
-      case 'getSkill': return { skill: await tavernSkills.read(args.name), references: await tavernSkills.referenceFiles(args.name) }
-      case 'assignSkill': return { skill: await tavernSkills.assign(args.name, args.agents) }
-      case 'deleteSkill': await tavernSkills.remove(args.name); return { deleted: true }
-      case 'importSkill': return await tavernSkills.importBundle({ files: skillImportFiles(args), overwrite: args.overwrite === true })
-      case 'getScriptInfo': {
-        const script = await readScript(args && args.path)
-        const info = scriptContinuity.inspect({ script: script, state: null, request: { kind: 'info' } })
-        return { script: script === undefined ? info : Object.assign({}, info, { path: script.path }) }
-      }
-      case 'importScript': return { script: await importScript(args && args.cardPath, args && args.payload) }
-      case 'bindScript': return { script: await bindScript(args && args.cardPath, args && args.path) }
-      case 'deleteScript': return await deleteScript(args && (args.cardPath || args.path))
-      case 'importSource': return { source: await importSource(args && args.payload) }
-      case 'importPreset': return { preset: await importPreset(args && args.payload) }
-      case 'exportSettingsBundle': return await exportSettingsBundle(args)
-      case 'importSettingsBundle': return await importSettingsBundle(args)
       case 'getConversationBackgroundModel':
       case 'getConversationBackgroundConfig': return conversationBackgroundSettings.read(args?.sessionId)
       case 'setConversationBackgroundModel':
@@ -4280,9 +4196,6 @@ export async function apply(ctx) {
         return { turn: plan.turn, atSeq: plan.atSeq, sourceRevision: plan.source._storageRevision }
       }
       case 'forkChat': return { fork: await forkChat(args?.chatId, args?.sessionId, args?.targetSessionId, args?.turn, args?.sourceRevision, args?.atSeq) }
-      case 'browseScript': return await scriptNavigation.browse(args?.sessionId, args?.position)
-      case 'setScriptChunkSize': return await scriptNavigation.setChunkSize(args?.sessionId, args || {})
-      case 'pointScript': return await scriptNavigation.point(args?.sessionId, args || {})
       case 'getSessionInventory': return await sessionInventory.read()
       case 'exportConversation': return await exportConversation(args && args.chatId, args && args.sessionId, args && args.title)
       case 'importGameSave': return await importGameSave(args)
@@ -4393,12 +4306,6 @@ export async function apply(ctx) {
       case 'getChoices': return { candidates: await candidateGenerator.find({ sessionId: args && args.sessionId, messageId: args && args.messageId }) }
       case 'startChoices': return await candidateTasks.startLegacy(args)
       case 'editLedger': { await ledgerEditor(args || {}); return { view: await sessionView(args.sessionId) } }
-      case 'updateGuideLibrary': return { item: await guideLibrary.update(args) }
-      case 'deleteGuideLibrary': { await guideLibrary.remove(args); return { ok: true } }
-      case 'listRegexLibrary': return { items: await regexLibrary.list() }
-      case 'importRegexLibrary': return { items: await regexLibrary.importFile(args?.text, args?.fileName) }
-      case 'deleteRegexLibrary': { await regexLibrary.remove(args); return { ok: true } }
-      case 'listGuideLibrary': return { items: await guideLibrary.list() }
       case 'saveGuideLibrary': return { item: await conversationGuides.save(args?.sessionId, args?.name) }
       case 'loadGuideLibrary': return { guides: await conversationGuides.load(args?.sessionId, args?.id) }
       case 'addGuide': return { guides: await conversationGuides.add(args?.sessionId, args?.text) }
