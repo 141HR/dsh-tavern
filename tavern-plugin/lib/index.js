@@ -45,7 +45,6 @@ import { createTemplateWindowReader, templateStateFields } from './domain/templa
 import { createSessionResourceAccess } from './domain/session-resource-access.js'
 import { createSaveUpgrade, detachSaveSessions, prepareSaveUpgrade, saveSessionIds, unreadySaveSessions } from './domain/save-upgrade.js'
 import { storedSessionVersion } from './domain/session-upgrade.js'
-import { exportSessionDiagnostics } from './domain/session-diagnostics.js'
 import { createTaskStateReader, taskStateFields } from './domain/task-state-reader.js'
 import { installHostProjectionReplay } from './domain/host-projection-replay.js'
 import { createBoundedHistory, readRecentWindow, readRowsAt } from './domain/bounded-history.js'
@@ -188,7 +187,7 @@ import { createCardPlugins } from './domain/card-plugins.js'
 import { createCardImportIdentity } from './domain/card-import-identity.js'
 import { createPostureItem, createSettlementItems, plainSettlementPlan, runPipelineStages } from './domain/background-pipeline.js'
 import { createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
-import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics, sanitizeModuleFailure, sanitizeMvuLoadDiagnostic, redactMvuLoadError } from './domain/mvu-diagnostics.js'
+import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics } from './domain/mvu-diagnostics.js'
 import { createPlayChatDebugReference, readPlayChatDebugTurn } from './domain/play-chat-debug.js'
 import { createSaveMaintenance } from './domain/save-maintenance.js'
 import { createServerScriptExecutor } from './domain/server-script-executor.js'
@@ -254,6 +253,7 @@ import { createSystemPromptDocuments } from './domain/system-prompt-documents.js
 // Runtime reads go through runtimePrompt() so panel overrides apply; the raw
 // file catalog only supplies built-in defaults.
 import { prompt as promptFile, SYSTEM_PROMPT_NAMES } from './prompt-catalog.js'
+import { createMaintenanceHandlers } from './rpc/maintenance.js'
 // dsh-tavern 宿主插件（profile 组合行）
 // RPC：同源 HTTP 路由 /api/dsh-tavern/<method>（客户端 fetch 调用）
 // DSH 生命周期负责回合状态；模型工具只处理按需读取和明确修改。
@@ -4011,44 +4011,23 @@ export async function apply(ctx) {
     onStyleEnabled: (sessionId, chatId) => { if (agentRegistry.get(sessionId)?.session) void worldbookPrefilter.start(chatId) }
   })
 
+  // Request handlers by area live in rpc/; bindings assigned later are read through getters.
+  const rpcDeps = { TAVERN_PACKAGE_VERSION, agentRegistry, applicationUpdater, attachPlayChatDebug,
+    backgroundAgentRunner, chatForSession, chatHeaderForSession, compatibilityDiagnostics,
+    displayRuntimeCaptures, exportTavernLogs, hostCompatibility, modelRequestLog, mvuDiagnostics,
+    preparedSaveSessions, readChat, readChatCard, readSessionMap, saveUpgrade, sessionPatch,
+    sessionStateForSession, sessionStore, str, worldbookRecallLog }
+  const rpcHandlers = Object.assign(Object.create(null),
+    createMaintenanceHandlers(rpcDeps))
+
   async function dispatchMethod(method, args, serverTemplate = false) {
     if (method.startsWith('gameplay.')) return await gameplayApi.call(method.slice(9), args || {})
+    const handler = rpcHandlers[method]
+    if (handler) return await handler(args, method, serverTemplate)
     switch (method) {
-      case 'getSaveUpgrade':
-      case 'upgradeSave': {
-        const chatId = (await readSessionMap())[str(args?.sessionId)]
-        if (!chatId) throw new Error('找不到当前存档')
-        return method === 'getSaveUpgrade' ? saveUpgrade.status(chatId) : saveUpgrade.start(chatId)
-      }
-      case 'exportSessionDiagnostics': {
-        const chatId = str(args?.chatId) || (await readSessionMap())[str(args?.sessionId)]
-        const chat = chatId && await readChat(chatId)
-        if (!chat) throw new Error('找不到这局存档')
-        const report = await exportSessionDiagnostics({
-          sessionsRoot: path.join(path.dirname(resolveTavernDataRoot()), 'sessions'),
-          sessionIds: saveSessionIds(chat),
-          errorOf: id => preparedSaveSessions.get(id)?.error,
-          tavernVersion: TAVERN_PACKAGE_VERSION,
-          chat,
-        })
-        return { filename: '酒馆诊断-' + chat.id.slice(0, 8) + '.json', text: JSON.stringify(report) }
-      }
       case 'getCardOrganization': return { groups: (await cardOrganization.read()).groups }
       case 'organizeCards': return { groups: (await cardOrganization.update(args || {}, await fileResources.list('card'))).groups }
       case 'listCards': return { cards: await listCards() }
-      case 'getHostCompatibility': return { compatibility: hostCompatibility }
-      case 'getSessionPatchStatus': return { patch: sessionPatch.view() }
-      case 'getSessionPatchClient': return sessionPatch.serverReady
-        ? { source: sessionPatch.clientSource }
-        : { source: '', skipped: sessionPatch.status === 'skipped', reason: sessionPatch.reason }
-      case 'confirmSessionPatch': {
-        sessionPatch.confirmClient(args || {})
-        return { patch: sessionPatch.view() }
-      }
-      case 'getUpdateStatus': return { status: await applicationUpdater.status() }
-      case 'checkUpdate': return { status: await applicationUpdater.check() }
-      case 'startUpdate': return { status: await applicationUpdater.start() }
-      case 'cancelUpdate': return { status: await applicationUpdater.cancel() }
       case 'prepareSessionOpening': {
         const chat = await chatForSession(args && args.sessionId)
         if (!chat) throw new Error('找不到原对话')
@@ -4222,15 +4201,6 @@ export async function apply(ctx) {
         invalidateTavernSkills()
         return { saved: true }
       }
-      case 'getLatestRequestContext': {
-        const sessionId = str(args?.sessionId)
-        const background = backgroundAgentRunner.requestContext(sessionId)
-        const session = sessionStore.get(sessionId) || agentRegistry.get(sessionId)?.session
-        // A forked game has a parentSession too, but its requests are filed under its own chat.
-        const own = background ? undefined : await sessionStateForSession(sessionId)
-        const chat = own || await sessionStateForSession(background?.parentSessionId || session?.header?.parentSession || sessionId)
-        return { record: await modelRequestLog.latestForSession(sessionId, str(args?.knownId), chat?.id) }
-      }
       case 'listSkills': return { skills: (await tavernSkills.list()).map(({ content, path, ...summary }) => summary) }
       case 'editSkill': return { skill: await tavernSkills.edit(args) }
       case 'getSkill': return { skill: await tavernSkills.read(args.name), references: await tavernSkills.referenceFiles(args.name) }
@@ -4402,42 +4372,8 @@ export async function apply(ctx) {
       case 'pointScript': return await scriptNavigation.point(args?.sessionId, args || {})
       case 'getSessionInventory': return await sessionInventory.read()
       case 'exportConversation': return await exportConversation(args && args.chatId, args && args.sessionId, args && args.title)
-      case 'exportTavernLogs': return await exportTavernLogs(args && args.sessionId)
       case 'importGameSave': return await importGameSave(args)
       case 'exportGameSave': return await exportGameSave(args && args.sessionId, { images: args && args.images !== false })
-      case 'recordTavernCompatibilityCalls': {
-        const chat = await chatHeaderForSession(str(args && args.sessionId), [])
-        if (!chat) throw new Error('当前 Session 没有绑定 Tavern 对话')
-        await compatibilityDiagnostics.record(chat.sessionId, args && args.runtimeId, args && args.calls)
-        return { recorded: true }
-      }
-      case 'recordMvuRuntimeDiagnostic': {
-        const chat = await chatHeaderForSession(str(args && args.sessionId), [])
-        if (!chat) throw new Error('当前 Session 没有绑定 Tavern 对话')
-        const diagnostic = args && args.diagnostic || {}
-        if (diagnostic.kind === 'mvu-load') {
-          const detail = sanitizeMvuLoadDiagnostic(diagnostic)
-          if (!detail) return { recorded: false }
-          try { await mvuDiagnostics.record(chat.sessionId, { stage: 'mvu-load', diagnostic: detail }) }
-          catch { return { recorded: false } }
-          return { recorded: true }
-        }
-        await mvuDiagnostics.record(chat.sessionId, { stage: 'script-runtime', diagnostic: { level: diagnostic.level === 'error' ? 'error' : 'warn', scriptId: str(diagnostic.scriptId).slice(0, 200), message: redactMvuLoadError(diagnostic.message, 4000), ...(sanitizeModuleFailure(diagnostic.moduleFailure) ? { moduleFailure: sanitizeModuleFailure(diagnostic.moduleFailure) } : {}) } })
-        return { recorded: true }
-      }
-      case 'getWorldBookRecallLog': {
-        const chat = await chatForSession(args && args.sessionId)
-        if (!chat) throw new Error('对话不存在')
-        return await worldbookRecallLog.read(chat, args && args.turn)
-      }
-      case 'getPlayChatDebugTarget': {
-        const sourceChat = await chatForSession(args && args.sessionId)
-        if (sourceChat === undefined || ((sourceChat.mode || 'story') !== 'story' && (sourceChat.mode || 'story') !== 'script')) throw new Error('当前对话不是游玩对话')
-        const card = await readChatCard(sourceChat)
-        return { card: { path: sourceChat.cardPath, name: card.name }, chatId: sourceChat.id }
-      }
-      case 'attachPlayChatDebug': return { reference: await attachPlayChatDebug(args && args.targetSessionId, args && args.sourceSessionId, args && args.turn) }
-      case 'captureDisplayRuntime': return await displayRuntimeCaptures.capture(args && args.sessionId, args && args.turn, args && args.partIndex, args && args.runtime)
 	      case 'getTavernHelperContext': {
         if (!args?.eventId && args?.openingWindow === 1) {
           const window = await readOpeningWindow(args.sessionId)
