@@ -1,6 +1,6 @@
 # 安装、更新与数据备份
 
-> 当前版本适配 DSH **0.2.1-rc.2**（官方 DeepSeek Harness、独立命令行）。Android 独立 APK 内置 DSH **0.2.0-rc.2**。旧一键安装包和 DSHA 0.1.5-rc2 说明属于[稳定版](https://github.com/flizzywine/dsh-tavern/blob/stable/docs/installation.md)（DSH 0.1.5，`stable` 分支）。
+> 当前版本适配 DSH **0.2.1-rc.2**（官方 DeepSeek Harness、独立命令行）。Android 独立 APK 内置 DSH **0.2.0-rc.2**。Windows 一键安装版和 DSHA 0.1.5-rc2 说明属于[稳定版](https://github.com/flizzywine/dsh-tavern/blob/stable/docs/installation.md)（DSH 0.1.5，`stable` 分支）。
 
 **桌面版仅支持官方 DeepSeek Harness，不再适配社区 DSH Desktop / DSH NEXT。** 社区版用户请先备份，再按[数据导入说明](data-import.md)迁移到官方版。
 
@@ -23,17 +23,17 @@ Android 仅提供独立 APK，要求 Android 11 及以上、ARM64；不再提供
 
 [返回项目首页](../README.md) · [在线使用文档](https://flizzywine.github.io/dsh-tavern/)
 
-### Windows：在官方桌面版里添加插件
+### Windows 一键安装版
 
-1. 安装并打开 [DeepSeek Harness 0.2.1-rc.2](https://www.deepseek.com/harness/)。
-2. 点左侧栏的 **插件**，再点右上角 **添加插件**，填 `dsh-profile-tavern@3.1.3`，点「安装」。安装源保持「中国大陆镜像源」。版本号照抄即可：不写版本号的话，桌面版会跳过刚发布不满一天的版本，可能装到旧版；装好后在酒馆里点更新就能到最新版。
-3. 安装完成后点「立即启用」，然后退出并重新打开 DeepSeek Harness，即进入酒馆。启用时如果弹出「启用失败 … Agent resolver is already registered」，不用管，重新打开后就好。
+本分支已将一键包宿主切换为官方 **DeepSeek Harness 0.2.1-rc.2**，新的 EXE 尚未发布。验证后会提供 Releases 下载；测试构建由 `Windows Setup` 工作流生成。旧社区版安装包不适用于此分支。新包双击后选择原安装文件夹，再点击「安装并启动」，沿用原数据。
 
-酒馆以 npm 包 `dsh-profile-tavern` 装进桌面版的 `desktop` 配置，由桌面版的插件管理器下载和维护。更新：在酒馆左侧栏底部点「检查更新 → 进行更新」，完成后重启 DeepSeek Harness；它调用桌面版自带的 pnpm 重新安装 npm 上的新版本。人物卡、正文和会话保存在 `%USERPROFILE%\.dsh\profile-data\tavern\`，卸载插件不会删除。
+- **以后启动：** 双击桌面或开始菜单中的「DSH Tavern」。也可以在安装目录双击 `DSH Tavern.exe`；不要直接运行 `runtime-…` 里的 `DeepSeek Harness.exe`，内部程序需要外层启动器提供正确的数据路径。
+- **安装位置：** 首次可自选，默认 `%LOCALAPPDATA%\DSH-Tavern`。新安装的程序、运行文件和数据放在所选目录下；数据位于 `data` 子目录。完成提示和目录中的 `如何启动.txt` 列出实际位置。
+- **下载包：** 安装器会在所选目录保存固定启动入口，安装完成后可以删除下载的 `Setup.exe`，不会影响快捷方式。
+- **旧版修复：** 新安装器会识别旧便携版的 `%LOCALAPPDATA%\DSH-Tavern-Portable`、历史 `D:\Workspace\.DSH-Tavern` 和更早的 `%LOCALAPPDATA%\DSH-Tavern`。点击「修复并启动」会关闭所选安装的旧进程、联网更新运行时和 Tavern 插件，并补建入口、取消旧安装文件夹的隐藏属性。请先保存当前操作；人物卡、聊天和设置保留，不自动搬动数据。
+- **断网或失败：** 已建立的桌面、开始菜单入口仍可用于重试。错误窗口显示文件位置，安装目录的 `launcher-error.txt` 记录启动问题，数据目录的 `first-install.log` 记录首次联网安装问题。
+- **重装与备份：** 再次运行安装包会沿用已记录的位置。新安装备份整个 `data` 目录；旧版请按完成提示中的实际数据位置备份。不要只移动 `runtime-…` 或修改 `launcher-settings.xml` 来迁移数据，现有依赖可能包含绝对路径。原安装位置失效时，安装器会提供「使用原目录」「重新安装」和「取消」。需要保留数据时，连接原磁盘或选择原安装文件夹；确认已卸载并希望重新开始时，点击「重新安装」并选择位置，无需手动清理注册表。重新安装不会删除旧文件，也不能恢复已删除的数据。
 
-一键安装 EXE、双击 `.cmd` 和 PowerShell 一行命令不再提供。之前用它们装过的，不用改装，继续在酒馆里更新；不要再额外添加插件，两份同时存在可能互相干扰。
-
-以下说明只适用于之前用安装命令装过的旧安装：
 Windows Desktop 安装和更新使用 Desktop 自带的 pnpm 与 Node（即 Desktop 程序本身），不再另外下载 Node；旧版留下的 `tools/desktop-package-manager` 目录不再使用，可以删除。安装器会自动使用 Windows 系统代理（PAC 自动配置除外）。若旧版一直卡在“正在更新”，先关闭旧更新任务，再使用新版安装器修复入口；普通 Desktop 从系统终端重新运行本文安装命令。命令行版继续使用独立 Node，macOS/Linux 不应用这项 Windows 修复。
 
 Desktop 固定为 **0.2.1-rc.2**；以后在酒馆界面更新插件。仅 Desktop 安装和更新内置 **`dsh-pocket 2.12.0`**（固定版本），并移除冲突的 `dsh-web-mobile`；手机扫码入口在 **设置 → 手机访问**，无需自行安装插件。CLI 不安装 Pocket，升级时会移除旧版 Pocket。Android / DSHA 不安装 Pocket，继续使用 `dsh-web-mobile`。切换到下面的 CLI 安装方式不会自动同步这份数据。
@@ -42,18 +42,18 @@ Desktop 固定为 **0.2.1-rc.2**；以后在酒馆界面更新插件。仅 Deskt
 
 适用于已经安装 **DSH 0.2.1-rc.2、Node.js 22.19+、pnpm**、准备新建独立 `tavern` Profile 的用户：
 
-在终端运行：
+需要 Git，在终端运行：
 
 ```bash
-dsh plugin --profile tavern add @deepseek-ai/dsh-web-app dsh-profile-tavern@3.1.3
+dsh plugin --profile tavern add @deepseek-ai/dsh-web-app github:flizzywine/dsh-tavern
 dsh --profile tavern
 ```
 
 第一条命令由 DSH 创建 Profile，装上网页组件和完整运行包并启用酒馆；第二条启动网页。新建的 `tavern` Profile 默认不带网页组件，所以要在同一条命令里一起加上。酒馆使用当前 DSH，不会另装或升级宿主。运行包包含侧栏、人物卡功能、预设和 Skill，无需自行构建。启动时检查 DSH 适配版本。
 
-> DSH 0.2.1-rc.2 解析依赖的缺陷（[#300](https://github.com/flizzywine/dsh-tavern/issues/300)）已在酒馆一侧绕过，npm 包 3.1.1 起可用。
+> **暂不可用：** DSH 0.2.1-rc.2 解析依赖时有缺陷，这条路线启动会报 `createRequire.resolve.paths is not a function`（[#300](https://github.com/flizzywine/dsh-tavern/issues/300)），需等 DSH 修复。在此之前请用下面的命令行安装方式。
 
-数据位于当前 `DSH_HOME` 下的 `profile-data/tavern/`；未设置 `DSH_HOME` 时通常为 `~/.dsh/profile-data/tavern/`。程序由 Profile 的包管理器维护。在酒馆里点「检查更新 → 进行更新」，完成后重启 DSH；它用 DSH 自己的 pnpm 安装 npm 上的新版本，不使用原来的源码更新器。
+数据位于当前 `DSH_HOME` 下的 `profile-data/tavern/`；未设置 `DSH_HOME` 时通常为 `~/.dsh/profile-data/tavern/`。程序由 Profile 的包管理器维护。更新时先关闭酒馆，重新运行第一条安装命令，再启动。页面中的「查看更新命令」提供同一条命令，不使用原来的源码更新器。
 
 当前先支持普通 DSH CLI 的新安装。不要往专用安装器已经管理的 `tavern` Profile 直接叠装；原 CLI、Desktop、Android 安装继续使用各自原有方式。这条路线不会迁移旧 CLI 的独立数据，也不附带 Desktop 的 Pocket 手机访问配置或宿主字体文件修改。侧栏终端复用宿主提供的 `node-pty`；宿主缺少此依赖时，终端会显示修复提示，酒馆仍可使用。
 
@@ -77,13 +77,21 @@ CLI 首次安装可选择：**默认目录 `~/.dsh-tavern/`、当前目录（回
 
 **首次安装、更新或重新安装，都运行下面对应的同一条命令。** 已安装时会覆盖更新程序文件，保留人物卡、对话、配置、自定义工具和 Skill，无需先卸载。重新安装前建议备份数据；如果使用了自定义数据或安装目录，请保持原配置。
 
-### 官方 DeepSeek Harness 桌面版（macOS）
+### 官方 DeepSeek Harness 桌面版
 
-适合不想单独配置运行环境和管理服务的 macOS 用户。Windows 见上面的「添加插件」。
+适合不想单独配置运行环境和管理服务的用户，支持 Windows 和 macOS。
 
-适配版本：**官方 DeepSeek Harness 0.2.1-rc.2**（内置 DSH `0.2.1-rc.2`），内置 DSH 版本必须匹配，否则停止安装。请自行打开 [DSH 下载页面](https://www.deepseek.com/harness/)，按页面提示下载适合自己 Mac 处理器的安装包；不要下载 Source code。
+适配版本：**官方 DeepSeek Harness 0.2.1-rc.2**（内置 DSH `0.2.1-rc.2`），内置 DSH 版本必须匹配，否则停止安装。请自行打开 [DSH 下载页面](https://www.deepseek.com/harness/)，按页面提示下载适合自己 Windows / macOS 系统和处理器的安装包；不要下载 Source code。
 
-安装后先退出官方桌面应用，在「终端」运行下面的命令。安装器自动查找默认安装位置；自定义位置请设置 `DSH_DESKTOP_APP_EXECUTABLE` 为官方程序的完整路径。无需另装 Node 或 pnpm。
+安装后先退出官方桌面应用，在系统终端运行对应命令。Windows 使用 PowerShell，macOS 使用终端。安装器自动查找默认安装位置；自定义位置请设置 `DSH_DESKTOP_APP_EXECUTABLE` 为官方程序的完整路径。无需另装 Node 或 pnpm。
+
+Windows：
+
+```powershell
+$env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.ps1')); Invoke-Expression $tavernInstaller
+```
+
+macOS：
 
 ```bash
 curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.sh' -o /tmp/dsh-tavern-install.sh && DSH_TAVERN_HOST=desktop sh /tmp/dsh-tavern-install.sh
@@ -91,9 +99,9 @@ curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install
 
 安装完成后重新打开官方 DeepSeek Harness。安装器将酒馆注册到官方固定使用的 `desktop` 配置，不需要切换 Profile。旧 `tavern` 配置中的自定义插件和用户补丁会合并到新配置，原配置保留；人物卡、正文、会话历史继续使用 `profile-data/tavern/`。更新前退出桌面应用，再运行同一安装命令。
 
-旧版内置更新失败时，也直接运行上面的命令：它会获取安装器，绕过本地旧更新脚本（CDN 缓存可能延迟刷新）。
+旧版内置更新失败时，也直接运行上面的命令：它会获取安装器，绕过本地旧更新脚本（CDN 缓存可能延迟刷新）。Windows 命令按 UTF-8 解码，避免中文乱码。
 
-旧 Windows 安装更新失败时，请提供 `update-diagnostics.jsonl` 文件，默认位于 `%USERPROFILE%\.dsh\profile-data\tavern\data\`；自定义 `DSH_HOME` 时以终端显示的位置为准。日志记录实际安装路径、失败步骤、退出码和脱敏后的错误输出。包管理环境首次下载失败会尝试三次；文件缺失会直接显示缺失路径。依赖安装期间会实时显示输出。若提示日志写入失败，请保留终端中的具体错误。
+Windows 安装失败时，请提供终端显示的 `update-diagnostics.jsonl` 文件，默认位于 `%USERPROFILE%\.dsh\profile-data\tavern\data\`；自定义 `DSH_HOME` 时以终端显示的位置为准。日志记录实际安装路径、失败步骤、退出码和脱敏后的错误输出。包管理环境首次下载失败会尝试三次；文件缺失会直接显示缺失路径。依赖安装期间会实时显示输出。若提示日志写入失败，请保留终端中的具体错误。
 
 ### 命令行版
 
