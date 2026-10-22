@@ -150,6 +150,30 @@ test('3.0.2 就地升级：更新代码，同时完整保留私人数据与工�
   assert.equal(installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet }).action, 'skipped', '升级后再装是同版本，跳过')
 })
 
+test('3.1.0 就地升级到 3.1.1：替换修复代码，保留私人数据与工作流，重复安装跳过', t => {
+  const source = makeSource(t, '3.1.1')
+  const data = makeData(t)
+  const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
+  mkdirSync(path.join(target, 'lib'), { recursive: true })
+  writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '3.1.0', main: './lib/index.js', dsh: CONTRACT }))
+  writeFileSync(path.join(target, 'lib', 'index.js'), 'export const oldFixes = true\n')
+  writeFileSync(path.join(target, 'client.js'), '// old client\n')
+  writeFileSync(path.join(target, 'config.json'), '{"apiKey":"private"}')
+  mkdirSync(path.join(target, 'workflows'), { recursive: true })
+  writeFileSync(path.join(target, 'workflows', 'custom.json'), '{"custom":true}')
+
+  const result = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet })
+  assert.equal(result.action, 'upgraded')
+  assert.equal(result.version, '3.1.1')
+  assert.equal(JSON.parse(readFileSync(path.join(target, 'package.json'), 'utf8')).version, '3.1.1')
+  assert.match(readFileSync(path.join(target, 'lib', 'index.js'), 'utf8'), /bundled/)
+  assert.equal(readFileSync(path.join(target, 'client.js'), 'utf8'), '// client\n')
+  assert.equal(readFileSync(path.join(target, 'config.json'), 'utf8'), '{"apiKey":"private"}')
+  assert.equal(readFileSync(path.join(target, 'workflows', 'custom.json'), 'utf8'), '{"custom":true}')
+
+  assert.equal(installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet }).action, 'skipped')
+})
+
 test('未知来源、Git 检出、更新版本和版本未知：不升级', t => {
   const source = makeSource(t, '2.8.0')
   for (const [setup, reason] of [
