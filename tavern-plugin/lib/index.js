@@ -463,6 +463,7 @@ export async function apply(ctx) {
     dataRoot,
     sourceRoot,
     hostDependencyAnchor: fileURLToPath(import.meta.url),
+    pluginManager: () => ctx.get('pluginManager'),
   })
   const modelRequestLog = createModelRequestLog({
     readJson: async function (path) { return await profileData.readJson(path) },

@@ -15856,7 +15856,9 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
       const repairing = status.phase === "repair-required";
       if (!await confirm(repairing
         ? "将重新安装当前构建以修复上次未完成的更新，期间会短暂断开。人物卡、资料和对话数据会保留。\n确定修复安装吗？"
-        : "更新期间会短暂断开，人物卡、资料和对话数据不会受到影响。\n确定更新到 GitHub 最新版吗？")) return;
+        : status.packageManaged
+          ? "将用 DSH 的插件管理安装" + (status.latestVersion ? " v" + status.latestVersion : "最新版") + "，完成后需重启 DSH。人物卡、资料和对话数据不会受到影响。\n确定更新吗？"
+          : "更新期间会短暂断开，人物卡、资料和对话数据不会受到影响。\n确定更新到 GitHub 最新版吗？")) return;
       if (!active) return;
       startedAt = now();
       recovery = { sawOffline: false, reloading: false };
@@ -17000,11 +17002,11 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
 			const updateMessage = updateStatus.phase === "package-managed"
 				? "关闭酒馆后，在终端重新运行安装命令，再启动 tavern。"
 				: updateStatus.phase === "checking"
-				? "正在向 GitHub 核实最新构建…"
+				? (updateStatus.packageManaged ? "正在核实最新版本…" : "正在向 GitHub 核实最新构建…")
 				: updateStatus.phase === "up-to-date"
 					? "✓ 未发现更新构建" + (updateStatus.checkWarning ? " · " + updateStatus.checkWarning : "")
 				: updateStatus.phase === "update-available"
-					? "发现新构建 " + ((updateStatus.latestCommit || "").slice(0, 7) || updateStatus.latestVersion || "") + (updateStatus.checkWarning ? " · " + updateStatus.checkWarning : "")
+					? (updateStatus.packageManaged ? "发现新版本 " + (updateStatus.latestVersion ? "v" + updateStatus.latestVersion : "") : "发现新构建 " + ((updateStatus.latestCommit || "").slice(0, 7) || updateStatus.latestVersion || "")) + (updateStatus.checkWarning ? " · " + updateStatus.checkWarning : "")
 				: updateStatus.phase === "repair-required"
 					? "当前构建需要修复安装" + (updateStatus.error ? "：" + updateStatus.error : "，没有发现更新构建。")
 				: updateStatus.phase === "running"
@@ -17016,7 +17018,7 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
 				: updateStatus.phase === "installed-restart-required"
 					? (updateStatus.error || "程序文件已更新，但自动重启失败。请手动重启 DSH Tavern。")
 				: updateStatus.phase === "restart-required"
-					? "请重启 DeepSeek Harness 以加载新版插件。"
+					? (updateStatus.packageManaged && updateStatus.host !== "desktop" ? "更新完成，请重启 DSH 以加载新版酒馆。" : "更新完成，请重启 DeepSeek Harness 以加载新版酒馆。")
 				: updateStatus.phase === "completed"
 					? (updateStatus.host === "desktop"
 						? "更新完成，请重启 DeepSeek Harness。"
@@ -17027,8 +17029,8 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
 						? (updateStatus.error || "更新失败，请稍后重试。")
 						: "尚未检查更新";
 			const currentVersionLabel = updateStatus.currentVersion && updateStatus.currentVersion !== "unknown" ? "v" + updateStatus.currentVersion : "版本未知";
-			const currentCommitLabel = (updateStatus.currentCommit || "").slice(0, 7) || "构建未知";
-			const updateHostLabel = updateStatus.phase === "package-managed" ? "插件安装版" : updateStatus.host === "desktop" ? "Desktop 版" : (updateStatus.host === "android" ? "Android 版" : "命令行版");
+			const currentCommitLabel = (updateStatus.currentCommit || "").slice(0, 7) || (updateStatus.packageManaged ? "插件安装" : "构建未知");
+			const updateHostLabel = updateStatus.phase === "package-managed" || updateStatus.packageManaged ? "插件安装版" : updateStatus.host === "desktop" ? "Desktop 版" : (updateStatus.host === "android" ? "Android 版" : "命令行版");
 			// 已是最新且无警告时，结果直接写在按钮上，不再单占一行（手机侧栏高度紧张）。
 			const upToDateQuiet = updateStatus.phase === "up-to-date" && !updateStatus.checkWarning;
 			const checkingOrRunning = updater.current?.isBusy(updateStatus) ?? true;
@@ -17042,7 +17044,7 @@ function createUpdateStatusController({ call, confirm, errors, browser, initial 
 					h("button", { className: "dsh-tavern-update-button", onClick: checkUpdate }, "检查更新"),
 					h("button", { className: "dsh-tavern-update-button primary", onClick: performUpdate }, updateStatus.phase === "repair-required" ? "修复安装" : "进行更新"))
 				: h("div", { className: "dsh-tavern-update-actions" },
-					h("button", { className: "dsh-tavern-update-button", disabled: checkingOrRunning || updateStatus.phase === "restart-required" || updateStatus.phase === "installed-restart-required", onClick: checkUpdate }, updateStatus.phase === "checking" ? "正在检查…" : (updateStatus.phase === "running" ? "正在更新…" : (updateStatus.phase === "cancelling" ? "正在取消…" : (updateStatus.phase === "blocked" ? "等待安全停止" : (updateStatus.phase === "installed-restart-required" ? "请手动重启" : (updateStatus.phase === "restart-required" ? "重启 Desktop 后可用" : (upToDateQuiet ? "✓ 已是最新" : "检查更新"))))))),
+					h("button", { className: "dsh-tavern-update-button", disabled: checkingOrRunning || updateStatus.phase === "restart-required" || updateStatus.phase === "installed-restart-required", onClick: checkUpdate }, updateStatus.phase === "checking" ? "正在检查…" : (updateStatus.phase === "running" ? "正在更新…" : (updateStatus.phase === "cancelling" ? "正在取消…" : (updateStatus.phase === "blocked" ? "等待安全停止" : (updateStatus.phase === "installed-restart-required" ? "请手动重启" : (updateStatus.phase === "restart-required" ? (updateStatus.packageManaged && updateStatus.host !== "desktop" ? "重启 DSH 后可用" : "重启 Desktop 后可用") : (upToDateQuiet ? "✓ 已是最新" : "检查更新"))))))),
 					cancelSupported ? h("button", { className: "dsh-tavern-update-button", disabled: updateStatus.phase === "cancelling", onClick: cancelUpdate }, updateStatus.phase === "cancelling" ? "正在取消…" : "取消更新") : null);
 			return h(React.Fragment, null, h(TavernErrorCenter), collapsedSidebar, h("div", { className: "dsh-tavern-sidebar", style: { display: collapsed ? "none" : undefined, position: "relative", width: props.embedded ? "100%" : props.width + "px" } },
 				h("div", { className: "dsh-tavern-side-head" }, h("div", { className: "dsh-tavern-side-brand dsh-tavern-lockup", role: "img", "aria-label": "DSH Tavern" }), props.embedded ? null : h("button", { className: "dsh-tavern-side-icon", title: "收起侧栏", onClick: props.toggleSidebar }, "◧")),
