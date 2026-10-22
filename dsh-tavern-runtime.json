@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "7319d2d15987f745d05533de9f9072e9805f32cb",
-  "releaseSequence": 820,
+  "revision": "ba761db41495db38d16b3ee4b2179ef58c825705",
+  "releaseSequence": 821,
   "version": "3.1.0",
   "files": [
     {
@@ -146,8 +146,8 @@
     },
     {
       "path": "bin/bundled-scene-image-plugin.mjs",
-      "sha256": "ed0c90d5e28db118f204aee0aeaf17e922b3d4227ed9e42830fb373f2a1275e6",
-      "size": 12870
+      "sha256": "c6e7390a2bb7247d0ea0d0dafb5b94e80e5765340d1d3c61dae6c9e660349a46",
+      "size": 16017
     },
     {
       "path": "bin/chat-answer-step-patch.mjs",
@@ -286,8 +286,8 @@
     },
     {
       "path": "bin/profile-installation.mjs",
-      "sha256": "8a3b77883e5cc4ee0a4609223e43d3f2d25f34cadc62153aa167610eee8030c8",
-      "size": 23066
+      "sha256": "a170251aa8a86d0e1f71a2997d86bef84265bec3e6794e50e867e23d8b804b3d",
+      "size": 23150
     },
     {
       "path": "bin/prune-installed-files.mjs",
@@ -646,8 +646,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "317b51399ab3fc46b368ca67759fcc7c283ddc028fe942df6443852a49113b05",
-      "size": 1975487
+      "sha256": "3801729a6c594d63800f40af6d8b64822ede2262eaf99a10deaeceb63446576a",
+      "size": 1975576
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -1591,8 +1591,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/plugin-text-segments.js",
-      "sha256": "e893f133766fba81753550456265266d118d0b94555ed7cb29db042d56eb99e4",
-      "size": 4246
+      "sha256": "cd6f4e6b421e2209eafd6969713415ef82f43f664004c3b4fa9cf8d94588ec4b",
+      "size": 4333
     },
     {
       "path": "tavern-plugin/lib/domain/plugin-turns.js",
@@ -4411,18 +4411,18 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/BUNDLED-VERSION.json",
-      "sha256": "a0b90bf9071a13c7a8e047fd14a17b424af29f8304e18d555ec79f3e75ab561e",
-      "size": 243
+      "sha256": "5196725d54113312690c47ff8a48309a5e51326fbaff1048653f2329caac950c",
+      "size": 259
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/client.js",
-      "sha256": "2e8ca6687e1adc40cce8b56db988f8ac473a087addf11e4a76140332f2cc4948",
-      "size": 450430
+      "sha256": "bf495061aeacff51ab009c58cf6c007604399b9fa102653857949dd76e2df930",
+      "size": 450658
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/console.html",
-      "sha256": "a54e18ad3404f93c659166284b35fa0bbc9420453ea4d8ea29f2d844f0d9c672",
-      "size": 49618
+      "sha256": "db28235fe0d395655be832b7faeb7cce29f7cf47ba9dc9fcf724240fbb8f55c3",
+      "size": 49705
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/cordis.patch.yml",
@@ -4491,18 +4491,18 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/image-providers.js",
-      "sha256": "f1e8dbb446df4385d9707df4a1ac62956c341a124b5cd9e3070b44927c898e4e",
-      "size": 32567
+      "sha256": "e1c25cb7e7039173661ad6724c2cfa2d432b0fa9e36df692c12bd4635688b0ac",
+      "size": 34825
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/index.js",
-      "sha256": "19cf9069b7d9bdb66709b52ddb5fec1964e18808a1f97d23963ddfe2b488c84b",
-      "size": 315067
+      "sha256": "5c92a454a7a9aa5d85e8d7fd263cad6e90470c5e4fef27c7aaecf9b5c8ba6145",
+      "size": 321764
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/media-actions.js",
-      "sha256": "7bf5339269c6ede278fcc719b4a7dfd654c1c61d3e84338f047be8395b2c4e42",
-      "size": 29579
+      "sha256": "c4a9c809a0ddac154b3eff09d9fcafda19b8af76cbe8507dd4a3adc2caf8293c",
+      "size": 29895
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/outfit-generator.js",
@@ -4516,8 +4516,8 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/planner.js",
-      "sha256": "4077bfd6720fca318aacde5381e25543290bcd6866027fdb068d1c17010e6170",
-      "size": 31666
+      "sha256": "a80719f42c19d38acc68e530190396f5da933f926edd859730b8d2e4a9d1df0c",
+      "size": 34953
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/plugin-compatibility.js",
@@ -4700,6 +4700,11 @@
       "size": 53
     },
     {
+      "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/workflow-delete.js",
+      "sha256": "aa55dcea9c0201ef21d3d2010c69eac1700606409c0e60b93a38773029fa99f6",
+      "size": 2924
+    },
+    {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/workflow-graph.js",
       "sha256": "79f7a1e81ffae02c5452c07f1993df97fab42f966a8edf1a526527d14f988505",
       "size": 2466
@@ -4711,13 +4716,13 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/package.json",
-      "sha256": "536547405ce99c0f825900fd8a193bab9078ae5f5d79db6d59b0c399467c6387",
+      "sha256": "0d6e0ad35d0eaaac082c02dc4e4c87bb9060c4f35d8ba933b4cd0eaeaccb9157",
       "size": 1609
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/README.md",
-      "sha256": "f04f523954f4d963fa5815a12f2d377d3e2aa58bd6ebadd86ab9dac7869b94ac",
-      "size": 30099
+      "sha256": "10e9b6d7a0af648adbf5de0a5d2a4f148073d8f4a1e918e45e988390afaa0cee",
+      "size": 30525
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/workflows/.gitkeep",
@@ -4731,13 +4736,13 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/世界书-通用生图规则.json",
-      "sha256": "84412e7ac897f817e64b9465e8d14f73829d16cbeb6f9ce2206c51c0c32c119c",
-      "size": 12112
+      "sha256": "a53109e6b99d6475d5eec70d9e7b20d233926552f8c81917d75167708d3e8de1",
+      "size": 16011
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/世界书-通用生图规则.txt",
-      "sha256": "1d94301ccc90994251d937997125c8c9833b94360800f629370393311508155c",
-      "size": 11141
+      "sha256": "49c8ec3aa5220d952333be1c4a6cab228b81af8fe39315492b47bd60c32a34f3",
+      "size": 14681
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-remote/.gitignore",
