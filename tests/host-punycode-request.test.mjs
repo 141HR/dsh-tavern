@@ -35,6 +35,6 @@ test('找不到 npm punycode 时不改写', () => {
 
 test('酒馆入口第一条导入就是 punycode 改写', async () => {
   const source = await readFile(new URL('../tavern-plugin/lib/index.js', import.meta.url), 'utf8')
-  const first = source.split('\n').find(line => line.startsWith('import '))
+  const first = source.split(/\r?\n/).find(line => line.startsWith('import '))
   assert.equal(first, "import './domain/host-punycode-request.js'")
 })

@@ -53,6 +53,15 @@ jobs:
             echo "dsh-profile-tavern@${{ steps.version.outputs.value }} 已在 npm 上，跳过。"
             echo "published=true" >> "$GITHUB_OUTPUT"
           fi
+      # The only CI test gate: checked once per release, not on every push.
+      - name: Test the package before publishing
+        if: steps.existing.outputs.published != 'true'
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.9.0 --activate
+          pnpm install --frozen-lockfile
+          node --test tests/application-updater.test.mjs tests/application-update-api.test.mjs tests/update-status-client.test.mjs tests/package-managed-update.test.mjs tests/host-punycode-request.test.mjs tests/plugin-package.test.mjs tests/plugin-package-guard.test.mjs tests/plugin-dependencies.test.mjs tests/bundled-scene-image-plugin.test.mjs tests/user-plugins.test.mjs tests/scene-illustration.test.mjs tests/server-template-runtime.test.mjs
       - name: Publish
         if: steps.existing.outputs.published != 'true'
         shell: bash
