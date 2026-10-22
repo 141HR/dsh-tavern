@@ -905,6 +905,9 @@ function createRuntime(ctx, overrides, logger, deps) {
             for (const item of Object.values(saved)) {
               if (!item || !item.id) continue
               const job = Object.assign({}, item, { params: item.params ?? {} })
+              // 旧版把 cache 兜底补回的占位记录（无 key、无提示词）也落了盘，且 createdAt 是当次启动时间。
+              // 认出来按占位处理：不再落盘、时间改用文件修改时间，免得挤掉真实记录、打乱图库顺序。
+              if (job.label === '历史图片' && !job.key && !job.positive) job.fromCache = true
               // 老记录有两处会让取图永久 404，这里在内存里补正（不写回盘，每次启动重算）：
               //   ① file 指着改名前的 cache 目录（…\tools\dsh-tavern-image\cache\…），文件其实已搬到 dsh-tavern-image；
               //   ② byteLength 被早期兜底恢复写成了 0，而取图门槛正是 `if (!job.file || !job.byteLength)`。
@@ -919,6 +922,7 @@ function createRuntime(ctx, overrides, logger, deps) {
                   const info = await stat(job.file)
                   if (info.size) {
                     job.byteLength = info.size
+                    if (job.fromCache && info.mtimeMs) job.createdAt = info.mtimeMs
                     // 文件在就说明这一张已经画完了。重启后内存里不可能还留着真正在跑的作业，
                     // 而落盘时残留的 pending 会让 hasImage 判成 false —— 历史图列表里
                     // 明明有图却显示「没有」，缩略图也出不来。以文件为准修正状态。
@@ -961,13 +965,17 @@ function createRuntime(ctx, overrides, logger, deps) {
             // byteLength 必须填成文件的真实字节数：取图路由的门槛是 `if (!job.file || !job.byteLength)`，
             // 填 0 会让这个作业永远被判成「图片还没生成好」而返回 404 —— 列表里明明有图却打不开。
             let bytes = 0
+            let cached = Buffer.alloc(0)
+            // 用文件修改时间当作生成时间：图库按 createdAt 排序，写 Date.now() 会让所有历史图每次重启都跑到最前面
+            let createdAt = Date.now()
             try {
               const buf = await readFile(join(dir, name))
+              cached = buf
               bytes = buf.length
               if (buf.length > 24 && buf[1] === 0x50 && buf[2] === 0x4e) size = { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) }
+              createdAt = (await stat(join(dir, name))).mtimeMs || createdAt
             } catch { /* 读不到尺寸就算了 */ }
-            const cached = await readFile(join(dir, name)).catch(() => Buffer.alloc(0))
-            jobs.set(id, { id, state: 'done', percent: 100, createdAt: Date.now(), file: join(dir, name), size, params: {}, label: '历史图片', byteLength: bytes, mediaType: imageMediaTypeFromBytes(cached) || (/\.jpe?g$/i.test(name) ? 'image/jpeg' : /\.webp$/i.test(name) ? 'image/webp' : 'image/png') })
+            jobs.set(id, { id, state: 'done', percent: 100, createdAt, fromCache: true, file: join(dir, name), size, params: {}, label: '历史图片', byteLength: bytes, mediaType: imageMediaTypeFromBytes(cached) || (/\.jpe?g$/i.test(name) ? 'image/jpeg' : /\.webp$/i.test(name) ? 'image/webp' : 'image/png') })
             added++
           }
           if (added) logger.info?.('dsh-tavern-image: 从 cache 补回 ' + added + ' 张历史图片')
@@ -983,7 +991,13 @@ function createRuntime(ctx, overrides, logger, deps) {
         if (!jobsDirty) return
         jobsDirty = false
         try {
-          const entries = [...jobs.entries()].slice(-150)
+          // 只落盘真实作业，按时间保留最近 150 条。cache 兜底补回的占位记录每次启动都会从 cache 重建，
+          // 不能占名额：按插入顺序截取时它们排在最后，会把带 key / 提示词的真实记录挤掉，
+          // 重启后同一段正文就查不到已有的图。
+          const entries = [...jobs.entries()]
+            .filter(([, job]) => !job.fromCache)
+            .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0))
+            .slice(-150)
           const plain = {}
           for (const [id, job] of entries) {
             plain[id] = {
