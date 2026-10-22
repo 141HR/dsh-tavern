@@ -123,16 +123,11 @@
 
 ### Windows
 
-1. 安装 [DeepSeek Harness 0.2.1-rc.2](https://deepseek.com/harness/)，打开一次后从托盘退出。
-2. 安装酒馆，以下两种方式**任选其一**：
-   - **方式 A：双击安装**。[下载安装程序](https://github.com/flizzywine/dsh-tavern/releases/download/v3.0/dsh-tavern-install.cmd)，双击运行（安全提示点「更多信息 → 仍要运行」）。
-   - **方式 B：命令安装**。打开 PowerShell，粘贴下面这行并按回车执行：
+1. 安装 [DeepSeek Harness 0.2.1-rc.2](https://deepseek.com/harness/) 并打开。
+2. 打开 **设置 → 插件**，点「添加插件」（如果要选添加方式，选「安装第三方插件」），在输入框填 `dsh-profile-tavern`，点「安装」。安装源保持「中国大陆镜像源」即可。
+3. 安装完成后重启 DeepSeek Harness，即进入酒馆。
 
-     ```powershell
-     $env:DSH_TAVERN_HOST='desktop'; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.ps1')); Invoke-Expression $tavernInstaller
-     ```
-
-3. 重新打开 DeepSeek Harness，即进入酒馆。
+以后在酒馆里点「检查更新 → 进行更新」，完成后重启 DeepSeek Harness 即可。之前用安装命令或双击安装过的，照常在酒馆里更新，不用重装。
 
 ### Android
 
@@ -180,7 +175,7 @@ curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install
 
 ### 更新、旧存档与切回原版
 
-- 在酒馆里点「检查更新」即可更新，也可以重新运行上面的安装命令；只替换程序，人物卡、聊天和设置都会保留。
+- 在酒馆里点「检查更新」即可更新（Windows 插件版更新完需重启 DeepSeek Harness），命令行版也可以重新运行上面的安装命令；只替换程序，人物卡、聊天和设置都会保留。
 - 旧版本的存档：打开后在「酒馆状态」里点「迁移存档」。正文、变量、分支和历史版本都会保留。迁移后的数据目录不要再让旧宿主直接读取。
 - 桌面版切回原版 DSH：设置 → 原版DSH → 切到原版 DSH 并重启。之后在原版 DSH 的设置 → DSH酒馆，就能切回酒馆。不要删除 `.dsh/backups` 和 `profiles/desktop.fresh-*`。细节见[桥接插件说明](tavern-plugin/packages/dsh-profile-bridge/README.md)。
 - 旧酒馆在自定义目录、需要继承数据时，见[数据继承说明](docs/data-import.md)。
