@@ -10,7 +10,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 const source = fileURLToPath(new URL('../tavern-plugin/packages/dsh-tavern-image-bundled/', import.meta.url))
 const SECRET = 'sk-SUPERSECRET-123456'
 const DEFINITIONS = { characters: [
-  { id: 'm', name: '阿梅', match: 'A Mei', enabled: true, traits: { face: 'black long hair, dark brown eyes', negative: 'glasses, beard, short hair' }, outfits: [{ id: 'o1', name: '常服', upper: 'cream cardigan', lower: 'blue skirt', negative: 'jeans' }] },
+  { id: 'm', name: '阿梅', match: 'A Mei', enabled: true, traits: { face: 'black long hair, dark brown eyes', negative: 'glasses, beard, short hair' }, outfits: [{ id: 'o1', name: '常服', upper: 'cream cardigan', lower: 'blue skirt', full: 'cream cardigan over a blue skirt', negative: 'jeans' }] },
   { id: 'mf', name: '阿梅（狐形）', match: 'A Mei fox form', enabled: true, traits: { face: 'silver-white long hair, pale ice-blue eyes, white fox ears' }, outfits: [] },
 ] }
 const story = '雨夜，阿梅和他共撑一把伞。' + SECRET
@@ -145,4 +145,12 @@ test('挂载句在正文里找不到时说清楚，而不是报「没有返回�
   const text = JSON.stringify(r.body)
   assert.match(text, /挂载句在正文里/)
   assert.doesNotMatch(text, /没有返回可用的 <image> 块/)
+})
+
+test('人物宏点名的衣服，负面词也进负向通道（以前只补人物自己的负面词）', async t => {
+  const f = await runtime(t)
+  await f.plan(); await delay(30)
+  const negative = f.bodies[0].prompt['2'].inputs.text
+  assert.match(negative, /jeans/)
+  assert.match(negative, /glasses/)
 })

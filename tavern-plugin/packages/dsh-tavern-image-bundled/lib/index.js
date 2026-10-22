@@ -5466,7 +5466,17 @@ export function injectDefinitions(text, definitions, config = {}, options = {}) 
       hits.push(character.name || character.id)
       // 人物宏展开时负面词没地方放（宏只产出正向文字），在这里补回负向通道。
       const own = String(character.traits?.negative ?? '').trim()
-      personNegatives.push(own && !PLACEHOLDER_VALUE.test(own) ? [own] : [])
+      const list = own && !PLACEHOLDER_VALUE.test(own) ? [own] : []
+      // 宏里点名的那套衣服，它的负面词同样没地方放：按展开进画面的衣服文字认出是哪一套，一并补回。
+      for (const outfit of character.outfits ?? []) {
+        const neg = String(outfit?.negative ?? '').trim()
+        if (!neg || PLACEHOLDER_VALUE.test(neg) || outfit.enabled === false) continue
+        // tag 写法有上下装时不写 full（见 characterTags），所以优先按上下装认。
+        const pieces = keys => keys.map(key => String(outfit[key] ?? '').trim()).filter(v => v.length >= 6 && !PLACEHOLDER_VALUE.test(v))
+        const worn = pieces(['upper', 'lower']).length ? pieces(['upper', 'lower']) : pieces(['full'])
+        if (worn.length && worn.every(v => source.includes(v))) list.push(neg)
+      }
+      personNegatives.push(list)
       continue
     }
     if (expanded.some(other => sameCharacterFamily(character, other))) continue
