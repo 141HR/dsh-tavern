@@ -5410,6 +5410,7 @@ export function injectDefinitions(text, definitions, config = {}, options = {}) 
   if (!source || !definitions) return { text: source, hits: [] }
   const have = tagSet(source)
   const added = []
+  const placed = []
   const hits = []
   const negatives = []
   const weight = Number(config.injectWeight) || 0
@@ -5447,22 +5448,31 @@ export function injectDefinitions(text, definitions, config = {}, options = {}) 
     hits.push(character.name || character.id)
     // 露的画面（nsfw 或写着洗澡/裸体/内衣）不自动补衣服：既不补「当前穿着」，也不补常穿。
     const bare = nsfw || bareScene || NOTHING_WORN.test(String(character.current?.outfit ?? '').trim())
-    const recordedRaw = bare ? '' : resolveWearText(character, character.current?.outfit)
+    // 规划已经在画面里写了这个人穿什么（没用人物宏、直接写衣服）时，不再补「当前穿着」或常穿：
+    // 两套衣服同时进提示词会打架（brown leather boots 对上 black leather boots）。
+    const dressedByPlanner = !natural && PLANNER_GARMENT.test(footText)
+    const recordedRaw = bare || dressedByPlanner ? '' : resolveWearText(character, character.current?.outfit)
     const recorded = barefoot ? dropFootwear(recordedRaw) : recordedRaw
-    const picked = characterTags(character, { nsfw, back, full, mode: config.traitMode, barefoot, noOutfit: Boolean(recordedRaw) || bare, tags: !natural })
+    const picked = characterTags(character, { nsfw, back, full, mode: config.traitMode, barefoot, noOutfit: Boolean(recordedRaw) || bare || dressedByPlanner, tags: !natural })
     // options.provenance：诊断用，记录每段注入文字来自哪个人物的哪个字段、作用于正向还是整图负向。
     if (Array.isArray(options?.provenance)) for (const origin of picked.origins ?? []) options.provenance.push({ stage: 'definition-injection', characterId: String(character.id ?? ''), characterName: String(character.name ?? ''), matchedBy: keys.find(key => key && source.includes(key)) ?? '', appliedScope: origin.channel === 'negative' ? 'whole-image-negative' : 'whole-image-positive', ...origin })
     if (natural) {
       const phrase = boundCharacterPhrase(character, picked, [], recorded)
       if (phrase && !source.includes(phrase)) added.push(phrase)
-    } else for (const raw of [...picked.tags, recorded].filter(Boolean)) {
+    } else {
+      // tag 写法：这个人的外貌紧跟在她的名字后面插入，而不是堆到整段末尾。
+      // 末尾是 SDXL 分段后权重最弱的位置，外貌放在那里等于没写。
+      const own = []
+      for (const raw of [...picked.tags, recorded].filter(Boolean)) {
       // tag 写法里「当前穿着」也要写进去（以前只有自然语言写法带上它，tag 写法里这个人就没衣服了）。
       for (const tag of splitTags(raw)) {
         const key = tag.toLowerCase()
         if (!key || have.has(key)) continue
         have.add(key)
-        added.push(weight > 0 && weight !== 1 ? `(${tag}:${weight})` : tag)
+        own.push(weight > 0 && weight !== 1 ? `(${tag}:${weight})` : tag)
       }
+      }
+      if (own.length) placed.push({ keys, tags: own })
     }
     // 人物的负面词（例如"不要画成小孩"）走负向通道，绝不进正向提示词
     personNegatives.push(picked.negative ?? [])
@@ -5508,8 +5518,19 @@ export function injectDefinitions(text, definitions, config = {}, options = {}) 
   }
   // 赤脚画面：负面里压一下鞋（鞋拿在手里时不压）。
   if (barefoot && !SHOES_IN_HAND.test(footText)) for (const tag of ['shoes', 'footwear']) if (!negatives.includes(tag)) negatives.push(tag)
-  return { text: added.length ? `${source}, ${added.join(', ')}` : source, hits, negatives }
+  // 按名字注入的外貌插在这个人名字所在的那一段后面；找不到名字时退回到末尾。
+  const segments = source.split(',')
+  for (const { keys, tags } of placed) {
+    const at = segments.findIndex(segment => keys.some(key => containsNameToken(segment, key)))
+    if (at < 0) added.unshift(...tags)
+    else segments.splice(at + 1, 0, ' ' + tags.join(', '))
+  }
+  const placedText = segments.join(',')
+  return { text: added.length ? `${placedText}, ${added.join(', ')}` : placedText, hits, negatives }
 }
+
+/** 画面里写了具体衣物（不含 wet clothes 这类状态词）。 */
+const PLANNER_GARMENT = /\b(outfit|uniform|dress|robe|hanfu|kimono|shirt|blouse|jacket|coat|skirt|trousers|pants|shorts|boots|shoes|sneakers|heels|dudou|lingerie|underwear|bra|panties|bikini|swimsuit|apron|armor|cloak|sweater|cardigan|hoodie|leotard|bodysuit)\b/i
 
 // =====================================================================
 // 编译工作流
