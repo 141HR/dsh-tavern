@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "4ba21d6df1a6ccb47dc2d85949aeb2483c825d19",
-  "releaseSequence": 824,
+  "revision": "7f01e5c0bdc7d9802772fdfa4944ebe1fa46bff8",
+  "releaseSequence": 825,
   "version": "3.1.0",
   "files": [
     {
@@ -1241,8 +1241,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/history-tool-call.js",
-      "sha256": "4e0562d5ae95bdf7f12996b475663e2455f155468a73731b558219b25a7cb03a",
-      "size": 7344
+      "sha256": "ffd43b2242f8aea98281fa35868d748e9a12d8b83c3ee51de6927b80dbcacbd8",
+      "size": 8621
     },
     {
       "path": "tavern-plugin/lib/domain/host-compatibility.js",
