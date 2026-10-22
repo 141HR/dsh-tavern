@@ -1,6 +1,6 @@
 import { createSettlementProgressGuard } from '../tavern-plugin/lib/domain/settlement-progress-guard.js'
 import { readSettlementInput } from '../tavern-plugin/lib/domain/settlement-input.js'
-import { pendingMvuTarget } from '../tavern-plugin/lib/domain/settlement-turn.js'
+import { createMvuSettlementEngine } from '../tavern-plugin/lib/domain/mvu-settlement-engine.js'
 import {applyJsonChanges} from '../tavern-plugin/lib/domain/json-mutation.js'
 import { createSettlementJobs } from '../tavern-plugin/lib/domain/settlement-jobs.js'
 import { createTurnSettledEvents } from '../tavern-plugin/lib/domain/turn-settled-events.js'
@@ -87,7 +87,8 @@ async function harness({ beginRunning = true, mvu = true } = {}) {
   sandbox.plainSettlementPlan = plainSettlementPlan
   sandbox.runPipelineStages = runPipelineStages
   sandbox.mvuReceiptsOf = createSessionStateView({activity:chat=>tasks.activity(chat),evidence:()=>({})}).receipts
-  sandbox.pendingMvuTarget = pendingMvuTarget
+  // Read through the sandbox on every call, so the tests below can swap MVU services.
+  sandbox.mvuSettlementEngine = createMvuSettlementEngine(sandbox)
   vm.runInContext(section('  async function runSettlement(', '  const mvuSettlementReconciler'), sandbox)
   sandbox.settlementJobs = createSettlementJobs({run:(...args)=>sandbox.runSettlement(...args),onSettled:(...args)=>sandbox.onSettlementSettled(...args)})
   vm.runInContext(section('  async function retrySettlement(', '  async function pullBackgroundCycle('), sandbox)
