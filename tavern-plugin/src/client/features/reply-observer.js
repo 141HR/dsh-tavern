@@ -4,6 +4,8 @@
 		// publishes a small, stable state. It covers play chats too (same snapshot), which
 		// keeps watchReply a single code path.
 		function createTavernReplyObserverFeatureModule() {
+			const EMPTY_REPLY_NODES = Object.freeze([]);
+
 			function tavernReplyText(blocks) {
 				return (Array.isArray(blocks) ? blocks : [])
 					.filter(function (block) { return block && block.kind === "text"; })
@@ -55,9 +57,9 @@
 			// Always mounted with the composer, for the session open in this page.
 			function TavernReplyObserver(props) {
 				const sessionId = String(props.sessionId || "");
-				const partial = props.useChat(function (snapshot) { return snapshot.legacy.partial; });
-				const nodes = props.useChat(function (snapshot) { return snapshot.legacy.nodes; });
-				const runningCalls = props.useChat(function (snapshot) { return snapshot.legacy.runningCalls; });
+				const partial = props.useChat(function (snapshot) { return snapshot && snapshot.legacy ? snapshot.legacy.partial : null; });
+				const nodes = props.useChat(function (snapshot) { return snapshot && snapshot.legacy ? snapshot.legacy.nodes : EMPTY_REPLY_NODES; });
+				const runningCalls = props.useChat(function (snapshot) { return snapshot && snapshot.legacy ? snapshot.legacy.runningCalls : EMPTY_REPLY_NODES; });
 				const running = props.useSession(function (snapshot) { return snapshot.running === true; });
 				const live = useLiveTavernView(sessionId, "reply-observer", [["mode"], ["cardSave"]]);
 				const view = live && live.view ? live.view : null;
