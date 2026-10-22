@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { buildSettingsBundle } from '../tavern-plugin/lib/domain/settings-bundle.js'
-import { applyTavernSettingsPatch, presentTavernSettings } from '../tavern-plugin/lib/domain/tavern-settings.js'
+import { applyTavernSettingsPatch, presentTavernSettings, resolveSystemPrompt } from '../tavern-plugin/lib/domain/tavern-settings.js'
 import { createUserPreferenceProfile } from '../tavern-plugin/lib/domain/user-preference-profile.js'
 
 import { createSettingsTransfer } from '../tavern-plugin/lib/domain/settings-transfer.js'
@@ -101,4 +101,15 @@ test('系统提示词校验失败时不先导入预设或切换长期偏好', as
   assert.equal(h.presets.size, 0)
   assert.equal(h.active(), '')
   assert.deepEqual(h.settings(), {})
+})
+
+test('卡片 Agent 系统指令：用户保存空白即覆盖默认，恢复默认才回到文件内容', () => {
+  const defaults = { 'card-system': '默认人设' }
+  const cleared = applyTavernSettingsPatch({}, { systemPrompt: { name: 'card-system', text: '  ' } })
+  const shown = presentTavernSettings(cleared, defaults).systemPrompts.find(item => item.name === 'card-system')
+  assert.deepEqual([shown.text, shown.customized], ['', true])
+  assert.equal(resolveSystemPrompt(cleared, 'card-system', name => defaults[name]), '')
+  const restored = applyTavernSettingsPatch(cleared, { systemPrompt: { name: 'card-system', text: null } })
+  assert.equal(resolveSystemPrompt(restored, 'card-system', name => defaults[name]), '默认人设')
+  assert.throws(() => applyTavernSettingsPatch({}, { systemPrompt: { name: 'story', text: '' } }), /不能为空/)
 })
