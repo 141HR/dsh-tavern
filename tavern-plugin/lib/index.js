@@ -59,7 +59,7 @@ import { createCardMemory, CARD_MEMORY_TOOLS } from '../packages/dsh-tavern-card
 import { installSkillCatalogSessionScope } from './domain/skill-catalog-session-scope.js'
 import { projectCardSummary } from './domain/card-preparation.js'
 import { createCardSummaryCache } from './domain/card-summary-cache.js'
-import { openingPreviewPayload, openingInitializationPayload } from './domain/opening-transport.js'
+import { openingPreviewPayload } from './domain/opening-transport.js'
 import { createLiveCardUpdate } from './domain/live-card-update.js'
 import { createSessionViewReader, createSessionChatReader } from './domain/session-view-reader.js'
 import { settlementTurn, pendingMvuSettlementState, projectDisplayRuntimeState } from './domain/chat-session-state.js'
@@ -113,7 +113,7 @@ import { appendHelperUserSessionContext } from './domain/helper-user-session-con
 import { userMessageForTurn, requestIdForTurn, requestIdForMessages } from './domain/session-turn-input.js'
 import { inspectStoryAlignment, nativeStoryTurns } from './domain/story-alignment.js'
 import { repairNativeSurface, recordNativeSurfaceRepair, planNativeSurfaceRepair } from './domain/native-surface-repair.js'
-import { sessionOpeningDescriptor, prepareSessionOpening } from './domain/session-opening.js'
+import { sessionOpeningDescriptor } from './domain/session-opening.js'
 import { scriptPromptScanText } from './domain/tavern-script-prompts.js'
 import { createOpeningPreparation } from './domain/opening-preparation.js'
 import { createChatHistoryImportService } from './domain/chat-history-import-service.js'
@@ -256,6 +256,7 @@ import { prompt as promptFile, SYSTEM_PROMPT_NAMES } from './prompt-catalog.js'
 import { createMaintenanceHandlers } from './rpc/maintenance.js'
 import { createCardHandlers } from './rpc/cards.js'
 import { createTemplateHandlers } from './rpc/template.js'
+import { createOpeningHandlers } from './rpc/opening.js'
 // dsh-tavern 宿主插件（profile 组合行）
 // RPC：同源 HTTP 路由 /api/dsh-tavern/<method>（客户端 fetch 调用）
 // DSH 生命周期负责回合状态；模型工具只处理按需读取和明确修改。
@@ -4018,41 +4019,25 @@ export async function apply(ctx) {
     backgroundAgentRunner, callModel, cardMemory, cardOrganization, cardPacksOf, cardPlugins,
     cardPreparation, cardTaskPrompts, castAssets, chatForSession, chatHeaderForSession, chatPersistence,
     commands, compatibilityDiagnostics, ctx, deleteCard, displayRuntimeCaptures, ensureNativeCardWorkspace,
-    exportTavernLogs, fileResources, fullTemplateRuntime, helperGenerationPreset, helperGenerationTasks,
-    helperHistoryAccess, hostCompatibility, importCard, importCardArchiveFile, importPluginCardFile,
-    listCards, mobileCardImport, modelRequestLog, mvuDiagnostics, openingPreparation, pagesInFront,
-    pluginApi, preparedSaveSessions, projectOpeningWindow, readCardExtensions, readCardWorkspace, readChat,
-    readChatCard, readOpeningWindow, readSessionMap, runtimePrompt, saveUpgrade, sessionPatch,
-    sessionStateForSession, sessionStore, sessionViews, setCardPlugins, sleep, str, tavernScriptHostAdapter,
-    updateCard, uploads, worldBooks, worldbookRecallLog, get serverScripts() { return serverScripts } }
+    ensureNativeOpening, exportTavernLogs, fileResources, fullTemplateRuntime, getCardOpenings,
+    helperGenerationPreset, helperGenerationTasks, helperHistoryAccess, hostCompatibility, importCard,
+    importCardArchiveFile, importPluginCardFile, listCards, mobileCardImport, modelRequestLog,
+    mvuDiagnostics, openingPreparation, pagesInFront, pluginApi, preparedSaveSessions, projectOpeningWindow,
+    readCardExtensions, readCardWorkspace, readChat, readChatCard, readOpeningWindow, readSessionMap,
+    requestPerformance, runtimePresets, runtimePrompt, saveUpgrade, sessionPatch, sessionStateForSession,
+    sessionStore, sessionViews, setCardPlugins, sleep, startChat, str, tavernScriptHostAdapter, updateCard,
+    uploads, worldBooks, worldbookRecallLog, get serverScripts() { return serverScripts } }
   const rpcHandlers = Object.assign(Object.create(null),
     createMaintenanceHandlers(rpcDeps),
     createCardHandlers(rpcDeps),
-    createTemplateHandlers(rpcDeps))
+    createTemplateHandlers(rpcDeps),
+    createOpeningHandlers(rpcDeps))
 
   async function dispatchMethod(method, args, serverTemplate = false) {
     if (method.startsWith('gameplay.')) return await gameplayApi.call(method.slice(9), args || {})
     const handler = rpcHandlers[method]
     if (handler) return await handler(args, method, serverTemplate)
     switch (method) {
-      case 'prepareSessionOpening': {
-        const chat = await chatForSession(args && args.sessionId)
-        if (!chat) throw new Error('找不到原对话')
-        return await prepareSessionOpening({ chat, card: await readChatCard(chat), swipeId: args.swipeId, message: args.message, preparation: openingPreparation })
-      }
-      case 'callOpeningRuntime': return await openingPreparation.callRuntime(args && args.id, args && args.method, args && args.args)
-      case 'saveOpeningSelection': return openingPreparation.select(args && args.id, args && args.openingId)
-      case 'initializeOpeningTemplate': try { return openingInitializationPayload(await openingPreparation.applyTemplateInitial(args.id, await requestPerformance.stage('templateInitialize', () => fullTemplateRuntime.forSession('opening:' + args.id).initializeVariables([]))), args.compact) } finally { fullTemplateRuntime.cancel('opening:' + args.id) }
-      case 'createOpeningPreparation': return await openingPreparation.create(args && args.path)
-      case 'getOpeningPreparation': return args?.touchOnly === true ? openingPreparation.retain(args.id) : openingPreparation.get(args && args.id)
-      case 'retainOpeningPreparation': return openingPreparation.retain(args && args.id)
-      case 'releaseOpeningPreparation': fullTemplateRuntime.cancel('opening:' + args.id); return openingPreparation.release(args && args.id)
-      case 'replaceOpeningWorldbook': return await openingPreparation.replaceWorldbook(args && args.id, args && args.entries, args && args.expectedEntries)
-      case 'getCardOpenings': return await getCardOpenings(args && args.path, args && args.userName, args && args.previewTransport)
-      case 'preparePlayStart': {
-        await requestPerformance.stage('preparePreset', () => runtimePresets.prepareFullSnapshot())
-        return { prepared: true }
-      }
       case 'getUserPreferenceProfile': {
         const chat = args?.sessionId && args.globalDefaults !== true ? await chatHeaderForSession(args.sessionId, ['userProfileEnabled','userProfileContextSnapshot','userProfileId','userProfileRevision']) : null
         return {
@@ -4315,20 +4300,6 @@ export async function apply(ctx) {
       }
       case 'rescueChatHistory': return await chatHistoryImporter.rescue(args || {})
       case 'importChatHistory': return await chatHistoryImporter.import(args || {})
-      case 'startChat': {
-        try {
-          return { view: await startChat(args && args.path, args && args.sessionId, args && args.mode, args && args.openingId, args && args.userName, args && args.requestMode, args && args.preparationId, args && args.cardTask) }
-        } catch (error) {
-          console.error('dsh-tavern: 创建对话失败', {
-            cardPath: str(args && args.path),
-            sessionId: str(args && args.sessionId),
-            mode: str(args && args.mode),
-            openingId: str(args && args.openingId),
-            error: str(error && error.message || error)
-          })
-          throw error
-        }
-      }
       case 'getBackgroundSuppressedTurns': {
         const id = str(args && args.sessionId)
         if (!id.startsWith('background-')) return { turns: [] }
@@ -4419,7 +4390,6 @@ export async function apply(ctx) {
         return { statusBarPlacement: args.placement }
       }
       case 'setPlayerName': return { playerName: await setPlayerName(args && args.sessionId, args && args.userName) }
-      case 'ensureOpening': return { view: await ensureNativeOpening(args && args.sessionId) }
       case 'getChoices': return { candidates: await candidateGenerator.find({ sessionId: args && args.sessionId, messageId: args && args.messageId }) }
       case 'startChoices': return await candidateTasks.startLegacy(args)
       case 'editLedger': { await ledgerEditor(args || {}); return { view: await sessionView(args.sessionId) } }
