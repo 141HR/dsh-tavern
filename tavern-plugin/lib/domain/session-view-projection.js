@@ -130,6 +130,9 @@ export function createSessionViewProjection({
       runtimePreset: activePresetSnapshot === null ? null : { id: activePresetSnapshot.presetPath, name: activePresetSnapshot.presetName },
       card: deferResources ? {path: str(card.path || chat.cardPath), name: card.name, tags: card.tags || []} : cardViewOf(card, chat),
       ...(deferResources ? {cardResourceAccess:sessionResources.issue(chat.id, resourceRevision, 'card')} : {}),
+      // The workbench card a tool wrote during a native turn; plugins tell a saved card
+      // from a plain question by its turn. Null for play chats.
+      cardSave: cardSaveViewOf(chat),
       cardUpdate,
       statusBarPlacement: chat.statusBarPlacement === 'body' ? 'body' : 'sidebar',
       posture: chat.posture || '',
@@ -351,7 +354,18 @@ export function createSessionViewProjection({
   function volatileSessionViewFields(chat, activity, changes) {
     const fields = sessionStateView.volatile(chat, activity, changes)
     return { ...fields, forkTurnsByMessageId: forkTurnsForChat(chat), userInputEdits: userInputEditsOf(chat), editableUserInputTurns: editableUserInputTurnsForChat(chat), latestCommittedUserTurn: latestCommittedUserTurnForChat(chat), failedUserInputTurns: failedUserInputTurnsForChat(chat),
+      cardSave: cardSaveViewOf(chat),
       ...transcriptPlanFields(chat, sessionDebugEvidence(chat.sessionId), fields.replacingDshTurns, fields.keptInputTurns) }
+  }
+
+  // The card the workbench wrote in a native turn, as a plain read-only fact.
+  function cardSaveViewOf(chat) {
+    const save = chat && chat.lastCardSave
+    if (save === null || typeof save !== 'object') return null
+    const turn = Math.max(0, Number(save.turn) || 0)
+    const path = str(save.path)
+    if (turn === 0 || path === '') return null
+    return { turn: turn, path: path, createsCard: save.createsCard === true, changed: save.changed === true }
   }
 
   async function projectCachedSessionView(chat, previous, activity) {

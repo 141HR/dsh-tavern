@@ -82,6 +82,20 @@ function stagedMap(chat) {
   return chat.pendingCardChanges
 }
 
+// The workbench's card was written during this native turn (a tool save is immediate).
+// The commit reads it to tell plugins that this turn changed the card: the tool result is
+// not part of the message, so `changed` alone would stay false for every `tavern_update_card`.
+function rememberCardSave(chat, turn, value) {
+  const nativeTurn = Math.max(0, Number(turn) || 0)
+  if (!nativeTurn) return
+  chat.lastCardSave = {
+    turn: nativeTurn,
+    path: str(value && value.path),
+    createsCard: value && value.createsCard === true,
+    changed: value && value.changed === true
+  }
+}
+
 function clearStaleStages(chat, turn) {
   const stages = stagedMap(chat)
   let changed = false
@@ -512,6 +526,7 @@ export function createTurnOrchestrator(options) {
       chat.cardName = result.card.name
     }
     if (chat.pendingCardChanges) delete chat.pendingCardChanges[String(input.turn)]
+    rememberCardSave(chat, input.turn, { path: chat.cardPath, createsCard: !cardPath, changed: result.changed })
     await store.writeChat(chat, { source: 'card.save' })
     return { saved: true, mode: 'card', changed: result.changed, createsCard: !cardPath, changedFields: result.changedFields || [] }
   }
@@ -671,18 +686,22 @@ export function createTurnOrchestrator(options) {
     }
     if (assistantText === '') throw new Error('本轮最终回复为空，无法保存酒馆状态')
     const stage = takeStage(chat, turn)
+    // A direct tool save earlier in this turn (tavern_update_card) leaves no staged fields,
+    // so the commit has to read the record it left behind or every save looks unchanged.
+    const savedThisTurn = Number(chat.lastCardSave?.turn) === turn ? chat.lastCardSave : null
+    const savedChanged = savedThisTurn !== null && (savedThisTurn.changed === true || savedThisTurn.createsCard === true)
 
     const cardPath = cardPathOf(chat)
     if (mode === 'card' && cardPath === '') {
       const state = object(chat.workspace)
-      let changed = false
+      let changed = savedChanged
       const hasCardChanges = Object.keys(object(stage.fields)).length > 0
       if (hasCardChanges) {
         const draftChange = cards.update({ kind: 'draft', card: object(state.draft), player: state.player, patch: stage.fields })
         state.draft = draftChange.card
         state.player = draftChange.player
         chat.workspace = state
-        changed = draftChange.changed
+        changed = draftChange.changed || changed
       }
       const created = hasCardChanges ? await store.createCard(chat, state) : null
       if (created !== null) {
@@ -709,13 +728,13 @@ export function createTurnOrchestrator(options) {
     }
 
     if (mode === 'card') {
-      let changed = false
+      let changed = savedChanged
       let savedCard = { name: chat.cardName }
       if (Object.keys(object(stage.fields)).length > 0 || (Array.isArray(stage.rawOperations) && stage.rawOperations.length > 0)) {
         const result = await store.updateCard(cardPath, object(stage.fields), {
           ts: now(), instruction: userText, summary: '通过卡片模式设定对话更新人物卡'
         }, Array.isArray(stage.rawOperations) ? stage.rawOperations : [])
-        changed = result.changed
+        changed = result.changed || changed
         savedCard = result.card
       }
       workspace.commit(chat, turn)

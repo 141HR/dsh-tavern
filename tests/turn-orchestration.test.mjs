@@ -238,9 +238,25 @@ test('new card is created and bound before tool returns; next write updates the 
   await run.orchestrator.saveChanges({ sessionId: 'session-1', turn: 1, fields: { name: '新角色', player: '旅人' } })
   assert.equal(run.chat().cardPath, 'cards/新角色.json')
   assert.equal(run.createdCards.length, 1)
+  assert.deepEqual(run.chat().lastCardSave, { turn: 1, path: 'cards/新角色.json', createsCard: true, changed: true })
   await run.orchestrator.saveChanges({ sessionId: 'session-1', turn: 1, fields: { description: '第二次修改' } })
   assert.equal(run.card().description, '第二次修改')
   assert.equal(run.createdCards.length, 1)
+  assert.deepEqual(run.chat().lastCardSave, { turn: 1, path: 'cards/新角色.json', createsCard: false, changed: true })
+})
+
+test('a tool save is reported as changed in the turn it happened, and only then', async () => {
+  const run = harness('card', { draft: true })
+  await run.orchestrator.saveChanges({ sessionId: 'session-1', turn: 2, fields: { name: '新角色', player: '旅人' } })
+  const committed = await run.orchestrator.finalize({ sessionId: 'session-1', turn: 2, userText: '就这样', assistantText: '建好了。' })
+  assert.equal(committed.changed, true)
+  assert.equal(run.chat().messages.at(-1).changed, true)
+  assert.equal(run.chat().nativeCommits['2'].changed, true)
+
+  // The next turn is a plain question: the earlier save must not bleed into it.
+  const next = await run.orchestrator.finalize({ sessionId: 'session-1', turn: 4, userText: '继续', assistantText: '**第 1 题：还要改什么？**' })
+  assert.equal(next.changed, false)
+  assert.equal(run.chat().messages.at(-1).changed, false)
 })
 
 test('玩家模板先于本轮召回，重试不重复执行；提交后只产生一条玩家消息', async () => {
