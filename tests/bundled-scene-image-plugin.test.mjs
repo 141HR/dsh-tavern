@@ -284,6 +284,37 @@ test('profile 已装 canonical 包：跳过，避免同一插件重复来源', t
   assert.equal(existsSync(path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)), false)
 })
 
+test('profile 迁移提示只针对 legacy、未知版本或较旧 canonical 包（覆盖目标目录有无）', t => {
+  const cases = [
+    { name: LEGACY_SCENE_IMAGE_PACKAGE_NAME, version: '3.1.0', hint: true },
+    { name: SCENE_IMAGE_PACKAGE_NAME, version: undefined, hint: true },
+    { name: SCENE_IMAGE_PACKAGE_NAME, version: '3.0.9', hint: true },
+    { name: SCENE_IMAGE_PACKAGE_NAME, version: '3.1.0', hint: false },
+    { name: SCENE_IMAGE_PACKAGE_NAME, version: '3.2.0', hint: false },
+  ]
+
+  for (const hasTarget of [false, true]) {
+    for (const profileCase of cases) {
+      const source = makeSource(t, '3.1.0')
+      const data = makeData(t)
+      const profile = path.join(data, 'profile')
+      const installed = path.join(profile, 'node_modules', profileCase.name)
+      mkdirSync(installed, { recursive: true })
+      writeFileSync(path.join(installed, 'package.json'), JSON.stringify({ name: profileCase.name, ...(profileCase.version ? { version: profileCase.version } : {}) }))
+      const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
+      if (hasTarget) {
+        mkdirSync(target, { recursive: true })
+        writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '3.0.0' }))
+      }
+
+      const result = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, profileDir: profile, logger: quiet })
+      assert.equal(result.action, 'skipped')
+      assert.deepEqual(result.profilePackage, { name: profileCase.name, version: profileCase.version ?? null })
+      assert.equal('hint' in result, profileCase.hint, `${profileCase.name} ${profileCase.version ?? '(unknown)'}, target exists: ${hasTarget}`)
+    }
+  }
+})
+
 test('readBundledSceneImage 校验版本标记、包名和委派契约', t => {
   const source = makeSource(t, '2.8.3')
   const info = readBundledSceneImage(source.root)

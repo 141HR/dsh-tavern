@@ -149,6 +149,12 @@ function profileMigrationHint(packageName, profileVersion, bundledVersion) {
   ].join('\n')
 }
 
+function needsProfileMigrationHint(packageName, profileVersion, bundledVersion) {
+  return packageName === LEGACY_SCENE_IMAGE_PACKAGE_NAME
+    || !profileVersion
+    || comparePluginVersions(bundledVersion, profileVersion) > 0
+}
+
 /** Replace the bundled copy's code files in an older install; plugin data stays untouched. */
 function upgradeInPlace(bundled, target, installedVersion) {
   const copied = []
@@ -228,6 +234,9 @@ export function installBundledSceneImagePlugin({ sourceRoot, dataRoot, profileDi
   const profilePackageVersion = profilePackageName
     ? String(readJson(path.join(profileDir, 'node_modules', profilePackageName, 'package.json'))?.version ?? '').trim() || null
     : null
+  const migrationHint = profilePackageName && needsProfileMigrationHint(profilePackageName, profilePackageVersion, bundled.version)
+    ? profileMigrationHint(profilePackageName, profilePackageVersion, bundled.version)
+    : null
 
   // An existing entry is user-owned unless it is an older copy of this same plugin.
   if (existsNoFollow(target)) {
@@ -236,7 +245,7 @@ export function installBundledSceneImagePlugin({ sourceRoot, dataRoot, profileDi
       action: 'skipped', reason: refusal, version: bundled.version, installedVersion, target,
       ...(profilePackageName ? {
         profilePackage: { name: profilePackageName, version: profilePackageVersion },
-        hint: profileMigrationHint(profilePackageName, profilePackageVersion, bundled.version),
+        ...(migrationHint ? { hint: migrationHint } : {}),
       } : {}),
     }
     return upgradeInPlace(bundled, target, installedVersion)
@@ -247,7 +256,7 @@ export function installBundledSceneImagePlugin({ sourceRoot, dataRoot, profileDi
       action: 'skipped', reason: 'profile 已安装同名插件包，保持单一来源',
       version: bundled.version, installedVersion, target,
       profilePackage: { name: profilePackageName, version: profilePackageVersion },
-      hint: profileMigrationHint(profilePackageName, profilePackageVersion, bundled.version),
+      ...(migrationHint ? { hint: migrationHint } : {}),
     }
   }
 
