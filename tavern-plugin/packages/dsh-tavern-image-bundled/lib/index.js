@@ -34,7 +34,7 @@ import { IMAGE_PROVIDERS, generateImage, testImageChannel } from './image-provid
 import { normalizeChannels, publicChannels, activeChannel, channelConfigPatch } from './image-channels.js'
 import { createCredentialStore } from './credential-store.js'
 import { patchWorkflowGraph, workflowRevision } from './workflow-graph.js'
-import { parseImagePlan, parsePlannerDecision, characterRoster, buildPlannerSystem, runPlanner, normalizePrompts, parseDesign } from './planner.js'
+import { parseImagePlan, parsePlannerDecision, characterRoster, buildPlannerSystem, runPlanner, normalizePrompts, parseDesign, parsePromptsBlock, formatPromptsBlock, preserveCharacterMetadata } from './planner.js'
 import { normalizeEntryActivation, selectPlannerContext } from './planner-context.js'
 import { createDownloadPackage, PLUGIN_DOWNLOADS } from './download-package.js'
 import { createMediaActions } from './media-actions.js'
@@ -124,7 +124,7 @@ const DEFAULTS = {
   // 世界书里哪几条进规划提示词；空数组 = 用默认的任务规则区
   plannerEntries: [],
   artistPosition: 'prefix',
-  weightMode: 'convert',
+  weightMode: 'auto',
   negativeMode: 'plugin',
   overrideSteps: false,
   injectWeight: 1.1,
@@ -1383,7 +1383,7 @@ function createRuntime(ctx, overrides, logger, deps) {
         ;(async () => {
           try {
             const result = await generateImage(channel, {
-              positive: compiled.positive, negative: compiled.negative, seed: compiled.seed,
+              positive: compiled.positive, negative: compiled.negative, seed: compiled.seed, characters: compiled.characters,
               width: compiled.size.width, height: compiled.size.height, steps: job.params.steps, cfg: job.params.cfg,
             }, { signal: job.controller.signal, maxImageBytes, onTask: info => {
               if (info?.provider && info?.taskId) {
@@ -1446,6 +1446,7 @@ function createRuntime(ctx, overrides, logger, deps) {
         textVersion: String(rawParams?.textVersion ?? ''),
         steps: rawParams?.steps,
         cfg: rawParams?.cfg,
+        characters: Array.isArray(rawParams?.characters) ? rawParams.characters.filter(item => item && String(item.prompt ?? '').trim()).slice(0, 8).map(item => ({ prompt: String(item.prompt).slice(0, 4000), centers: String(item.centers ?? '').slice(0, 40), uc: String(item.uc ?? '').slice(0, 4000) })) : [],
       }
       if (rawParams?.sessionId) lastSessionId = String(rawParams.sessionId)
       const key = typeof rawParams?.key === 'string' ? rawParams.key.slice(0, 4000) : ''
@@ -1478,7 +1479,7 @@ function createRuntime(ctx, overrides, logger, deps) {
       const traceStages = diagTrace?.traceId ? [] : null
       const onStage = traceStages ? (name, data) => traceStages.push({ name, data }) : null
       const compiled = workflow ? compileJob({ workflow, params, config: compileConfig, definitions: scopedDefs, onStage })
-        : compileChannelJob({ params, config: jobConfig, definitions: scopedDefs, onStage })
+        : compileChannelJob({ params, config: jobConfig, definitions: scopedDefs, channel, onStage })
       if (traceStages) {
         const T = diag.text
         const at = { imageIndex: diagTrace.imageIndex }
@@ -1580,9 +1581,10 @@ function createRuntime(ctx, overrides, logger, deps) {
     }
 
     /** 重画时「重新整理提示词」：按玩家意见（可为空）改写一张图的提示词，用规划模型。 */
-    async function revisePrompt({ prompt, instruction, sessionId, turn, signal } = {}) {
+    async function revisePrompt({ prompt, characters = [], instruction, sessionId, turn, signal } = {}) {
       if (!deps.llm) throw new Error('当前 DSH 没有 llm 服务，无法整理提示词')
-      const original = String(prompt ?? '').trim()
+      let original = String(prompt ?? '').trim()
+      if (Array.isArray(characters) && characters.length && !/<scene_composition|<character_\d/i.test(original)) original = formatPromptsBlock(original, characters)
       if (!original) throw new Error('这张图没有记录提示词，不能重新整理')
       const fallback = await backgroundModel(sessionId)
       const provider = config.plannerProvider || fallback?.provider || ''
@@ -1590,17 +1592,21 @@ function createRuntime(ctx, overrides, logger, deps) {
       if (!provider || !model) throw new Error('规划用的模型没定：Tavern 设置里的「默认后台模型」是空的，或者在本插件设置里单独指定一个')
       let story = ''
       try { story = String((await deps.tavern?.getTurn?.({ gameId: sessionId, turn: Number(turn) }))?.text || '').slice(-3000) } catch {}
+      const structured = /<scene_composition|<character_\d/i.test(original)
       const system = '你是生图提示词编辑。根据原提示词、这一轮正文和玩家意见，写出这张图的新提示词。'
         + '保持原提示词的写法（标签或自然语言）、画风词和人物外貌；只按意见改动画面内容、构图、镜头或动作。只输出新的提示词本身，不要解释，不要加引号或代码块。'
       const ask = ['原提示词：\n' + original, story ? '这一轮正文：\n' + story : '',
         '玩家意见：\n' + (String(instruction ?? '').trim() || '没有具体意见：人物和场景不变，重新构思构图、镜头和动作，画一个不同的瞬间')].filter(Boolean).join('\n\n')
       const result = await runPlanner(deps.llm, { provider, model, reasoningEffort: plannerEffortFor(fallback), system, text: ask, temperature: 0.9, maxTokens: 4000, signal })
-      const revised = String(result?.text ?? '').replace(/^```\w*\s*|\s*```$/g, '').trim()
+      let revised = String(result?.text ?? '').replace(/^```\w*\s*|\s*```$/g, '').trim()
       if (!revised) throw new Error('模型没有给出新的提示词')
+      if (structured) {
+        revised = preserveCharacterMetadata(original, revised, characters)
+      }
       return revised.slice(0, 12000)
     }
 
-    async function startReplacement({ sourceJobId, prompt, negative, channelId, sessionId, turn, textVersion, acceptUncertain = false } = {}) {
+    async function startReplacement({ sourceJobId, prompt, characters = [], negative, channelId, sessionId, turn, textVersion, acceptUncertain = false } = {}) {
       const source = getJob(String(sourceJobId || ''))
       if (!source) throw Object.assign(new Error('找不到这张图片的源作业'), { submissionNotStarted: true })
       if (!acceptUncertain && (source.state === 'uncertain' || source.cancelMayHaveContinued
@@ -1609,8 +1615,12 @@ function createRuntime(ctx, overrides, logger, deps) {
       }
       const jobConfig = replacementConfigFor(source, channelId)
       const session = String(sessionId || '')
-      const rawTag = String(prompt ?? source.params?.rawTag ?? source.params?.tag ?? '')
-      if (!rawTag.trim()) throw Object.assign(new Error('原作业没有可用提示词'), { submissionNotStarted: true })
+      const submitted = String(prompt ?? source.params?.rawTag ?? source.params?.tag ?? '')
+      const hasStructuredPrompt = /<scene_composition|<character_\d/i.test(submitted)
+      const blocks = hasStructuredPrompt ? parsePromptsBlock(submitted) : null
+      const rawTag = blocks ? blocks.scene : submitted
+      const characterSource = blocks ? blocks.characters : (characters.length ? characters : source.params?.characters)
+      if (!rawTag.trim() && !(Array.isArray(characterSource) && characterSource.length)) throw Object.assign(new Error('原作业没有可用提示词'), { submissionNotStarted: true })
       const sourceContextMatches = source.gameId === session && Number(source.turn) === Number(turn) && source.textVersion === textVersion
       let characterSnapshot = sourceContextMatches ? source.characterSnapshot : null
       if (!characterSnapshot && textVersion && typeof deps.tavern?.readTurnData === 'function') {
@@ -1644,6 +1654,7 @@ function createRuntime(ctx, overrides, logger, deps) {
         fresh = await startJob({
           tag: normalizePrompts(expandRosterCalls(rawTag, scoped, jobConfig.traitMode, { style: rosterStyle(jobConfig, workflow ?? styleWorkflow(jobConfig)) }), scoped, { backend: jobConfig.imageBackend, style: rosterStyle(jobConfig, workflow ?? styleWorkflow(jobConfig)) }),
           rawTag,
+          characters: compileCharacterList(characterSource, scoped, jobConfig, rosterStyle(jobConfig, workflow ?? styleWorkflow(jobConfig))),
           artist: source.params?.artist,
           artistPosition: source.params?.artistPosition,
           negative: String(negative ?? source.params?.negative ?? ''),
@@ -2155,20 +2166,23 @@ let worldbookCache = null
         for (const image of images) {
           if (!imageGeneration || submissionStopped) continue
           if (smart && (streamDecision !== 'draw' || !decisionFrozen || streamConflict)) continue
-          if (!image.mount || !body.includes(image.mount) || !String(image.prompts ?? '').trim()) continue
-          const identity = JSON.stringify([image.mount, image.prompts])
-          const promptIdentity = String(image.prompts).replace(/\s+/g, ' ').trim().toLowerCase()
+          const planCharacters = Array.isArray(image.characters) ? image.characters.filter(item => item && String(item.prompt ?? '').trim()) : []
+          const sceneText = String(image.prompts ?? '')
+          if (!image.mount || !body.includes(image.mount) || (!sceneText.trim() && !planCharacters.length)) continue
+          const identity = JSON.stringify([image.mount, sceneText, planCharacters])
+          const promptIdentity = [sceneText, ...planCharacters.map(item => item.prompt)].join(' ').replace(/\s+/g, ' ').trim().toLowerCase()
           if (seen.has(identity) || seenPrompts.has(promptIdentity) || seen.size >= want) continue
           seen.add(identity)
           seenPrompts.add(promptIdentity)
           submitChain = submitChain.then(async () => {
             task.controller.signal.throwIfAborted()
             if (submissionStopped || !imageGeneration || (smart && (!decisionFrozen || streamDecision !== 'draw' || streamConflict))) return
-            const key = ('plan|' + (manualBatch ? 'manual:' + manualBatch + '|' : '') + (messageId ?? '') + '|' + image.mount + '|' + image.prompts).slice(0, 3800)
+            const key = ('plan|' + (manualBatch ? 'manual:' + manualBatch + '|' : '') + (messageId ?? '') + '|' + image.mount + '|' + promptIdentity).slice(0, 3800)
             const imageIndex = ++traceImageIndex
             const macros = traceId ? [] : null
-            const expanded = expandRosterCalls(image.prompts, scoped, config.traitMode, { style: rosterStyle(config, plannerWorkflow), onMacro: macros ? entry => macros.push(entry) : null })
-            const normalizedTag = normalizePrompts(expanded, scoped, { backend: config.imageBackend, style: rosterStyle(config, plannerWorkflow) })
+            const expandOne = text => normalizePrompts(expandRosterCalls(text, scoped, config.traitMode, { style: rosterStyle(config, plannerWorkflow), onMacro: macros ? entry => macros.push(entry) : null }), scoped, { backend: config.imageBackend, style: rosterStyle(config, plannerWorkflow) })
+            const normalizedTag = expandOne(sceneText)
+            const characters = planCharacters.map(item => ({ prompt: expandOne(item.prompt), centers: String(item.centers ?? '').trim(), uc: String(item.uc ?? '').trim() })).filter(item => item.prompt)
             if (traceId) {
               const T = diag.text
               diag.record(traceId, 'image-adopted', { mount: T(image.mount), size: image.size ?? null, prompts: T(image.prompts), adoptedAtStreamChars: streamed.length }, { imageIndex })
@@ -2176,7 +2190,7 @@ let worldbookCache = null
             }
             const job = await startJob({
               tag: normalizedTag,
-              rawTag: image.prompts, size: image.size, key, sessionId, turn, textVersion, characterSnapshot: visualSnapshot,
+              rawTag: sceneText, characters, size: image.size, key, sessionId, turn, textVersion, characterSnapshot: visualSnapshot,
             }, { label: 'agent 规划', diagTrace: traceId ? { traceId, imageIndex } : null })
             if (traceId) diag.record(traceId, 'image-job', { jobId: job.id, status: job.status }, { imageIndex })
             // startJob 返回的是 publicJob，size 已经是 "896x1152" 这样的文字。
@@ -2584,11 +2598,15 @@ let worldbookCache = null
     }
 
     function consoleJob(job) {
+      const characters = Array.isArray(job.params?.characters) ? job.params.characters.map(item => ({ prompt: String(item.prompt ?? ''), centers: String(item.centers ?? ''), uc: String(item.uc ?? '') })) : []
+      const rawPrompt = job.params?.rawTag || job.params?.tag || job.positive || ''
       return {
       workflowId: job.workflowId ?? '', workflowLabel: job.workflowLabel ?? '', loras: Array.isArray(job.loras) ? job.loras : [],
         ...publicJob(job),
         prompt: job.positive ?? '', negative: job.negative ?? '', tag: job.params?.tag ?? '',
-        rawPrompt: job.params?.rawTag || job.params?.tag || job.positive || '',
+        rawPrompt,
+        characters,
+        promptText: characters.length ? formatPromptsBlock(rawPrompt, characters) : '',
         artist: job.params?.artist ?? '', size: job.size ? `${job.size.width}x${job.size.height}` : '',
         hits: job.hits ?? [], hasImage: job.state === 'done' && Boolean(job.byteLength), label: job.label ?? '',
         gameId: job.gameId ?? '', turn: job.turn ?? null,
@@ -4272,9 +4290,13 @@ let worldbookCache = null
           const timeline = applyCharacterSnapshot(definitions, src.characterSnapshot)
           const defs = { ...timeline, characters: (timeline.characters ?? []).filter(character => usableOnCard(character, card)) }
           const askedRaw = String(body?.prompt ?? src.params?.rawTag ?? src.params?.tag ?? '')
+          const submitted = /<character_\d/i.test(askedRaw) ? parsePromptsBlock(askedRaw) : null
+          const sceneRaw = submitted ? submitted.scene : askedRaw
+          const characterSource = submitted ? submitted.characters : src.params?.characters
           const fresh = await startJob({
-            tag: normalizePrompts(expandRosterCalls(askedRaw, defs, config.traitMode, { style: rosterStyle(config, styleWorkflow(config, src.workflowId)) }), defs, { backend: config.imageBackend, style: rosterStyle(config, styleWorkflow(config, src.workflowId)) }),
-            rawTag: askedRaw,
+            tag: normalizePrompts(expandRosterCalls(sceneRaw, defs, config.traitMode, { style: rosterStyle(config, styleWorkflow(config, src.workflowId)) }), defs, { backend: config.imageBackend, style: rosterStyle(config, styleWorkflow(config, src.workflowId)) }),
+            rawTag: sceneRaw,
+            characters: compileCharacterList(characterSource, defs, config, rosterStyle(config, styleWorkflow(config, src.workflowId))),
             artist: src.params?.artist,
             artistPosition: src.params?.artistPosition,
             negative: String(body?.negative ?? src.params?.negative ?? ''),
@@ -4298,7 +4320,7 @@ let worldbookCache = null
       if (action === 'improve-prompt') {
         try {
           const src = getJob(String(body?.jobId ?? ''))
-          const current = String(body?.prompt ?? src?.positive ?? '')
+          const current = String(body?.prompt ?? src?.promptText ?? src?.positive ?? '')
           const instruction = String(body?.instruction ?? '')
           // 和 planMessage 一样：没单独指定就跟随 Tavern 的默认后台模型
           const fallback = await backgroundModel(body?.sessionId ?? lastSessionId)
@@ -4319,9 +4341,11 @@ let worldbookCache = null
             '只输出修改后的提示词。',
           ].join('\n')
           const out = await runPlanner(deps.llm, { provider, model, reasoningEffort: plannerEffortFor(fallback), system, text: ask, maxTokens: 1200, temperature: 0.7 })
-          const next = String(out?.text ?? '').split('\n').map(l => l.trim()).filter(Boolean)[0] ?? ''
+          let next = String(out?.text ?? '').split('\n').map(l => l.trim()).filter(Boolean)[0] ?? ''
           if (!next) { sendJson(response, 400, { ok: false, error: '模型没返回内容' }); return }
-          sendJson(response, 200, { ok: true, prompt: next })
+          const structured = /<scene_composition|<character_\d/i.test(current)
+          if (structured) next = preserveCharacterMetadata(current, next, src?.params?.characters)
+          sendJson(response, 200, { ok: true, prompt: next, repaired: structured && !/<character_\d/i.test(String(out?.text ?? '')) })
         } catch (error) {
           sendJson(response, 400, { ok: false, error: String(error?.message ?? error) })
         }
@@ -5274,6 +5298,27 @@ function applyWeights(text, mode) {
   return mode === 'strip' ? stripWeights(text) : convertWeights(text)
 }
 
+export function resolveWeightMode(config = {}, backend = '', mode = 'tags') {
+  const requested = String(config.weightMode ?? 'auto').toLowerCase()
+  if (mode === 'natural') return 'strip'
+  const name = String(backend ?? config.imageBackend ?? '').toLowerCase()
+  const novelai = name === 'novelai' || name.startsWith('novelai ')
+  if (requested === 'keep' || requested === 'strip') return requested
+  return novelai ? 'keep' : 'convert'
+}
+
+function compileCharacterList(list, scoped, cfg, style, backend = cfg.imageBackend) {
+  const weightMode = resolveWeightMode(cfg, backend, style)
+  return (Array.isArray(list) ? list : []).map(item => {
+    const raw = String(item?.prompt ?? '')
+    const expanded = expandRosterCalls(raw, scoped, cfg.traitMode, { style })
+    const injected = injectDefinitions(expanded, scoped, cfg, { style, raw })
+    const prompt = normalizePrompts(applyWeights(injected.text, weightMode), scoped, { backend, style })
+    const uc = [String(item?.uc ?? ''), ...(injected.negatives ?? [])].filter(Boolean).join(', ')
+    return { prompt, centers: String(item?.centers ?? '').trim(), uc: normalizePrompts(applyWeights(uc, weightMode), scoped, { backend, style }) }
+  }).filter(item => item.prompt)
+}
+
 /** 人物库注入：提示词里出现某个定义的名字（或触发词）时，把它的稳定 tag 补齐。 */
 /**
  * 名字是否作为**完整词**出现在正文里。
@@ -5440,7 +5485,7 @@ function applySize(prompt, size, sizes, bindings = null) {
   return target
 }
 
-function prepareImagePrompt({ workflow, params, config, definitions, onStage = null }) {
+function prepareImagePrompt({ workflow, params, config, definitions, onStage = null, channel = null }) {
   const stage = (name, data) => { if (onStage) { try { onStage(name, data) } catch {} } }
   const tag = String(params.tag ?? '').trim()
   const artist = String(params.artist ?? '').trim()
@@ -5454,7 +5499,7 @@ function prepareImagePrompt({ workflow, params, config, definitions, onStage = n
   const provenance = onStage ? [] : null
   const injected = injectDefinitions(base, definitions, config, { style: mode === 'natural' ? 'natural' : 'tags', provenance, raw: params.rawTag })
   // 自然语言模型（LLM 文本编码器）不认 (tag:1.2) 这种权重，总是去掉；tag 模型按设置处理。
-  const positive = formatPromptForBackend(applyWeights(injected.text, mode === 'natural' ? 'strip' : config.weightMode), backend, mode)
+  const positive = formatPromptForBackend(applyWeights(injected.text, resolveWeightMode(config, channel?.provider ?? backend, mode)), backend, mode)
   stage('compile-positive', { mode, artistPosition: params.artistPosition ?? config.artistPosition, artist, rawBase, afterPreset: base, afterInjection: injected.text, final: positive, hits: injected.hits, provenance })
 
   const workflowNegative = String(
@@ -5480,18 +5525,28 @@ function prepareImagePrompt({ workflow, params, config, definitions, onStage = n
   return { positive, negative, hits: injected.hits }
 }
 
-export function compileChannelJob({ params, config, definitions, onStage = null }) {
-  const prepared = prepareImagePrompt({ params, config, definitions, onStage })
+export function compileChannelJob({ params, config, definitions, channel = null, onStage = null }) {
+  const prepared = prepareImagePrompt({ params, config, definitions, channel, onStage })
+  const characters = compileCharacterList(params.characters, definitions, config, resolvePromptMode(config, channel?.provider ?? config.imageBackend), channel?.provider ?? config.imageBackend)
+  const nativeNovelai = channel?.provider === 'novelai' && channel?.options?.protocol !== 'chat'
+  if (!nativeNovelai && characters.length) {
+    prepared.positive = [prepared.positive, ...characters.map(item => item.prompt)].filter(Boolean).join(', ')
+    prepared.negative = [prepared.negative, ...characters.map(item => item.uc)].filter(Boolean).join(', ')
+  }
   const dimensions = config.sizes?.[params.size]
   const pixels = /^(\d{2,5})\s*[x×*]\s*(\d{2,5})$/i.exec(String(params.size ?? ''))
   const size = pixels ? { width: Number(pixels[1]), height: Number(pixels[2]) } : dimensions || { width: 832, height: 1216 }
   if (![size.width, size.height].every(value => Number.isInteger(value) && value >= 64 && value <= 8192)) throw new Error('图片尺寸需在 64–8192 像素之间')
-  return { ...prepared, seed: randomInt(0, 2 ** 32), size, loras: [] }
+  return { ...prepared, characters: nativeNovelai ? characters : [], seed: randomInt(0, 2 ** 32), size, loras: [] }
 }
 
 export function compileJob({ workflow, params, config, definitions, onStage = null }) {
   const prompt = structuredClone(workflow.prompt)
-  const { positive, negative, hits } = prepareImagePrompt({ workflow, params, config, definitions, onStage })
+  const prepared = prepareImagePrompt({ workflow, params, config, definitions, onStage })
+  const characters = compileCharacterList(params.characters, definitions, config, resolvePromptMode(config, 'comfyui'), 'comfyui')
+  const positive = [prepared.positive, ...characters.map(item => item.prompt)].filter(Boolean).join(', ')
+  const negative = [...new Set([prepared.negative, ...characters.map(item => item.uc)].flatMap(value => String(value || '').split(',').map(part => part.trim())).filter(Boolean))].join(', ')
+  const { hits } = prepared
 
   setBinding(prompt, workflow.bindings.positive, positive)
   if (workflow.bindings.negative?.length) setBinding(prompt, workflow.bindings.negative, applyWeights(negative, config.weightMode))
