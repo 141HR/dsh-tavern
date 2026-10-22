@@ -70,6 +70,78 @@ export function rulesFromEntries(entries, selected) {
   return blocks.join('\n\n')
 }
 
+/** 取某个标签里的文字（不区分大小写，非贪婪）。 */
+function tagInner(chunk, tag) {
+  const hit = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, 'i').exec(chunk)
+  return hit && hit[1].trim() ? hit[1].trim() : ''
+}
+
+const CHARACTER_BLOCK_RE = /<character_(\d+)\b[^>]*>([\s\S]*?)<\/character_\1>/gi
+
+function collectCharacterBlocks(chunk) {
+  const list = []
+  for (const hit of String(chunk ?? '').matchAll(CHARACTER_BLOCK_RE)) {
+    const prompt = tagInner(hit[2], 'prompt')
+    if (!prompt) continue
+    list.push({ prompt, centers: tagInner(hit[2], 'centers') || tagInner(hit[2], 'center'), uc: tagInner(hit[2], 'uc') || tagInner(hit[2], 'negative') })
+  }
+  return list
+}
+
+function splitPromptsBlock(rawPrompts, wholeBlock = rawPrompts) {
+  const inPrompts = collectCharacterBlocks(rawPrompts)
+  const inWhole = collectCharacterBlocks(wholeBlock)
+  // Inner blocks are a subset of the outer set; dedupe by order and content.
+  const characters = inWhole.length ? inWhole : inPrompts
+  const explicitScene = tagInner(wholeBlock, 'scene_composition')
+  let scene = explicitScene || tagInner(rawPrompts, 'scene_composition')
+  if (!scene && characters.length) {
+    scene = inPrompts.length
+      ? String(rawPrompts).replace(CHARACTER_BLOCK_RE, ' ').replace(/<\/?[a-z][\w-]*[^>]*>/gi, ' ').replace(/\s{2,}/g, ' ').trim()
+      : String(rawPrompts).replace(/<\/?[a-z][\w-]*[^>]*>/gi, ' ').replace(/\s{2,}/g, ' ').trim()
+  } else if (!scene) {
+    scene = String(rawPrompts).replace(/<\/?[a-z][\w-]*[^>]*>/gi, ' ').replace(/\s{2,}/g, ' ').trim() || String(rawPrompts)
+  }
+  return { scene, characters }
+}
+
+export function parsePromptsBlock(text) {
+  const raw = String(text ?? '')
+  return splitPromptsBlock(raw, raw)
+}
+
+export function formatPromptsBlock(scene, characters) {
+  const lines = ['<scene_composition>' + String(scene ?? '').trim() + '</scene_composition>']
+  ;(Array.isArray(characters) ? characters : []).forEach((item, index) => {
+    const prompt = String(item?.prompt ?? '').trim()
+    if (!prompt) return
+    const n = index + 1
+    lines.push('<character_' + n + '>', '<prompt>' + prompt + '</prompt>')
+    const centers = String(item?.centers ?? '').trim()
+    if (centers) lines.push('<centers>' + centers + '</centers>')
+    const uc = String(item?.uc ?? '').trim()
+    if (uc) lines.push('<uc>' + uc + '</uc>')
+    lines.push('</character_' + n + '>')
+  })
+  return lines.join('\n')
+}
+
+/** Merge a model's edited structure with original per-character metadata. */
+export function preserveCharacterMetadata(originalText, revisedText, fallbackCharacters = []) {
+  const before = parsePromptsBlock(originalText)
+  const revised = String(revisedText ?? '')
+  const after = /<scene_composition|<character_\d/i.test(revised)
+    ? parsePromptsBlock(revised)
+    : { scene: revised.replace(/<[^>]+>/g, '').trim(), characters: [] }
+  const merged = after.characters.map((item, index) => ({
+    ...item,
+    centers: item.centers || before.characters[index]?.centers || '',
+    uc: item.uc || before.characters[index]?.uc || '',
+  }))
+  while (merged.length < before.characters.length) merged.push(before.characters[merged.length])
+  return formatPromptsBlock(after.scene || before.scene, merged.length ? merged : (fallbackCharacters.length ? fallbackCharacters : before.characters))
+}
+
 /** 解析 <image> 块。模型偶尔会把标签写成全角或漏闭合，这里都尽量兜住。 */
 export function parseImagePlan(text) {
   const source = String(text ?? '')
@@ -77,22 +149,17 @@ export function parseImagePlan(text) {
   const blockRe = /<image\b[^>]*>([\s\S]*?)<\/image>/gi
   for (const match of source.matchAll(blockRe)) {
     const body = match[1]
-    const pick = (...tags) => {
-      for (const tag of tags) {
-        const re = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, 'i')
-        const hit = re.exec(body)
-        if (hit && hit[1].trim()) return hit[1].trim()
-      }
-      return ''
-    }
-    const prompts = pick('prompts', 'prompt')
-    if (!prompts) continue
+    const pick = (...tags) => tags.map(tag => tagInner(body, tag)).find(Boolean) || ''
+    const rawPrompts = pick('prompts', 'prompt') || pick('scene_composition')
+    if (!rawPrompts) continue
+    const { scene, characters } = splitPromptsBlock(rawPrompts, body)
     images.push({
       mount: pick('regex', '挂载文本', 'regex_mount'),
       title: pick('title_styled', 'title'),
       think: pick('Tag_think', 'think'),
       size: pick('size'),
-      prompts,
+      prompts: scene,
+      characters,
     })
   }
   return images

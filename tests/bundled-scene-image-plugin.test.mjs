@@ -30,6 +30,8 @@ function makeSource(t, version = '2.8.0') {
   writeFileSync(path.join(dir, 'cordis.patch.yml'), '[]\n')
   writeFileSync(path.join(dir, 'lib', 'index.js'), 'export const bundled = true\n')
   writeFileSync(path.join(dir, 'client.js'), '// client\n')
+  mkdirSync(path.join(dir, 'workflows'), { recursive: true })
+  writeFileSync(path.join(dir, 'workflows', 'seed-deleted.json'), '{"seed":true}')
   writeFileSync(path.join(dir, 'BUNDLED-VERSION.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version }))
   return { root, dir }
 }
@@ -101,12 +103,12 @@ test('已存在的较新插件目录：完整保留', t => {
   assert.equal(JSON.parse(readFileSync(path.join(target, 'package.json'), 'utf8')).version, '9.0.0')
 })
 
-test('已存在的旧版插件目录：就地升级代码，用户数据和停用标记不动', t => {
-  const source = makeSource(t, '2.8.0')
+test('3.0.2 就地升级：更新代码，同时完整保留私人数据与工作流', t => {
+  const source = makeSource(t, '3.1.0')
   const data = makeData(t)
   const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
   mkdirSync(path.join(target, 'lib'), { recursive: true })
-  writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '2.7.0', main: './lib/index.js', dsh: CONTRACT }))
+  writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '3.0.2', main: './lib/index.js', dsh: CONTRACT }))
   writeFileSync(path.join(target, 'lib', 'index.js'), 'export const old = true\n')
   writeFileSync(path.join(target, 'lib', 'removed-upstream.js'), '// old helper\n')
   // 用户的私人数据：升级必须保留
@@ -115,25 +117,40 @@ test('已存在的旧版插件目录：就地升级代码，用户数据和停�
     'worldbook.json': '{"entries":[]}',
     'definitions.json': '{"characters":[]}',
     'jobs-store.json': '{"jobs":[]}',
+    'plans-store.json': '{"plans":[]}',
     '.tavern-disabled': '',
   }
   for (const [name, body] of Object.entries(userFiles)) writeFileSync(path.join(target, name), body)
+  mkdirSync(path.join(target, 'cache'), { recursive: true })
+  mkdirSync(path.join(target, 'backups'), { recursive: true })
+  mkdirSync(path.join(target, 'workflows'), { recursive: true })
+  writeFileSync(path.join(target, 'cache', 'private.json'), 'cache')
+  writeFileSync(path.join(target, 'backups', 'private.json'), 'backup')
+  writeFileSync(path.join(target, 'workflows', 'custom.json'), '{"custom":true}')
+  writeFileSync(path.join(target, 'workflows', 'edited-seed.json'), '{"edited":true}')
+  // A bundled workflow deleted by the user must stay deleted after upgrade.
+  rmSync(path.join(target, 'workflows', 'seed-deleted.json'), { force: true })
 
   const r = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet })
   assert.equal(r.action, 'upgraded')
-  assert.equal(r.installedVersion, '2.7.0')
-  assert.equal(JSON.parse(readFileSync(path.join(target, 'package.json'), 'utf8')).version, '2.8.0')
+  assert.equal(r.installedVersion, '3.0.2')
+  assert.equal(JSON.parse(readFileSync(path.join(target, 'package.json'), 'utf8')).version, '3.1.0')
   assert.match(readFileSync(path.join(target, 'lib', 'index.js'), 'utf8'), /bundled/)
   assert.ok(existsSync(path.join(target, 'client.js')))
   for (const [name, body] of Object.entries(userFiles)) {
     assert.equal(readFileSync(path.join(target, name), 'utf8'), body, 'user data changed: ' + name)
   }
+  assert.equal(readFileSync(path.join(target, 'cache', 'private.json'), 'utf8'), 'cache')
+  assert.equal(readFileSync(path.join(target, 'backups', 'private.json'), 'utf8'), 'backup')
+  assert.equal(readFileSync(path.join(target, 'workflows', 'custom.json'), 'utf8'), '{"custom":true}')
+  assert.equal(readFileSync(path.join(target, 'workflows', 'edited-seed.json'), 'utf8'), '{"edited":true}')
+  assert.equal(existsSync(path.join(target, 'workflows', 'seed-deleted.json')), false)
   assert.ok(existsSync(path.join(target, 'lib', 'removed-upstream.js')), '不删任何已有文件')
   assert.deepEqual(readdirSync(path.join(data, 'plugins')).sort(), [BUNDLED_SCENE_IMAGE_FOLDER], '临时目录和备份都清理掉')
   assert.equal(installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet }).action, 'skipped', '升级后再装是同版本，跳过')
 })
 
-test('旧版但来源不同：Git 检出、旧包名都不升级', t => {
+test('未知来源、Git 检出、更新版本和版本未知：不升级', t => {
   const source = makeSource(t, '2.8.0')
   for (const [setup, reason] of [
     [target => mkdirSync(path.join(target, '.git')), /Git/],
@@ -153,18 +170,104 @@ test('旧版但来源不同：Git 检出、旧包名都不升级', t => {
   }
 })
 
-test('profile 已装旧名包：跳过，避免同一插件出现第三份来源', t => {
+test('升级替换中途失败：已替换文件回滚且临时备份清理', t => {
+  const source = makeSource(t, '3.1.0')
+  const data = makeData(t)
+  const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
+  mkdirSync(path.join(target, 'lib'), { recursive: true })
+  writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '3.0.2', main: './lib/index.js', dsh: CONTRACT }))
+  writeFileSync(path.join(target, 'client.js'), 'old client\n')
+  writeFileSync(path.join(target, 'cordis.patch.yml'), 'old patch\n')
+  writeFileSync(path.join(target, 'lib', 'index.js'), 'old entry\n')
+  writeFileSync(path.join(target, 'config.json'), 'private config\n')
+  const moduleUrl = pathToFileURL(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../bin/bundled-scene-image-plugin.mjs')).href
+  const child = `
+    import assert from 'node:assert/strict'
+    import fs from 'node:fs'
+    import path from 'node:path'
+    import { syncBuiltinESMExports } from 'node:module'
+    import { installBundledSceneImagePlugin } from ${JSON.stringify(moduleUrl)}
+    const [sourceRoot, dataRoot] = process.argv.slice(1)
+    const target = path.join(dataRoot, 'plugins', ${JSON.stringify(BUNDLED_SCENE_IMAGE_FOLDER)})
+    const originalRename = fs.renameSync
+    let failed = false
+    fs.renameSync = (from, to) => {
+      if (!failed && String(from).includes(path.join('lib', 'index.js')) && path.resolve(to) === path.join(target, 'lib', 'index.js')) {
+        failed = true
+        const error = new Error('injected replace failure')
+        error.code = 'EIO'
+        throw error
+      }
+      return originalRename(from, to)
+    }
+    syncBuiltinESMExports()
+    assert.throws(() => installBundledSceneImagePlugin({ sourceRoot, dataRoot, logger: { warn() {} } }), /injected replace failure/)
+    assert.equal(fs.readFileSync(path.join(target, 'package.json'), 'utf8').includes('3.0.2'), true)
+    assert.equal(fs.readFileSync(path.join(target, 'client.js'), 'utf8'), 'old client\\n')
+    assert.equal(fs.readFileSync(path.join(target, 'cordis.patch.yml'), 'utf8'), 'old patch\\n')
+    assert.equal(fs.readFileSync(path.join(target, 'lib', 'index.js'), 'utf8'), 'old entry\\n')
+    assert.equal(fs.readFileSync(path.join(target, 'config.json'), 'utf8'), 'private config\\n')
+    assert.deepEqual(fs.readdirSync(path.join(dataRoot, 'plugins')).filter(name => name.startsWith('.dsh-tavern-image-')), [])
+  `
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', child, source.root, data], { encoding: 'utf8' })
+  assert.equal(result.status, 0, result.stderr || result.stdout)
+})
+
+test('升级遇到 workflows 私人目录链接：保留链接和链接目标内容', t => {
+  const source = makeSource(t, '3.1.0')
+  const data = makeData(t)
+  const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
+  const outside = path.join(data, 'private-workflows')
+  mkdirSync(path.join(target, 'lib'), { recursive: true })
+  mkdirSync(outside)
+  writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '3.0.2', main: './lib/index.js', dsh: CONTRACT }))
+  writeFileSync(path.join(target, 'lib', 'index.js'), 'old entry\n')
+  writeFileSync(path.join(outside, 'custom.json'), 'private workflow\n')
+  symlinkSync(outside, path.join(target, 'workflows'), process.platform === 'win32' ? 'junction' : 'dir')
+  const result = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet })
+  assert.equal(result.action, 'upgraded')
+  assert.equal(readFileSync(path.join(outside, 'custom.json'), 'utf8'), 'private workflow\n')
+  assert.equal(readFileSync(path.join(target, 'workflows', 'custom.json'), 'utf8'), 'private workflow\n')
+})
+
+test('升级遇到 lib junction：拒绝更新且不写入插件目录外', t => {
+  const source = makeSource(t, '3.1.0')
+  const data = makeData(t)
+  const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
+  const outside = path.join(data, 'private-lib')
+  mkdirSync(target, { recursive: true })
+  mkdirSync(outside)
+  writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '3.0.2', main: './lib/index.js', dsh: CONTRACT }))
+  writeFileSync(path.join(outside, 'index.js'), 'external private code\n')
+  symlinkSync(outside, path.join(target, 'lib'), process.platform === 'win32' ? 'junction' : 'dir')
+
+  const result = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, logger: quiet })
+  assert.equal(result.action, 'skipped')
+  assert.match(result.reason, /符号链接或 junction/)
+  assert.equal(readFileSync(path.join(outside, 'index.js'), 'utf8'), 'external private code\n')
+  assert.equal(JSON.parse(readFileSync(path.join(target, 'package.json'), 'utf8')).version, '3.0.2')
+  assert.ok(existsSync(path.join(target, 'lib')))
+  assert.deepEqual(readdirSync(path.join(data, 'plugins')).sort(), [BUNDLED_SCENE_IMAGE_FOLDER])
+})
+
+test('profile 已装旧名包且目标已存在：跳过并提示真实数据备份位置', t => {
   const source = makeSource(t)
   const data = makeData(t)
   const profile = path.join(data, 'profile')
   const installed = path.join(profile, 'node_modules', LEGACY_SCENE_IMAGE_PACKAGE_NAME)
   mkdirSync(installed, { recursive: true })
   writeFileSync(path.join(installed, 'package.json'), JSON.stringify({ name: LEGACY_SCENE_IMAGE_PACKAGE_NAME, version: '2.8.0' }))
+  const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
+  mkdirSync(target, { recursive: true })
+  writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '3.0.2' }))
 
   const r = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, profileDir: profile, logger: quiet })
   assert.equal(r.action, 'skipped')
   assert.match(r.reason, /单一来源/)
-  assert.equal(existsSync(path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)), false)
+  assert.deepEqual(r.profilePackage, { name: LEGACY_SCENE_IMAGE_PACKAGE_NAME, version: '2.8.0' })
+  assert.match(r.hint, /MIGRATION\.md/)
+  assert.match(r.hint, /实际位置并备份整个真实数据目录/)
+  assert.equal(JSON.parse(readFileSync(path.join(target, 'package.json'), 'utf8')).version, '3.0.2')
 })
 
 test('profile 已装 canonical 包：跳过，避免同一插件重复来源', t => {
@@ -179,6 +282,37 @@ test('profile 已装 canonical 包：跳过，避免同一插件重复来源', t
   assert.equal(r.action, 'skipped')
   assert.match(r.reason, /单一来源/)
   assert.equal(existsSync(path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)), false)
+})
+
+test('profile 迁移提示只针对 legacy、未知版本或较旧 canonical 包（覆盖目标目录有无）', t => {
+  const cases = [
+    { name: LEGACY_SCENE_IMAGE_PACKAGE_NAME, version: '3.1.0', hint: true },
+    { name: SCENE_IMAGE_PACKAGE_NAME, version: undefined, hint: true },
+    { name: SCENE_IMAGE_PACKAGE_NAME, version: '3.0.9', hint: true },
+    { name: SCENE_IMAGE_PACKAGE_NAME, version: '3.1.0', hint: false },
+    { name: SCENE_IMAGE_PACKAGE_NAME, version: '3.2.0', hint: false },
+  ]
+
+  for (const hasTarget of [false, true]) {
+    for (const profileCase of cases) {
+      const source = makeSource(t, '3.1.0')
+      const data = makeData(t)
+      const profile = path.join(data, 'profile')
+      const installed = path.join(profile, 'node_modules', profileCase.name)
+      mkdirSync(installed, { recursive: true })
+      writeFileSync(path.join(installed, 'package.json'), JSON.stringify({ name: profileCase.name, ...(profileCase.version ? { version: profileCase.version } : {}) }))
+      const target = path.join(data, 'plugins', BUNDLED_SCENE_IMAGE_FOLDER)
+      if (hasTarget) {
+        mkdirSync(target, { recursive: true })
+        writeFileSync(path.join(target, 'package.json'), JSON.stringify({ name: SCENE_IMAGE_PACKAGE_NAME, version: '3.0.0' }))
+      }
+
+      const result = installBundledSceneImagePlugin({ sourceRoot: source.root, dataRoot: data, profileDir: profile, logger: quiet })
+      assert.equal(result.action, 'skipped')
+      assert.deepEqual(result.profilePackage, { name: profileCase.name, version: profileCase.version ?? null })
+      assert.equal('hint' in result, profileCase.hint, `${profileCase.name} ${profileCase.version ?? '(unknown)'}, target exists: ${hasTarget}`)
+    }
+  }
 })
 
 test('readBundledSceneImage 校验版本标记、包名和委派契约', t => {

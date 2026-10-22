@@ -236,28 +236,70 @@ async function generateNovelaiChat(ch, request, ctx) {
   throw new Error(text.trim() ? '该接口没有返回图片链接：' + redact(text.trim().slice(0, 200), ch) : '该接口没有返回图片链接')
 }
 
+function parseCharCenter(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return null
+  const grid = /^([a-e])\s*([1-5])$/i.exec(text)
+  if (grid) return { x: { a: 0.1, b: 0.3, c: 0.5, d: 0.7, e: 0.9 }[grid[1].toLowerCase()], y: { 1: 0.1, 2: 0.3, 3: 0.5, 4: 0.7, 5: 0.9 }[grid[2]] }
+  if (text.startsWith('[') || text.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(text)
+      const x = Number(Array.isArray(parsed) ? parsed[0] : parsed?.x ?? parsed?.X)
+      const y = Number(Array.isArray(parsed) ? parsed[1] : parsed?.y ?? parsed?.Y)
+      if (Number.isFinite(x) && Number.isFinite(y)) return { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) }
+    } catch { /* use the pair parser below */ }
+  }
+  const pair = /^([-+]?[0-9.]+)\s*[,，\s]\s*([-+]?[0-9.]+)$/.exec(text)
+  if (!pair) return null
+  const x = Number(pair[1]), y = Number(pair[2])
+  return Number.isFinite(x) && Number.isFinite(y) ? { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) } : null
+}
+
 async function generateNovelai(channel, request, ctx) {
   const { base, fetchImpl, signal, max, channel: ch } = ctx
   if (option(ch, 'protocol', 'native') === 'chat') return generateNovelaiChat(ch, request, ctx)
   const { width, height } = requestedDims(ch, request)
   const positive = String(request.positive || ''), negative = String(request.negative || '')
+  const novelaiModel = String(ch.model || PROVIDERS.novelai[2])
+  const isNovelaiV5 = novelaiModel.includes('nai-diffusion-5')
+  let novelaiSampler = String(option(ch, 'sampler', 'k_euler_ancestral'))
+  if (isNovelaiV5 && novelaiSampler === 'ddim_v3') novelaiSampler = 'k_euler_ancestral'
   // 可选旋钮：只在你填了大于 0 的值时才写进请求，不填就跟以前完全一样。
   const extras = {}
   const uncondScale = clampedNumber(option(ch, 'uncondScale', 0), 0, 10, 0)
   if (uncondScale > 0) extras.uncond_scale = uncondScale
   const skipCfgAboveSigma = clampedNumber(option(ch, 'skipCfgAboveSigma', 0), 0, 1000, 0)
-  if (skipCfgAboveSigma > 0) extras.skip_cfg_above_sigma = skipCfgAboveSigma
-  const payload = { input: String(request.positive || ''), model: ch.model || PROVIDERS.novelai[2], action: 'generate', parameters: {
+  if (skipCfgAboveSigma > 0 && !isNovelaiV5) extras.skip_cfg_above_sigma = skipCfgAboveSigma
+  const charList = Array.isArray(request.characters) ? request.characters.filter(item => item && String(item.prompt ?? '').trim()).slice(0, 8) : []
+  const centers = charList.map(item => parseCharCenter(item.centers))
+  const useCoords = centers.length > 0 && centers.every(Boolean)
+  const v4Prompt = { caption: { base_caption: positive, char_captions: [] }, use_coords: useCoords, use_order: true }
+  const v4Negative = { caption: { base_caption: negative, char_captions: [] }, legacy_uc: false }
+  charList.forEach((item, index) => {
+    const center = centers[index]
+    v4Prompt.caption.char_captions.push({ char_caption: String(item.prompt), centers: [center || {}] })
+    v4Negative.caption.char_captions.push({ char_caption: String(item.uc ?? ''), centers: [center || {}] })
+  })
+  const payload = { input: String(request.positive || ''), model: novelaiModel, action: 'generate', parameters: {
     width, height, seed: Number.isFinite(Number(request.seed)) ? Number(request.seed) : Math.floor(Math.random() * 2 ** 32),
     steps: bounded(request.steps ?? option(ch, 'steps', 28), 1, 100), scale: clampedNumber(request.cfg ?? option(ch, 'cfg', option(ch, 'scale', 5)), 0, 30, 5), n_samples: 1,
     cfg_rescale: clampedNumber(option(ch, 'cfgRescale', 0), 0, 1, 0),
-    negative_prompt: negative, sampler: option(ch, 'sampler', 'k_euler_ancestral'), noise_schedule: option(ch, 'noiseSchedule', 'karras'),
-    qualityToggle: option(ch, 'qualityToggle', true) !== false, ucPreset: clampedNumber(option(ch, 'ucPreset', 3), 0, 4, 3), variety_boost: option(ch, 'varietyBoost', false) === true, sm: false, dynamic_thresholding: false, params_version: 3,
-    v4_prompt: { caption: { base_caption: positive, char_captions: [] }, use_coords: false, use_order: true },
-    v4_negative_prompt: { caption: { base_caption: negative, char_captions: [] }, legacy_uc: false },
+    negative_prompt: negative, sampler: novelaiSampler, noise_schedule: option(ch, 'noiseSchedule', 'karras'),
+    qualityToggle: option(ch, 'qualityToggle', true) !== false, ucPreset: clampedNumber(option(ch, 'ucPreset', 3), 0, 4, 3), variety_boost: isNovelaiV5 ? false : option(ch, 'varietyBoost', false) === true, sm: false, dynamic_thresholding: false, params_version: isNovelaiV5 ? 4 : 3,
+    v4_prompt: v4Prompt,
+    v4_negative_prompt: v4Negative,
     add_original_image: true, legacy: false, legacy_uc: false, controlnet_strength: 1,
     ...extras
   } }
+  if (isNovelaiV5) {
+    delete payload.parameters.noise_schedule
+    delete payload.parameters.skip_cfg_above_sigma
+    if (novelaiModel.includes('medium')) {
+      delete payload.parameters.cfg_rescale
+      payload.parameters.steps = 14
+      payload.parameters.sampler = 'k_euler_ancestral'
+    }
+  }
   const bytes = await fetchRaw(fetchImpl, joinUrl(base, endpointFromOption(ch, 'generatePath', '/ai/generate-image')), { method: 'POST', headers: requestHeaders(ch, 'novelai'), body: JSON.stringify(payload) }, Math.min(max + 1024 * 1024, 129 * 1024 * 1024), signal, ch)
   if (bytes[0] === 0x50 && bytes[1] === 0x4b) return zipImage(bytes, max)
   return { bytes, mediaType: imageType(bytes) }

@@ -247,7 +247,7 @@ export function createMediaActions({
       throw Object.assign(new Error('作业号与这张图片当前记录不匹配'), { code: 'JOB_MISMATCH' })
     }
     const key = keyOf(input)
-    const dedupe = JSON.stringify([key, input.operation, sourceJobId, input.prompt || '', input.negative || '', input.channelId || ''])
+    const dedupe = JSON.stringify([key, input.operation, sourceJobId, input.prompt || '', input.negative || '', input.characters || [], input.channelId || ''])
     let task = tasks.get(key)
     if (task) {
       if (task.dedupe !== dedupe) throw Object.assign(new Error('这张图片已有不同的重绘任务正在运行'), { code: 'ACTION_BUSY' })
@@ -265,20 +265,20 @@ export function createMediaActions({
       try {
         started = await Promise.race([
           Promise.resolve().then(() => startReplacement({
-            sourceJobId, prompt: input.prompt, negative: input.negative, channelId: input.channelId,
+            sourceJobId, prompt: input.prompt, characters: input.characters, negative: input.negative, channelId: input.channelId,
             sessionId: input.gameId, turn: Number(input.turn), textVersion: input.textVersion, acceptUncertain: accepted,
           })),
           new Promise((_resolve, reject) => { startTimer = setTimeout(() => reject(Object.assign(new Error('提交作业超时；请到生图平台确认，不能安全地自动重发'), { uncertain: true })), 60000) }),
         ])
       } catch (error) {
       if (error?.submissionNotStarted === true) {
-          try { await tavern.update(item.id, { data: { ...data, replacement: { jobId: '', state: 'failed', submissionNotStarted: true, error: safeError(error), prompt: input.prompt || '', negative: input.negative || '', channelId: input.channelId || '' } } }) } catch {}
+          try { await tavern.update(item.id, { data: { ...data, replacement: { jobId: '', state: 'failed', submissionNotStarted: true, error: safeError(error), prompt: input.prompt || '', characters: input.characters || [], negative: input.negative || '', channelId: input.channelId || '' } } }) } catch {}
           error.code ||= 'REJECTED'
           throw error
         }
         const unknownId = 'unknown-' + Date.now().toString(36)
         taskBase.jobId = unknownId
-        try { await tavern.update(item.id, { data: { ...data, replacement: { jobId: unknownId, state: 'uncertain', error: safeError(error), prompt: input.prompt || '', negative: input.negative || '', channelId: input.channelId || '' } } }) } catch {}
+        try { await tavern.update(item.id, { data: { ...data, replacement: { jobId: unknownId, state: 'uncertain', error: safeError(error), prompt: input.prompt || '', characters: input.characters || [], negative: input.negative || '', channelId: input.channelId || '' } } }) } catch {}
         throw Object.assign(new Error(safeError(error)), { code: 'UNCERTAIN' })
       } finally { clearTimeout(startTimer) }
       const jobId = String(started?.jobId || started?.id || '')
@@ -294,7 +294,7 @@ export function createMediaActions({
         throw Object.assign(new Error('图片记录已变化，拒绝发布旧请求结果'), { code: 'STALE_MEDIA' })
       }
       taskBase.jobId = jobId
-      await tavern.update(item.id, { data: { ...data, replacement: { jobId, state: 'pending', operation: input.operation, sourceJobId, prompt: input.prompt || '', negative: input.negative || '', channelId: input.channelId || '', startedAt: Date.now() } } })
+      await tavern.update(item.id, { data: { ...data, replacement: { jobId, state: 'pending', operation: input.operation, sourceJobId, prompt: input.prompt || '', characters: input.characters || [], negative: input.negative || '', channelId: input.channelId || '', startedAt: Date.now() } } })
       return jobId
     })()
     let jobId
@@ -441,12 +441,13 @@ export function createMediaActions({
     if (input.operation === 'revise') {
       if (typeof revisePrompt !== 'function') throw new Error('当前插件不支持重新整理提示词')
       const sourceJob = await readJob(String(item.data?.replacement?.jobId || item.data?.jobId || ''))
-      const prompt = String(item.prompt || sourceJob?.params?.rawTag || sourceJob?.params?.tag || sourceJob?.positive || '')
+      const prompt = String(item.prompt || sourceJob?.promptText || sourceJob?.params?.rawTag || sourceJob?.params?.tag || sourceJob?.positive || '')
+      const characters = Array.isArray(sourceJob?.params?.characters) ? sourceJob.params.characters : []
       await tavern.update(item.id, { activity: { label: '整理提示词', progress: null, cancellable: false } })
       let revised
-      try { revised = await revisePrompt({ prompt, instruction: input.instruction, sessionId: normalized.gameId, turn: normalized.turn }) }
+      try { revised = await revisePrompt({ prompt, characters, instruction: input.instruction, sessionId: normalized.gameId, turn: normalized.turn }) }
       finally { await tavern.update(item.id, { activity: null }).catch(() => {}) }
-      return start({ ...normalized, operation: 'redraw', prompt: revised }, (await locate(normalized)).item)
+      return start({ ...normalized, operation: 'redraw', prompt: revised, characters }, (await locate(normalized)).item)
     }
     if (input.jobId && input.jobId !== item.data?.jobId && input.jobId !== item.data?.replacement?.jobId) {
       throw Object.assign(new Error('作业号与所选图片不匹配'), { code: 'JOB_MISMATCH' })

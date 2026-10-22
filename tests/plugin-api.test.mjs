@@ -401,6 +401,10 @@ test('正文切分：标记换成插件元素，锚点媒体放在所在段落�
   assert.deepEqual(result.segments[3].match, ['image###rain, night###', 'rain, night'])
   assert.equal(result.segments.filter(segment => segment.kind === 'text').map(segment => segment.text).join('') + 'image###rain, night###', text.replace('image###rain, night###', '') + 'image###rain, night###')
   assert.deepEqual(segmentPluginText('abc', { markers: [/x*/] }).segments, [{ kind: 'text', text: 'abc' }], '空匹配不会死循环')
+  const crlf = '第一段。\r\n\r\n她推开了门。\r\n\r\n第三段。'
+  const crlfResult = segmentPluginText(crlf, { anchors: [{ id: 'door', anchor: '她推开了门。' }] })
+  assert.deepEqual(crlfResult.segments.map(segment => segment.kind), ['text', 'media', 'text'], 'Windows 换行的空行也算段落分界')
+  assert.equal(crlfResult.segments[0].text, '第一段。\r\n\r\n她推开了门。')
   const html = extractPluginMarkers('<div class="bar">image###a###</div>', [/image###(.+?)###/])
   assert.equal(html.html, '<div class="bar"></div>')
   assert.equal(html.markers.length, 1)

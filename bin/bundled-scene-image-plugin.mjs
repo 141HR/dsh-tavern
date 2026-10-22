@@ -23,8 +23,8 @@ export const SCENE_IMAGE_PACKAGE_NAME = 'dsh-tavern-image'
 /** 旧版 profile 包名：识别既有来源，避免新旧包并存。 */
 export const LEGACY_SCENE_IMAGE_PACKAGE_NAME = 'dsh-tavern-comfy'
 
-/** 插件自己的数据，升级时绝不覆盖（与插件 release-updater 的 PRIVATE 一致）。 */
-const PRIVATE = /^(config(\.json)?|definitions(\.json)?|worldbook(-outfits)?(\.json)?|jobs(-store)?\.json|plans(-store)?\.json|cache|backups|node_modules|\.git)(\/|$)/i
+/** 插件自己的数据，升级时绝不覆盖。workflows 整目录属于用户，删除或修改都必须保留。 */
+const PRIVATE = /^(config(\.json)?|definitions(\.json)?|worldbook(-outfits)?(\.json)?|jobs(-store)?\.json|plans(-store)?\.json|cache|backups|workflows|node_modules|\.git)(\/|$)/i
 
 /** 内置副本必须齐备的文件；缺一个就当"这份发行版没内置插件"，不去猜。 */
 const REQUIRED = ['package.json', 'lib/index.js', 'client.js', 'cordis.patch.yml']
@@ -127,6 +127,34 @@ function upgradeRefusal(target, bundledVersion) {
   return ''
 }
 
+/** Refuse paths that could make an upgrade write through a symlink/junction outside the plugin. */
+function hasLinkedUpgradePath(target, relativeFile) {
+  const parts = relativeFile.split('/')
+  let current = target
+  for (let index = 0; index < parts.length; index += 1) {
+    current = path.join(current, parts[index])
+    if (!existsNoFollow(current)) return false
+    const stat = lstatSync(current)
+    if (stat.isSymbolicLink() || (index < parts.length - 1 && !stat.isDirectory())) return true
+  }
+  return false
+}
+
+/** Give legacy profile installs a safe migration path without guessing where their data lives. */
+function profileMigrationHint(packageName, profileVersion, bundledVersion) {
+  return [
+    `profile 仍登记着独立安装的 ${packageName}${profileVersion ? ' ' + profileVersion : ''}，因此本次没有更新/安装 Tavern 内置的 ${bundledVersion}。`,
+    '请先按迁移指南确认旧插件数据的实际位置并备份整个真实数据目录，再移除旧 profile 包并重新运行 Tavern 更新：',
+    'https://github.com/weixinlll/dsh-tavern-image/blob/master/MIGRATION.md',
+  ].join('\n')
+}
+
+function needsProfileMigrationHint(packageName, profileVersion, bundledVersion) {
+  return packageName === LEGACY_SCENE_IMAGE_PACKAGE_NAME
+    || !profileVersion
+    || comparePluginVersions(bundledVersion, profileVersion) > 0
+}
+
 /** Replace the bundled copy's code files in an older install; plugin data stays untouched. */
 function upgradeInPlace(bundled, target, installedVersion) {
   const copied = []
@@ -141,9 +169,27 @@ function upgradeInPlace(bundled, target, installedVersion) {
     }
     // package.json last: until it lands, the install still reports the old version.
     const files = copied.filter(file => !PRIVATE.test(file)).sort((a, b) => (a === 'package.json') - (b === 'package.json'))
+    if (files.some(file => hasLinkedUpgradePath(target, file))) {
+      rmSync(staging, { recursive: true, force: true })
+      rmSync(backup, { recursive: true, force: true })
+      return {
+        action: 'skipped', reason: '升级路径包含符号链接或 junction，保留现有内容',
+        version: bundled.version, installedVersion, target,
+      }
+    }
     for (const file of files) {
       const destination = path.join(target, file), saved = path.join(backup, file)
+      if (hasLinkedUpgradePath(target, file)) {
+        const error = new Error('升级路径在操作期间变成符号链接或 junction，已停止写入')
+        error.code = 'ERR_UNSAFE_UPGRADE_PATH'
+        throw error
+      }
       mkdirSync(path.dirname(destination), { recursive: true })
+      if (hasLinkedUpgradePath(target, file)) {
+        const error = new Error('升级路径在创建目录期间变成符号链接或 junction，已停止写入')
+        error.code = 'ERR_UNSAFE_UPGRADE_PATH'
+        throw error
+      }
       const existed = existsNoFollow(destination)
       if (existed) { mkdirSync(path.dirname(saved), { recursive: true }); renameSync(destination, saved) }
       moved.push({ destination, saved, existed })
@@ -155,6 +201,10 @@ function upgradeInPlace(bundled, target, installedVersion) {
     }
     rmSync(staging, { recursive: true, force: true })
     rmSync(backup, { recursive: true, force: true })
+    if (error?.code === 'ERR_UNSAFE_UPGRADE_PATH') return {
+      action: 'skipped', reason: error.message,
+      version: bundled.version, installedVersion, target,
+    }
     throw error
   }
   rmSync(staging, { recursive: true, force: true })
@@ -179,20 +229,34 @@ export function installBundledSceneImagePlugin({ sourceRoot, dataRoot, profileDi
   const installedVersion = readJson(path.join(target, 'package.json'))?.version ?? null
 
   // profile 侧已装同名包：让它做唯一来源，别再放一份永不加载的副本
-  const profileHasSceneImagePackage = profileDir && [SCENE_IMAGE_PACKAGE_NAME, LEGACY_SCENE_IMAGE_PACKAGE_NAME]
-    .some(name => existsSync(path.join(profileDir, 'node_modules', name, 'package.json')))
+  const profilePackageName = profileDir && [SCENE_IMAGE_PACKAGE_NAME, LEGACY_SCENE_IMAGE_PACKAGE_NAME]
+    .find(name => existsSync(path.join(profileDir, 'node_modules', name, 'package.json')))
+  const profilePackageVersion = profilePackageName
+    ? String(readJson(path.join(profileDir, 'node_modules', profilePackageName, 'package.json'))?.version ?? '').trim() || null
+    : null
+  const migrationHint = profilePackageName && needsProfileMigrationHint(profilePackageName, profilePackageVersion, bundled.version)
+    ? profileMigrationHint(profilePackageName, profilePackageVersion, bundled.version)
+    : null
 
   // An existing entry is user-owned unless it is an older copy of this same plugin.
   if (existsNoFollow(target)) {
-    const refusal = profileHasSceneImagePackage ? 'profile 已安装同名插件包，保持单一来源' : upgradeRefusal(target, bundled.version)
-    if (refusal) return { action: 'skipped', reason: refusal, version: bundled.version, installedVersion, target }
+    const refusal = profilePackageName ? 'profile 已安装同名插件包，保持单一来源' : upgradeRefusal(target, bundled.version)
+    if (refusal) return {
+      action: 'skipped', reason: refusal, version: bundled.version, installedVersion, target,
+      ...(profilePackageName ? {
+        profilePackage: { name: profilePackageName, version: profilePackageVersion },
+        ...(migrationHint ? { hint: migrationHint } : {}),
+      } : {}),
+    }
     return upgradeInPlace(bundled, target, installedVersion)
   }
 
-  if (profileHasSceneImagePackage) {
+  if (profilePackageName) {
     return {
       action: 'skipped', reason: 'profile 已安装同名插件包，保持单一来源',
       version: bundled.version, installedVersion, target,
+      profilePackage: { name: profilePackageName, version: profilePackageVersion },
+      ...(migrationHint ? { hint: migrationHint } : {}),
     }
   }
 

@@ -11372,7 +11372,8 @@ function bindTavernFontZoom(node, win) {
 		  const found = projection.normalized.indexOf(needle)
 		  if (found < 0) return -1
 		  const end = projection.positions[found + needle.length - 1] + 1
-		  const paragraph = /\n[ \t]*\n/g
+		  // Card text often keeps Windows line endings: a blank line is then "\r\n\r\n".
+		  const paragraph = /\r?\n[ \t\r]*\n/g
 		  paragraph.lastIndex = end
 		  const next = paragraph.exec(text)
 		  return next ? next.index : text.length
