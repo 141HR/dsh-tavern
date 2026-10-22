@@ -2106,6 +2106,12 @@ let worldbookCache = null
         const asked = String(entry.asked ?? '').trim()
         if (asked && !unmatchedCharacters.has(asked.toLowerCase())) unmatchedCharacters.set(asked.toLowerCase(), { asked, ambiguous: entry.result === 'ambiguous' })
       }
+      // 挂载句按客户端放图时的同一套规则比对（去掉空白、Markdown 记号和 HTML 标签），
+      // 能放上去的图就该画；对不上的收集起来告诉用户。
+      const anchorText = value => String(value ?? '').replace(/<\/?[a-zA-Z][^<>]*>/g, '').replace(/[\s*_~`#>|\u200b]/g, '')
+      const bodyAnchorText = anchorText(body)
+      const mountInBody = mount => { const needle = anchorText(mount); return needle.length >= 2 && bodyAnchorText.includes(needle) }
+      const missingMounts = new Set()
       const characterWarnings = () => {
         const norm = value => String(value ?? '').toLowerCase().replace(/[\s_\-.'"（）()]+/g, '')
         return [...unmatchedCharacters.values()].map(({ asked, ambiguous }) => {
@@ -2114,7 +2120,7 @@ let worldbookCache = null
             && [c.id, c.name, ...splitTags(c.match)].some(alias => norm(alias) && norm(alias) === norm(asked)))
           if (elsewhere) return '「' + (elsewhere.name || asked) + '」在人物库里绑定的是别的卡，这次没用上她的外貌；在人物库里给她勾上这张卡即可'
           return '「' + asked + '」不在人物库里，长相每张会不一样；把她加进人物库能固定外貌'
-        }).slice(0, 4)
+        }).slice(0, 4).concat(missingMounts.size ? ['有 ' + missingMounts.size + ' 张图的挂载句在正文里找不到，没有画（例如「' + [...missingMounts][0] + '」）；可以重新配图'] : [])
       }
       // 世界书条目的 backends 里可以写 tags / natural / mixed，按默认工作流的写法只给规划看对应的规则。
       const plannerWorkflow = styleWorkflow()
@@ -2212,7 +2218,13 @@ let worldbookCache = null
           if (smart && (streamDecision !== 'draw' || !decisionFrozen || streamConflict)) continue
           const planCharacters = Array.isArray(image.characters) ? image.characters.filter(item => item && String(item.prompt ?? '').trim()) : []
           const sceneText = String(image.prompts ?? '')
-          if (!image.mount || !body.includes(image.mount) || (!sceneText.trim() && !planCharacters.length)) continue
+          if (!sceneText.trim() && !planCharacters.length) continue
+          if (!mountInBody(image.mount)) {
+            // 以前逐字比对、静默跳过：规划少抄一个 * 或换行就整张图不画，全部跳过时还报成「没有返回可用的 <image> 块」。
+            const mount = String(image.mount ?? '').trim()
+            if (mount) missingMounts.add(mount.slice(0, 24))
+            continue
+          }
           const identity = JSON.stringify([image.mount, sceneText, planCharacters])
           const promptIdentity = [sceneText, ...planCharacters.map(item => item.prompt)].join(' ').replace(/\s+/g, ' ').trim().toLowerCase()
           if (seen.has(identity) || seenPrompts.has(promptIdentity) || seen.size >= want) continue
@@ -2354,6 +2366,7 @@ let worldbookCache = null
         finishTask(task, error)
         throw error
       }
+      if (imageGeneration && !skipped && !plans.length && missingMounts.size) failure ||= new Error('规划给的挂载句在正文里都找不到（例如「' + [...missingMounts][0] + '」），没有画图；可以重新配图')
       if (imageGeneration && !skipped && !plans.length) failure ||= new Error('模型没有返回可用的 <image> 块')
       if (smart && parsed.decision === 'draw' && !plans.length) failure ||= new Error('选择配图后没有返回可用的 <image> 块')
       finishTask(task, failure)

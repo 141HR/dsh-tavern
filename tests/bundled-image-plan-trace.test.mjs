@@ -16,7 +16,7 @@ const DEFINITIONS = { characters: [
 const story = '雨夜，阿梅和他共撑一把伞。' + SECRET
 const PLANNER_TEXT = '<image><regex>阿梅和他共撑一把伞</regex><title>雨夜</title><prompts>${"name":"A Mei","outfit":"常服"}$, A Mei and a man with short black hair share an umbrella in the rain</prompts></image>'
 
-async function runtime(t, { diagnostics, definitions = DEFINITIONS, plannerText = PLANNER_TEXT, setup } = {}) {
+async function runtime(t, { diagnostics, definitions = DEFINITIONS, plannerText = PLANNER_TEXT, setup, text = story } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-comfy-test-'))
   await mkdir(join(root, 'lib')); await mkdir(join(root, 'workflows'))
   await cp(join(source, 'lib'), join(root, 'lib'), { recursive: true })
@@ -61,7 +61,7 @@ async function runtime(t, { diagnostics, definitions = DEFINITIONS, plannerText 
     Object.assign(req, { method: 'POST', url: '/plugins/dsh-tavern-image/' + path, headers: { host: 'localhost', 'content-type': 'application/json' } })
     routes.get(req.url)(req, { headersSent: false, writeHead(s) { this.status = s }, end(b) { try { ok({ status: this.status, body: JSON.parse(String(b)) }) } catch (e) { fail(e) } } })
   })
-  const plan = () => request('plan', { text: story, messageId: 'm1', sessionId: 'game-1', count: 1, manual: true })
+  const plan = () => request('plan', { text, messageId: 'm1', sessionId: 'game-1', count: 1, manual: true })
   const events = async () => {
     const dir = join(root, 'diagnostics')
     try { if (!(await stat(dir)).isDirectory()) return [] } catch { return [] }
@@ -128,4 +128,21 @@ test('cache 兜底补回的历史图不落盘，不再挤掉带 key 的真实作
   assert.equal(saved[realId].key, 'game-1:3:abc')
   assert.equal(list.filter(job => job.label === '历史图片').length, 0, '占位记录不落盘')
   assert.ok(list.length <= 150)
+})
+
+test('挂载句只差 Markdown 记号或换行时照样出图（以前逐字比对，整张图静默不画）', async t => {
+  const f = await runtime(t, { text: '雨夜，**阿梅**和他\r\n共撑一把伞。' })
+  const r = await f.plan(); await delay(30)
+  assert.equal(r.status, 200)
+  assert.equal(f.bodies.length, 1)
+  assert.equal(r.body.characterWarnings, undefined)
+})
+
+test('挂载句在正文里找不到时说清楚，而不是报「没有返回可用的 <image> 块」', async t => {
+  const f = await runtime(t, { text: '雨夜，阿梅独自走回家。' })
+  const r = await f.plan(); await delay(30)
+  assert.equal(f.bodies.length, 0)
+  const text = JSON.stringify(r.body)
+  assert.match(text, /挂载句在正文里/)
+  assert.doesNotMatch(text, /没有返回可用的 <image> 块/)
 })
