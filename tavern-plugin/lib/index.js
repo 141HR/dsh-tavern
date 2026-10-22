@@ -65,6 +65,7 @@ import { createSessionViewReader, createSessionChatReader } from './domain/sessi
 import { settlementTurn, pendingMvuSettlementState } from './domain/chat-session-state.js'
 import { createSettlementProgressGuard } from './domain/settlement-progress-guard.js'
 import { createSettlementJobs } from './domain/settlement-jobs.js'
+import { createTurnSettledEvents } from './domain/turn-settled-events.js'
 import { createPluginSettlementProgress } from './domain/plugin-settlement-progress.js'
 import { readHostCompatibility } from './domain/host-compatibility.js'
 import { installHostSessionPatch } from './domain/host-session-patch.js'
@@ -613,6 +614,8 @@ export async function apply(ctx) {
     return result.renderedText
   }
 
+  const turnSettled = createTurnSettledEvents()
+  turnSettled.subscribe(({ latest }) => { if (latest) return gameTitles.afterTurn(latest.sessionId, latest.cardName) })
   const settlementJobs = createSettlementJobs({ run: (...args) => wholeReads.scope('结算', () => runSettlementCycle(...args)), onSettled: onSettlementSettled })
   const scriptContinuity = createScriptContinuity()
   const storyTimeline = createStoryTimeline({ id: uid, now: Date.now })
@@ -920,6 +923,7 @@ export async function apply(ctx) {
     }
   })
   ctx.effect(() => () => saveMaintenance.dispose(), 'dsh-tavern: save maintenance')
+  turnSettled.subscribe(({ chatId, latest }) => { if (latest) saveMaintenance.noteWrite(chatId, Number(latest._storageRevision)) })
   const historyRecall = createHistoryRecall()
   const foregroundRecallScopes = new WeakMap()
   async function recallHistoryForSession(sessionId, args, scope, audience) {
@@ -1971,6 +1975,8 @@ export async function apply(ctx) {
   const worldbookPrefilter = createWorldbookPrefilter({
     run: (chatId, signal) => wholeReads.scope('回复后预备', () => prepareAfterReply(chatId, signal))
   })
+  turnSettled.subscribe(({ chatId, latest }) => { if (latest) return worldbookPrefilter.start(chatId) })
+
   // The replies each game prepared for (round and version, the latest few). Tavern's own
   // turns — a rollback, a body edit, a repair — end like replies but bring no new one:
   // preparing again would only rewrite the save (and void the rollback's undo point).
@@ -2338,6 +2344,7 @@ export async function apply(ctx) {
     publish: sessionId => sessionSignals.publish(sessionId, { kind: 'plugin-media', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) })
   })
   ctx.provide('tavern', pluginApi.service)
+  turnSettled.subscribe(({ latest }) => { if (latest) return pluginApi.turnSettled(latest.sessionId) })
   cardRevisionListeners.add((cardPath, revision) => pluginApi.cardChanged(cardPath, revision))
   // Tell plugins the story line changed (informational: their turn data follows text versions
   // by itself). After an edit or an undone rollback the visible version may be new to them.
@@ -2580,6 +2587,7 @@ export async function apply(ctx) {
     onError:error=>console.warn('dsh-tavern: 候选上下文提前准备失败:',str(error.message||error))
   })
   ctx.effect(()=>()=>candidateWorldbookPreparation.dispose())
+  turnSettled.subscribe(({ latest }) => { if (latest) return candidateWorldbookPreparation.warm(latest.sessionId) })
   const candidateGenerator = createCandidateGenerator({
     backgroundTasks: async chat => normalizeBackgroundTasks((await backgroundConfigForSession(chat.sessionId))?.backgroundTasks),
     store: {
@@ -3078,19 +3086,9 @@ export async function apply(ctx) {
     return { started: true }
   }
   async function onSettlementSettled(chatId, signal) {
-    try {
-      const latest = (await chatPersistence.readSlice(chatId, [], ['_storageRevision', 'sessionId', 'cardName']))?.chat
-      if (!signal.aborted && latest) {
-        saveMaintenance.noteWrite(chatId, Number(latest._storageRevision))
-        void mvuSettlementReconciler.wake(latest.sessionId)
-        void candidateWorldbookPreparation.warm(latest.sessionId)
-        void worldbookPrefilter.start(chatId)
-        void pluginApi.turnSettled(latest.sessionId).catch(error => console.warn('dsh-tavern: 插件轮次通知失败:', str(error?.message || error)))
-        void gameTitles.afterTurn(latest.sessionId, latest.cardName)
-      }
-    } catch {
-      if (!signal.aborted) void mvuSettlementReconciler.scan()
-    }
+    let latest
+    try { latest = (await chatPersistence.readSlice(chatId, [], ['_storageRevision', 'sessionId', 'cardName']))?.chat } catch { latest = null }
+    if (!signal.aborted && latest !== undefined) turnSettled.emit({ chatId, latest })
   }
   function queueSettlement(chatId) { return settlementJobs.start(chatId) }
   function cancelSettlement(chatId, options) { return settlementJobs.cancel(chatId, options) }
@@ -3120,6 +3118,8 @@ export async function apply(ctx) {
       console.error('dsh-tavern: 接续等待中的 MVU 变量结算失败，将自动重试', str(error && error.message || error))
     }
   })
+  // An unreadable save after a settlement: scan every game for waiting MVU work instead.
+  turnSettled.subscribe(({ latest }) => latest ? mvuSettlementReconciler.wake(latest.sessionId) : mvuSettlementReconciler.scan())
   const unsubscribeMvuRuntimeReady = tavernScriptDispatch.subscribeSettled(function (sessionId) {
     void mvuSettlementReconciler.wake(sessionId)
   })
