@@ -254,6 +254,7 @@ import { createSystemPromptDocuments } from './domain/system-prompt-documents.js
 // file catalog only supplies built-in defaults.
 import { prompt as promptFile, SYSTEM_PROMPT_NAMES } from './prompt-catalog.js'
 import { createMaintenanceHandlers } from './rpc/maintenance.js'
+import { createCardHandlers } from './rpc/cards.js'
 // dsh-tavern 宿主插件（profile 组合行）
 // RPC：同源 HTTP 路由 /api/dsh-tavern/<method>（客户端 fetch 调用）
 // DSH 生命周期负责回合状态；模型工具只处理按需读取和明确修改。
@@ -4013,21 +4014,22 @@ export async function apply(ctx) {
 
   // Request handlers by area live in rpc/; bindings assigned later are read through getters.
   const rpcDeps = { TAVERN_PACKAGE_VERSION, agentRegistry, applicationUpdater, attachPlayChatDebug,
-    backgroundAgentRunner, chatForSession, chatHeaderForSession, compatibilityDiagnostics,
-    displayRuntimeCaptures, exportTavernLogs, hostCompatibility, modelRequestLog, mvuDiagnostics,
-    preparedSaveSessions, readChat, readChatCard, readSessionMap, saveUpgrade, sessionPatch,
-    sessionStateForSession, sessionStore, str, worldbookRecallLog }
+    backgroundAgentRunner, cardMemory, cardOrganization, cardPacksOf, cardPlugins, cardPreparation,
+    cardTaskPrompts, castAssets, chatForSession, chatHeaderForSession, compatibilityDiagnostics, deleteCard,
+    displayRuntimeCaptures, ensureNativeCardWorkspace, exportTavernLogs, fileResources, hostCompatibility,
+    importCard, importCardArchiveFile, importPluginCardFile, listCards, mobileCardImport, modelRequestLog,
+    mvuDiagnostics, pluginApi, preparedSaveSessions, readCardWorkspace, readChat, readChatCard,
+    readSessionMap, runtimePrompt, saveUpgrade, sessionPatch, sessionStateForSession, sessionStore,
+    setCardPlugins, sleep, str, updateCard, uploads, worldBooks, worldbookRecallLog }
   const rpcHandlers = Object.assign(Object.create(null),
-    createMaintenanceHandlers(rpcDeps))
+    createMaintenanceHandlers(rpcDeps),
+    createCardHandlers(rpcDeps))
 
   async function dispatchMethod(method, args, serverTemplate = false) {
     if (method.startsWith('gameplay.')) return await gameplayApi.call(method.slice(9), args || {})
     const handler = rpcHandlers[method]
     if (handler) return await handler(args, method, serverTemplate)
     switch (method) {
-      case 'getCardOrganization': return { groups: (await cardOrganization.read()).groups }
-      case 'organizeCards': return { groups: (await cardOrganization.update(args || {}, await fileResources.list('card'))).groups }
-      case 'listCards': return { cards: await listCards() }
       case 'prepareSessionOpening': {
         const chat = await chatForSession(args && args.sessionId)
         if (!chat) throw new Error('找不到原对话')
@@ -4102,31 +4104,6 @@ export async function apply(ctx) {
         } }
       }
       case 'setUserPreferenceProfileDefaultEnabled': return { userProfile: presentUserPreferenceProfile(await userPreferenceProfile.setDefaultEnabled(args && args.enabled === true, args?.profileId)) }
-      case 'getCard': {
-        const cardPath = normalizeResourcePath(args && args.path, 'card')
-        const workspace = await readCardWorkspace(cardPath)
-        if (workspace === undefined) throw new Error('人物卡不存在: ' + cardPath)
-        return { card: Object.assign(cardPreparation.present({ card: workspace, as: 'detail' }), { path: cardPath }) }
-      }
-      case 'getCardTaskPrompt': {
-        const task = str(args && args.task)
-        const promptName = cardTaskPrompts[task]
-        if (promptName === undefined) throw new Error('未知卡片任务: ' + task)
-        const chat = await chatForSession(args && args.sessionId)
-        let legacyWorkspaceText = ''
-        if (task === 'edit' && chat?.cardEditContext?.version === 1) {
-          const target = await waitForWritableSession({ registry: agentRegistry, sessions: sessionStore, sessionId: chat.sessionId, sleep })
-          legacyWorkspaceText = await ensureNativeCardWorkspace(target.session, chat)
-        }
-        return { task, text: runtimePrompt(promptName), legacyWorkspaceText }
-      }
-      case 'getCardMemory': {
-        const chat = await chatForSession(args?.sessionId)
-        if (!chat) return { enabled: false }
-        return { enabled: true, ...await cardMemory.search(chat, args?.query, { manual: true }) }
-      }
-      case 'changeCardMemoryPreference': return await cardMemory.preference(await chatForSession(args?.sessionId), args || {}, { manual: true })
-      case 'changeCardMemoryExperience': return await cardMemory.experience(await chatForSession(args?.sessionId), args || {}, { manual: true })
       case 'getResourceWorkspace': return { path: dataRoot + '/resources' }
       case 'listResources': return await listTavernResources()
       case 'getResource': {
@@ -4219,10 +4196,6 @@ export async function apply(ctx) {
       case 'importPreset': return { preset: await importPreset(args && args.payload) }
       case 'exportSettingsBundle': return await exportSettingsBundle(args)
       case 'importSettingsBundle': return await importSettingsBundle(args)
-      case 'updateCard': {
-        const change = await updateCard(args && args.path, args && args.patch)
-        return { card: change.card, changed: change.changed }
-      }
       case 'getConversationBackgroundModel':
       case 'getConversationBackgroundConfig': return conversationBackgroundSettings.read(args?.sessionId)
       case 'setConversationBackgroundModel':
@@ -4299,14 +4272,6 @@ export async function apply(ctx) {
         return { title: saved.title }
       }
       case 'markConversationOpened': return await conversationRegistry.touch(args && args.sessionId, Date.now())
-      // A log the host cannot open is repaired on demand: the client retries the open
-      // once after this reports a rewrite, and untouched logs cost one read.
-      case 'listMobileCardImports': return await mobileCardImport.list()
-      case 'importMobileCard': {
-        const archive = await mobileCardImport.archive(args && args.id)
-        return { card: archive ? await importCardArchiveFile(archive.file, archive.name) : await importCard(await mobileCardImport.read(args && args.id)) }
-      }
-      case 'importCard': return { card: await importCard(args && args.payload) }
       // Names of games by id, for plugin pages that list several games (tavernUi.getGames).
       case 'gameTitles': {
         const ids = [...new Set((Array.isArray(args?.gameIds) ? args.gameIds : []).map(str).filter(Boolean))].slice(0, 500)
@@ -4342,23 +4307,6 @@ export async function apply(ctx) {
         spawn(opener[0], opener[1], { detached: true, stdio: 'ignore', windowsHide: true }).on('error', () => {}).unref()
         return { dir: userPluginInstaller.pluginsDir }
       }
-      case 'importCardUpload': {
-        const upload = await uploads.take(args && args.uploadId)
-        const name = str(args && args.name) || '人物卡.dshcard'
-        try {
-          if (/\.(charx|dshcard)$/i.test(name)) return { card: await importCardArchiveFile(upload.file, name) }
-          if (await pluginApi.cardImporterFor(name)) return { card: await importPluginCardFile(upload.file, name) }
-          throw new Error('无法识别的人物卡文件（需要 PNG、JSON、CHARX、DSH 人物卡 .dshcard，或装上能导入这种文件的插件）')
-        }
-        finally { await upload.remove() }
-      }
-      case 'cardPacks': return { packs: await cardPacksOf(args && args.sessionId) }
-      case 'cardPlugins': return { plugins: (await castAssets.read(normalizeResourcePath(args && args.path, 'card'))).plugins || [] }
-      case 'setCardPlugins': return { plugins: await setCardPlugins(args && args.path, args && args.enabled === true) }
-      case 'cardStage': return { enabled: (await castAssets.read(normalizeResourcePath(args && args.path, 'card'))).stage === true }
-      case 'setCardStage': return { enabled: (await castAssets.setStage(normalizeResourcePath(args && args.path, 'card'), args && args.enabled === true)).stage === true }
-      case 'cardPluginScopes': return { scopes: Object.fromEntries([...await cardPlugins.scope()].map(([name, scope]) => [name, scope.cards])) }
-      case 'deleteCard': return await deleteCard(args && args.path)
       case 'prepareDeleteChats': return await deleteChats(args && args.chatIds, true)
       case 'deleteChats': return await deleteChats(args && args.chatIds)
       case 'deleteChat': return await deleteChat(args && args.chatId)
@@ -4581,13 +4529,6 @@ export async function apply(ctx) {
       case 'ensureOpening': return { view: await ensureNativeOpening(args && args.sessionId) }
       case 'getChoices': return { candidates: await candidateGenerator.find({ sessionId: args && args.sessionId, messageId: args && args.messageId }) }
       case 'startChoices': return await candidateTasks.startLegacy(args)
-      case 'exportCard': {
-        const cardPath = args && args.path
-        const workspace = await readCardWorkspace(cardPath)
-        if (workspace === undefined) throw new Error('人物卡不存在: ' + (args && args.path))
-        const characterBook = await worldBooks.characterBookForCard(cardPath)
-        return { document: cardPreparation.present({ card: workspace, as: 'sillytavern-v3', characterBook }) }
-      }
       case 'editLedger': { await ledgerEditor(args || {}); return { view: await sessionView(args.sessionId) } }
       case 'updateGuideLibrary': return { item: await guideLibrary.update(args) }
       case 'deleteGuideLibrary': { await guideLibrary.remove(args); return { ok: true } }
