@@ -515,7 +515,11 @@
 				if (!input.turn || String(input.text || "").trim() === "") return null;
 				const key = input.sessionId + ":" + input.turn;
 				const cached = tavernReplyFoldDecisions.get(key);
-				if (cached && cached.text === input.text) return cached;
+				// A presenter that was disposed (plugin disabled, fold switch off) must
+				// not keep its cached fold: recompute and unfold on the next render.
+				const stillRegistered = Boolean(cached) && tavernUiExtensions.replyPresenters().some(function (presenter) { return presenter.owner === cached.owner; });
+				if (cached && cached.text === input.text && stillRegistered) return cached;
+				if (cached && !stillRegistered) tavernReplyFoldDecisions.delete(key);
 				const found = tavernUiExtensions.presentReply(input);
 				if (!found) { tavernReplyFoldDecisions.delete(key); return null; }
 				const entry = { text: input.text, owner: found.owner, summary: found.fold.summary };
