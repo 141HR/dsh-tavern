@@ -84,7 +84,7 @@ import { createManualCharacterDesign } from './domain/manual-character-design.js
 import { prepareTemplateHistory, synchronizeTemplateHistory } from './domain/template-history.js'
 import { createServerTemplateSync } from './domain/server-template-sync.js'
 import { createServerTemplateRuntime } from './domain/server-template-runtime.js'
-import { estimateWorldBookTokens, historyScanDepth } from './domain/worldbook-activation.js'
+import { historyScanDepth } from './domain/worldbook-activation.js'
 import { createWorldbookFilter, WORLD_BOOK_FILTER_TOOLS } from './domain/worldbook-filter.js'
 import { createWorldbookPrefilter } from './domain/worldbook-prefilter.js'
 import { createStyleReferenceRecall, STYLE_REFERENCE_SUBMIT_TOOL } from './domain/style-reference.js'
@@ -105,8 +105,8 @@ import { createBackgroundSuppressionReader } from './domain/background-surface.j
 import { ensureCardWorkspaceMessage } from './domain/card-workspace-message.js'
 import { createPromptTemplateGlobalVariables } from './domain/prompt-template-global-variables.js'
 import { createTavernApiDiagnostics } from './domain/tavern-api-diagnostics.js'
-import { generateHelper, generateHelperRaw, generateHelperCompletion, identifyHelperModelMessages, defaultOrderedRawConfig } from './domain/helper-generation.js'
-import { validateHelperGenerateConfig, resolveHelperGenerationPreset, helperGenerationHistory } from './domain/helper-generation-prompts.js'
+import { generateHelper, generateHelperRaw, identifyHelperModelMessages, defaultOrderedRawConfig } from './domain/helper-generation.js'
+import { validateHelperGenerateConfig, resolveHelperGenerationPreset } from './domain/helper-generation-prompts.js'
 import { createHelperGenerationTasks } from './domain/helper-generation-tasks.js'
 import { createBodyEditor } from './domain/body-editor.js'
 import { appendHelperUserSessionContext } from './domain/helper-user-session-context.js'
@@ -187,7 +187,7 @@ import { createCardPlugins } from './domain/card-plugins.js'
 import { createCardImportIdentity } from './domain/card-import-identity.js'
 import { createPostureItem, createSettlementItems, plainSettlementPlan, runPipelineStages } from './domain/background-pipeline.js'
 import { createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
-import { createMvuDiagnosticStore, createMvuDiagnosticExport, sanitizeRuntimeDiagnostics } from './domain/mvu-diagnostics.js'
+import { createMvuDiagnosticStore, createMvuDiagnosticExport } from './domain/mvu-diagnostics.js'
 import { createPlayChatDebugReference, readPlayChatDebugTurn } from './domain/play-chat-debug.js'
 import { createSaveMaintenance } from './domain/save-maintenance.js'
 import { createServerScriptExecutor } from './domain/server-script-executor.js'
@@ -199,7 +199,7 @@ import { clearFailedTurnSurface, rollbackAvailability, reshadowRolledBackRounds,
 import { createStorySubmissionTool, foldStorySubmission, STORY_SUBMIT_TOOL_NAME } from './domain/story-tool-submission.js'
 import { readHistoryLayoutFile } from './domain/history-tool-call.js'
 import { createTavernRetryLimiter } from './domain/tavern-retry-limiter.js'
-import { lastTavernHelperVariables, hydrateTavernHelperMessages, HELPER_MESSAGE_COLD_WINDOW } from './domain/tavern-helper-context.js'
+import { lastTavernHelperVariables, HELPER_MESSAGE_COLD_WINDOW } from './domain/tavern-helper-context.js'
 import { projectTavernHelperWorldbook } from './domain/tavern-helper-worldbook.js'
 import { projectTavernHelperScripts, hasTavernScriptRuntime } from './domain/tavern-helper-scripts.js'
 import { createTavernScriptDispatch } from './domain/tavern-script-dispatch.js'
@@ -255,6 +255,7 @@ import { createSystemPromptDocuments } from './domain/system-prompt-documents.js
 import { prompt as promptFile, SYSTEM_PROMPT_NAMES } from './prompt-catalog.js'
 import { createMaintenanceHandlers } from './rpc/maintenance.js'
 import { createCardHandlers } from './rpc/cards.js'
+import { createTemplateHandlers } from './rpc/template.js'
 // dsh-tavern 宿主插件（profile 组合行）
 // RPC：同源 HTTP 路由 /api/dsh-tavern/<method>（客户端 fetch 调用）
 // DSH 生命周期负责回合状态；模型工具只处理按需读取和明确修改。
@@ -4014,16 +4015,20 @@ export async function apply(ctx) {
 
   // Request handlers by area live in rpc/; bindings assigned later are read through getters.
   const rpcDeps = { TAVERN_PACKAGE_VERSION, agentRegistry, applicationUpdater, attachPlayChatDebug,
-    backgroundAgentRunner, cardMemory, cardOrganization, cardPacksOf, cardPlugins, cardPreparation,
-    cardTaskPrompts, castAssets, chatForSession, chatHeaderForSession, compatibilityDiagnostics, deleteCard,
-    displayRuntimeCaptures, ensureNativeCardWorkspace, exportTavernLogs, fileResources, hostCompatibility,
-    importCard, importCardArchiveFile, importPluginCardFile, listCards, mobileCardImport, modelRequestLog,
-    mvuDiagnostics, pluginApi, preparedSaveSessions, readCardWorkspace, readChat, readChatCard,
-    readSessionMap, runtimePrompt, saveUpgrade, sessionPatch, sessionStateForSession, sessionStore,
-    setCardPlugins, sleep, str, updateCard, uploads, worldBooks, worldbookRecallLog }
+    backgroundAgentRunner, callModel, cardMemory, cardOrganization, cardPacksOf, cardPlugins,
+    cardPreparation, cardTaskPrompts, castAssets, chatForSession, chatHeaderForSession, chatPersistence,
+    commands, compatibilityDiagnostics, ctx, deleteCard, displayRuntimeCaptures, ensureNativeCardWorkspace,
+    exportTavernLogs, fileResources, fullTemplateRuntime, helperGenerationPreset, helperGenerationTasks,
+    helperHistoryAccess, hostCompatibility, importCard, importCardArchiveFile, importPluginCardFile,
+    listCards, mobileCardImport, modelRequestLog, mvuDiagnostics, openingPreparation, pagesInFront,
+    pluginApi, preparedSaveSessions, projectOpeningWindow, readCardExtensions, readCardWorkspace, readChat,
+    readChatCard, readOpeningWindow, readSessionMap, runtimePrompt, saveUpgrade, sessionPatch,
+    sessionStateForSession, sessionStore, sessionViews, setCardPlugins, sleep, str, tavernScriptHostAdapter,
+    updateCard, uploads, worldBooks, worldbookRecallLog, get serverScripts() { return serverScripts } }
   const rpcHandlers = Object.assign(Object.create(null),
     createMaintenanceHandlers(rpcDeps),
-    createCardHandlers(rpcDeps))
+    createCardHandlers(rpcDeps),
+    createTemplateHandlers(rpcDeps))
 
   async function dispatchMethod(method, args, serverTemplate = false) {
     if (method.startsWith('gameplay.')) return await gameplayApi.call(method.slice(9), args || {})
@@ -4035,31 +4040,6 @@ export async function apply(ctx) {
         if (!chat) throw new Error('找不到原对话')
         return await prepareSessionOpening({ chat, card: await readChatCard(chat), swipeId: args.swipeId, message: args.message, preparation: openingPreparation })
       }
-      case 'generateTavernHelper':
-      case 'generateTavernHelperRaw': {
-        return await helperGenerationTasks.run(args?.sessionId, args?.config?.generation_id, async signal => {
-          const chat = await chatForSession(args?.sessionId)
-          if (!chat) throw new Error('找不到当前游戏')
-          signal.throwIfAborted()
-          const backgroundCall = opts => callModel({ ...opts, background: true, signal })
-          if (method === 'generateTavernHelperRaw' && args.completion) return { text: await generateHelperCompletion(args.completion, { callModel: backgroundCall, sessionId: chat.sessionId }) }
-          const context = { callModel: backgroundCall, sessionId: chat.sessionId, history: helperGenerationHistory(chat) }
-          // generateRaw without an order is Tavern Helper's default-order request: build it like generate.
-          const defaultOrder = method === 'generateTavernHelperRaw' ? defaultOrderedRawConfig(args.config) : null
-          if (method === 'generateTavernHelperRaw' && !defaultOrder) return { text: await generateHelperRaw(args.config, context) }
-          const config = defaultOrder || args.config
-          validateHelperGenerateConfig(config)
-          const card = await readChatCard(chat)
-          const presetSnapshot = await helperGenerationPreset(config.preset_name, chat.runtimePresetSnapshot || null)
-          const worldBook = await worldBooks.bound(chat.cardPath, card, chat)
-          const extensions = await readCardExtensions(chat.cardPath, chat)
-          signal.throwIfAborted()
-          return { text: await generateHelper(config, { ...context, chat, card, worldBook, presetSnapshot, extensions,
-            presetRegexScripts: chat.runtimePresetSnapshot?.regexScripts || [], characterVariables: extensions?.variables || {} }) }
-        }, args?.generationToken)
-      }
-      case 'stopTavernHelperGeneration': return { stopped: helperGenerationTasks.stop(args?.sessionId, args?.generationId, { generationToken: args?.generationToken, pending: args?.pending }) }
-      case 'stopAllTavernHelperGeneration': return { stopped: true, generationIds: helperGenerationTasks.stopAll(args?.sessionId, args?.pendingGenerations) }
       case 'callOpeningRuntime': return await openingPreparation.callRuntime(args && args.id, args && args.method, args && args.args)
       case 'saveOpeningSelection': return openingPreparation.select(args && args.id, args && args.openingId)
       case 'initializeOpeningTemplate': try { return openingInitializationPayload(await openingPreparation.applyTemplateInitial(args.id, await requestPerformance.stage('templateInitialize', () => fullTemplateRuntime.forSession('opening:' + args.id).initializeVariables([]))), args.compact) } finally { fullTemplateRuntime.cancel('opening:' + args.id) }
@@ -4322,78 +4302,6 @@ export async function apply(ctx) {
       case 'exportConversation': return await exportConversation(args && args.chatId, args && args.sessionId, args && args.title)
       case 'importGameSave': return await importGameSave(args)
       case 'exportGameSave': return await exportGameSave(args && args.sessionId, { images: args && args.images !== false })
-	      case 'getTavernHelperContext': {
-        if (!args?.eventId && args?.openingWindow === 1) {
-          const window = await readOpeningWindow(args.sessionId)
-          if (window) {
-            const projected = await projectOpeningWindow(window)
-            return { contextWindow: {historyWindow:projected.historyWindow,tavernHelper:projected.tavernHelper} }
-          }
-        }
-        return { context: args?.eventId ? await tavernScriptHostAdapter.transactionContext(args.sessionId,args.eventId) : await tavernScriptHostAdapter.context(args && args.sessionId) }
-      }
-	      case 'updateTavernHelperPrompts': return await tavernScriptHostAdapter.updatePrompts(args && args.sessionId, args && args.operation, args && args.expectedLifecycleRevision, args && args.eventId)
-	      case 'updateTavernHelperVariables': return await tavernScriptHostAdapter.updateVariables(args && args.sessionId, args && args.option, args && args.variables, args && args.expectedLifecycleRevision, args && args.eventId, args && args.contextBaseline)
-	      case 'updateTavernHelperMessages': return await tavernScriptHostAdapter.updateMessages(args && args.sessionId, args && args.messages, args && args.expectedLifecycleRevision, args && args.eventId)
-	      case 'createTavernHelperMessages': return await tavernScriptHostAdapter.createMessages(args && args.sessionId, args && args.messages, args && args.option, args && args.expectedLifecycleRevision, args && args.eventId)
-      // Old pages must not create a second executor or receive server work.
-      case 'releaseFullTemplateRuntime': return { released: false }
-      case 'heartbeatFullTemplateRuntime': return { active: false, executor: 'server' }
-      case 'claimFullTemplateWork': return { event: null, executor: 'server' }
-      case 'startFullTemplateWork': return { started: false }
-      case 'completeFullTemplateWork': return { completed: false }
-      case 'executeTemplateHostCommand': {
-        if (!serverTemplate) throw new Error('模板命令仅由服务端执行器调用')
-        const text = str(args.text)
-        const send = /^\/send\s+([\s\S]+)\|\s*\/trigger\s*$/.exec(text)
-        if (send || /^\/trigger\s*$/.test(text)) {
-          await ctx.get('sessionController').prompt({ sessionId: args.sessionId, requestId: randomUUID(),
-            content: send ? [{ type: 'text', text: send[1].trim() }] : [], mode: 'followup' }, new AbortController().signal)
-          return { pipe: '' }
-        }
-        if (/^\/setinput(?:\s|$)/.test(text)) throw new Error('服务端模板不能操作网页输入框，请使用 /send … | /trigger')
-        const agent = agentRegistry.get(args.sessionId)
-        if (!agent || !commands) throw new Error('当前会话没有可用的命令执行器')
-        const result = await commands.execute(agent, text, [])
-        if (!result || result.result?.kind === 'error') throw new Error(result?.result?.text || '未注册的模板命令')
-        return { pipe: str(result.result?.text) }
-      }
-      case 'getFullTemplateWorldbook': return await tavernScriptHostAdapter.getWorldbook(args.sessionId, args.name, true)
-      case 'replaceFullTemplateWorldbook': return await tavernScriptHostAdapter.replaceWorldbook(args.sessionId, args.name, args.entries, args.expectedEntries, true)
-      case 'executeFullTemplateCommand': return await fullTemplateRuntime.forSession(args.sessionId).command(args.text)
-      case 'countFullTemplateTokens': return { tokens: estimateWorldBookTokens(args.text), estimator: 'unicode-estimate' }
-      case 'getGlobalPromptTemplateSettings': return await tavernScriptHostAdapter.readGlobalPromptTemplateSettings()
-      case 'saveGlobalPromptTemplateSettings': return await tavernScriptHostAdapter.saveGlobalPromptTemplateSettings(args.settings, args.expectedSettings)
-      case 'getFullPromptTemplateState': if (args.sessionId?.startsWith('opening:')) return openingPreparation.templateState(args.sessionId.slice(8)); return await tavernScriptHostAdapter.readFullPromptTemplateState(args && args.sessionId, args?.cursor, args?.openingWindow === 1)
-      case 'getPromptTemplateHistory': {
-        if (!serverTemplate) throw new Error('Template history is server-only')
-        return await helperHistoryAccess.read(args.token,args.messageId,args.messageId)
-      }
-      case 'saveFullPromptTemplateGlobals': if (!serverTemplate) throw new Error('提示词模板已迁移到服务端，请刷新页面'); if (args.sessionId?.startsWith('opening:')) return openingPreparation.saveTemplateGlobals(args.sessionId.slice(8), args.variables); return await tavernScriptHostAdapter.saveFullPromptTemplateGlobals(args && args.sessionId, args && args.variables, args && args.expectedVariables)
-      case 'saveFullPromptTemplateSettings': if (args.sessionId?.startsWith('opening:')) return openingPreparation.saveTemplateSettings(args.sessionId.slice(8), args.settings); return await tavernScriptHostAdapter.saveFullPromptTemplateSettings(args && args.sessionId, args && args.settings, args && args.expectedSettings)
-      case 'saveFullPromptTemplateState': if (!serverTemplate) throw new Error('提示词模板已迁移到服务端，请刷新页面'); if (args.sessionId?.startsWith('opening:')) return openingPreparation.saveTemplateState(args.sessionId.slice(8), args.state); return await tavernScriptHostAdapter.saveFullPromptTemplateState(args && args.sessionId, args && args.state)
-      case 'saveTavernChatData': return await tavernScriptHostAdapter.saveChatData(args && args.sessionId, args && args.request)
-      case 'saveTavernExtensionSettings': return await tavernScriptHostAdapter.saveExtensionSettings(args && args.sessionId, args && args.settings, args && args.expectedSettings)
-      case 'loadTavernWorldInfo': return await tavernScriptHostAdapter.loadWorldInfo(args && args.sessionId, args && args.name)
-      case 'saveTavernWorldInfo': return await tavernScriptHostAdapter.saveWorldInfo(args && args.sessionId, args && args.name, args && args.worldInfo, args && args.expectedWorldInfo)
-      case 'getTavernHelperWorldbook': return await tavernScriptHostAdapter.getWorldbook(args && args.sessionId, args && args.name)
-      case 'replaceTavernHelperWorldbook': return await tavernScriptHostAdapter.replaceWorldbook(args && args.sessionId, args && args.name, args && args.entries, args && args.expectedEntries)
-	  case 'claimTavernScriptWork': {
-	    // A visible desktop page runs its game's card scripts; a hidden one or a
-	    // phone hands them to the server. Background games run nowhere.
-	    if (serverScripts && args?.foreground === true && !String(args?.runtimeId || '').startsWith('server-')) {
-	      if (args?.pageActive === true) pagesInFront.set(String(args.sessionId || ''), Date.now())
-	      else serverScripts.demand(args?.sessionId)
-	    }
-	    const claimed = await tavernScriptHostAdapter.claimWork(args && args.sessionId, args && args.runtimeId, args && args.ready, args && args.initializationError, args && args.contextBaseline)
-	    if (claimed?.event && String(args?.runtimeId || '').startsWith('server-')) console.log('dsh-tavern: 服务端卡脚本运行时领取事件', claimed.event.name, claimed.event.id)
-	    return claimed
-	  }
-	  case 'startTavernScriptWork': return tavernScriptHostAdapter.startWork(args && args.sessionId, args && args.eventId, args && args.leaseToken, args && args.runtimeId)
-	  case 'getTavernScriptWorkState': return tavernScriptHostAdapter.workState(args && args.sessionId, args && args.eventId, args && args.leaseToken, args && args.runtimeId, args && args.keepAlive)
-	  case 'heartbeatTavernScriptRuntime': return tavernScriptHostAdapter.heartbeatRuntime(args && args.sessionId, args && args.runtimeId, args && args.ready, args && args.initializationError)
-	  case 'completeTavernHelperEvent': return { completed: tavernScriptHostAdapter.completeEvent(args && args.sessionId, args && args.eventId, args && args.args, args && args.runtimeId, args && args.leaseToken, args && args.error, sanitizeRuntimeDiagnostics(args && args.diagnostics)) }
-	  case 'releaseTavernHelperRuntime': return { released: tavernScriptHostAdapter.releaseRuntime(args && args.sessionId, args && args.runtimeId) }
       case 'previewChatImport': return await chatHistoryImporter.preview(args || {})
       case 'importChatHistoryText': return await importChatHistoryText(args || {})
       case 'appendStoryRounds': return await appendStoryRounds(args || {})
@@ -4459,7 +4367,6 @@ export async function apply(ctx) {
         }
         throw conflict
       }
-      case 'getFullTemplateRuntimeInfo': throw new Error('提示词模板已迁移到服务端，请刷新页面');
       case 'getSession': {
         // A save opened for the first time in this process is checked once, while nothing runs.
         await reconcileWhenIdle(args && args.sessionId, { once: true })
@@ -4467,20 +4374,6 @@ export async function apply(ctx) {
         if(args?.fullView === true)templateHistoryFrom.set(args.sessionId,0)
         else if(Number.isSafeInteger(args?.historyFrom) && args.historyFrom >= 0)templateHistoryFrom.set(args.sessionId,args.historyFrom)
         return sessionViews.response(args || {})
-      }
-      case 'hydrateTavernHelperMessages': {
-        const sessionId = args && args.sessionId
-        const chatId = (await readSessionMap())[sessionId]
-        if (args?.chatId && args.chatId !== chatId) throw new Error('聊天已切换，请重新读取历史')
-        const selected = chatId && await chatPersistence.readHelperContext(chatId, {from:args?.from,to:args?.to,revision:args?.revision})
-        if (selected && selected.chat.sessionId === sessionId && selected.chat.backgroundConfigVersion === 1 && selected.chat.conversationFeaturesVersion === 1) {
-          const payload = {from:selected.from,to:selected.to,messages:selected.context.messages}
-          sessionViews.acceptHelperMessages(sessionId,chatId,selected.chat._storageRevision,payload)
-          return payload
-        }
-        const chat = await chatForSession(sessionId)
-        if (!chat) throw new Error('请先打开游玩会话')
-        return hydrateTavernHelperMessages(chat, args && args.from, args && args.to)
       }
       case 'designCharacter': return await manualCharacterDesign.start(args || {})
       case 'removeCharacterDesign': {
