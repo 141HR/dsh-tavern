@@ -49,7 +49,7 @@ import { createBoundedHistory, readRecentWindow, readRowsAt } from './domain/bou
 import { createHelperHistoryAccess } from './domain/helper-history-access.js'
 import { isScopedMessages } from './domain/scoped-messages.js'
 import {registerVariableReadTool} from './domain/read-variables.js'
-import { createBackgroundSessionRetirement, installRetiredBackgroundFilter } from './domain/background-session-retirement.js'
+import { createBackgroundSessionRetirement, installRetiredBackgroundFilter, installRetiredCatalogView } from './domain/background-session-retirement.js'
 import { createBackgroundCatalogBackfill } from './domain/background-catalog.js'
 import { createGameTitles } from './domain/game-titles.js'
 import { createCardMemory, CARD_MEMORY_TOOLS } from '../packages/dsh-tavern-card-memory/index.js'
@@ -1877,6 +1877,8 @@ export async function apply(ctx) {
 
   const backgroundRetirement = createBackgroundSessionRetirement(profileData, { readState: taskStateReader.forSession, isRunning: id => agentRegistry.get(id)?.status === 'running' })
   ctx.effect(() => installRetiredBackgroundFilter(ctx.get('subagents'), backgroundRetirement, ctx.get('sessionQuery')))
+  void backgroundRetirement.load().catch(error => console.warn('dsh-tavern: 读取已退休后台会话失败', str(error?.message || error)))
+  ctx.effect(() => installRetiredCatalogView(ctx.get('sessionProjections'), backgroundRetirement, { isRunning: id => agentRegistry.get(id)?.status === 'running' }))
   // Games whose background agents predate their catalog entry get them listed when opened.
   const backgroundCatalog = createBackgroundCatalogBackfill({ agents: agentRegistry, sessionQuery: ctx.get('sessionQuery'),
     onListed: parentId => sessionSignals.publish(parentId, { kind: 'subagents', version: String(Date.now()) + ':' + Math.random().toString(36).slice(2) }) })
