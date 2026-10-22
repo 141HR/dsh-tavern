@@ -4,7 +4,9 @@
 
 ## 构建
 
-安装包 = 官方 DeepSeek Harness 0.2.1-rc.2 + 外层启动器（自动安装 Tavern）。推荐用 GitHub Actions 的 `Windows Setup` 工作流（`.github/workflows/windows-setup.yml`）构建：它下载上游 `deepseek-harness-0.2.1-rc.2-win-x64.exe` 和 7-Zip extra 包并按 SHA-256 校验，生成 payload、编译启动器、运行 `test.ps1`，并把 EXE 作为 Actions 产物上传。可在 Actions 页面手动触发。
+> 已停用（2026-10）：Windows 改为在官方桌面版「插件 → 添加插件」中安装 `dsh-profile-tavern`，一键安装 EXE 不再构建，`Windows Setup` / `Windows Setup Verify` 工作流已删除。以下内容仅供历史参考。
+
+安装包 = 官方 DeepSeek Harness 0.2.1-rc.2 + 外层启动器（自动安装 Tavern）。原先用 GitHub Actions 的 `Windows Setup` 工作流构建：它下载上游 `deepseek-harness-0.2.1-rc.2-win-x64.exe` 和 7-Zip extra 包并按 SHA-256 校验，生成 payload、编译启动器、运行 `test.ps1`，并把 EXE 作为 Actions 产物上传。
 
 本地构建需要 Windows x64、完整版 7-Zip（读取 NSIS 安装包）和系统自带的 .NET Framework C# 编译器：
 
