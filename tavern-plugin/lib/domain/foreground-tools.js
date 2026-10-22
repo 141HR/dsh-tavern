@@ -11,12 +11,13 @@ export const FOREGROUND_TOOL_CATALOG = Object.freeze([
   { name: 'submit_story', label: '正文提交', description: '用 submit_story 提交正文；还需全局开启「正文走工具调用」。' }
 ])
 
-const TOOL_NAMES = new Set(FOREGROUND_TOOL_CATALOG.map(tool => tool.name))
+// Plugin tools are not in the static catalog, so these names are accepted as
+// tool-name strings; a removed plugin's stale name is harmless.
+const TOOL_NAME = /^[A-Za-z0-9_.:-]{1,120}$/
 
-/** Unknown names are ignored, so a removed tool never keeps a save in limbo. */
 export function normalizeDisabledForegroundTools(value) {
   if (!Array.isArray(value)) return []
-  return [...new Set(value.filter(name => typeof name === 'string' && TOOL_NAMES.has(name)))]
+  return [...new Set(value.filter(name => typeof name === 'string' && TOOL_NAME.test(name)))].slice(0, 200)
 }
 
 /** The mode's tools, in catalog order, for the per-game settings panel. */

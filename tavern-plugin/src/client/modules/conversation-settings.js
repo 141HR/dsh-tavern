@@ -129,15 +129,20 @@ function createConversationSettingsModule({
         const [busy, setBusy] = React.useState(false);
         const [error, setError] = React.useState("");
         const [notice, setNotice] = React.useState("");
-        React.useEffect(() => {
-            let active = true;
-            rpc("getConversationBackgroundConfig", { sessionId: props.sessionId }, props.sessionId).then(result => {
-                if (!active) return;
+        const mounted = React.useRef(true);
+        async function load() {
+            try {
+                const result = await rpc("getConversationBackgroundConfig", { sessionId: props.sessionId }, props.sessionId);
+                if (!mounted.current) return;
                 setCatalog(Array.isArray(result.foregroundTools) ? result.foregroundTools : []);
                 setDisabled(Array.isArray(result.disabledForegroundTools) ? result.disabledForegroundTools : []);
-                setLoaded(true);
-            }, err => { if (active) setError(String(err.message || err)); });
-            return () => { active = false; };
+                setLoaded(true); setError("");
+            } catch (err) { if (mounted.current) setError(String(err.message || err)); }
+        }
+        React.useEffect(() => {
+            mounted.current = true;
+            void load();
+            return () => { mounted.current = false; };
         }, [props.sessionId]);
         async function save(next) {
             if (busy || !loaded) return;
@@ -158,12 +163,14 @@ function createConversationSettingsModule({
         const allNames = catalog.map(tool => tool.name);
         return h("section", { className: "dsh-local-section", "aria-label": "前台工具" },
             h("h3", null, "前台工具"),
-            h("p", { className: "dsh-local-help" }, "逐项控制本轮正文能看到的工具；关闭后下一轮生效。后台结算和插件工具不在此列表。"),
+            h("p", { className: "dsh-local-help" }, "逐项控制本轮正文能看到的工具；关闭后下一轮生效。后台结算的工具不在此列表。"),
+            h("p", { className: "dsh-local-help" }, "插件/扩展工具来自宿主工具目录，本局生成一次后会按实际请求校正；列表里的「插件/扩展」就是这类工具。"),
             h("div", { style: { display: "flex", gap: "8px", margin: "4px 0 8px" } },
                 h("button", { type: "button", className: "dsh-tavern-btn", disabled: !loaded || busy || disabled.length === 0, onClick: () => void save([]) }, "全部开启"),
-                h("button", { type: "button", className: "dsh-tavern-btn", disabled: !loaded || busy || disabled.length === allNames.length, onClick: () => void save(allNames) }, "全部关闭")),
+                h("button", { type: "button", className: "dsh-tavern-btn", disabled: !loaded || busy || disabled.length === allNames.length, onClick: () => void save(allNames) }, "全部关闭"),
+                h("button", { type: "button", className: "dsh-tavern-btn", disabled: busy, onClick: () => void load() }, "刷新")),
             catalog.map(tool => h("label", { key: tool.name, className: "dsh-tavern-background-task" },
-                h("span", null, tool.label, h("span", { className: "dsh-tavern-settings-desc" }, tool.description)),
+                h("span", null, (tool.source === "plugin" ? "插件/扩展 · " : "") + tool.label, h("span", { className: "dsh-tavern-settings-desc" }, tool.description)),
                 h("input", { type: "checkbox", role: "switch", "aria-label": tool.label, checked: !disabled.includes(tool.name), disabled: !loaded || busy, onChange: event => toggle(tool.name, event.target.checked) }))),
             error ? h("p", { role: "alert" }, "保存失败：" + error) : h("span", { role: "status", className: "dsh-local-feedback" }, busy ? "保存中…" : (loaded ? notice : "正在读取…")));
     }

@@ -888,6 +888,14 @@ export async function apply(ctx) {
       return updateChat(chat.id, current => adoptConversationFeatures(adoptConversationBackground(current, tavernSettingsDocument), tavernSettingsDocument), { source: 'background-config.adopt' })
     }
   })
+  // Plugin/extra tools last seen in a play request, per game. The settings
+  // switches need the real model-facing tools; a game shows them after its
+  // first request.
+  const foregroundExtraTools = new Map()
+  function extraToolEntry(tool) {
+    return { name: tool.name, label: tool.name,
+      description: String(tool.description || '').replace(/\s+/g, ' ').trim().slice(0, 240) || '插件注册的前台工具。' }
+  }
   function chatForSession(sessionId) { return sessionChats.read(sessionId) }
   function sessionStateForSession(sessionId) {
     return requestPerformance.stage('readSessionState', () => sessionChats.readState(sessionId))
@@ -3082,6 +3090,20 @@ export async function apply(ctx) {
     readConfig: backgroundConfigForSession, readChat: chatForSession, updateChat,
     modelCatalog: tavernModelCatalog, modelReasoning: selection => readBackgroundModelReasoning(llm, selection),
     isPlayMode: mode => groupOfMode(mode) === 'play',
+    extraTools: async sessionId => {
+      const cached = foregroundExtraTools.get(String(sessionId))
+      if (cached) return cached
+      // Before this game's first request (or after a restart) fall back to the
+      // host registry: plugin tools that opted into play, plus any other
+      // non-Tavern tool currently registered.
+      try {
+        return (typeof ctx.tools?.schemas === 'function' ? ctx.tools.schemas() : [])
+          .filter(tool => tool && typeof tool.name === 'string' && !controlledToolNames.has(tool.name))
+          .filter(tool => { const modes = pluginApi.toolModesFor(tool.name); return !modes || modes.includes('play') })
+          .map(extraToolEntry)
+          .sort((left, right) => left.name.localeCompare(right.name))
+      } catch { return [] }
+    },
     // Unloaded sessions recall after their next reply.
     onStyleEnabled: (sessionId, chatId) => { if (agentRegistry.get(sessionId)?.session) void worldbookPrefilter.start(chatId) }
   })
@@ -3320,6 +3342,16 @@ export async function apply(ctx) {
       visibleTools: async function (sessionId) {
         const names = await turnOrchestrator.visibleTools(sessionId)
         return skillGatedTools(names, sessionStore.get(sessionId) || agentRegistry.get(sessionId)?.session)
+      },
+      // Cache the plugin/extra tools that reached a play request. The settings
+      // panel reads this map; Tavern's own tools come from the static catalog.
+      recordTools: function (sessionId, tools) {
+        const extra = tools
+          .filter(tool => tool && typeof tool.name === 'string' && !controlledToolNames.has(tool.name))
+          .map(extraToolEntry)
+          .sort((left, right) => left.name.localeCompare(right.name))
+        foregroundExtraTools.set(String(sessionId), extra)
+        if (foregroundExtraTools.size > 300) foregroundExtraTools.delete(foregroundExtraTools.keys().next().value)
       },
       cardSystemPrompt: function () { return runtimePrompt('card-system') },
       cardReferencePrompt: function () { return runtimePrompt('card-reference') },

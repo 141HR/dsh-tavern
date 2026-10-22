@@ -275,8 +275,9 @@ test('Anthropic：去掉本轮输入之前各轮回复的签名思考块，本�
   assert.equal(projectAnthropicPriorThinking(deepseek), deepseek)
 })
 
-test('提交提示词按最终工具列表选择：只有提交工具时用严格版', async () => {
+test('提交提示词按最终工具列表选择，插件工具关闭后仍留在目录里', async () => {
   let visibleNames = ['submit_story']
+  let recorded = null
   const run = strategies({ nativePlay: {
     async modeFor() { return 'story' },
     filterMessages(messages) { return messages },
@@ -285,6 +286,7 @@ test('提交提示词按最终工具列表选择：只有提交工具时用严�
     appendFrame(input) { return { messages: input.messages, receipt: {} } },
     recordFrame() {},
     async visibleTools() { return visibleNames },
+    recordTools(_sessionId, tools) { recorded = tools },
     modePrompt() { return 'story' },
     workspaceContext() { return '' },
     async ensureSessionPrefix() {},
@@ -299,7 +301,15 @@ test('提交提示词按最终工具列表选择：只有提交工具时用严�
 
   const normal = await assemble([{ name: 'submit_story' }, { name: 'plugin_tool' }])
   assert.deepEqual(normal.tools.map(tool => tool.name), ['submit_story', 'plugin_tool'])
+  assert.deepEqual(recorded.map(tool => tool.name), ['plugin_tool'])
   assert.match(normal.sections.find(section => section.name === 'tavern:story-tool-submission').text, /可以先使用已开放的历史查询/)
+
+  chat.disabledForegroundTools = ['plugin_tool']
+  const filtered = await assemble([{ name: 'submit_story' }, { name: 'plugin_tool' }])
+  assert.deepEqual(filtered.tools.map(tool => tool.name), ['submit_story'])
+  assert.deepEqual(recorded.map(tool => tool.name), ['plugin_tool'], '关闭的工具仍要出现在设置目录里')
+  assert.match(filtered.sections.find(section => section.name === 'tavern:story-tool-submission').text, /不要调用任何其他工具/)
+  chat.disabledForegroundTools = []
 
   visibleNames = []
   const none = await assemble([])

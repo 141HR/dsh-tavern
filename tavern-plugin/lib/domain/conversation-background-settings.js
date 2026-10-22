@@ -5,7 +5,7 @@ import { normalizeBackgroundTasks } from './tavern-settings.js'
 
 /** Validate model choices, patch only current configuration and trigger newly enabled work. */
 export function createConversationBackgroundSettings({ readConfig, readChat, updateChat, modelCatalog, modelReasoning,
-  isPlayMode, onStyleEnabled = () => {} }) {
+  isPlayMode, onStyleEnabled = () => {}, extraTools = async () => [] }) {
   function requirePlay(chat) {
     if (!chat || !isPlayMode(chat.mode)) throw new Error('请先打开游玩会话')
     return chat
@@ -15,9 +15,22 @@ export function createConversationBackgroundSettings({ readConfig, readChat, upd
       backgroundTasks: normalizeBackgroundTasks(chat.backgroundTasks), webSearchEnabled: chat.webSearchEnabled === true,
       disabledForegroundTools: normalizeDisabledForegroundTools(chat.disabledForegroundTools) }
   }
+  async function toolCatalog(chat, sessionId) {
+    const tools = foregroundToolCatalog(chat.mode)
+    const known = new Set(tools.map(tool => tool.name))
+    let extra
+    try { extra = await extraTools(sessionId) } catch { extra = [] }
+    for (const tool of Array.isArray(extra) ? extra : []) {
+      if (!tool || typeof tool.name !== 'string' || known.has(tool.name)) continue
+      known.add(tool.name)
+      tools.push({ name: tool.name, label: tool.label || tool.name,
+        description: tool.description || '插件注册的前台工具。', source: 'plugin' })
+    }
+    return tools
+  }
   async function read(sessionId) {
     const chat = requirePlay(await readConfig(String(sessionId || '')))
-    return { ...present(chat), foregroundTools: foregroundToolCatalog(chat.mode), mvuCard: chat.mvu?.enabled === true && chat.mvu.owner === 'official', modelCatalog: await modelCatalog() }
+    return { ...present(chat), foregroundTools: await toolCatalog(chat, String(sessionId || '')), mvuCard: chat.mvu?.enabled === true && chat.mvu.owner === 'official', modelCatalog: await modelCatalog() }
   }
   async function checkModel(value, label) {
     const selection = normalizeBackgroundModel(value)

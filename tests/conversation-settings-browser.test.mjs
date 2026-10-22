@@ -25,7 +25,8 @@ test('注册的本局设置保存玩家称呼、预设、后台模型与前台�
         disabledForegroundTools: disabledTools,
         foregroundTools: [
           { name: 'worldbook_search', label: '搜索世界书', description: '按关键词检索本局世界书。' },
-          { name: 'submit_story', label: '正文提交', description: '用 submit_story 提交正文。' }
+          { name: 'submit_story', label: '正文提交', description: '用 submit_story 提交正文。' },
+          { name: 'plugin_lookup', label: '插件查询', description: '插件注册的工具。', source: 'plugin' }
         ],
         modelCatalog: [{ provider: 'p', models: [{ id: 'm', name: '测试模型' }] }]
       }
@@ -54,10 +55,15 @@ test('注册的本局设置保存玩家称呼、预设、后台模型与前台�
   assert.deepEqual(disabledTools, ['worldbook_search'])
   await page.getByRole('button', { name: '全部关闭' }).click()
   await page.waitForFunction(() => document.querySelector('input[aria-label="正文提交"]')?.checked === false)
-  assert.deepEqual([...disabledTools].sort(), ['submit_story', 'worldbook_search'])
+  assert.deepEqual([...disabledTools].sort(), ['plugin_lookup', 'submit_story', 'worldbook_search'])
   await page.getByRole('button', { name: '全部开启' }).click()
   await page.waitForFunction(() => document.querySelector('input[aria-label="正文提交"]')?.checked === true)
   assert.deepEqual(disabledTools, [])
+  const plugin = page.getByLabel('插件查询', { exact: true })
+  await plugin.waitFor()
+  await plugin.click()
+  await page.waitForFunction(() => document.querySelector('input[aria-label="插件查询"]')?.checked === false)
+  assert.deepEqual(disabledTools, ['plugin_lookup'])
 
   fail = true
   await select.selectOption('')

@@ -3,7 +3,7 @@ import { projectPlayerContent } from './player-input-content.js'
 import { resolveRuntimePresetMacros } from './runtime-presets.js'
 import { projectRuntimePresetRequest } from './runtime-preset-lifecycle.js'
 import { STORY_SUBMIT_PROMPT, STORY_SUBMIT_PROMPT_STRICT, STORY_SUBMIT_TOOL_NAME } from './story-tool-submission.js'
-import { NO_FOREGROUND_TOOLS_PROMPT } from './foreground-tools.js'
+import { NO_FOREGROUND_TOOLS_PROMPT, normalizeDisabledForegroundTools } from './foreground-tools.js'
 import { projectHistoryAsToolCalls } from './history-tool-call.js'
 import { markRequestHandled, requestHandledBy } from './request-lineage.js'
 import { inputKind } from './session-turn-input.js'
@@ -421,6 +421,7 @@ export function createNativePlayOrchestrationStrategy(options) {
     const mode = await options.modeFor(input.sessionId)
     const visible = new Set(await options.visibleTools(input.sessionId))
     const playMode = mode === 'story' || mode === 'script'
+    const disabled = new Set(playMode ? normalizeDisabledForegroundTools(input.chat?.disabledForegroundTools) : [])
     // Play rules arrive in the foreground frame. Still replace the inherited
     // sections explicitly so removing play-mode cannot restore DSH's persona.
     const cardEdit = mode === 'card' && input.chat?.cardEditContext?.version === 1
@@ -454,6 +455,16 @@ export function createNativePlayOrchestrationStrategy(options) {
       const modes = options.pluginToolModes ? options.pluginToolModes(schema.name) : null
       return !modes || modes.includes(group)
     })
+    // Record the plugin/extra tools before applying the per-game switches: the
+    // settings panel must keep listing a tool the player has switched off.
+    if (playMode && typeof options.recordTools === 'function') {
+      try {
+        options.recordTools(input.sessionId, assembly.tools
+          .filter(schema => !options.controlledToolNames.has(schema.name))
+          .map(schema => ({ name: schema.name, description: String(schema.description || '') })))
+      } catch { /* the tool catalog must never fail the request */ }
+    }
+    if (playMode) assembly.tools = assembly.tools.filter(schema => options.controlledToolNames.has(schema.name) || !disabled.has(schema.name))
     // The submission contract follows the tools that actually survived the
     // per-game switches and the plugin scopes. The strict wording is only true
     // when submit_story is the single model-facing tool.
