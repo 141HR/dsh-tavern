@@ -9,6 +9,11 @@ import path from 'node:path'
 // when they are missing, `available()` is false and the caller falls back to the
 // terminal instructions.
 const PACKAGE = 'dsh-profile-tavern'
+// pnpm 11 skips versions younger than minimumReleaseAge (one day by default): an update
+// to a release published today would fail, and a bare install falls back to an older
+// release. The player asked for this exact Tavern version, so exempt only this package;
+// its dependencies keep the supply-chain delay.
+const RELEASE_AGE_EXCLUDE = '--config.minimumReleaseAgeExclude=' + PACKAGE
 const GIT_SPEC = /^(github:|gitlab:|bitbucket:|git\+|git:|git@|https?:\/\/.+\.git(#.*)?$)/i
 
 export function packageUpdateSpec(recorded) {
@@ -144,7 +149,7 @@ export function createPackageManagedUpdater(options) {
         const configured = target.kind === 'registry' ? await service.registries() : null
         let run
         for (const registry of target.kind === 'registry' ? registryPlan(configured) : [null]) {
-          run = await service.runPnpm(['add', spec, ...(registry === null ? [] : ['--registry=' + registry])])
+          run = await service.runPnpm(['add', spec, RELEASE_AGE_EXCLUDE, ...(registry === null ? [] : ['--registry=' + registry])])
           if (run.incompatible || (run.exitCode === 0 && run.timedOut !== true)) break
         }
         if (run.incompatible || run.exitCode !== 0 || run.timedOut === true) throw new Error(failureText(run))

@@ -74,8 +74,8 @@ test('进行更新：按检查到的确切版本安装，镜像缺版本时换�
   assert.equal((await updater.start()).phase, 'running')
   await settle(); await settle()
   assert.deepEqual(manager.calls, [
-    ['add', 'dsh-profile-tavern@3.3.0', '--registry=https://registry.npmmirror.com/'],
-    ['add', 'dsh-profile-tavern@3.3.0'],
+    ['add', 'dsh-profile-tavern@3.3.0', '--config.minimumReleaseAgeExclude=dsh-profile-tavern', '--registry=https://registry.npmmirror.com/'],
+    ['add', 'dsh-profile-tavern@3.3.0', '--config.minimumReleaseAgeExclude=dsh-profile-tavern'],
   ])
   assert.equal((await updater.status()).phase, 'restart-required')
 })
@@ -86,7 +86,7 @@ test('pnpm 全部失败时报告原因，不要求重启', async () => {
   const updater = createPackageManagedUpdater({ pluginManager: manager, currentVersion: async () => '3.2.0' })
   await updater.start()
   await settle(); await settle()
-  assert.deepEqual(manager.calls, [['add', 'github:flizzywine/dsh-tavern']])
+  assert.deepEqual(manager.calls, [['add', 'github:flizzywine/dsh-tavern', '--config.minimumReleaseAgeExclude=dsh-profile-tavern']])
   const status = await updater.status()
   assert.equal(status.phase, 'failed')
   assert.match(status.error, /ERR_PNPM_GIT_UNKNOWN/)
