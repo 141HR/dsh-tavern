@@ -9,7 +9,6 @@ import { settlementPerformanceChecks, settlementPerformanceInitialVariables } fr
 import {setupRealVariables,realVariableLookupChecks} from './real-variable-lookup.mjs'
 import { setupRealCharacterDesign, realCharacterDesignChecks } from './real-character-design.mjs'
 import { setupRealCardEdit, realCardEditChecks } from './real-card-edit.mjs'
-import { startSceneImageServer, sceneAddChecks } from './scene-add.mjs'
 import { regenAnomalyChecks, regenTemplateChecks } from './regen-anomalies.mjs'
 import { failedTurnCleanupChecks } from './failed-turn-cleanup.mjs'
 import { toolStepsChecks } from './tool-steps.mjs'
@@ -233,7 +232,6 @@ try {
           TAVERN_E2E_SETTLEMENT_DUMP: process.env.TAVERN_E2E_SETTLEMENT_DUMP || '',
           TAVERN_E2E_CAST: castScenario ? '1' : '',
           TAVERN_E2E_MEMORY_AUDIT: process.argv.includes('--card-memory') ? join(output, 'memory-requests.jsonl') : '',
-          TAVERN_E2E_SCENE_AUDIT: process.argv.includes('--scene-add') ? join(output, 'scene-requests.jsonl') : '',
           TAVERN_E2E_CONTEXT_AUDIT: process.argv.includes('--native-repair') || process.argv.includes('--failure-resilience') ? join(output, 'context-requests.jsonl') : '',
           TAVERN_E2E_LLM_MODULE: join(modules, '@deepseek-ai/dsh-llm/lib/index.js'),
           // Server card scripts are the default; ordinary scenarios keep exercising the page path.
@@ -490,9 +488,6 @@ try {
     await failedTurnCleanupChecks({ page, step, savedChat, output, report })
   } else if (process.argv.includes('--regen-anomalies')) {
     await regenAnomalyChecks({ page, step, savedChat, output, report, serverLog: () => log })
-  } else if (process.argv.includes('--scene-add')) {
-    const images = await startSceneImageServer()
-    try { await sceneAddChecks({ page, step, output, report, images, savedChat }) } finally { await images.close() }
   } else if (process.argv.includes('--real-gameplay')) {
     await realGameplayChecks({page,step,savedChat,output,report,restartServer,root})
   } else if (process.argv.includes('--real-card-edit')) {

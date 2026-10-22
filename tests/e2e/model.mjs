@@ -39,7 +39,6 @@ export function apply(ctx) {
         const after = input.messages.slice(latest + 1).flatMap(message => message.content || [])
         const called = name => after.some(block => block.type === 'tool-call' && block.name === name)
         const addition = request.includes('\\"addition\\"')
-        if (process.env.TAVERN_E2E_SCENE_AUDIT && !called('submit_scene_layout')) await appendFile(process.env.TAVERN_E2E_SCENE_AUDIT, JSON.stringify({ addition, request: addition ? /画柜台上的金币/.test(request) : false }) + '\n')
         const id = 'e2e-scene-' + latest
         const block = !called('submit_scene_layout') ? { type: 'tool-call', id: id + '-layout', name: 'submit_scene_layout', arguments: JSON.stringify({ description: addition ? '柜台上的金币' : '领取奖励', subjects: [], continuity: 'uncertain', moment: 'end', orientation: 'square', anchor: '',
           scene: { composition: addition ? { text: '柜台上的金币特写', tags: 'gold coins on a wooden counter, close-up' } : { text: '酒馆柜台前领取奖励', tags: 'tavern counter, receiving a reward' } } }) }
