@@ -39,7 +39,7 @@ import { createRegexLibrary } from './domain/regex-library.js'
 import { copyJsonTree } from './domain/copy-json-tree.js'
 import { createCandidateContextReader } from './domain/candidate-context-reader.js'
 import { createCandidateWorldbookPreparation } from './domain/candidate-worldbook-preparation.js'
-import { withPluginWorldbookEntries } from './domain/plugin-worldbook.js'
+import { createPlayWorldBook } from './domain/play-world-book.js'
 import { createTemplateWindowReader, templateStateFields } from './domain/template-window-reader.js'
 import { createSessionResourceAccess } from './domain/session-resource-access.js'
 import { createSaveUpgrade, detachSaveSessions, prepareSaveUpgrade, saveSessionIds, unreadySaveSessions } from './domain/save-upgrade.js'
@@ -83,7 +83,6 @@ import { createManualCharacterDesign } from './domain/manual-character-design.js
 import { prepareTemplateHistory, synchronizeTemplateHistory } from './domain/template-history.js'
 import { createServerTemplateSync } from './domain/server-template-sync.js'
 import { createServerTemplateRuntime } from './domain/server-template-runtime.js'
-import { historyScanDepth } from './domain/worldbook-activation.js'
 import { createWorldbookFilter, WORLD_BOOK_FILTER_TOOLS } from './domain/worldbook-filter.js'
 import { createWorldbookPrefilter } from './domain/worldbook-prefilter.js'
 import { createStyleReferenceRecall, STYLE_REFERENCE_SUBMIT_TOOL } from './domain/style-reference.js'
@@ -235,7 +234,7 @@ import { createWorldbookRecallLog, compactRecallDiagnostics } from './domain/wor
 import { foregroundWorldbookReads } from './domain/worldbook-read-handoff.js'
 import { createWorldbookSearch, sharedWorldbookSearch } from './domain/worldbook-search.js'
 import { createForegroundWorldbook } from './domain/foreground-worldbook.js'
-import { prepareTemplateWorldbook, mvuUpdateRulesFromWorldBook, prepareWorldBookRecall, projectWorldBookTemplates } from './domain/worldbook-recall.js'
+import { prepareTemplateWorldbook, prepareWorldBookRecall, projectWorldBookTemplates } from './domain/worldbook-recall.js'
 import {
   createBackgroundTaskCoordinator,
   isOpeningAwaitingSettlement
@@ -2659,28 +2658,7 @@ export async function apply(ctx) {
     return name
   }
   // ---------- 后台结算 ----------
-  async function mvuUpdateRules(chat, card) {
-    try {
-      const worldBook = await worldBooks.bound(chat.cardPath, card, chat)
-      return mvuUpdateRulesFromWorldBook(worldBook).map(function (rule) {
-        return projectAgentContent(rule, { charName: card && card.name, macroState: chat.macroState }).agentText
-      })
-    } catch (_error) {
-      return []
-    }
-  }
-  // An unreadable book has no known depth: callers then use the complete read.
-  async function worldBookScanDepth(chat) {
-    try { return historyScanDepth(await worldBooks.bound(chat.cardPath, await readChatCard(chat), chat)) }
-    catch { return Infinity }
-  }
-  // What recall, world book search and screening read: the bound book plus plugin entries (tavern.worldbookEntries).
-  async function playWorldBook(chat, card) {
-    const record = await worldBooks.bound(chat.cardPath, card, chat)
-    if (!chat?.sessionId) return record
-    const turn = Number([...(chat.messages || [])].reverse().find(message => message?.role === 'assistant')?.turn) || 0
-    return withPluginWorldbookEntries(record, await pluginApi.worldbookPoolEntries({ gameId: chat.sessionId, turn }))
-  }
+  const { playWorldBook, worldBookScanDepth, mvuUpdateRules } = createPlayWorldBook({ worldBooks, readChatCard, pluginApi })
   const boundedHistory = createBoundedHistory({ links: readSessionMap, readWindow: chatPersistence.readWindow })
   // A story request reads the header, every floor its world book scans (plus the
   // current input or latest body), the latest reply and the latest variable floor.
