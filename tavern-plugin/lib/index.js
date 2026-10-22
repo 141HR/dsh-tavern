@@ -2,7 +2,6 @@ import { createSessionViewProjection } from './domain/session-view-projection.js
 import { createConversationBackgroundSettings } from './domain/conversation-background-settings.js'
 import { createChatWrites } from './domain/chat-writes.js'
 import { upgradeReferences, upgradedAnchor } from './domain/session-upgrade-references.js'
-import { producerSource } from './domain/message-source.js'
 import { createGameSaveImporter } from './domain/game-save-import.js'
 import { createGameSaveSnapshot } from './domain/game-save-snapshot.js'
 import { createGameSaveResources } from './domain/game-save-resources.js'
@@ -48,7 +47,7 @@ import { createTaskStateReader, taskStateFields } from './domain/task-state-read
 import { installHostProjectionReplay } from './domain/host-projection-replay.js'
 import { createBoundedHistory, readRecentWindow, readRowsAt } from './domain/bounded-history.js'
 import { readSettlementInput } from './domain/settlement-input.js'
-import { applySettlement, settleUserText } from './domain/settlement-turn.js'
+import { applySettlement } from './domain/settlement-turn.js'
 import { createHelperHistoryAccess } from './domain/helper-history-access.js'
 import { isScopedMessages } from './domain/scoped-messages.js'
 import {registerVariableReadTool} from './domain/read-variables.js'
@@ -163,6 +162,7 @@ import { createModelRequestLog } from './domain/model-request-log.js'
 import { createDisplayRuntimeCoalescer } from './domain/display-runtime-coalescer.js'
 import { MVU_SUBMIT_UPDATE_TOOL, createMvuSettlementModule } from './domain/mvu-background-settlement.js'
 import { createMvuSettlementEngine } from './domain/mvu-settlement-engine.js'
+import { createPlainSettlementEngine } from './domain/plain-settlement-engine.js'
 import { createMvuSettlementReconciler } from './domain/mvu-settlement-reconciler.js'
 import {
   CHARACTER_DESIGN_READ_TOOL,
@@ -174,7 +174,7 @@ import {
 import { createLedgerEditor } from './domain/ledger-editor.js'
 import { LEDGER_SUBMIT_TOOL } from './domain/story-ledger.js'
 import { createManualLedger } from './domain/manual-ledger.js'
-import { POSTURE_SUBMIT_TOOL, POSTURE_SUBMIT_TOOL_NAME, lastSubmittedPosture, normalizePostureSubmission } from './domain/posture-submission.js'
+import { POSTURE_SUBMIT_TOOL } from './domain/posture-submission.js'
 import { createCastPresentation } from './domain/cast-presentation.js'
 import { createCastAssets } from './domain/cast-assets.js'
 import { createSpeech } from './domain/speech.js'
@@ -182,7 +182,7 @@ import { createAssetPacks } from './domain/asset-packs.js'
 import { createUploads } from './domain/uploads.js'
 import { createCardPlugins } from './domain/card-plugins.js'
 import { createCardFiles } from './domain/card-files.js'
-import { createPostureItem, createSettlementItems, plainSettlementPlan, runPipelineStages } from './domain/background-pipeline.js'
+import { createPostureItem, createSettlementItems, runPipelineStages } from './domain/background-pipeline.js'
 import { createTavernCompatibilityDiagnosticStore } from './domain/tavern-compatibility-diagnostics.js'
 import { createMvuDiagnosticStore, createMvuDiagnosticExport } from './domain/mvu-diagnostics.js'
 import { createPlayChatDebugReference, readPlayChatDebugTurn } from './domain/play-chat-debug.js'
@@ -209,7 +209,7 @@ import { createTavernStaticResourceCache } from './domain/tavern-static-resource
 import { SILLYTAVERN_CSS_COMPAT_URLS } from './domain/sillytavern-css-compatibility.js'
 import { createRoundHistory } from './domain/round-history.js'
 import { createResourceWorkspaceProjection } from './domain/resource-workspace-projection.js'
-import { projectAgentContent, projectAgentMessageText, projectRuntimeReply } from './domain/runtime-content-projection.js'
+import { projectAgentContent, projectRuntimeReply } from './domain/runtime-content-projection.js'
 import { plainReplyProse } from './domain/reply-prose.js'
 import { createScriptContinuity } from './domain/script-continuity.js'
 import { appendWritingSkillState } from './domain/skill-visibility.js'
@@ -2744,6 +2744,7 @@ export async function apply(ctx) {
     return latest
   }
   const mvuSettlementEngine = createMvuSettlementEngine({ mvuSettlement, mvuUpdateRules, backgroundModelSelection, postureItem, tavernScriptDispatch })
+  const plainSettlementEngine = createPlainSettlementEngine({ pluginApi, pluginSettlementProgress, settlementItems, backgroundModelSelection, postureItem, backgroundAgentRunner, agentRegistry, sessionStore })
   async function runSettlement(chatId, signal) {
     const retryStale = createSettlementProgressGuard({ backgroundTasks, onStopped: ({ operationId, error }) => {
       console.error('dsh-tavern: 结算连续三次未能提交且剧情状态未前进，已停止，可重新结算', chatId, operationId, str(error?.message || error || '提交已过期'))
@@ -2827,95 +2828,18 @@ export async function apply(ctx) {
   // A settlement job: plugin tasks before Tavern's settlement, the settlement, plugin tasks after it.
   // Running inside the job, they hold the next turn back (foreground handoff waits for the job).
   // The main settlement's engine (docs/design/background-task-pipeline.md): official MVU
-  // variables, nothing to do, a plugin's replacement, or Tavern's plain agent run.
+  // variables carry the posture in their own run; every other game settles the plain way.
   // `trace` carries the background session the run used, also when it throws.
   async function runSettlementEngine({ snapshot, taskRun, card, signal, trace }) {
-    // Seam to the plugin layer: a plugin may replace the posture settlement of a game
-    // without official MVU. Any failure falls back to Tavern's own settlement.
-    const settleByPlugin = async function () {
-      const latest = [...(snapshot.messages || [])].reverse().find(message => message?.role === 'assistant')
-      const replaced = await pluginApi.replaceSettlement({ gameId: snapshot.sessionId, turn: settlementTurn(snapshot), signal,
-        onStart: plugin => pluginSettlementProgress.begin(snapshot.sessionId, plugin),
-        text: latest ? projectAgentMessageText(latest, { charName: card && card.name, macroState: snapshot.macroState }) : '',
-        posture: str(snapshot.posture), tasks: { posture: backgroundTasksSettings.posture === true } })
-      if (!replaced) return false
-      result = replaced.posture ? { ...normalizePostureSubmission({ posture: replaced.posture }, { charName: card && card.name, macroState: snapshot.macroState }) } : {}
-      text = JSON.stringify({ plugin: replaced.owner, ...result })
-      return true
-    }
     const backgroundTasksSettings = mvuSettlementEngine.settings(snapshot)
     const mvuTarget = mvuSettlementEngine.target(snapshot)
-    let text = ''
-    let result = null
-    let mvuResult = null
     if (mvuSettlementEngine.runs(mvuTarget, backgroundTasksSettings)) {
       const settled = await mvuSettlementEngine.run({ snapshot, taskRun, card, signal, trace, backgroundTasksSettings, mvuTarget })
       if (settled.deferred) return settled
-      text = settled.text
-      mvuResult = settled.mvuResult
-      result = { posture: settled.posture }
-    } else if (!backgroundTasksSettings.posture && !await settlementItems.wanted({ gameId: snapshot.sessionId })) {
-      result = {}
-    } else if (await settleByPlugin()) {
-      // A plugin replaced this settlement; its validated result is committed like Tavern's own.
-    } else {
-      const selection = backgroundModelSelection(snapshot)
-      if (selection === null) throw new Error('没有可用的模型配置，请先在当前会话的模型选择器中选择模型')
-      let submittedPosture = null
-      let settlementToolTail = Promise.resolve()
-      const plan = plainSettlementPlan({ posture: backgroundTasksSettings.posture ? postureItem : null })
-      const run = await backgroundAgentRunner.run({
-        onPersistentSessionReady: id => taskRun.bindSession(id, { stateOnly: true }),
-        task: 'settlement',
-        turn: settlementTurn(snapshot),
-        backgroundTasks: backgroundTasksSettings,
-        persistent: true,
-        persistentSessionId: trace.sessionId,
-        rewindTo: taskRun.participantRequest.rewindTo,
-        selection,
-        messages: [{
-          id: 'settle-' + Date.now().toString(36),
-          role: 'user',
-          regexPlacement: 2,
-          content: [{ type: 'text', text: settleUserText(snapshot, backgroundTasksSettings.posture, taskRun.participantRequest.rewindTo == null ? lastSubmittedPosture(trace.sessionId && (agentRegistry.get(trace.sessionId)?.session || sessionStore.get(trace.sessionId))) : '') }],
-          source: producerSource('dsh-tavern')
-        }],
-        system: plan.system,
-        tools: plan.tools,
-        maxToolCalls: 12,
-        temperature: 0.2,
-        sessionId: snapshot.sessionId,
-        webSearchEnabled: snapshot.webSearchEnabled === true,
-        signal,
-        stopToolsWhen: function () { return submittedPosture !== null },
-        acceptWithoutText: function () { return submittedPosture !== null },
-        onToolCall(call) {
-          const pending = settlementToolTail.then(async function () {
-            if (!backgroundTasksSettings.posture || !call || call.name !== POSTURE_SUBMIT_TOOL_NAME) {
-              return JSON.stringify({ ok: false, retryable: true, error: '当前任务只允许调用人物设计工具和 posture_submit' })
-            }
-            try {
-              submittedPosture = normalizePostureSubmission(call.arguments, {
-                charName: card && card.name,
-                macroState: snapshot.macroState
-              })
-              return JSON.stringify({ ok: true })
-            } catch (error) {
-              return JSON.stringify({ ok: false, retryable: true, error: str(error && error.message || error) })
-            }
-          })
-          settlementToolTail = pending.catch(function () {})
-          return pending
-        }
-      })
-      await settlementToolTail
-      if (backgroundTasksSettings.posture && submittedPosture === null) throw new Error('后台 Agent 未调用 posture_submit 提交有效姿势')
-      result = { ...(submittedPosture || {}) }
-      text = str(run.text) || JSON.stringify(result)
-      trace.sessionId = str(run.traceSessionId)
-      trace.boundary = Number.isSafeInteger(run.traceBoundary) ? run.traceBoundary : null
+      return { text: settled.text, result: { posture: settled.posture }, mvuResult: settled.mvuResult, mvuTarget, backgroundTasksSettings }
     }
-    return { text, result, mvuResult, mvuTarget, backgroundTasksSettings }
+    const { text, result } = await plainSettlementEngine.run({ snapshot, taskRun, card, signal, trace, backgroundTasksSettings })
+    return { text, result, mvuResult: null, mvuTarget, backgroundTasksSettings }
   }
   async function runSettlementCycle(chatId, signal) {
     const state = await taskStateReader.read(chatId).catch(() => null)

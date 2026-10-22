@@ -1,6 +1,7 @@
 import { createSettlementProgressGuard } from '../tavern-plugin/lib/domain/settlement-progress-guard.js'
 import { readSettlementInput } from '../tavern-plugin/lib/domain/settlement-input.js'
 import { createMvuSettlementEngine } from '../tavern-plugin/lib/domain/mvu-settlement-engine.js'
+import { createPlainSettlementEngine } from '../tavern-plugin/lib/domain/plain-settlement-engine.js'
 import {applyJsonChanges} from '../tavern-plugin/lib/domain/json-mutation.js'
 import { createSettlementJobs } from '../tavern-plugin/lib/domain/settlement-jobs.js'
 import { createTurnSettledEvents } from '../tavern-plugin/lib/domain/turn-settled-events.js'
@@ -71,7 +72,6 @@ async function harness({ beginRunning = true, mvu = true } = {}) {
     projectAgentMessageText: message => message.text, mvuUpdateRules: async () => [],
     readTavernSettings: async () => ({ backgroundTasks: { posture: true, characterDesign: true } }),
     backgroundModelSelection: () => ({}), runtimePrompt: () => '',
-    settleUserText: () => '【本轮正文】\n门开了',
     applySettlement: () => ({ postureUpdated: false }), applyMvuSettlementEffect, createMvuSettlementReconciler,
     backgroundAgentRunner: { async run() { throw new Error('backgroundAgentRunner not configured') } },
     characterDesignDocuments: { async execute() { return JSON.stringify({ ok: true }) } },
@@ -89,6 +89,7 @@ async function harness({ beginRunning = true, mvu = true } = {}) {
   sandbox.mvuReceiptsOf = createSessionStateView({activity:chat=>tasks.activity(chat),evidence:()=>({})}).receipts
   // Read through the sandbox on every call, so the tests below can swap MVU services.
   sandbox.mvuSettlementEngine = createMvuSettlementEngine(sandbox)
+  sandbox.plainSettlementEngine = createPlainSettlementEngine(sandbox)
   vm.runInContext(section('  async function runSettlement(', '  const mvuSettlementReconciler'), sandbox)
   sandbox.settlementJobs = createSettlementJobs({run:(...args)=>sandbox.runSettlement(...args),onSettled:(...args)=>sandbox.onSettlementSettled(...args)})
   vm.runInContext(section('  async function retrySettlement(', '  async function pullBackgroundCycle('), sandbox)
@@ -487,7 +488,7 @@ test('管线护栏：普通卡开姿势时，结算请求的提示词、工具�
   }
   await h.sandbox.queueSettlement('chat')
   assert.deepEqual(requests, [{ task: 'settlement', persistent: true, system: '〈posture-settlement〉\n\nposture_submit 是本任务最后一步。', tools: ['posture_submit'],
-    messages: ['【本轮正文】\n门开了'], maxToolCalls: 12, temperature: 0.2, turn: 2, backgroundTasks: { posture: true, characterDesign: false, variables: true, ledger: false, styleReference: false } }])
+    messages: ['【上一轮结算姿势】\n（无）\n【最新一轮对话】\n玩家: 开门\n正文: 门开了'], maxToolCalls: 12, temperature: 0.2, turn: 2, backgroundTasks: { posture: true, characterDesign: false, variables: true, ledger: false, styleReference: false } }])
   assert.equal(h.get().settleStatus, 'done')
 })
 
@@ -499,7 +500,7 @@ test('管线护栏：只开台词标注时照样跑结算（不提交姿势）�
   cast.sandbox.backgroundAgentRunner.run = async input => { requests.push(settlementRequest(input)); assert.equal(input.acceptWithoutText(), false); return { text: '完成' } }
   await cast.sandbox.queueSettlement('chat')
   assert.deepEqual(requests, [{ task: 'settlement', persistent: true, system: '本轮不生成或提交姿势。完成启用的后台任务后简短回复完成。\n\n', tools: [],
-    messages: ['【本轮正文】\n门开了'], maxToolCalls: 12, temperature: 0.2, turn: 2, backgroundTasks: { posture: false, characterDesign: false, variables: true, ledger: false, styleReference: false } }])
+    messages: ['【最新一轮对话】\n玩家: 开门\n正文: 门开了'], maxToolCalls: 12, temperature: 0.2, turn: 2, backgroundTasks: { posture: false, characterDesign: false, variables: true, ledger: false, styleReference: false } }])
   assert.equal(cast.get().settleStatus, 'done')
 
   const off = await harness({ beginRunning: false, mvu: false })
