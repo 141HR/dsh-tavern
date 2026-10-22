@@ -101,7 +101,7 @@
 
 以上均为社区作者开发，更多插件见[讨论区的 Show and tell](https://github.com/flizzywine/dsh-tavern/discussions/categories/show-and-tell)。
 
-**安装酒馆插件**：设置 → DSH Tavern → 插件，粘贴插件的 GitHub 地址，点「安装」，刷新页面即可；有新版时显示「更新到 x.y.z」，更新后重启 DSH 生效；也可以随时「停用」或「启用」插件；连不上 GitHub 时，下载插件 ZIP 后在同一处上传。插件作者见[发布与一键安装](docs/plugin-publishing.md)。
+**安装酒馆插件**：设置 → DSH Tavern → 插件，粘贴插件的 GitHub 地址，点「安装」，刷新页面即可；插件页会自动检查更新，也可点「检查更新」重查，有新版时显示「更新到 x.y.z」，更新后重启 DSH 生效；也可以随时「停用」或「启用」插件；连不上 GitHub 时，下载插件 ZIP 后在同一处上传。插件作者见[发布与一键安装](docs/plugin-publishing.md)。
 
 ## 看看实际效果
 

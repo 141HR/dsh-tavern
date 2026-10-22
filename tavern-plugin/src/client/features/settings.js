@@ -373,14 +373,36 @@
             const [notice, setNotice] = React.useState("");
             const [error, setError] = React.useState("");
             const zipInput = React.useRef(null);
-            async function checkUpdates() {
+            function updateSummary(next) {
+                const items = Object.keys(next).map(function (folder) { return next[folder]; });
+                const available = items.filter(function (item) { return item.status === "available"; }).length;
+                const failed = items.filter(function (item) { return item.status === "error"; }).length;
+                if (!items.length) return { text: "没有从 GitHub 安装的插件，无需检查更新。", failed: false };
+                return {
+                    failed: failed > 0,
+                    text: failed
+                        ? "检查完成：" + (available ? available + " 个插件有新版，" : "") + failed + " 个插件检查失败。"
+                        : available ? "检查完成：有 " + available + " 个插件可以更新。" : "检查完成：没有发现新版本。"
+                };
+            }
+            async function checkUpdates(announce) {
                 setChecking(true);
+                if (announce) { setNotice(""); setError(""); }
                 try {
-                    const result = await rpc("checkUserPluginUpdates");
+                    // 点「检查更新」是明确的重查，跳过 5 分钟的 Release 缓存。
+                    const result = await rpc("checkUserPluginUpdates", announce ? { fresh: true } : undefined);
                     const next = {};
                     (result && result.plugins || []).forEach(function (item) { next[item.folder] = item; });
                     setUpdates(next);
-                } catch (_error) { setUpdates({}); }
+                    if (announce) {
+                        const summary = updateSummary(next);
+                        if (summary.failed) setError(summary.text);
+                        else setNotice(summary.text);
+                    }
+                } catch (err) {
+                    setUpdates({});
+                    if (announce) setError("检查更新失败：" + String(err && err.message || err));
+                }
                 finally { setChecking(false); }
             }
             async function refresh() {
@@ -463,6 +485,11 @@
                 h("p", { className: "dsh-tavern-settings-desc" }, "插件会运行在你的电脑上，只装信任的作者发布的插件。有 Release 时安装最新 Release，否则安装默认分支；连不上 GitHub 时，可以在仓库页面下载 ZIP 后上传。"),
                 notice ? h("p", { className: "dsh-tavern-user-plugins-notice", role: "status" }, notice) : null,
                 error ? h("p", { className: "dsh-tavern-settings-error", role: "alert" }, error) : null,
+                plugins.length ? h("div", { className: "dsh-tavern-user-plugins-head" },
+                    h("span", { className: "dsh-tavern-user-plugins-head-title" }, "已装的插件"),
+                    plugins.some(function (plugin) { return plugin.source.kind === "github"; })
+                        ? h("button", { type: "button", className: "dsh-tavern-btn", disabled: busy || checking, onClick: function () { void checkUpdates(true); } }, checking ? "检查中…" : "检查更新")
+                        : null) : null,
                 data && plugins.length === 0 ? h("p", { className: "dsh-tavern-settings-desc" }, "还没有装插件。") : null,
                 plugins.length ? h("ul", { className: "dsh-tavern-user-plugins-list" }, plugins.map(function (plugin) {
                     const canToggle = plugin.source.kind !== "card" || plugin.enabled === false;

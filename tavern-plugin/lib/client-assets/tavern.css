@@ -3228,6 +3228,9 @@ html[data-dsh-text-layout] :is(.dsh-tavern-assistant, .dsh-tavern-user-bubble, .
 .dsh-tavern-user-plugins-install input { flex: 1; min-width: 0; max-width: none; height: 36px; box-sizing: border-box; }
 .dsh-tavern-user-plugins-install .dsh-tavern-btn { flex: none; height: 36px; padding: 0 16px; }
 .dsh-tavern-user-plugins-notice { padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, #2f8a4c 9%, transparent); color: #2f7a44; font-size: 12px; }
+.dsh-tavern-user-plugins-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dsh-tavern-user-plugins-head-title { color: var(--dsw-alias-label-secondary); font-size: 12px; font-weight: 600; }
+.dsh-tavern-user-plugins-head .dsh-tavern-btn { flex: none; height: 30px; padding: 0 12px; }
 .dsh-tavern-user-plugins-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .dsh-tavern-user-plugin { display: flex; gap: 14px; align-items: center; padding: 12px 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-alias-bg-base, transparent); }
 .dsh-tavern-user-plugin-copy { display: grid; flex: 1; min-width: 0; gap: 4px; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-secondary); }
