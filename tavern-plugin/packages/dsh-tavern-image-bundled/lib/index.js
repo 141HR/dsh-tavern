@@ -3571,7 +3571,6 @@ let worldbookCache = null
               if (!workflows.some(wf => wf.id === config.defaultWorkflow && !wf.error && wf.enabled)) {
                 config.defaultWorkflow = workflows.find(wf => !wf.error && wf.enabled)?.id ?? ''
               }
-              await saveConfig(config)
             },
           })
           if (result.status !== 200) { sendJson(response, result.status, { ok: false, error: result.error }); return }

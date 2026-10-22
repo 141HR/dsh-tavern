@@ -1,9 +1,80 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { Readable } from 'node:stream'
+import { pathToFileURL, fileURLToPath } from 'node:url'
 import { deleteWorkflow } from '../tavern-plugin/packages/dsh-tavern-image-bundled/lib/workflow-delete.js'
+
+const bundledPackage = fileURLToPath(new URL('../tavern-plugin/packages/dsh-tavern-image-bundled', import.meta.url))
+
+async function pluginRuntime(root, tag) {
+  const pluginRoot = path.join(root, 'plugins', 'dsh-tavern-image')
+  const routes = new Map(), disposers = []
+  const ctx = {
+    logger: { info() {}, warn() {}, error() {} },
+    webServer: { register({ path: routePath, handler }) { routes.set(routePath, handler); return () => routes.delete(routePath) } },
+    inject(names, install) { if (names.every(name => this[name])) install(this) },
+    effect(install) { const dispose = install(); if (typeof dispose === 'function') disposers.push(dispose); return dispose },
+  }
+  const { apply } = await import(pathToFileURL(path.join(pluginRoot, 'lib', 'index.js')).href + `?runtime=${tag}`)
+  apply(ctx)
+  return {
+    close() { for (const dispose of disposers.splice(0).reverse()) dispose() },
+    request(route, body, method = 'POST') {
+      return new Promise((resolve, reject) => {
+        const req = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))])
+        Object.assign(req, { method, url: `/plugins/dsh-tavern-image/${route}`, headers: { host: 'localhost', 'content-type': 'application/json' } })
+        const response = {
+          headersSent: false,
+          writeHead(status) { this.status = status; this.headersSent = true },
+          end(value) { try { resolve({ status: this.status, body: JSON.parse(String(value)) }) } catch (error) { reject(error) } },
+        }
+        const handler = routes.get(req.url)
+        if (!handler) return reject(new Error(`route not registered: ${req.url}`))
+        handler(req, response)
+      })
+    },
+  }
+}
+
+async function realRouteFixture(t) {
+  const root = await mkdtemp(path.join(tmpdir(), 'dsh-image-workflow-route-'))
+  const pluginRoot = path.join(root, 'plugins', 'dsh-tavern-image')
+  await mkdir(path.dirname(pluginRoot), { recursive: true })
+  await cp(bundledPackage, pluginRoot, { recursive: true })
+  await mkdir(path.join(pluginRoot, 'workflows'), { recursive: true })
+  await writeFile(path.join(pluginRoot, 'worldbook.json'), JSON.stringify({ name: 'test', entries: [] }))
+  await writeFile(path.join(pluginRoot, 'definitions.json'), JSON.stringify({ characters: [], settings: [], props: [] }))
+  const workflow = name => writeFile(path.join(pluginRoot, 'workflows', name), JSON.stringify({
+    format: 'dsh-tavern-comfy-v1', outputNode: '2',
+    prompt: {
+      '1': { class_type: 'CLIPTextEncode', inputs: { text: '' } },
+      '2': { class_type: 'SaveImage', inputs: { images: ['1', 0] } },
+    },
+    bindings: { positive: [{ node: '1', input: 'text' }] },
+  }))
+  await workflow('remove-me.json')
+  await workflow('fallback.json')
+  await writeFile(path.join(pluginRoot, 'config.json'), JSON.stringify({
+    defaultWorkflow: 'remove-me',
+    workflows: [
+      { id: 'remove-me', label: 'Remove me', file: 'workflows/remove-me.json', enabled: true },
+      { id: 'fallback', label: 'Fallback', file: 'workflows/fallback.json', enabled: true },
+    ],
+  }))
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response('{}', { status: 200 })
+  const run = await pluginRuntime(root, 'first')
+  t.after(async () => {
+    run.close()
+    globalThis.fetch = originalFetch
+    assert.ok(path.resolve(root).startsWith(path.resolve(tmpdir())))
+    await rm(root, { recursive: true, force: true })
+  })
+  return { root, pluginRoot, run }
+}
 
 async function fixture(t) {
   const root = await mkdtemp(path.join(tmpdir(), 'dsh-image-workflow-delete-'))
@@ -91,4 +162,59 @@ test('删除非默认工作流不更改当前默认项；不存在的 id 不写�
   const missing = await deleteWorkflow({ ...f, id: 'unknown' })
   assert.equal(missing.status, 404)
   assert.equal(f.persisted.length, 1)
+})
+
+test('实际 POST /workflow 删除文件；reload 和全新 runtime state 都不会重新发现', async t => {
+  const f = await realRouteFixture(t)
+  const before = await f.run.request('state', undefined, 'GET')
+  assert.equal(before.status, 200)
+  assert.ok(before.body.workflows.some(item => item.id === 'remove-me'))
+
+  const removed = await f.run.request('workflow', { id: 'remove-me', remove: true })
+  assert.equal(removed.status, 200, removed.body.error)
+  assert.ok(!removed.body.state.workflows.some(item => item.id === 'remove-me'))
+  assert.equal(removed.body.state.workflows.find(item => item.id === 'fallback').current, true)
+  await assert.rejects(readFile(path.join(f.pluginRoot, 'workflows', 'remove-me.json')),
+    error => error.code === 'ENOENT')
+  const savedConfig = JSON.parse(await readFile(path.join(f.pluginRoot, 'config.json'), 'utf8'))
+  assert.deepEqual(savedConfig.workflows.map(item => item.id), ['fallback'])
+
+  const rescanned = await f.run.request('reload', {})
+  assert.equal(rescanned.status, 200, rescanned.body.error)
+  assert.ok(!rescanned.body.state.workflows.some(item => item.id === 'remove-me'))
+
+  f.run.close()
+  const restarted = await pluginRuntime(f.root, 'restart')
+  t.after(() => restarted.close())
+  const afterRestart = await restarted.request('state', undefined, 'GET')
+  assert.equal(afterRestart.status, 200)
+  assert.ok(!afterRestart.body.workflows.some(item => item.id === 'remove-me'))
+  assert.equal(afterRestart.body.workflows.find(item => item.id === 'fallback').current, true)
+})
+
+test('实际路由接受 workflows 内的 Windows 绝对反斜杠路径', async t => {
+  const f = await realRouteFixture(t)
+  const file = path.join(f.pluginRoot, 'workflows', 'remove-me.json')
+  const configPath = path.join(f.pluginRoot, 'config.json')
+  const config = JSON.parse(await readFile(configPath, 'utf8'))
+  config.workflows[0].file = file
+  config.workflows[0].id = 'absolute-old-config'
+  await writeFile(configPath, JSON.stringify(config))
+  const result = await f.run.request('workflow', { id: 'absolute-old-config', remove: true })
+  assert.equal(result.status, 200, result.body.error)
+  await assert.rejects(readFile(file), error => error.code === 'ENOENT')
+})
+
+test('共享同一 JSON 的条目一并移除，避免留下指向已删除文件的别名', async t => {
+  const f = await realRouteFixture(t)
+  const configPath = path.join(f.pluginRoot, 'config.json')
+  const config = JSON.parse(await readFile(configPath, 'utf8'))
+  config.workflows.push({ id: 'alias', label: 'Alias', file: 'workflows\\remove-me.json', enabled: true })
+  await writeFile(configPath, JSON.stringify(config))
+  const result = await f.run.request('workflow', { id: 'alias', remove: true })
+  assert.equal(result.status, 200, result.body.error)
+  assert.ok(!result.body.state.workflows.some(item => ['remove-me', 'alias'].includes(item.id)))
+  const persisted = JSON.parse(await readFile(configPath, 'utf8'))
+  assert.ok(!persisted.workflows.some(item => ['remove-me', 'alias'].includes(item.id)))
+  assert.ok(!result.body.state.workflows.some(item => item.error?.includes('文件不存在')))
 })
