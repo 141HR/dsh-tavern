@@ -24,8 +24,8 @@ function plugin(ui, name = 'pet-guide') {
   return instance
 }
 
-test('浏览器接口版本升到 6', () => {
-  assert.equal(load().service.apiVersion, 6)
+test('浏览器接口版本升到 7', () => {
+  assert.equal(load().service.apiVersion, 7)
 })
 
 test('watchReply：先给当前状态，随后每次变化回调一次，内容不变不回调，卸载后停止', () => {

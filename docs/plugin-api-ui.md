@@ -133,6 +133,48 @@ const stop = ctx.tavernUi.watchReply(gameId, (state) => {
 
 工具调用不会改动 `text`；想在工作台里判断「建好了」，用 `cardSaved`，不要匹配正文。
 
+## `watchWorkStatus(sessionId, listener)`、`getWorkStatus(sessionId)`（第 7 版）
+
+读这一局现在在做什么，给桌宠、陪玩这类要跟着状态换表情的插件用。`watchWorkStatus` 先用当前状态调用一次 `listener(status)`，之后每次变化再调用，返回取消函数；只在这一局于当前页面打开时有通知。`getWorkStatus` 同步读当前值，不订阅。
+
+```js
+const stop = ctx.tavernUi.watchWorkStatus(gameId, (status) => {
+  pet.face(status.state) // idle / thinking / working / waiting / success / error
+})
+```
+
+| 字段 | 含义 |
+|---|---|
+| `state` | `idle` 空闲；`thinking` 正在写正文；`working` 正在跑工具或后台结算；`waiting` 在等玩家回答（`ask_user_question`）；`success` 刚忙完；`error` 出错 |
+| `reason` | 细分来源：`idle` / `busy` / `streaming` / `tool` / `settlement` / `question` / `settled` / `load` |
+| `busy` | 这一局现在是否在跑 |
+| `turn` | 最新一轮的轮次；还没有正文时为 `0` |
+| `tool` | 正在执行的工具名，拿不到时 `null` |
+| `phase`、`role` | Tavern 的原始活动字段（`role` 如 `settlement`） |
+| `error` | `state === 'error'` 时的原因，否则空字符串 |
+| `updatedAt` | 这次状态的生成时刻 |
+
+- `success` 只在**看着这一局从忙变闲**时出现，持续 4 秒后回到 `idle`；第一次订阅一个早就写完的局不会补一次成功。
+- 换局、关掉这一局、插件卸载都会自动停掉订阅。
+- 只读，不改变游戏。
+
+## `acquireLease({ sessionId, scope, ttlMs?, reason? })`、`getLease(sessionId, scope)`、`watchLease(sessionId, scope, listener)`（第 7 版）
+
+「占用锁」：同一局同一个 `scope` 同时只给一个插件。给桌宠这类会抢气泡、动作、舞台的插件协调用，避免两个插件同时说话或同时换画面。
+
+```js
+const lease = ctx.tavernUi.acquireLease({ sessionId: gameId, scope: 'voice', ttlMs: 30000, reason: '引导提问' })
+try { /* 这段归我说话 */ } finally { lease.release() }
+```
+
+- `scope` 只能用小写字母、数字、点、下划线和连字符，以字母开头；建议用 `voice`、`bubble`、`stage`、`composer` 这类语义名。
+- `ttlMs` 默认 30 秒，范围 1 秒–10 分钟。过期是懒判的：`getLease` 和下一次 `acquireLease` 会清掉，`watchLease` 会收到 `expired`。
+- 返回 `{ leaseId, holder, expiresAt, renew(ttlMs?), release(), active() }`。`holder` 是插件名（`package.json` 的 `name`）。
+- 别人持有这个 `scope` 时 `acquireLease` 抛错，`error.code === 'TAVERN_PLUGIN_LEASED'`，另带 `holder` 与 `expiresAt`；同一个插件重拿是续期，`leaseId` 不变。
+- 续期时锁已经丢了，抛 `TAVERN_PLUGIN_LEASE_LOST`；`release()` 是幂等的。
+- `getLease(sessionId, scope)` 返回当前持有者快照或 `null`；`watchLease` 先给一次当前值（`cause === 'current'`），之后在 `acquired` / `renewed` / `released` / `expired` 时回调，返回取消函数。
+- 插件卸载时自动释放。Tavern 保证同一 `scope` 只有一个持有者；拿不到锁的插件应当自己让路（检查 `getLease` / `watchLease`），Tavern 不会替它改已经注册的界面。
+
 ## `registerReplyPresenter({ id, modes, present })`（第 6 版）
 
 让插件把会话里的**已完成**回复折叠成一行，例如卡片工作台里已经由桌宠念过的提问。Tavern 在画每条助手消息时同步调用 `present(message)`；返回 `null` 或不认识就保持原文。
