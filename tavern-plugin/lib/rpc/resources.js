@@ -190,7 +190,8 @@ export function createResourceHandlers(deps) {
       return { item: await guideLibrary.update(args) }
     },
     async deleteGuideLibrary(args) {
-      await guideLibrary.remove(args); return { ok: true } 
+      await guideLibrary.remove(args)
+      return { ok: true }
     },
     async listRegexLibrary(args) {
       return { items: await regexLibrary.list() }
@@ -199,7 +200,8 @@ export function createResourceHandlers(deps) {
       return { items: await regexLibrary.importFile(args?.text, args?.fileName) }
     },
     async deleteRegexLibrary(args) {
-      await regexLibrary.remove(args); return { ok: true } 
+      await regexLibrary.remove(args)
+      return { ok: true }
     },
     async listGuideLibrary(args) {
       return { items: await guideLibrary.list() }

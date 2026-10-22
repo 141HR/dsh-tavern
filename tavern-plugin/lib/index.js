@@ -259,6 +259,7 @@ import { createTemplateHandlers } from './rpc/template.js'
 import { createOpeningHandlers } from './rpc/opening.js'
 import { createResourceHandlers } from './rpc/resources.js'
 import { createMediaHandlers } from './rpc/media.js'
+import { createSettingsHandlers } from './rpc/settings.js'
 // dsh-tavern 宿主插件（profile 组合行）
 // RPC：同源 HTTP 路由 /api/dsh-tavern/<method>（客户端 fetch 调用）
 // DSH 生命周期负责回合状态；模型工具只处理按需读取和明确修改。
@@ -4021,21 +4022,23 @@ export async function apply(ctx) {
     backgroundAgentRunner, backgroundConfigForSession, bindScript, callModel, cardMemory, cardOrganization,
     cardPacksOf, cardPlugins, cardPreparation, cardTaskPrompts, castAssets, castCardOf, castEdit,
     castPresentation, castStage, castView, chatForSession, chatHeaderForSession, chatPersistence, commands,
-    compatibilityDiagnostics, ctx, dataRoot, deleteCard, deletePreset, deleteResource, deleteScript,
-    displayRuntimeCaptures, ensureNativeCardWorkspace, ensureNativeOpening, exportSettingsBundle,
-    exportTavernLogs, fileResources, fullTemplateRuntime, getCardOpenings, groupOfMode, guideLibrary,
-    helperGenerationPreset, helperGenerationTasks, helperHistoryAccess, hostCompatibility, importCard,
-    importCardArchiveFile, importPluginCardFile, importPreset, importScript, importSettingsBundle,
-    importSource, listCards, listTavernResources, mobileCardImport, modelRequestLog, mvuDiagnostics,
-    openingPreparation, pagesInFront, pluginApi, pluginGalleryItems, pluginMediaForTurn, pluginMediaTurns,
-    preparedSaveSessions, presetLibrary, previewPreset, projectOpeningWindow, readCardExtensions,
+    compatibilityDiagnostics, conversationBackgroundSettings, ctx, dataRoot, deleteCard, deletePreset,
+    deleteResource, deleteScript, displayRuntimeCaptures, ensureNativeCardWorkspace, ensureNativeOpening,
+    exportSettingsBundle, exportTavernLogs, fileResources, fullTemplateRuntime, getCardOpenings, groupOfMode,
+    guideLibrary, helperGenerationPreset, helperGenerationTasks, helperHistoryAccess, hostCompatibility,
+    importCard, importCardArchiveFile, importPluginCardFile, importPreset, importScript,
+    importSettingsBundle, importSource, listCards, listTavernResources, llm, mobileCardImport,
+    modelRequestLog, mvuDiagnostics, openingPreparation, pagesInFront, playCardSnapshots, pluginApi,
+    pluginGalleryItems, pluginMediaForTurn, pluginMediaTurns, preparedSaveSessions, presentSystemPrompts,
+    presentUserPreferenceProfile, presetLibrary, previewPreset, projectOpeningWindow, readCardExtensions,
     readCardWorkspace, readChat, readChatCard, readOpeningWindow, readScript, readSessionMap,
     readTavernSettings, regexLibrary, removePluginGalleryItems, removePluginMediaVersion, renameResource,
     requestPerformance, runtimePresets, runtimePrompt, saveUpgrade, sceneIllustrations, scriptContinuity,
     scriptNavigation, sessionActivity, sessionPatch, sessionStateForSession, sessionStore, sessionViews,
     setCardPlugins, skillImportFiles, sleep, speakLine, speech, speechReply, startChat, str,
-    tavernScriptHostAdapter, tavernSkills, updateCard, updateChat, updateTavernSettings, uploads, worldBooks,
-    worldbookRecallLog, get invalidateTavernSkills() { return invalidateTavernSkills },
+    tavernModelCatalog, tavernScriptHostAdapter, tavernSkills, updateCard, updateChat, updateTavernSettings,
+    uploads, userPreferenceProfile, worldBooks, worldbookRecallLog,
+    get invalidateTavernSkills() { return invalidateTavernSkills },
     get serverScripts() { return serverScripts } }
   const rpcHandlers = Object.assign(Object.create(null),
     createMaintenanceHandlers(rpcDeps),
@@ -4043,65 +4046,14 @@ export async function apply(ctx) {
     createTemplateHandlers(rpcDeps),
     createOpeningHandlers(rpcDeps),
     createResourceHandlers(rpcDeps),
-    createMediaHandlers(rpcDeps))
+    createMediaHandlers(rpcDeps),
+    createSettingsHandlers(rpcDeps))
 
   async function dispatchMethod(method, args, serverTemplate = false) {
     if (method.startsWith('gameplay.')) return await gameplayApi.call(method.slice(9), args || {})
     const handler = rpcHandlers[method]
     if (handler) return await handler(args, method, serverTemplate)
     switch (method) {
-      case 'getUserPreferenceProfile': {
-        const chat = args?.sessionId && args.globalDefaults !== true ? await chatHeaderForSession(args.sessionId, ['userProfileEnabled','userProfileContextSnapshot','userProfileId','userProfileRevision']) : null
-        return {
-          userProfile: presentUserPreferenceProfile(await userPreferenceProfile.read()),
-          currentConversation: chat && groupOfMode(chat.mode) === 'play' ? {
-            enabled: chat.userProfileEnabled === true,
-            content: chat.userProfileEnabled === true ? str(chat.userProfileContextSnapshot) : '',
-            profileId: chat.userProfileId || 'default',
-            revision: Math.max(0, Number(chat.userProfileRevision) || 0)
-          } : null
-        }
-      }
-      case 'manageUserPreferenceProfile': return { userProfile: presentUserPreferenceProfile(await userPreferenceProfile.manage(args)) }
-      case 'updateUserPreferenceProfile': return { userProfile: presentUserPreferenceProfile(await userPreferenceProfile.updateConfirmed(args)) }
-      case 'setConversationUserProfileEnabled': {
-        const sessionId = str(args?.sessionId)
-        const chat = await chatForSession(sessionId)
-        if (!chat || groupOfMode(chat.mode) !== 'play') throw new Error('请先打开游玩会话')
-        if (typeof args.enabled !== 'boolean') throw new Error('画像开关必须为布尔值')
-        if ((await sessionActivity(sessionId))?.busy || agentRegistry.get(sessionId)?.phase?.kind === 'running') throw new Error('请等待当前生成和后台任务完成后再切换画像')
-        const patch = await playCardSnapshots.preferenceReplacement(chat, args.enabled, args.profileId)
-        const saved = Object.keys(patch).length ? await updateChat(chat.id, current => {
-          if (current._storageRevision !== chat._storageRevision || Number(current.cardContextRevision || 0) !== Number(chat.cardContextRevision || 0) || current.cardContextSnapshot !== chat.cardContextSnapshot || current.userProfileEnabled !== chat.userProfileEnabled) throw new Error('当前游戏配置已变化，请刷新后重试')
-          return Object.assign(current, patch)
-        }, { source: 'user-profile.toggle-conversation' }) : chat
-        return { userProfile: presentUserPreferenceProfile(await userPreferenceProfile.read()), currentConversation: {
-          content: saved.userProfileEnabled === true ? str(saved.userProfileContextSnapshot) : '',
-          enabled: saved.userProfileEnabled === true, profileId: saved.userProfileId || 'default', revision: Math.max(0, Number(saved.userProfileRevision) || 0)
-        } }
-      }
-      case 'setUserPreferenceProfileDefaultEnabled': return { userProfile: presentUserPreferenceProfile(await userPreferenceProfile.setDefaultEnabled(args && args.enabled === true, args?.profileId)) }
-      case 'getConversationBackgroundModel':
-      case 'getConversationBackgroundConfig': return conversationBackgroundSettings.read(args?.sessionId)
-      case 'setConversationBackgroundModel':
-      case 'setConversationBackgroundConfig': return conversationBackgroundSettings.save(args)
-      case 'getBackgroundModelReasoning': return { reasoning: await readBackgroundModelReasoning(llm, args) }
-      case 'getDisplayPreferences': { const settings = await readTavernSettings(); return { hideContextAndReasoning: settings.hideContextAndReasoning, headerItems: settings.headerItems } }
-      case 'getCandidatePreferences': return { candidateDismissMode: (await readTavernSettings()).candidateDismissMode }
-      case 'getTavernSettings': return { settings: await readTavernSettings(), modelCatalog: await tavernModelCatalog() }
-      case 'updateTavernSettings': return { settings: await updateTavernSettings(args && args.patch) }
-      case 'getSystemPrompts': return { systemPrompts: presentSystemPrompts(await readTavernSettings()) }
-      case 'updateSystemPrompt': {
-        const name = str(args && args.name)
-        if (!SYSTEM_PROMPT_NAMES.includes(name)) throw new Error('未知系统提示词: ' + name)
-        return { systemPrompts: presentSystemPrompts(await updateTavernSettings({ systemPrompt: { name, text: args && args.text } })) }
-      }
-      case 'resetSystemPrompts': return { systemPrompts: presentSystemPrompts(await updateTavernSettings({ resetSystemPrompts: SYSTEM_PROMPT_NAMES })) }
-      case 'manageSystemPromptSet': {
-        const action = str(args && args.action)
-        if (!['create', 'duplicate', 'select', 'rename', 'delete'].includes(action)) throw new Error('未知的系统提示词方案操作')
-        return { systemPrompts: presentSystemPrompts(await updateTavernSettings({ promptSet: { action, id: args.id, name: args.name } })) }
-      }
       case 'listSessions': {
         const settings = await readTavernSettings()
         return { sessions: (await listTavernSessions()).filter(chat => chat.requestMode !== 'sillytavern'), capabilities: { trustedCardMode: settings.trustedCardMode } }

@@ -4,11 +4,11 @@ import vm from 'node:vm'
 import test from 'node:test'
 import { JSDOM } from 'jsdom'
 
+import { createSettingsHandlers } from '../tavern-plugin/lib/rpc/settings.js'
 import { DEFAULT_HEADER_ITEMS, applyTavernSettingsPatch, presentTavernSettings } from '../tavern-plugin/lib/domain/tavern-settings.js'
 
 const client = await readFile(new URL('../tavern-plugin/lib/client.js', import.meta.url), 'utf8')
 const css = await readFile(new URL('../tavern-plugin/lib/client-assets/tavern.css', import.meta.url), 'utf8')
-const server = await readFile(new URL('../tavern-plugin/lib/index.js', import.meta.url), 'utf8')
 
 test('顶栏默认值与改动前一致：酒馆状态、导出，图标加文字', () => {
   assert.deepEqual({ display: DEFAULT_HEADER_ITEMS.display, items: [...DEFAULT_HEADER_ITEMS.items] }, { display: 'icon-text', items: ['dsh-tavern:status', 'header:export'] })
@@ -49,10 +49,8 @@ test('传 null 恢复默认顶栏', () => {
 })
 
 test('getDisplayPreferences 一并返回顶栏设置', async () => {
-  const line = server.split('\n').find(source => source.includes("case 'getDisplayPreferences':"))
-  const body = line.slice(line.indexOf('{') + 1, line.lastIndexOf('}'))
-  const run = new Function('readTavernSettings', 'return async () => {' + body + '}')
-  const preferences = await run(async () => ({ hideContextAndReasoning: false, headerItems: { display: 'icon', items: ['header:export'] } }))()
+  const handlers = createSettingsHandlers({ readTavernSettings: async () => ({ hideContextAndReasoning: false, headerItems: { display: 'icon', items: ['header:export'] } }) })
+  const preferences = await handlers.getDisplayPreferences({})
   assert.deepEqual(preferences, { hideContextAndReasoning: false, headerItems: { display: 'icon', items: ['header:export'] } })
 })
 
