@@ -70,10 +70,10 @@ function gitTarFiles(archive) {
   assert.fail('Missing TAR end marker')
 }
 
+// Read names from the archive bytes on every platform: system tar's listing depends on the
+// locale (macOS bsdtar without a UTF-8 LANG prints 世界书 as \344\270\226…).
 async function listTarFiles(file) {
-  return process.platform === 'win32'
-    ? gitTarFiles(await readFile(file))
-    : execFileSync('tar', ['-tf', file], { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024 }).split(/\r?\n/)
+  return gitTarFiles(await readFile(file))
 }
 
 test('Git TAR 清单保留 Unicode、PAX 长路径和 USTAR prefix，并拒绝损坏或截断', () => {
@@ -190,13 +190,13 @@ for (const format of ['tar', 'zip']) {
     // ZIP readers may stop before consuming all stdin bytes; use a seekable file
     // to avoid EPIPE or a blocked synchronous pipe on macOS.
     // Windows bsdtar uses the legacy system locale to decode ZIP names; .NET reads UTF-8 names directly.
-    const listing = format === 'tar' && process.platform === 'win32'
+    const listing = format === 'tar'
       ? (await listTarFiles(file)).join('\n')
       : format === 'zip' && process.platform === 'win32'
       ? execFileSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '$ErrorActionPreference = \'Stop\'; [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); Add-Type -AssemblyName System.IO.Compression.FileSystem; $zip = [System.IO.Compression.ZipFile]::OpenRead($env:DSH_TEST_ZIP_PATH); try { foreach ($entry in $zip.Entries) { [Console]::Out.WriteLine($entry.FullName) } } finally { $zip.Dispose() }'], { encoding: 'utf8', env: { ...process.env, DSH_TEST_ZIP_PATH: file } })
       : format === 'zip' && process.platform === 'linux'
         ? execFileSync('unzip', ['-Z1', file], { encoding: 'utf8' })
-        : execFileSync('tar', ['-tf', file], { encoding: 'utf8' })
+        : execFileSync('tar', ['-tf', file], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'en_US.UTF-8' } })
     const files = listing.split(/\r?\n/)
     for (const file of required) assert.ok(files.includes(file), `运行包遗漏：${file}`)
     assert.ok(files.includes('LICENSE'), '保留许可文件')
