@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "ba761db41495db38d16b3ee4b2179ef58c825705",
-  "releaseSequence": 821,
+  "revision": "5bd89708354beeb6c2936071474c33c69184ec08",
+  "releaseSequence": 822,
   "version": "3.1.0",
   "files": [
     {
@@ -4411,7 +4411,7 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/BUNDLED-VERSION.json",
-      "sha256": "5196725d54113312690c47ff8a48309a5e51326fbaff1048653f2329caac950c",
+      "sha256": "66669a47c61ba2c5863460c1ad7771bf83df96c117109a5927b68b54210c918e",
       "size": 259
     },
     {
@@ -4496,8 +4496,8 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/index.js",
-      "sha256": "5c92a454a7a9aa5d85e8d7fd263cad6e90470c5e4fef27c7aaecf9b5c8ba6145",
-      "size": 321764
+      "sha256": "50589a69dedcc9553cf395fbb3588cb6e692d36cc79cc9755826ad6aabf72503",
+      "size": 321584
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/media-actions.js",
@@ -4516,8 +4516,8 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/planner.js",
-      "sha256": "a80719f42c19d38acc68e530190396f5da933f926edd859730b8d2e4a9d1df0c",
-      "size": 34953
+      "sha256": "001b3ff434de07d6ffa5d6cb45cd9ea027f61333a6712dc5371f2892a42d0758",
+      "size": 36211
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/plugin-compatibility.js",
@@ -4701,8 +4701,8 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/workflow-delete.js",
-      "sha256": "aa55dcea9c0201ef21d3d2010c69eac1700606409c0e60b93a38773029fa99f6",
-      "size": 2924
+      "sha256": "90a816e5badfaf4198f92871fb2f82179c91f673f13d9d1a3bd94f31e851f567",
+      "size": 3774
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/lib/workflow-graph.js",
@@ -4716,7 +4716,7 @@
     },
     {
       "path": "tavern-plugin/packages/dsh-tavern-image-bundled/package.json",
-      "sha256": "0d6e0ad35d0eaaac082c02dc4e4c87bb9060c4f35d8ba933b4cd0eaeaccb9157",
+      "sha256": "ad59529d2c1cae46558fea8dfa54de6636a48c3dc4cbe0df8c076e2fbec7b052",
       "size": 1609
     },
     {
