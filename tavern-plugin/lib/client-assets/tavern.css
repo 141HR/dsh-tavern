@@ -3249,3 +3249,14 @@ html[data-dsh-text-layout] :is(.dsh-tavern-assistant, .dsh-tavern-user-bubble, .
 .dsh-tavern-user-plugins-folder span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
 .dsh-tavern-user-plugins-folder .dsh-tavern-btn { flex: none; height: 30px; padding: 0 12px; }
 @media (max-width: 640px) { .dsh-tavern-user-plugins-install, .dsh-tavern-user-plugin { flex-wrap: wrap; } .dsh-tavern-user-plugins-install input { flex-basis: 100%; } }
+
+/* Card workbench guides: a plugin's folded question, and its block above the input box. */
+.dsh-tavern-assistant-fold { appearance: none; display: flex; gap: 8px; align-items: center; max-width: 100%; margin: 0; padding: 6px 12px; border: 1px dashed var(--dsw-alias-border-l2); border-radius: 999px; background: var(--dsw-alias-bg-layer-1, rgba(127, 127, 127, .06)); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 13px; line-height: 20px; text-align: left; cursor: pointer; }
+.dsh-tavern-assistant-fold:hover { border-color: var(--dsh-tavern-accent-border); color: var(--dsw-alias-label-primary); }
+.dsh-tavern-assistant-fold b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--dsw-alias-label-primary); }
+.dsh-tavern-assistant-fold-paw { flex: none; }
+.dsh-tavern-assistant-fold-hint { flex: none; color: var(--dsw-alias-label-tertiary); }
+.dsh-tavern-assistant-fold-back { appearance: none; align-self: flex-start; margin: 0; padding: 2px 8px; border: 1px dashed var(--dsw-alias-border-l2); border-radius: 999px; background: transparent; color: var(--dsw-alias-label-tertiary); font: inherit; font-size: 12px; line-height: 18px; cursor: pointer; }
+.dsh-tavern-assistant-fold-back:hover { border-color: var(--dsh-tavern-accent-border); color: var(--dsh-tavern-accent); }
+.dsh-tavern-composer-slot { display: flex; flex-direction: column; min-width: 0; max-height: 40vh; overflow-y: auto; overscroll-behavior: contain; }
+.dsh-tavern-plugin-slot-error { padding: 8px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; color: var(--dsw-alias-label-secondary); font-size: 12px; }

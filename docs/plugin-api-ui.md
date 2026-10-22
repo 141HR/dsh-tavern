@@ -107,6 +107,65 @@ new Audio(ctx.tavernUi.assetUrl('sfx/hit.mp3')).play()
 
 `getTurnState` 返回 Promise，结果与宿主侧 `tavern.getTurnState` 相同。`watchTurnState` 先用当前状态调用一次 `listener(state)`，之后每次状态变化（开始或写完正文、结算开始或结束、回退等）再调用；返回取消函数，插件卸载时自动取消。只在这一局在当前页面打开时有通知。
 
+## `watchReply(sessionId, listener)`（第 6 版）
+
+读正在写的这条回复，**卡片工作台也能用**（其他 `getTurnState` 一类接口在工作台不可用）。先用当前状态调用一次 `listener(state)`，之后每次变化（逐字生成、写完、工具开始或结束、卡片落盘）再调用；返回取消函数，插件卸载时自动取消。只在这一局在当前页面打开时有通知。
+
+```js
+const stop = ctx.tavernUi.watchReply(gameId, (state) => {
+  bubble.text = state.text
+  bubble.streaming = state.streaming
+  if (state.cardSaved) showBuiltCard(state.cardSaved)
+})
+```
+
+| 字段 | 含义 |
+|---|---|
+| `mode` | `'card'` 是卡片工作台，`'story'` / `'script'` 是游玩 |
+| `turn` | 这一轮的轮次（工作台里同样是 DSH 的轮次） |
+| `text` | 最新一条助手回复的纯文本；生成中是当前已写出的部分 |
+| `streaming` | 正在逐字写（已经拿到部分文字） |
+| `busy` | 这一轮还在跑（生成正文或执行工具），此时 `text` 可能还是上一轮 |
+| `tool` | 正在执行的工具名（如 `tavern_update_card`），拿不到时 `null` |
+| `cardSave` | 工作台最近一次落盘：`{ turn, path, createsCard, changed }`，没有时 `null` |
+| `cardSaved` | 这一轮刚创建的新卡路径（`createsCard`），否则 `null` |
+| `changed` | 这一轮改过或创建了这张卡（含工具直接保存），否则 `false` |
+
+工具调用不会改动 `text`；想在工作台里判断「建好了」，用 `cardSaved`，不要匹配正文。
+
+## `registerReplyPresenter({ id, modes, present })`（第 6 版）
+
+让插件把会话里的**已完成**回复折叠成一行，例如卡片工作台里已经由桌宠念过的提问。Tavern 在画每条助手消息时同步调用 `present(message)`；返回 `null` 或不认识就保持原文。
+
+```js
+ctx.tavernUi.registerReplyPresenter({
+  id: 'question', modes: ['card'],
+  present: ({ text }) => parseQuestion(text) ? { fold: { summary: '第 2 题：核心定位是什么？' } } : null,
+})
+```
+
+- `message = { sessionId, turn, text, changed, streaming }`，`streaming` 恒为 `false`（生成中不调用）。
+- 返回 `{ fold: { summary } }` 时，这条消息显示成 `🐾 摘要 · 展开`；`summary` 压成一行、最多 60 字，点击就地展开原文，再点「收起」回到一行。
+- `modes` 目前只有 `'card'` 有效；同一会话注册多个时，按注册顺序取第一个返回非 `null` 的。
+- `present` 必须同步且快；抛错会记到插件错误里，连续 3 次后这一会话不再调用它。插件卸载后恢复原文。
+- 只修改显示，存档里的正文不变。
+
+## `registerComposerSlot({ id, modes, render })`（第 6 版）
+
+在输入框正上方加一块插件自己的界面（与对话栏同宽），给卡片工作台的引导员这类需要常驻的角色用。
+
+```js
+ctx.tavernUi.registerComposerSlot({
+  id: 'guide', modes: ['card'],
+  render: ({ sessionId, busy }) => h(GuideDock, { sessionId, busy }),
+})
+```
+
+- `render` 返回 React 元素，收到 `{ sessionId, busy }`（`busy` 是这一轮是否在跑）。
+- 同一会话只显示一个停靠区（先注册者），`modes` 不符合的会话不显示；插件卸载后移除。
+- 高度由内容决定，最高 40vh，超出内部滚动；Tavern 会把输入区上移，不会盖住最新一条消息。
+- 出错时只显示一行错误；卡内插件按它那张卡的局生效。
+
 ## `setInput({ gameId, text })`、`submitInput({ gameId, text })`（第 2 版）
 
 `setInput` 把文字填进这一局的输入框，不发送，玩家可以改了再发。`submitInput` 直接作为玩家输入发送并生成正文，返回 Promise（提交后完成，不等正文写完；要等结果用 `watchTurnState`）。正在生成时会排在当前这轮之后。这一局没有在当前页面打开时报错。

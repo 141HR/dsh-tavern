@@ -821,6 +821,8 @@ window.__ModuleLoader__.load({
 
 // @include features/plugin-extensions.js
 
+// @include features/reply-observer.js
+
 // @include features/speech.js
 
 // @include features/music.js
@@ -1030,6 +1032,7 @@ window.__ModuleLoader__.load({
 			registerTavernStartPage(ctx, slots);
 			playControlsFeature.register({ ctx: ctx, slots: slots });
 			assistantRendererFeature.register({ ctx: ctx, slots: slots });
+			tavernReplyObserverFeature.register({ ctx: ctx, slots: slots });
 			ctx.effect(function () {
 				return slots.inject("conversation.input.right", function () { return slots.register({
 					name: "conversation.input.right",

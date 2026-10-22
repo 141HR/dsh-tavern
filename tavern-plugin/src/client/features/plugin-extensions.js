@@ -15,6 +15,15 @@
 			const statusSections = [];
 			const turnViews = [];
 			const illustrators = [];
+			const replyPresenters = [];
+			const composerSlots = [];
+			// Latest reply per session, fed by the observer in the composer dock (reply-observer.js):
+			// the card workbench has no transcript in Tavern's session view, so DSH's own Chat
+			// snapshot (running step blocks + finalized nodes) is the source for every mode.
+			const replyStates = new Map();
+			const replySubscribers = new Map();
+			const replyPresenterFailures = new Map();
+			const replyPresenterDisabled = new Set();
 			const listeners = new Set();
 			// Tavern's own context, for the sidebar a plugin panel opens in (set at apply).
 			let host = null;
@@ -40,6 +49,39 @@
 				if (input.when !== undefined && typeof input.when !== "function") throw new TypeError(kind + " 的 when 必须是函数");
 				return { id: String(input.id || input.label), label: input.label.trim(), when: input.when, run: input.run };
 			}
+			// Mode lists on the two card-workbench APIs; only "card" exists today, but a plugin
+			// may also ask for a play mode without Tavern changing.
+			function modesOf(value, label) {
+				const modes = value === undefined ? ["card"] : value;
+				if (!Array.isArray(modes) || modes.length === 0 || modes.length > 8) throw new TypeError(label + " 的 modes 需要 1–8 个模式名");
+				if (!modes.every(function (mode) { return typeof mode === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(mode); })) throw new TypeError(label + " 的 modes 只能用小写字母、数字和连字符");
+				return Array.from(new Set(modes));
+			}
+			// The public ReplyState; cardSaved/changed come from the view's cardSave so a direct
+			// tool save (no staged fields) still reads as "this turn changed the card".
+			function replyStateOf(sessionId, value) {
+				const input = value !== null && typeof value === "object" ? value : {};
+				const turn = Math.max(0, Number(input.turn) || 0);
+				const save = input.cardSave !== null && typeof input.cardSave === "object" ? {
+					turn: Math.max(0, Number(input.cardSave.turn) || 0),
+					path: String(input.cardSave.path || ""),
+					createsCard: input.cardSave.createsCard === true,
+					changed: input.cardSave.changed === true
+				} : null;
+				const savedHere = save !== null && save.path !== "" && turn > 0 && save.turn === turn;
+				return {
+					sessionId: String(sessionId || ""),
+					mode: typeof input.mode === "string" ? input.mode : "",
+					turn: turn,
+					text: typeof input.text === "string" ? input.text : "",
+					streaming: input.streaming === true,
+					busy: input.busy === true,
+					tool: typeof input.tool === "string" && input.tool !== "" ? input.tool : null,
+					cardSave: save,
+					cardSaved: savedHere && save.createsCard ? save.path : null,
+					changed: savedHere && (save.changed || save.createsCard)
+				};
+			}
 			// The input box of a game open in this page, for setInput / submitInput.
 			function composerFor(input, label) {
 				if (!input || typeof input.gameId !== "string" || !input.gameId) throw new TypeError(label + " 需要 gameId");
@@ -49,9 +91,61 @@
 				if (!scope || !conversation) throw new Error("这一局没有在当前页面打开，无法使用输入框");
 				return { input: conversation.input.for(scope), text: input.text };
 			}
+			function replySnapshot(sessionId) {
+				const record = replyStates.get(String(sessionId || ""));
+				return record ? record.state : replyStateOf(sessionId, null);
+			}
+			// Called by the observer while a reply streams; identical states are dropped so a
+			// Vue side repaint cannot feed itself back through the API.
+			function publishReply(value) {
+				const sessionId = String(value && value.sessionId || "");
+				if (sessionId === "") return;
+				const state = replyStateOf(sessionId, value);
+				const text = JSON.stringify(state);
+				const previous = replyStates.get(sessionId);
+				if (previous && previous.text === text) return;
+				replyStates.set(sessionId, { state: state, text: text });
+				const entries = replySubscribers.get(sessionId);
+				if (!entries) return;
+				for (const entry of Array.from(entries)) {
+					if (!tavernPluginAllowed(entry.owner, sessionId)) continue;
+					entry.listener(state);
+				}
+			}
+			function presentReply(input) {
+				const sessionId = String(input && input.sessionId || "");
+				const mode = String(input && input.mode || "");
+				if (sessionId === "" || mode === "") return null;
+				const message = {
+					sessionId: sessionId,
+					turn: Math.max(0, Number(input.turn) || 0),
+					text: String(input.text || ""),
+					changed: input.changed === true,
+					streaming: input.streaming === true
+				};
+				for (const presenter of replyPresenters) {
+					if (presenter.modes.indexOf(mode) < 0) continue;
+					if (!tavernPluginAllowed(presenter.owner, sessionId)) continue;
+					const failureKey = presenter.owner + ":" + sessionId;
+					if (replyPresenterDisabled.has(failureKey)) continue;
+					let result;
+					try { result = presenter.present(message); }
+					catch (error) {
+						const count = (replyPresenterFailures.get(failureKey) || 0) + 1;
+						replyPresenterFailures.set(failureKey, count);
+						if (count >= 3) replyPresenterDisabled.add(failureKey);
+						try { tavernErrorHub.report("插件 " + presenter.owner, error); } catch (_) {}
+						continue;
+					}
+					const summary = result && result.fold && typeof result.fold.summary === "string" ? result.fold.summary.replace(/\s+/g, " ").trim() : "";
+					if (summary === "") continue;
+					return { owner: presenter.owner, key: presenter.key, fold: { summary: summary.slice(0, 60) } };
+				}
+				return null;
+			}
 			const service = {
 				ctx: undefined,
-				apiVersion: 5,
+				apiVersion: 6,
 				registerMediaRenderer(kind, render) {
 					if (typeof kind !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}\/[a-z0-9][a-z0-9._-]{0,63}$/.test(kind)) throw new TypeError("只能为插件自定义的 <插件名>/<类型> 注册显示方式");
 					if (typeof render !== "function") throw new TypeError("registerMediaRenderer 需要 render 函数");
@@ -182,6 +276,67 @@
 						const stopView = liveTavernView.subscribe(gameId, refresh, [["latestAssistantTurn"], ["activity"], ["settlementTurn"], ["settleStatus"]]);
 						return function () { disposed = true; stopView(); if (typeof stopSessions === "function") stopSessions(); };
 					}, "tavernUi.watchTurnState()");
+				},
+				// The latest assistant reply of the game open here (apiVersion 6), card workbench
+				// included: the text (streamed while it is written), the running tool, and the
+				// card this turn saved. Calls listener with the state now, then after each change.
+				watchReply(sessionId, listener) {
+					if (typeof sessionId !== "string" || !sessionId) throw new TypeError("watchReply 需要 sessionId");
+					if (typeof listener !== "function") throw new TypeError("watchReply 需要 listener 函数");
+					const owner = ownerOf(this);
+					return owned(this, function () {
+						let disposed = false;
+						const entry = {
+							owner: owner,
+							listener: function (state) {
+								if (disposed) return;
+								try { listener(state); } catch (error) { try { tavernErrorHub.report("插件 " + owner, error); } catch (_) {} }
+							}
+						};
+						let entries = replySubscribers.get(sessionId);
+						if (!entries) { entries = new Set(); replySubscribers.set(sessionId, entries); }
+						entries.add(entry);
+						if (tavernPluginAllowed(owner, sessionId)) entry.listener(replySnapshot(sessionId));
+						return function () {
+							disposed = true;
+							const current = replySubscribers.get(sessionId);
+							if (!current) return;
+							current.delete(entry);
+							if (!current.size) replySubscribers.delete(sessionId);
+						};
+					}, "tavernUi.watchReply()");
+				},
+				// Fold a finished reply in the main area into one line (apiVersion 6). present() runs
+				// while the message is drawn, must be synchronous, and returns null to keep the
+				// original message. The first registered presenter that answers wins; a presenter
+				// that throws three times is skipped for that session.
+				registerReplyPresenter(input) {
+					if (!input || typeof input.id !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(input.id)) throw new TypeError("registerReplyPresenter 的 id 只能用小写字母、数字、点、下划线和连字符");
+					if (typeof input.present !== "function") throw new TypeError("registerReplyPresenter 需要 present 函数");
+					const owner = ownerOf(this);
+					const entry = { key: owner + ":" + input.id, owner: owner, modes: modesOf(input.modes, "registerReplyPresenter"), present: input.present };
+					return owned(this, function () {
+						if (replyPresenters.some(function (presenter) { return presenter.key === entry.key; })) throw new Error("回复呈现器 " + input.id + " 已注册");
+						const dispose = addTo(replyPresenters, entry);
+						return function () {
+							dispose();
+							for (const key of Array.from(replyPresenterFailures.keys())) if (key.indexOf(entry.owner + ":") === 0) replyPresenterFailures.delete(key);
+							for (const key of Array.from(replyPresenterDisabled)) if (key.indexOf(entry.owner + ":") === 0) replyPresenterDisabled.delete(key);
+						};
+					}, "tavernUi.registerReplyPresenter()");
+				},
+				// A block of the plugin's own above the input box (apiVersion 6), for card-workbench
+				// guides: the pet, its bubble and its option buttons live here. Only one slot per
+				// session; render returns React.
+				registerComposerSlot(input) {
+					if (!input || typeof input.id !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(input.id)) throw new TypeError("registerComposerSlot 的 id 只能用小写字母、数字、点、下划线和连字符");
+					if (typeof input.render !== "function") throw new TypeError("registerComposerSlot 需要 render 函数");
+					const owner = ownerOf(this);
+					const entry = { key: owner + ":" + input.id, owner: owner, modes: modesOf(input.modes, "registerComposerSlot"), render: input.render };
+					return owned(this, function () {
+						if (composerSlots.some(function (slot) { return slot.key === entry.key; })) throw new Error("输入框停靠区 " + input.id + " 已注册");
+						return addTo(composerSlots, entry);
+					}, "tavernUi.registerComposerSlot()");
 				},
 				// What the stage shows (apiVersion 2): the latest turns with their dialogue annotations, and the card's characters.
 				getStage(gameId, options) {
@@ -411,7 +566,15 @@
 				turnViews: function () { return turnViews.slice(); },
 				// The latest registered illustrator handling `kind`; without a kind, the latest one that can draw.
 				illustrator: function (kind) { for (let index = illustrators.length - 1; index >= 0; index -= 1) if (kind === undefined ? illustrators[index].draw : illustrators[index].kinds.indexOf(kind) >= 0) return illustrators[index]; return null; },
-				startGroups: function () { return startGroups.map(function (group) { return { title: group.title, tabs: group.tabs.slice() }; }); }
+				startGroups: function () { return startGroups.map(function (group) { return { title: group.title, tabs: group.tabs.slice() }; }); },
+				// Reply observation (fed by the composer-dock observer) and the two workbench
+				// registries. Tavern's renderer uses presentReply/composerSlotFor directly.
+				publishReply: publishReply,
+				replySnapshot: replySnapshot,
+				presentReply: presentReply,
+				replyPresenters: function () { return replyPresenters.slice(); },
+				composerSlotFor: function (mode) { for (const slot of composerSlots) if (slot.modes.indexOf(mode) >= 0) return slot; return null; },
+				composerSlots: function () { return composerSlots.slice(); }
 			};
 		}
 		const tavernUiExtensions = createTavernUiExtensions();
