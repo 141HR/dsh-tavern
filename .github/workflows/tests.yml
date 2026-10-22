@@ -1,0 +1,46 @@
+name: Tests
+
+# 酒馆功能与插件版（npm 包）检查。安装脚本渠道已冻结，它的安装 / 内嵌模块测试
+# 不再在 CI 里跑，随渠道下线一并删除。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push supersedes the checks of an older one on the same branch.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cross-platform:
+    strategy:
+      fail-fast: false
+      # Oldest supported Node (22.19) plus the newer one desktop hosts bundle (24).
+      matrix:
+        include:
+          - { os: ubuntu-latest, node: 22.19.0 }
+          - { os: macos-latest, node: 22.19.0 }
+          - { os: windows-latest, node: 24.18.1 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.9.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check npm package contents
+        run: |
+          node bin/build-tavern-client.mjs --check
+          node bin/build-plugin-package.mjs --check
+      - name: Check plugin package and in-app update
+        run: node --test tests/application-updater.test.mjs tests/application-update-api.test.mjs tests/update-status-client.test.mjs tests/package-managed-update.test.mjs tests/host-punycode-request.test.mjs tests/plugin-package.test.mjs tests/plugin-package-guard.test.mjs tests/plugin-dependencies.test.mjs
+      - name: Check delegated scene images
+        run: node --test tests/bundled-scene-image-plugin.test.mjs tests/bundled-image-unknown-character.test.mjs tests/bundled-image-revise.test.mjs tests/bundled-image-novelai-chat.test.mjs tests/bundled-image-novelai-characters.test.mjs tests/bundled-image-workflow-delete.test.mjs tests/user-plugins.test.mjs tests/scene-illustration.test.mjs tests/scene-image-gallery.test.mjs tests/scene-image-frontend.test.mjs
+      - name: Check server template process
+        run: node --test tests/server-template-runtime.test.mjs
