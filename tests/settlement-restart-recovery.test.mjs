@@ -1,5 +1,6 @@
 import { createSettlementProgressGuard } from '../tavern-plugin/lib/domain/settlement-progress-guard.js'
 import { readSettlementInput } from '../tavern-plugin/lib/domain/settlement-input.js'
+import { pendingMvuTarget } from '../tavern-plugin/lib/domain/settlement-turn.js'
 import {applyJsonChanges} from '../tavern-plugin/lib/domain/json-mutation.js'
 import { createSettlementJobs } from '../tavern-plugin/lib/domain/settlement-jobs.js'
 import { createSessionStateView, projectChatSessionState, pendingMvuSettlementState } from '../tavern-plugin/lib/domain/chat-session-state.js'
@@ -85,7 +86,7 @@ async function harness({ beginRunning = true, mvu = true } = {}) {
   sandbox.plainSettlementPlan = plainSettlementPlan
   sandbox.runPipelineStages = runPipelineStages
   sandbox.mvuReceiptsOf = createSessionStateView({activity:chat=>tasks.activity(chat),evidence:()=>({})}).receipts
-  vm.runInContext(section('  function pendingMvuTarget(', '  async function mvuUpdateRules('), sandbox)
+  sandbox.pendingMvuTarget = pendingMvuTarget
   vm.runInContext(section('  async function runSettlement(', '  const mvuSettlementReconciler'), sandbox)
   sandbox.settlementJobs = createSettlementJobs({run:(...args)=>sandbox.runSettlement(...args),onSettled:(...args)=>sandbox.onSettlementSettled(...args)})
   vm.runInContext(section('  async function retrySettlement(', '  async function pullBackgroundCycle('), sandbox)

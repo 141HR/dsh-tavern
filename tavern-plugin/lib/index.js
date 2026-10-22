@@ -48,6 +48,7 @@ import { createTaskStateReader, taskStateFields } from './domain/task-state-read
 import { installHostProjectionReplay } from './domain/host-projection-replay.js'
 import { createBoundedHistory, readRecentWindow, readRowsAt } from './domain/bounded-history.js'
 import { readSettlementInput } from './domain/settlement-input.js'
+import { applySettlement, pendingMvuTarget, settleUserText } from './domain/settlement-turn.js'
 import { createHelperHistoryAccess } from './domain/helper-history-access.js'
 import { isScopedMessages } from './domain/scoped-messages.js'
 import {registerVariableReadTool} from './domain/read-variables.js'
@@ -2658,52 +2659,6 @@ export async function apply(ctx) {
     return name
   }
   // ---------- 后台结算 ----------
-  // `knownPosture`: the posture the background history already shows; the block is
-  // repeated only when that differs (new session, compaction, rewind).
-  function settleUserText(chat, includePosture = true, knownPosture = '') {
-    const msgs = (chat.messages || []).filter(function (message) {
-      return message && (message.role === 'user' || message.role === 'assistant')
-    }).slice(-2)
-    const repeatPosture = includePosture && !(str(chat.posture).trim() !== '' && str(chat.posture).trim() === knownPosture)
-    const lines = [
-      ...(repeatPosture ? ['【上一轮结算姿势】',
-      str(chat.posture) !== '' ? projectAgentContent(chat.posture, { charName: chat.cardName, macroState: chat.macroState }).agentText : '（无）'] : []),
-      '【最新一轮对话】'
-    ]
-    for (let i = 0; i < msgs.length; i++) {
-      const m = msgs[i]
-      if (m === null || typeof m !== 'object') continue
-      const text = projectAgentMessageText(m, { charName: chat.cardName, macroState: chat.macroState })
-      if (text.trim() === '') continue
-      lines.push((m.role === 'assistant' ? '正文' : '玩家') + ': ' + text)
-    }
-    return lines.join('\n')
-  }
-  function applySettlement(chat, result) {
-    let postureUpdated = false
-    const posture = str(result.posture).trim()
-    if (posture !== '') {
-      chat.posture = posture
-      postureUpdated = true
-    }
-    return { postureUpdated: postureUpdated }
-  }
-  function pendingMvuTarget(chat) {
-    const messages = Array.isArray(chat && chat.messages) ? chat.messages : []
-    for (let messageId = messages.length - 1; messageId >= 0; messageId--) {
-      const message = messages[messageId]
-      if (!message || message.role !== 'assistant' || !message.mvu || message.mvu.pending !== true) continue
-      const swipeId = Math.max(0, Number(message.swipeId) || 0)
-      const variables = message.mvuBaseline?.swipeId === swipeId ? message.mvuBaseline.variables : (Array.isArray(message.variables) ? message.variables[swipeId] : undefined)
-      return {
-        messageId,
-        swipeId,
-        message,
-        variables: variables && typeof variables === 'object' ? structuredClone(variables) : {}
-      }
-    }
-    return null
-  }
   async function mvuUpdateRules(chat, card) {
     try {
       const worldBook = await worldBooks.bound(chat.cardPath, card, chat)
