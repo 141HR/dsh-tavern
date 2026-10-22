@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "7b6b26ef2e1c32c7def84fee7875425c918a308e",
-  "releaseSequence": 828,
+  "revision": "70534d4de5e4d58754f6c3b48380f270d3472774",
+  "releaseSequence": 829,
   "version": "3.2.0",
   "files": [
     {
@@ -621,8 +621,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "460b869df502cbbaab450d87fa95e19084a224ac59d6dcb7b6439813e7720e75",
-      "size": 2022566
+      "sha256": "f8e3e3d58b02e3a6ba2ccf7fa1537165a313a798c67f69a98a1b88ee6607294b",
+      "size": 2022597
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -2241,8 +2241,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/tavern-settings.js",
-      "sha256": "11f956a11707df25a6439abe36096736da0841e5853ef1fd2ed22910bb230673",
-      "size": 17555
+      "sha256": "65620eaa825d91e1717eca300a9bfe36a218e8b5d38b181b3b170a41881a74a1",
+      "size": 17780
     },
     {
       "path": "tavern-plugin/lib/domain/tavern-skill-provider.js",
@@ -5031,8 +5031,8 @@
     },
     {
       "path": "tavern-plugin/prompts/card-system.md",
-      "sha256": "8b38bf489d9698e4d62b452a8f82f8bced2cf4f1e08fafd7dda607a4ad22a19a",
-      "size": 1898
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
     },
     {
       "path": "tavern-plugin/prompts/card-task-debug-play.md",
@@ -5271,8 +5271,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/system-prompts.js",
-      "sha256": "2da5f8ff51cd2d7321cf4e28dd1b5197e26ec31ad5339353b00b599eb2bca328",
-      "size": 10612
+      "sha256": "3431d982509406658240fbdc743f400a4da45d2efbbd554d2bc5eb81bff8e905",
+      "size": 10643
     },
     {
       "path": "tavern-plugin/src/client/features/text-layout.js",
