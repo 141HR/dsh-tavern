@@ -3,7 +3,7 @@
 // （这一轮还没有参考，不带「上一次选的是」），记录书名、作者、原文、耗时与搜索次数。
 //   node bin/exp-style-reference-web.mjs --card <人物卡名> --out 输出目录 样本1.jsonl [样本2.jsonl …]
 // 联网组运行期间临时改写系统提示词「文风联想选段」，结束（含出错）后恢复原值。对局保留不删。
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
