@@ -3203,7 +3203,7 @@ function versionsOf(jobId) {
         const activeCharacter = filteredCharacters.find(character => character.id === peopleActiveId) || filteredCharacters[0] || null
         const activeIndex = activeCharacter ? characters.findIndex(character => character.id === activeCharacter.id) : -1
         const batchFields = [
-          ['feature', '角色特征'], ['face', '五官外貌'], ['faceBack', '五官外貌背面'],
+          ['feature', '性格气质'], ['face', '五官外貌'], ['faceBack', '五官外貌背面'],
           ['bodySFW', '上半身SFW'], ['bodySFWBack', '上半身SFW背面'], ['lowerSFW', '下半身SFW'], ['lowerSFWBack', '下半身SFW背面'],
           ['bodyNSFW', '上半身NSFW'], ['bodyNSFWBack', '上半身NSFW背面'], ['lowerNSFW', '下半身NSFW'], ['lowerNSFWBack', '下半身NSFW背面'],
           ['negative', '负面'], ['match', '英文触发名'], ['group', '分组'], ['continuity', '状态与变化'], ['note', '备注'], ['enabled', '启用状态'], ['cards', '绑定卡片'],
@@ -3856,7 +3856,7 @@ function versionsOf(jobId) {
               )),
             ) : null,
             h('div', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '10px' } }, '外貌（正面与背面互斥：背面不放眼睛/胸部；SFW 块不放裸露词，否则衣服画不出来）'),
-            grouped([["feature","角色特征","气质属性，只写与绘图有关的（innocent / seductive / cold / gentle）",2,false],["face","五官外貌","【正面】发型、发色、瞳色、脸型、肤色、年龄段 —— 不写表情",3,false],["faceBack","五官外貌背面","【背面】发型背面、后脑勺、脖子后面、耳背 —— 不能写眼睛鼻子嘴巴",2,true]]),
+            grouped([["feature","性格气质","性格与气质（proud / gentle / tsundere），只给规划挑表情动作，不写进画图提示词",2,false],["face","五官外貌","【正面】发型、发色、瞳色、脸型、肤色、年龄段 —— 不写表情",3,false],["faceBack","五官外貌背面","【背面】发型背面、后脑勺、脖子后面、耳背 —— 不能写眼睛鼻子嘴巴",2,true]]),
             h('details', { style: { marginTop: '4px' } }, h('summary', { style: { cursor: 'pointer', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, '穿衣身体块（上半身 / 下半身，正背面）'),
               grouped([["bodySFW","上半身SFW","穿衣可见的上半身正面：体型、胸部轮廓、肩宽 —— 禁裸露词",2,false],["bodySFWBack","上半身SFW背面","穿衣可见的背面：肩膀轮廓、腰部线条 —— 不写胸部",2,true],["lowerSFW","下半身SFW","穿衣可见的下半身正面：腿型 —— 禁裸露词",2,true],["lowerSFWBack","下半身SFW背面","臀部轮廓、腿部背面",2,true]]),
             ),
@@ -5890,7 +5890,7 @@ function versionsOf(jobId) {
             const runMessageDraw = createMessageDrawRunner(async context => {
               const r = await drawTurn(context)
               if (typeof showToast === 'function') {
-                if (r && r.ok && r.attached) showToast('已提交 ' + r.attached + ' 张，出图后自动插进正文')
+                if (r && r.ok && r.attached) showToast('已提交 ' + r.attached + ' 张，出图后自动插进正文' + (Array.isArray(r.warnings) && r.warnings.length ? '。' + r.warnings.join('；') : ''))
                 else if (r && r.ok && r.skipped) showToast('本轮自动跳过配图：' + (r.reason || '没有合适的画面'))
                 else showToast('生图没出画面：' + ((r && r.error) || '规划没有产出画面'))
               }
@@ -5910,7 +5910,7 @@ function versionsOf(jobId) {
               // 进度和结果由 Tavern 显示在这一轮正文里：成功不提示，跳过返回说明，失败抛错。
               const draw = createMessageDrawRunner(async context => {
                 const r = await drawTurn({ gameId: context.gameId, turn: context.turn })
-                if (r && r.ok && r.attached) return {}
+                if (r && r.ok && r.attached) return Array.isArray(r.warnings) && r.warnings.length ? { notice: '已配图。' + r.warnings.join('；') } : {}
                 if (r && r.ok && r.skipped) return { notice: '本轮跳过配图：' + (r.reason || '没有合适的画面') }
                 throw new Error('没出画面：' + ((r && r.error) || '规划没有产出画面'))
               })

@@ -34,7 +34,7 @@ import { IMAGE_PROVIDERS, generateImage, testImageChannel } from './image-provid
 import { normalizeChannels, publicChannels, activeChannel, channelConfigPatch } from './image-channels.js'
 import { createCredentialStore } from './credential-store.js'
 import { patchWorkflowGraph, workflowRevision } from './workflow-graph.js'
-import { parseImagePlan, parsePlannerDecision, characterRoster, buildPlannerSystem, runPlanner, normalizePrompts, parseDesign, parsePromptsBlock, formatPromptsBlock, preserveCharacterMetadata } from './planner.js'
+import { parseImagePlan, parsePlannerDecision, characterRoster, buildPlannerSystem, runPlanner, normalizePrompts, dedupeTags, parseDesign, parsePromptsBlock, formatPromptsBlock, preserveCharacterMetadata } from './planner.js'
 import { normalizeEntryActivation, selectPlannerContext } from './planner-context.js'
 import { createDownloadPackage, PLUGIN_DOWNLOADS } from './download-package.js'
 import { createMediaActions } from './media-actions.js'
@@ -173,7 +173,7 @@ const DEFAULT_OFF_FIELDS = new Set(['continuity'])
  * 分别写。镜头切到哪一块就带哪一块，避免把全身细节全塞进一张近景。
  */
 const CHARACTER_TRAITS = [
-  ['feature', '角色特征'],
+  ['feature', '性格气质'],
   ['face', '五官外貌'],
   ['faceBack', '五官外貌背面'],
   ['bodySFW', '上半身SFW'],
@@ -291,6 +291,8 @@ export function expandRosterCalls(text, scoped, mode, options = {}) {
         const pushOutfit = (outfit) => {
           for (const field of ['upper', 'lower', 'shoes', 'accessory', 'full', 'back']) {
             if (barefoot && field === 'shoes') continue
+            // 「整体印象」(full) 是给自然语言模型的一句概括；tag 写法里已有上衣下装时它只是噪音。
+            if (field === 'full' && !natural && (String(outfit.upper ?? '').trim() || String(outfit.lower ?? '').trim())) continue
             if (field === 'back' && !(backView || lastBack)) continue
             const value = barefoot ? dropFootwear(outfit[field]) : String(outfit[field] ?? '').trim()
             if (value && !PLACEHOLDER_VALUE.test(value)) bits.push(value)
@@ -356,6 +358,7 @@ export function expandRosterCalls(text, scoped, mode, options = {}) {
             barefoot,
             outfitName: outfitName || undefined,
             noOutfit: Boolean(wear) || ownsStandalone || (!libraryHit && autoOff),
+            tags: !natural,
           })
           const angleTag = angle && /front|back|side|behind|left|right|from/i.test(angle) ? angle : ''
           if (natural) bits.push(boundCharacterPhrase(person, picked, angleTag ? [angleTag] : [], wear))
@@ -473,7 +476,9 @@ function characterTags(character, options = {}) {
   const back = options.back === true
   const nsfw = options.nsfw === true || options.mode === 'all'
   const full = options.full !== false
-  const keys = ['feature', back ? 'faceBack' : 'face']
+  // 「性格气质」(feature) 只给规划挑表情动作，不写进画图提示词：它每张都会带上，
+  // 会把这一刻的神态压成同一种（泡澡放松的画面也带着 fierce）。
+  const keys = [back ? 'faceBack' : 'face']
   // 宏里分别给了上下身状态时按部位挑：上身露、下身穿着，就只带上身的 NSFW 块，反之亦然；hidden 的部位不带。
   // 没分别给（或 traitMode 为 all）时和以前一样，整个人一起按 nsfw / sfw 挑。
   const part = value => { const v = String(value ?? '').toLowerCase(); return v === 'nsfw' || v === 'hidden' || v === 'sfw' ? v : '' }
@@ -499,6 +504,7 @@ function characterTags(character, options = {}) {
     else if (!isDefault && (character.outfits ?? []).some(o => o.default && o.enabled !== false)) continue
     for (const key of ['upper', 'lower', 'shoes', 'accessory', 'full']) {
       if (options.barefoot && key === 'shoes') continue
+      if (key === 'full' && options.tags && (String(outfit.upper ?? '').trim() || String(outfit.lower ?? '').trim())) continue
       const value = options.barefoot ? dropFootwear(outfit[key]) : String(outfit[key] ?? '').trim()
       if (value && !PLACEHOLDER_VALUE.test(value)) { tags.push(value); origins.push({ field: 'outfit.' + key, outfitId: outfit.id, text: value }) }
     }
@@ -899,6 +905,9 @@ function createRuntime(ctx, overrides, logger, deps) {
             for (const item of Object.values(saved)) {
               if (!item || !item.id) continue
               const job = Object.assign({}, item, { params: item.params ?? {} })
+              // 旧版把 cache 兜底补回的占位记录（无 key、无提示词）也落了盘，且 createdAt 是当次启动时间。
+              // 认出来按占位处理：不再落盘、时间改用文件修改时间，免得挤掉真实记录、打乱图库顺序。
+              if (job.label === '历史图片' && !job.key && !job.positive) job.fromCache = true
               // 老记录有两处会让取图永久 404，这里在内存里补正（不写回盘，每次启动重算）：
               //   ① file 指着改名前的 cache 目录（…\tools\dsh-tavern-image\cache\…），文件其实已搬到 dsh-tavern-image；
               //   ② byteLength 被早期兜底恢复写成了 0，而取图门槛正是 `if (!job.file || !job.byteLength)`。
@@ -913,6 +922,7 @@ function createRuntime(ctx, overrides, logger, deps) {
                   const info = await stat(job.file)
                   if (info.size) {
                     job.byteLength = info.size
+                    if (job.fromCache && info.mtimeMs) job.createdAt = info.mtimeMs
                     // 文件在就说明这一张已经画完了。重启后内存里不可能还留着真正在跑的作业，
                     // 而落盘时残留的 pending 会让 hasImage 判成 false —— 历史图列表里
                     // 明明有图却显示「没有」，缩略图也出不来。以文件为准修正状态。
@@ -955,13 +965,17 @@ function createRuntime(ctx, overrides, logger, deps) {
             // byteLength 必须填成文件的真实字节数：取图路由的门槛是 `if (!job.file || !job.byteLength)`，
             // 填 0 会让这个作业永远被判成「图片还没生成好」而返回 404 —— 列表里明明有图却打不开。
             let bytes = 0
+            let cached = Buffer.alloc(0)
+            // 用文件修改时间当作生成时间：图库按 createdAt 排序，写 Date.now() 会让所有历史图每次重启都跑到最前面
+            let createdAt = Date.now()
             try {
               const buf = await readFile(join(dir, name))
+              cached = buf
               bytes = buf.length
               if (buf.length > 24 && buf[1] === 0x50 && buf[2] === 0x4e) size = { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) }
+              createdAt = (await stat(join(dir, name))).mtimeMs || createdAt
             } catch { /* 读不到尺寸就算了 */ }
-            const cached = await readFile(join(dir, name)).catch(() => Buffer.alloc(0))
-            jobs.set(id, { id, state: 'done', percent: 100, createdAt: Date.now(), file: join(dir, name), size, params: {}, label: '历史图片', byteLength: bytes, mediaType: imageMediaTypeFromBytes(cached) || (/\.jpe?g$/i.test(name) ? 'image/jpeg' : /\.webp$/i.test(name) ? 'image/webp' : 'image/png') })
+            jobs.set(id, { id, state: 'done', percent: 100, createdAt, fromCache: true, file: join(dir, name), size, params: {}, label: '历史图片', byteLength: bytes, mediaType: imageMediaTypeFromBytes(cached) || (/\.jpe?g$/i.test(name) ? 'image/jpeg' : /\.webp$/i.test(name) ? 'image/webp' : 'image/png') })
             added++
           }
           if (added) logger.info?.('dsh-tavern-image: 从 cache 补回 ' + added + ' 张历史图片')
@@ -977,7 +991,13 @@ function createRuntime(ctx, overrides, logger, deps) {
         if (!jobsDirty) return
         jobsDirty = false
         try {
-          const entries = [...jobs.entries()].slice(-150)
+          // 只落盘真实作业，按时间保留最近 150 条。cache 兜底补回的占位记录每次启动都会从 cache 重建，
+          // 不能占名额：按插入顺序截取时它们排在最后，会把带 key / 提示词的真实记录挤掉，
+          // 重启后同一段正文就查不到已有的图。
+          const entries = [...jobs.entries()]
+            .filter(([, job]) => !job.fromCache)
+            .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0))
+            .slice(-150)
           const plain = {}
           for (const [id, job] of entries) {
             plain[id] = {
@@ -1295,7 +1315,7 @@ function createRuntime(ctx, overrides, logger, deps) {
                 blankRetry.delete(job.id)
                 job.state = 'failed'
                 job.requestMayHaveSucceeded = false
-                job.error = 'ComfyUI 连续返回全黑图片（多半是 bf16 / fp16 精度溢出）；可以再点重画换个种子。如果经常出现，先重启 ComfyUI；不要在 bf16 模型已加载时切到 fp32 工作流（部分显卡会因此掉线）'
+                job.error = '换了 ' + ((job.blankRetries ?? 0) + 1) + ' 个种子都是全黑图片：多半不是种子的问题，而是模型某一步的计算精度在溢出（常见于 fp16 的文本编码器或 U-Net）。请在 ComfyUI 启动参数里把文本编码器和 U-Net 精度设为 bf16、VAE 设为 fp32，然后重启 ComfyUI 再重画；不要在 bf16 模型已加载时切到 fp32 工作流（部分显卡会因此掉线）'
                 return
               }
               const signal = job.controller?.signal
@@ -2073,6 +2093,35 @@ let worldbookCache = null
         ...timelineDefinitions,
         characters: (timelineDefinitions.characters ?? []).filter(character => usableOnCard(character, card)),
       }
+      // 规划调用了、但人物库补不上外貌的角色：插件只能写个名字，长相每张都会不一样。
+      // 以前这件事完全静默；现在收集起来，配图完成时提示用户。
+      const unmatchedCharacters = new Map()
+      const noteMacro = entry => {
+        if (!entry || (entry.result !== 'not-found' && entry.result !== 'ambiguous')) return
+        let parsed = null
+        try { parsed = JSON.parse('{' + String(entry.macro ?? '') + '}') } catch { return }
+        // 服装宏（upperBody: visible/hidden）找不到不算人物问题。
+        const parts = [parsed?.upperBody, parsed?.lowerBody, parsed?.body].map(v => String(v ?? '').toLowerCase())
+        if (!parsed?.angle && !parts.some(v => v === 'sfw' || v === 'nsfw')) return
+        const asked = String(entry.asked ?? '').trim()
+        if (asked && !unmatchedCharacters.has(asked.toLowerCase())) unmatchedCharacters.set(asked.toLowerCase(), { asked, ambiguous: entry.result === 'ambiguous' })
+      }
+      // 挂载句按客户端放图时的同一套规则比对（去掉空白、Markdown 记号和 HTML 标签），
+      // 能放上去的图就该画；对不上的收集起来告诉用户。
+      const anchorText = value => String(value ?? '').replace(/<\/?[a-zA-Z][^<>]*>/g, '').replace(/[\s*_~`#>|\u200b]/g, '')
+      const bodyAnchorText = anchorText(body)
+      const mountInBody = mount => { const needle = anchorText(mount); return needle.length >= 2 && bodyAnchorText.includes(needle) }
+      const missingMounts = new Set()
+      const characterWarnings = () => {
+        const norm = value => String(value ?? '').toLowerCase().replace(/[\s_\-.'"（）()]+/g, '')
+        return [...unmatchedCharacters.values()].map(({ asked, ambiguous }) => {
+          if (ambiguous) return '「' + asked + '」在人物库里对上了不止一个人，没有补外貌；把其中一位的英文触发名改得更具体'
+          const elsewhere = (timelineDefinitions.characters ?? []).find(c => c && c.enabled !== false && !usableOnCard(c, card)
+            && [c.id, c.name, ...splitTags(c.match)].some(alias => norm(alias) && norm(alias) === norm(asked)))
+          if (elsewhere) return '「' + (elsewhere.name || asked) + '」在人物库里绑定的是别的卡，这次没用上她的外貌；在人物库里给她勾上这张卡即可'
+          return '「' + asked + '」不在人物库里，长相每张会不一样；把她加进人物库能固定外貌'
+        }).slice(0, 4).concat(missingMounts.size ? ['有 ' + missingMounts.size + ' 张图的挂载句在正文里找不到，没有画（例如「' + [...missingMounts][0] + '」）；可以重新配图'] : [])
+      }
       // 世界书条目的 backends 里可以写 tags / natural / mixed，按默认工作流的写法只给规划看对应的规则。
       const plannerWorkflow = styleWorkflow()
       const plannerMode = resolvePromptMode(config, promptBackendContext(config, plannerWorkflow))
@@ -2169,7 +2218,13 @@ let worldbookCache = null
           if (smart && (streamDecision !== 'draw' || !decisionFrozen || streamConflict)) continue
           const planCharacters = Array.isArray(image.characters) ? image.characters.filter(item => item && String(item.prompt ?? '').trim()) : []
           const sceneText = String(image.prompts ?? '')
-          if (!image.mount || !body.includes(image.mount) || (!sceneText.trim() && !planCharacters.length)) continue
+          if (!sceneText.trim() && !planCharacters.length) continue
+          if (!mountInBody(image.mount)) {
+            // 以前逐字比对、静默跳过：规划少抄一个 * 或换行就整张图不画，全部跳过时还报成「没有返回可用的 <image> 块」。
+            const mount = String(image.mount ?? '').trim()
+            if (mount) missingMounts.add(mount.slice(0, 24))
+            continue
+          }
           const identity = JSON.stringify([image.mount, sceneText, planCharacters])
           const promptIdentity = [sceneText, ...planCharacters.map(item => item.prompt)].join(' ').replace(/\s+/g, ' ').trim().toLowerCase()
           if (seen.has(identity) || seenPrompts.has(promptIdentity) || seen.size >= want) continue
@@ -2181,13 +2236,19 @@ let worldbookCache = null
             const key = ('plan|' + (manualBatch ? 'manual:' + manualBatch + '|' : '') + (messageId ?? '') + '|' + image.mount + '|' + promptIdentity).slice(0, 3800)
             const imageIndex = ++traceImageIndex
             const macros = traceId ? [] : null
-            const expandOne = text => normalizePrompts(expandRosterCalls(text, scoped, config.traitMode, { style: rosterStyle(config, plannerWorkflow), onMacro: macros ? entry => macros.push(entry) : null }), scoped, { backend: config.imageBackend, style: rosterStyle(config, plannerWorkflow) })
-            const normalizedTag = expandOne(sceneText)
+            // 诊断里记录的「展开后、清理前」的场景提示词（以前引用了不存在的 expanded，开着诊断时每张图都提交失败）。
+            let expandedScene = ''
+            const expandOne = (text, keep = false) => {
+              const expanded = expandRosterCalls(text, scoped, config.traitMode, { style: rosterStyle(config, plannerWorkflow), onMacro: entry => { macros?.push(entry); noteMacro(entry) } })
+              if (keep) expandedScene = expanded
+              return normalizePrompts(expanded, scoped, { backend: config.imageBackend, style: rosterStyle(config, plannerWorkflow) })
+            }
+            const normalizedTag = expandOne(sceneText, true)
             const characters = planCharacters.map(item => ({ prompt: expandOne(item.prompt), centers: String(item.centers ?? '').trim(), uc: String(item.uc ?? '').trim() })).filter(item => item.prompt)
             if (traceId) {
               const T = diag.text
               diag.record(traceId, 'image-adopted', { mount: T(image.mount), size: image.size ?? null, prompts: T(image.prompts), adoptedAtStreamChars: streamed.length }, { imageIndex })
-              diag.record(traceId, 'macro-expansion', { macros: macros.map(m => ({ ...m, origins: (m.origins ?? []).map(o => ({ ...o, text: T(o.text) })) })), expanded: T(expanded), normalized: T(normalizedTag) }, { imageIndex })
+              diag.record(traceId, 'macro-expansion', { macros: macros.map(m => ({ ...m, origins: (m.origins ?? []).map(o => ({ ...o, text: T(o.text) })) })), expanded: T(expandedScene), normalized: T(normalizedTag) }, { imageIndex })
             }
             const job = await startJob({
               tag: normalizedTag,
@@ -2305,6 +2366,7 @@ let worldbookCache = null
         finishTask(task, error)
         throw error
       }
+      if (imageGeneration && !skipped && !plans.length && missingMounts.size) failure ||= new Error('规划给的挂载句在正文里都找不到（例如「' + [...missingMounts][0] + '」），没有画图；可以重新配图')
       if (imageGeneration && !skipped && !plans.length) failure ||= new Error('模型没有返回可用的 <image> 块')
       if (smart && parsed.decision === 'draw' && !plans.length) failure ||= new Error('选择配图后没有返回可用的 <image> 块')
       finishTask(task, failure)
@@ -2314,6 +2376,8 @@ let worldbookCache = null
 
       const characterSnapshot = characterUpdates ? visualSnapshot : null
       const plan = { messageId: String(messageId ?? ''), turn, at: Date.now(), plans, skipped, reason: parsed.reason, characterSnapshot, historyWarning, raw: plans.length ? '' : String(result.text || streamed).slice(0, 4000), card: card?.name ?? null }
+      const warnings = characterWarnings()
+      if (warnings.length) plan.characterWarnings = warnings
       if (failure) plan.error = String(failure?.message ?? failure)
       if (messageId) plansByMessage.set(String(messageId), plan)
         persistPlans()
@@ -5373,6 +5437,7 @@ export function injectDefinitions(text, definitions, config = {}, options = {}) 
   if (!source || !definitions) return { text: source, hits: [] }
   const have = tagSet(source)
   const added = []
+  const placed = []
   const hits = []
   const negatives = []
   const weight = Number(config.injectWeight) || 0
@@ -5401,7 +5466,17 @@ export function injectDefinitions(text, definitions, config = {}, options = {}) 
       hits.push(character.name || character.id)
       // 人物宏展开时负面词没地方放（宏只产出正向文字），在这里补回负向通道。
       const own = String(character.traits?.negative ?? '').trim()
-      personNegatives.push(own && !PLACEHOLDER_VALUE.test(own) ? [own] : [])
+      const list = own && !PLACEHOLDER_VALUE.test(own) ? [own] : []
+      // 宏里点名的那套衣服，它的负面词同样没地方放：按展开进画面的衣服文字认出是哪一套，一并补回。
+      for (const outfit of character.outfits ?? []) {
+        const neg = String(outfit?.negative ?? '').trim()
+        if (!neg || PLACEHOLDER_VALUE.test(neg) || outfit.enabled === false) continue
+        // tag 写法有上下装时不写 full（见 characterTags），所以优先按上下装认。
+        const pieces = keys => keys.map(key => String(outfit[key] ?? '').trim()).filter(v => v.length >= 6 && !PLACEHOLDER_VALUE.test(v))
+        const worn = pieces(['upper', 'lower']).length ? pieces(['upper', 'lower']) : pieces(['full'])
+        if (worn.length && worn.every(v => source.includes(v))) list.push(neg)
+      }
+      personNegatives.push(list)
       continue
     }
     if (expanded.some(other => sameCharacterFamily(character, other))) continue
@@ -5410,22 +5485,31 @@ export function injectDefinitions(text, definitions, config = {}, options = {}) 
     hits.push(character.name || character.id)
     // 露的画面（nsfw 或写着洗澡/裸体/内衣）不自动补衣服：既不补「当前穿着」，也不补常穿。
     const bare = nsfw || bareScene || NOTHING_WORN.test(String(character.current?.outfit ?? '').trim())
-    const recordedRaw = bare ? '' : resolveWearText(character, character.current?.outfit)
+    // 规划已经在画面里写了这个人穿什么（没用人物宏、直接写衣服）时，不再补「当前穿着」或常穿：
+    // 两套衣服同时进提示词会打架（brown leather boots 对上 black leather boots）。
+    const dressedByPlanner = !natural && PLANNER_GARMENT.test(footText)
+    const recordedRaw = bare || dressedByPlanner ? '' : resolveWearText(character, character.current?.outfit)
     const recorded = barefoot ? dropFootwear(recordedRaw) : recordedRaw
-    const picked = characterTags(character, { nsfw, back, full, mode: config.traitMode, barefoot, noOutfit: Boolean(recordedRaw) || bare })
+    const picked = characterTags(character, { nsfw, back, full, mode: config.traitMode, barefoot, noOutfit: Boolean(recordedRaw) || bare || dressedByPlanner, tags: !natural })
     // options.provenance：诊断用，记录每段注入文字来自哪个人物的哪个字段、作用于正向还是整图负向。
     if (Array.isArray(options?.provenance)) for (const origin of picked.origins ?? []) options.provenance.push({ stage: 'definition-injection', characterId: String(character.id ?? ''), characterName: String(character.name ?? ''), matchedBy: keys.find(key => key && source.includes(key)) ?? '', appliedScope: origin.channel === 'negative' ? 'whole-image-negative' : 'whole-image-positive', ...origin })
     if (natural) {
       const phrase = boundCharacterPhrase(character, picked, [], recorded)
       if (phrase && !source.includes(phrase)) added.push(phrase)
-    } else for (const raw of [...picked.tags, recorded].filter(Boolean)) {
+    } else {
+      // tag 写法：这个人的外貌紧跟在她的名字后面插入，而不是堆到整段末尾。
+      // 末尾是 SDXL 分段后权重最弱的位置，外貌放在那里等于没写。
+      const own = []
+      for (const raw of [...picked.tags, recorded].filter(Boolean)) {
       // tag 写法里「当前穿着」也要写进去（以前只有自然语言写法带上它，tag 写法里这个人就没衣服了）。
       for (const tag of splitTags(raw)) {
         const key = tag.toLowerCase()
         if (!key || have.has(key)) continue
         have.add(key)
-        added.push(weight > 0 && weight !== 1 ? `(${tag}:${weight})` : tag)
+        own.push(weight > 0 && weight !== 1 ? `(${tag}:${weight})` : tag)
       }
+      }
+      if (own.length) placed.push({ keys, tags: own })
     }
     // 人物的负面词（例如"不要画成小孩"）走负向通道，绝不进正向提示词
     personNegatives.push(picked.negative ?? [])
@@ -5471,8 +5555,19 @@ export function injectDefinitions(text, definitions, config = {}, options = {}) 
   }
   // 赤脚画面：负面里压一下鞋（鞋拿在手里时不压）。
   if (barefoot && !SHOES_IN_HAND.test(footText)) for (const tag of ['shoes', 'footwear']) if (!negatives.includes(tag)) negatives.push(tag)
-  return { text: added.length ? `${source}, ${added.join(', ')}` : source, hits, negatives }
+  // 按名字注入的外貌插在这个人名字所在的那一段后面；找不到名字时退回到末尾。
+  const segments = source.split(',')
+  for (const { keys, tags } of placed) {
+    const at = segments.findIndex(segment => keys.some(key => containsNameToken(segment, key)))
+    if (at < 0) added.unshift(...tags)
+    else segments.splice(at + 1, 0, ' ' + tags.join(', '))
+  }
+  const placedText = segments.join(',')
+  return { text: added.length ? `${placedText}, ${added.join(', ')}` : placedText, hits, negatives }
 }
+
+/** 画面里写了具体衣物（不含 wet clothes 这类状态词）。 */
+const PLANNER_GARMENT = /\b(outfit|uniform|dress|robe|hanfu|kimono|shirt|blouse|jacket|coat|skirt|trousers|pants|shorts|boots|shoes|sneakers|heels|dudou|lingerie|underwear|bra|panties|bikini|swimsuit|apron|armor|cloak|sweater|cardigan|hoodie|leotard|bodysuit)\b/i
 
 // =====================================================================
 // 编译工作流
@@ -5517,7 +5612,9 @@ function prepareImagePrompt({ workflow, params, config, definitions, onStage = n
   const provenance = onStage ? [] : null
   const injected = injectDefinitions(base, definitions, config, { style: mode === 'natural' ? 'natural' : 'tags', provenance, raw: params.rawTag })
   // 自然语言模型（LLM 文本编码器）不认 (tag:1.2) 这种权重，总是去掉；tag 模型按设置处理。
-  const positive = formatPromptForBackend(applyWeights(injected.text, resolveWeightMode(config, channel?.provider ?? backend, mode)), backend, mode)
+  // 画风词和按名字补上的外貌是在规划提示词清理之后才拼进来的，tag 写法再去一次重。
+  const injectedText = mode === 'tags' ? dedupeTags(injected.text) : injected.text
+  const positive = formatPromptForBackend(applyWeights(injectedText, resolveWeightMode(config, channel?.provider ?? backend, mode)), backend, mode)
   stage('compile-positive', { mode, artistPosition: params.artistPosition ?? config.artistPosition, artist, rawBase, afterPreset: base, afterInjection: injected.text, final: positive, hits: injected.hits, provenance })
 
   const workflowNegative = String(
