@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "79de8af903ec6b00ebc81d761d504b657474aed0",
-  "releaseSequence": 827,
+  "revision": "7b6b26ef2e1c32c7def84fee7875425c918a308e",
+  "releaseSequence": 828,
   "version": "3.2.0",
   "files": [
     {
@@ -616,13 +616,13 @@
     },
     {
       "path": "tavern-plugin/lib/client-assets/tavern.css",
-      "sha256": "4b87f03860ae36acb50740ea5890bf60e9c6b7ed2cbcccb980fcdafba0b98180",
-      "size": 315955
+      "sha256": "8e80a3e99bf8a1270ead61152f1c72b3058755c9eba3c0c16e6e7a96955be22f",
+      "size": 316277
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "fc1d3bb67af087f53ac8edaafe5e134b1834423c969d0177af07ab5d75613eb9",
-      "size": 2020209
+      "sha256": "460b869df502cbbaab450d87fa95e19084a224ac59d6dcb7b6439813e7720e75",
+      "size": 2022566
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -2336,8 +2336,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/user-plugin-install.js",
-      "sha256": "35689517fc4231a8c03943fa8516ec760d1e3150a9613e854db7117c2d0c3fa1",
-      "size": 19566
+      "sha256": "b93f48cc5277b693cbe93a3fe14bb2852fdabe67088896c6fce8d7aef7118715",
+      "size": 19706
     },
     {
       "path": "tavern-plugin/lib/domain/user-plugins.js",
@@ -2551,8 +2551,8 @@
     },
     {
       "path": "tavern-plugin/lib/rpc/plugins.js",
-      "sha256": "e82242ee14293d6f53e46a8a18fd0d758ac166d784e771f3497fd4c5a45c28c5",
-      "size": 3645
+      "sha256": "629f81bb4d0a5f5b649c6a08c631838ac4e203763438ee8259c2b494cf657275",
+      "size": 3683
     },
     {
       "path": "tavern-plugin/lib/rpc/resources.js",
@@ -5251,8 +5251,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/settings.js",
-      "sha256": "cebe29d47821ee151166dfde26d6dbc45fd73bdbfe2c8d9d86e6f4987cd17a31",
-      "size": 45271
+      "sha256": "f2d7acc87d5f462c3e78ebd423112fe1effd48007c528fe9a0d5d427236ab376",
+      "size": 47303
     },
     {
       "path": "tavern-plugin/src/client/features/sidebar.js",
