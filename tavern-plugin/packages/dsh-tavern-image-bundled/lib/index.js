@@ -44,6 +44,7 @@ import { BUILTIN_PROMPT_PRESETS, normalizePromptPresets, resolvePromptMode, comp
 import { transcodeImageOutputAsync, isBlankImage } from './image-output.js'
 import { buildComfySimpleWorkflow, inspectComfySimple, normalizeComfySimpleConfig } from './comfy-simple.js'
 import { createDiagnostics } from './diagnostics.js'
+import { deleteWorkflow } from './workflow-delete.js'
 
 export const name = 'dsh-tavern-image'
 export const inject = ['webServer']
@@ -3558,7 +3559,25 @@ let worldbookCache = null
         if (body.match !== undefined) target.match = Array.isArray(body.match) ? body.match.map(String) : splitTags(String(body.match))
         if (body.sizes !== undefined) target.sizes = body.sizes && typeof body.sizes === 'object' ? body.sizes : null
         if (body.enabled !== undefined) target.enabled = Boolean(body.enabled)
-        if (body.remove === true) config.workflows = config.workflows.filter(item => String(item.id) !== id)
+        if (body.remove === true) {
+          const result = await deleteWorkflow({
+            config,
+            id,
+            workflowsDir: WORKFLOW_DIR,
+            saveConfig: () => saveConfig(config),
+            reload: async () => {
+              config.workflows = await scanWorkflows(config)
+              await loadAllWorkflows()
+              if (!workflows.some(wf => wf.id === config.defaultWorkflow && !wf.error && wf.enabled)) {
+                config.defaultWorkflow = workflows.find(wf => !wf.error && wf.enabled)?.id ?? ''
+              }
+              await saveConfig(config)
+            },
+          })
+          if (result.status !== 200) { sendJson(response, result.status, { ok: false, error: result.error }); return }
+          sendJson(response, 200, { ok: true, state: await consoleState() })
+          return
+        }
         await saveConfig(config)
         await loadAllWorkflows()
         sendJson(response, 200, { ok: true, state: await consoleState() })

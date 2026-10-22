@@ -4576,14 +4576,14 @@ function versionsOf(jobId) {
                   }, '改名'),
                   h('button', {
                     style: Object.assign({}, buttonStyle, { fontSize: '12px', padding: '3px 12px', borderColor: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 60%, transparent)', color: 'var(--dsw-alias-state-error-primary)' }),
-                    title: '从列表移除（不删文件）',
+                    title: '删除工作流及磁盘文件',
                     onClick: async () => {
-                      if (!confirm('把《' + (wf.label || wf.id) + '》从列表移除？只移除条目，磁盘 JSON 不删。')) return
+                      if (!confirm('删除《' + (wf.label || wf.id) + '》？这会同时删除工作流列表项和 workflows/ 中的 JSON 文件。')) return
                       try {
                         const r = await post('/workflow', { id: wf.id, remove: true })
                         if (r?.state) receiveState(r.state)
-                        if (typeof showToast === 'function') showToast('已移除')
-                      } catch (e) { if (typeof showToast === 'function') showToast('移除失败：' + (e?.message ?? e), 'fail') }
+                        if (typeof showToast === 'function') showToast('已删除')
+                      } catch (e) { if (typeof showToast === 'function') showToast('删除失败：' + (e?.message ?? e), 'fail') }
                     },
                   }, '移除'),
                 ),
