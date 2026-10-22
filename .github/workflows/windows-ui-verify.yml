@@ -1,10 +1,16 @@
 name: Windows UI Verify
 
-# Pre-release check on a clean Windows: silent-install official DeepSeek Harness, get past its
-# welcome page with the DEEPSEEK_API_KEY secret, run install.ps1 the README way (it installs
-# the published main), run it once more as an upgrade, relaunch and screenshot over CDP. Screenshots are the artifact.
+# Pre-release check of the plugin package on a clean Windows: silent-install official DeepSeek
+# Harness, get past its welcome page with the DEEPSEEK_API_KEY secret, install dsh-profile-tavern
+# from npm the way「插件 → 添加插件」does (Desktop's own dsh + pnpm), relaunch, require the Tavern
+# backend to answer, and screenshot over CDP. Screenshots are the artifact.
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'npm 版本号或标签（默认 latest）'
+        required: false
+        default: latest
 
 env:
   DESKTOP_SETUP_URL: https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.1-rc.2-win-x64.exe
@@ -31,53 +37,10 @@ jobs:
           $sw = [Diagnostics.Stopwatch]::StartNew()
           $p = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
           Write-Output "installer exit $($p.ExitCode) in $($sw.Elapsed.TotalSeconds)s"
-          Get-ChildItem "$env:LOCALAPPDATA\Programs" -ErrorAction SilentlyContinue | Select-Object Name
-          Get-ChildItem $env:ProgramFiles | Where-Object Name -like '*Harness*' | Select-Object FullName
-          Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object DisplayName -like '*Harness*' | Format-List DisplayName,DisplayVersion,InstallLocation,UninstallString
+          "EXE=$env:LOCALAPPDATA\Programs\DeepSeek Harness\DeepSeek Harness.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
+      # The first launch also creates the desktop profile the plugin is added to.
       - name: Launch and get past the welcome page
-        continue-on-error: true
-        timeout-minutes: 5
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        run: |
-          $exe = "$env:LOCALAPPDATA\Programs\DeepSeek Harness\DeepSeek Harness.exe"
-          "EXE=$exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-          Start-Process -FilePath $exe -ArgumentList '--remote-debugging-port=9222'
-          for ($i = 0; $i -lt 60; $i++) { Start-Sleep 2; try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:9222/json/version | Out-Null; break } catch {} }
-          Start-Sleep 15
-          node packaging/windows/ui-verify.mjs welcome "$env:RUNNER_TEMP\shots" first
-          node packaging/windows/ui-verify.mjs shot "$env:RUNNER_TEMP\shots" first
-          Get-Process | Where-Object { $_.Path -like '*Harness*' } | Stop-Process -Force
-          Start-Sleep 5
-
-      - name: Run install.ps1 (desktop)
-        continue-on-error: true
-        timeout-minutes: 30
-        run: |
-          $sw = [Diagnostics.Stopwatch]::StartNew()
-          # Same as the README command: decode as UTF-8, then Invoke-Expression.
-          $env:DSH_TAVERN_HOST = 'desktop'
-          $script = [IO.File]::ReadAllText((Resolve-Path ./install.ps1), [Text.Encoding]::UTF8)
-          try { Invoke-Expression $script *>&1 | Tee-Object "$env:RUNNER_TEMP\shots\install.log"; Write-Output "install OK in $($sw.Elapsed.TotalSeconds)s" }
-          catch { Write-Output "install FAILED in $($sw.Elapsed.TotalSeconds)s: $_"; throw }
-
-      # Upgrades go through paths a first install never touches (profile copy, link reuse).
-      - name: Run install.ps1 again over the installed Tavern
-        timeout-minutes: 30
-        run: |
-          $sw = [Diagnostics.Stopwatch]::StartNew()
-          $env:DSH_TAVERN_HOST = 'desktop'
-          $script = [IO.File]::ReadAllText((Resolve-Path ./install.ps1), [Text.Encoding]::UTF8)
-          try { Invoke-Expression $script *>&1 | Tee-Object "$env:RUNNER_TEMP\shots\reinstall.log"; Write-Output "reinstall OK in $($sw.Elapsed.TotalSeconds)s" }
-          catch { Write-Output "reinstall FAILED in $($sw.Elapsed.TotalSeconds)s: $_"; throw }
-          $modules = "$env:USERPROFILE\.dsh\profiles\tavern\node_modules"
-          Get-ChildItem -LiteralPath $modules -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint } | ForEach-Object {
-            if (-not ($_.Attributes -band [IO.FileAttributes]::Directory)) { throw "File-type link to a directory: $($_.FullName)" }
-          }
-
-      - name: Relaunch and screenshot
-        if: always()
         continue-on-error: true
         timeout-minutes: 5
         env:
@@ -85,9 +48,42 @@ jobs:
         run: |
           Start-Process -FilePath $env:EXE -ArgumentList '--remote-debugging-port=9222'
           for ($i = 0; $i -lt 60; $i++) { Start-Sleep 2; try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:9222/json/version | Out-Null; break } catch {} }
-          Start-Sleep 30
-          node packaging/windows/ui-verify.mjs welcome "$env:RUNNER_TEMP\shots" after
+          Start-Sleep 15
+          node packaging/windows/ui-verify.mjs welcome "$env:RUNNER_TEMP\shots" first
+          node packaging/windows/ui-verify.mjs shot "$env:RUNNER_TEMP\shots" first
+          Get-Process | Where-Object { $_.Path -like '*Harness*' } | Stop-Process -Force
+          Start-Sleep 5
+
+      - name: Add the plugin with Desktop's dsh and pnpm
+        timeout-minutes: 20
+        env:
+          TAVERN_VERSION: ${{ inputs.version }}
+        run: |
+          $resources = Join-Path (Split-Path $env:EXE) 'resources'
+          $bin = Join-Path $env:RUNNER_TEMP 'desktop-bin'
+          New-Item -ItemType Directory -Force $bin | Out-Null
+          $pnpm = "$resources\runtime\primary-runtime\dependencies\pnpm\bin\pnpm.mjs"
+          $dsh = "$resources\app.asar\dsh\node_modules\@deepseek-ai\dsh-desktop-host\lib\cli.js"
+          foreach ($tool in @(@('pnpm', $pnpm), @('dsh', $dsh))) {
+            Set-Content -Encoding ascii "$bin\$($tool[0]).cmd" "@echo off`r`nset `"ELECTRON_RUN_AS_NODE=1`"`r`n`"$env:EXE`" --expose-internals `"$($tool[1])`" %*`r`nexit /b %errorlevel%"
+          }
+          $env:PATH = "$bin;$env:PATH"
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\shots" | Out-Null
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          dsh plugin --profile desktop add "dsh-profile-tavern@$env:TAVERN_VERSION" *>&1 | Tee-Object "$env:RUNNER_TEMP\shots\plugin-add.log"
+          if ($LASTEXITCODE -ne 0) { throw "dsh plugin add failed after $($sw.Elapsed.TotalSeconds)s" }
+          Write-Output "plugin added in $($sw.Elapsed.TotalSeconds)s"
+          Get-Content "$env:USERPROFILE\.dsh\profiles\desktop\package.json"
+
+      - name: Relaunch, require the Tavern backend, screenshot
+        timeout-minutes: 5
+        run: |
+          Start-Process -FilePath $env:EXE -ArgumentList '--remote-debugging-port=9222'
+          for ($i = 0; $i -lt 60; $i++) { Start-Sleep 2; try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:9222/json/version | Out-Null; break } catch {} }
+          Start-Sleep 20
           node packaging/windows/ui-verify.mjs shot "$env:RUNNER_TEMP\shots" after
+          node packaging/windows/ui-verify.mjs tavern
+          if ($LASTEXITCODE -ne 0) { throw 'Tavern backend did not answer' }
 
       - uses: actions/upload-artifact@v4
         if: always()
