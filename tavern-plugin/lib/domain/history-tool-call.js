@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { producerSource } from './message-source.js'
 
 // Story prose is the one thing a turn contributes to the transcript: the model's
 // reply and the player's own input. Replayed as plain text they read as "this was
@@ -17,6 +18,10 @@ import { readFileSync } from 'node:fs'
 // that alphabet, so the pair stays legal on every backend this plugin talks to.
 export const HISTORY_CALL_PREFIX = 'tvh_'
 export const HISTORY_RECEIPT_TEXT = '已收到。'
+// Gemini accepts a function call only right after a user turn or a function response.
+// A history made only of bodies (an imported save opens on the greeting) would start
+// on a call; this fixed turn goes in front of such a call and nowhere else.
+export const HISTORY_ANCHOR_TEXT = '（以下是此前已经发生的剧情。）'
 
 function str(value) {
   return typeof value === 'string' ? value : (value === undefined || value === null ? '' : String(value))
@@ -112,7 +117,27 @@ export function projectHistoryAsToolCalls(messages, options = {}) {
     })
     changed = true
   })
-  return changed ? projected : messages
+  return changed ? anchorCalls(projected) : messages
+}
+
+function isCall(message) {
+  return message && message.role === 'assistant' && Array.isArray(message.content)
+    && message.content.some(block => block && block.type === 'tool-call')
+}
+
+/** Put the anchor turn before every call whose previous turn is neither a user turn nor a tool result. */
+function anchorCalls(messages) {
+  const anchored = []
+  let previous = null
+  for (const message of messages) {
+    if (isCall(message) && !(previous && (previous.role === 'user' || previous.role === 'tool'))) {
+      const call = message.content.find(block => block && block.type === 'tool-call')
+      anchored.push({ id: str(call.id) + ':anchor', role: 'user', source: producerSource('dsh-tavern'), content: [{ type: 'text', text: HISTORY_ANCHOR_TEXT }] })
+    }
+    anchored.push(message)
+    if (message && message.role !== 'system') previous = message
+  }
+  return anchored
 }
 
 /**
