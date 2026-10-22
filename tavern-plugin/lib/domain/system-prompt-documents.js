@@ -1,8 +1,8 @@
-import { prompt as promptFile, SYSTEM_PROMPT_DEFINITIONS } from '../prompt-catalog.js'
+import { cardPersonas, prompt as promptFile, SYSTEM_PROMPT_DEFINITIONS } from '../prompt-catalog.js'
 
 // Documents carry resolved text; imported sets retain only overrides so future
 // shipped prompt improvements still reach entries left at their defaults.
-export function createSystemPromptDocuments({ definitions = SYSTEM_PROMPT_DEFINITIONS, prompt = promptFile } = {}) {
+export function createSystemPromptDocuments({ definitions = SYSTEM_PROMPT_DEFINITIONS, prompt = promptFile, personas = cardPersonas } = {}) {
   const names = definitions.map(item => item.name)
   function presentSystemPrompts(settings) {
     const byName = Object.fromEntries((settings.systemPrompts || []).map(function (item) { return [item.name, item] }))
@@ -12,7 +12,9 @@ export function createSystemPromptDocuments({ definitions = SYSTEM_PROMPT_DEFINI
       systemAppendEnabled: settings.systemAppendEnabled === true,
       promptSets: settings.promptSets,
       prompts: definitions.map(function (definition) {
-        return Object.assign({}, definition, byName[definition.name] || { text: prompt(definition.name), customized: false })
+        const item = Object.assign({}, definition, byName[definition.name] || { text: prompt(definition.name), customized: false })
+        if (definition.name === 'card-system') item.presets = personas()
+        return item
       })
     }
   }

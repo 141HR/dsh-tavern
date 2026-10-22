@@ -113,3 +113,14 @@ test('卡片 Agent 系统指令：用户保存空白即覆盖默认，恢复默�
   assert.equal(resolveSystemPrompt(restored, 'card-system', name => defaults[name]), '默认人设')
   assert.throws(() => applyTavernSettingsPatch({}, { systemPrompt: { name: 'story', text: '' } }), /不能为空/)
 })
+
+test('内置性格随卡片 Agent 系统指令下发，导出方案时不带出', async () => {
+  const { cardPersonas, CARD_PERSONA_DEFINITIONS } = await import('../tavern-plugin/lib/prompt-catalog.js')
+  const personas = cardPersonas()
+  assert.equal(personas.length, CARD_PERSONA_DEFINITIONS.length)
+  for (const item of personas) assert.ok(item.text.length > 0, item.id)
+  const documents = createSystemPromptDocuments({ definitions: [{ name: 'card-system', label: 'c' }, { name: 'story', label: 's' }], prompt: () => '', personas: () => [{ id: 'x', label: 'X', text: 'x' }] })
+  const settings = { systemPrompts: [], promptSets: { sets: [] } }
+  assert.deepEqual(documents.present(settings).prompts.map(item => item.presets), [[{ id: 'x', label: 'X', text: 'x' }], undefined])
+  assert.deepEqual(documents.export(settings).prompts, { 'card-system': '', story: '' })
+})
