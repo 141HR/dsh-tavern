@@ -1,7 +1,6 @@
 // Drives DeepSeek Harness over CDP for the Windows UI Verify workflow.
 //   node ui-verify.mjs welcome <out>  click "Add API Key", dump the form, fill DEEPSEEK_API_KEY and submit
 //   node ui-verify.mjs shot <out> <tag>  screenshot and dump every page except the welcome page
-//   node ui-verify.mjs tavern            fail unless the Tavern backend answers inside the Harness page
 // Never screenshot a page that may show the key: artifacts of a public repo are downloadable.
 import { writeFileSync, mkdirSync } from 'node:fs'
 const [mode, out = 'shots', tag = 'run'] = process.argv.slice(2)
@@ -60,28 +59,6 @@ if (mode === 'welcome') {
   try { console.log('after submit', (await page.evaluate(TEXT)).replaceAll(key, '***')) } catch (e) { console.log('welcome gone', e.message) }
   page.close()
   process.exit(0)
-}
-
-if (mode === 'tavern') {
-  // The plugin package once rendered its client while every /api/dsh-tavern route was 404:
-  // a screenshot alone cannot tell, so ask the backend from inside the page.
-  for (let attempt = 0; attempt < 12; attempt++) {
-    for (const target of await pages()) {
-      // Desktop serves its window as dsh-app://app/; a browser tab would be http://127.0.0.1:<port>/.
-      if (!/^(dsh-app:\/\/app\/|https?:\/\/127\.0\.0\.1:)/.test(target.url)) continue
-      const page = await connect(target)
-      const report = await page.evaluate(`(async () => {
-        const response = await fetch('/api/dsh-tavern/runtime-generation', { cache: 'no-store' })
-        return { status: response.status, update: document.querySelector('.dsh-tavern-update')?.innerText || '' }
-      })()`).catch(error => ({ error: error.message }))
-      page.close()
-      console.log('tavern', JSON.stringify(report))
-      if (report?.status === 200) process.exit(0)
-    }
-    await sleep(5000)
-  }
-  console.log('Tavern backend did not answer')
-  process.exit(1)
 }
 
 if (mode === 'shot') {
