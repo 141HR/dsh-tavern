@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "c69c85d7807e911518f79a9115dfc4f428e15db0",
-  "releaseSequence": 865,
+  "revision": "7703520b9d04454fca86d8f8b4ec79e2cf4cf255",
+  "releaseSequence": 866,
   "version": "3.1.0",
   "files": [
     {
@@ -596,8 +596,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "2dff57668e9a6a341337a11cb97c1f3f940c14e1122929811b1b770209a0ea32",
-      "size": 2076813
+      "sha256": "02484a350d1752829b65e29463afdcb4f34515801c62c3e2bd1c8cc33a4abc7d",
+      "size": 2086999
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -1001,8 +1001,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-initialization.js",
-      "sha256": "e0dd83da2ed344c06199ed11dbfe420b5f74a88e46e89242ef68b6d7eb1b85a8",
-      "size": 21568
+      "sha256": "bfb3a7027f108b89af20e27247d0e4617a139876f06f4a408c6f23cfbae9def7",
+      "size": 22528
     },
     {
       "path": "tavern-plugin/lib/domain/conversation-page-store.js",
@@ -1491,13 +1491,13 @@
     },
     {
       "path": "tavern-plugin/lib/domain/opening-command.js",
-      "sha256": "39569727ca7e8c436c7a7a2e702d2466e534d7ccfe05ac790f38aa15d4256e26",
-      "size": 2035
+      "sha256": "eda31e52dc0335b632a358c1f38cee9da3c607829368c8d471d72674c9f326f8",
+      "size": 3206
     },
     {
       "path": "tavern-plugin/lib/domain/opening-preparation.js",
-      "sha256": "ca927a503aebeb144718424c7b1b1a99413d1035adb1d8e6f2860113ff78f2e5",
-      "size": 16403
+      "sha256": "eae6700fd13b51ed7e7a3232bf87451950602d144c7d1baa0cf2293351288392",
+      "size": 19529
     },
     {
       "path": "tavern-plugin/lib/domain/opening-transport.js",
@@ -4416,9 +4416,9 @@
     }
   ],
   "archive": {
-    "commit": "7fe109c227ef90e1b245d4920e8b7dd05f43682d",
+    "commit": "6d823af698a227124a6b06552a29182f062ebc7b",
     "path": "runtime.zip",
-    "sha256": "ba6d371eab93c72086fcb5d7052478ebb3855698e4d53b42ad93ddda0ca6cd62",
-    "size": 9802866
+    "sha256": "46ffcb1c2d2eedf6210197d3c184946c550e980c25738dd5165f0bed7e80b25c",
+    "size": 9806717
   }
 }
