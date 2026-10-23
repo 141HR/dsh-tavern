@@ -138,7 +138,15 @@ if [ "${INSTALL_HOST}" = "desktop" ]; then
       done
     done
   fi
-  [ -n "$desktop_executable" ] && [ -x "$desktop_executable" ] || fail "请先安装官方 DeepSeek Harness（https://deepseek.com/harness/）"
+  if ! { [ -n "$desktop_executable" ] && [ -x "$desktop_executable" ]; }; then
+    # A community app installed instead of the official one gets told where its installer is.
+    for community_name in "DSH NEXT" "DSH Desktop"; do
+      for community_app in "/Applications/${community_name}.app" "$HOME/Applications/${community_name}.app"; do
+        [ -d "$community_app" ] && fail "检测到社区版 ${community_name}，当前版本只支持官方 DeepSeek Harness（https://deepseek.com/harness/）。继续用社区版请改用稳定版的安装命令：https://github.com/flizzywine/dsh-tavern/blob/stable/README.md"
+      done
+    done
+    fail "请先安装官方 DeepSeek Harness（https://deepseek.com/harness/）"
+  fi
   cat >"${TEMP_DIR}/official-desktop-runtime.cjs" <<'DSH_OFFICIAL_DESKTOP_MODULE'
 // Bootstrap for official DeepSeek Harness only. Electron reads packaged app.asar files.
 const fs = require('node:fs');

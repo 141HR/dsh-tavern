@@ -920,7 +920,19 @@ try {
       $DesktopCandidates += @(Get-Process -Name $DesktopName -ErrorAction SilentlyContinue | ForEach-Object { $_.Path })
     }
     $OfficialDesktopExecutable = $DesktopCandidates | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
-    if (-not $OfficialDesktopExecutable) { throw '请先安装官方 DeepSeek Harness（https://deepseek.com/harness/）（装在其他位置时，可用 DSH_DESKTOP_APP_EXECUTABLE 指定程序路径）' }
+    if (-not $OfficialDesktopExecutable) {
+      # A community app installed instead of the official one gets told where its installer is.
+      $CommunityDesktop = @('DSH NEXT', 'DSH Desktop') | Where-Object {
+        $Name = $_
+        (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA ('Programs\' + $Name + '\' + $Name + '.exe'))) -or
+        ($env:ProgramFiles -and (Test-Path -LiteralPath (Join-Path $env:ProgramFiles ($Name + '\' + $Name + '.exe')))) -or
+        @(Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+          'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like ($Name + '*') }).Count -gt 0 -or
+        @(Get-Process -Name $Name -ErrorAction SilentlyContinue).Count -gt 0
+      } | Select-Object -First 1
+      if ($CommunityDesktop) { throw ('检测到社区版 ' + $CommunityDesktop + '，当前版本只支持官方 DeepSeek Harness（https://deepseek.com/harness/）。继续用社区版请改用稳定版的安装命令：https://github.com/flizzywine/dsh-tavern/blob/stable/README.md') }
+      throw '请先安装官方 DeepSeek Harness（https://deepseek.com/harness/）（装在其他位置时，可用 DSH_DESKTOP_APP_EXECUTABLE 指定程序路径）'
+    }
     New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
     $OfficialDesktopModuleSource = @'
 // Bootstrap for official DeepSeek Harness only. Electron reads packaged app.asar files.
