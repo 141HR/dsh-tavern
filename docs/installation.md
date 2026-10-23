@@ -176,7 +176,7 @@ dsh-tavern stop
 dsh-tavern restart
 ```
 
-**更新酒馆：** 更新沿用已安装目录，保留数据。完整覆盖重装步骤见[更新与重新安装](https://flizzywine.github.io/dsh-tavern/#a02--section-7)。
+**更新酒馆：** 更新沿用已安装目录，保留数据。完整覆盖重装步骤见[更新](https://flizzywine.github.io/dsh-tavern/#a02--section-6)。
 
 ```bash
 dsh-tavern update

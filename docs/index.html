@@ -38,161 +38,48 @@
 <ul><li>一台可运行 DSH 的设备，按<a href="#a02">安装与启动</a>选择桌面版或命令行版。</li><li>一个可用的文字模型服务（任意模型均可，不限于 DeepSeek），准备服务地址、模型名称和所需的 API 密钥；模型调用可能产生费用。</li><li>一张想玩的 PNG / JSON 人物卡；也可以安装后再通过卡片模式制作。</li></ul>
 <p>不用先导入外部预设。长期偏好、文生图和其他高级设置都可以先跳过，遇到需要时再查。</p>
 <h2 id="a01--section-9">下一步</h2>
-<p>还没安装：先看<a href="#a02">安装与启动</a>。已经装好：从<a href="#a04">完成第一次游玩</a>开始，再按需要查阅各部分功能文档。</p><nav class="pagination" aria-label="相邻文档"><a class="" href="#a01">← 入门指南</a><a class="" href="#a02">安装与启动 →</a></nav><footer class="article-footer"><span>DSH Tavern 使用文档</span><a class="" href="#help">需要帮助？</a></footer></article><article class="doc-page" id="a02" data-group="getting-started" data-title="安装与启动"><div class="breadcrumb">使用文档 <span>/</span> <a class="" href="#a01">入门指南</a> <span>/</span> 功能说明</div><h1 tabindex="-1">安装与启动</h1><p class="lead">先安装 DSH Tavern，再配置一个可用的文字模型。桌面版和命令行版选择一种即可。</p><h2 id="a02--section-1">先选一种安装方式</h2>
-<p><strong>只需完成其中一种安装方式，然后配置文字模型，就可以开始玩。</strong> 已经装好酒馆的用户，可直接看<a href="#a02--section-6">日常启动</a>、<a href="#a02--section-7">更新与重新安装</a>或<a href="#a02--section-9">安装排错</a>。</p>
-<div class="table-wrap" tabindex="0" role="region" aria-label="说明表格"><table><thead><tr><th scope="col">你的情况</th><th scope="col">选择哪一种</th><th scope="col">需要输入命令吗</th></tr></thead><tbody><tr><td>Windows / macOS，用 DeepSeek Harness 桌面版</td><td><a href="#a02--section-2">A．DeepSeek Harness 安装</a></td><td>在系统终端里运行一条命令</td></tr><tr><td>想用浏览器访问，并自己管理服务；或使用 Linux / WSL2</td><td><a href="#a02--section-3">B．命令行版</a></td><td>需要，先准备 Node.js</td></tr><tr><td>Android 11 及以上、ARM64，想直接装酒馆应用</td><td><a href="#a02--section-4">C．Android 独立 APK</a></td><td>不需要</td></tr></tbody></table></div>
-<p><strong>用桌面版的就选 A；不知道怎么选，也选 A。</strong></p>
-<p>安装前保持联网，并预留下载和安装的时间。先装好程序即可，模型密钥和人物卡可以稍后准备。不同安装方式的数据各自独立，切换方式不会自动带走原来的聊天、人物卡和设置；桌面版与命令行版不要同时运行。</p>
-<h2 id="a02--section-2">A．DeepSeek Harness 安装（Windows / macOS）</h2>
-<p>按以下顺序操作：<strong>先安装 DeepSeek Harness，再在系统终端中安装 Tavern，最后切换到 Tavern 界面。</strong></p>
-<h3>第 1 步：安装适配的 Desktop 版本</h3>
-<ol><li>打开 <a href="https://www.deepseek.com/harness/">DSH 下载页面</a>。</li><li>按页面提示下载适合自己 Windows / macOS 系统和处理器的安装包，不要下载 <strong>Source code</strong>。</li><li>安装并打开 DeepSeek Harness。已经安装的用户，先确认版本是 <strong>0.2.1-rc.2</strong>。</li></ol>
-<p>本项目当前要求 Desktop 内置的 DSH 为 <strong>0.2.1-rc.2</strong>，对应的 Desktop 版本是 <strong>0.2.1-rc.2</strong>。其他版本不一定兼容，安装器检测到不匹配会停止。请使用这里指定的适配版本，不要因为提示有新版就先升级 Desktop。</p>
-<h3>第 2 步：打开系统终端</h3>
-<p>先退出官方桌面应用，再打开 Windows PowerShell 或 macOS 终端。安装器使用官方应用内置的 Node 和 pnpm；自定义安装位置可用 DSH_DESKTOP_APP_EXECUTABLE 指定。</p>
-<p><strong>下一步的命令就粘贴在这个窗口里，不是发到 DSH 的聊天输入框里。</strong> 请从 Desktop 的入口打开，以便使用它提供的运行环境。</p>
-<p>下面的操作位置截图来自旧版 Desktop，供辨认入口；实际安装请使用上面指定的 <strong>0.2.1-rc.2</strong>。</p>
-<h3>第 3 步：只运行自己系统对应的命令</h3>
-<p>点击代码框右上角的 <strong>复制</strong>，把整条命令粘贴到刚打开的终端，按 <strong>回车</strong>，等待安装结束。命令很长，网页上可能需要横向滚动才能看全，使用复制按钮即可取得完整内容。</p>
-<p><strong>Windows 用户：运行下面这条 PowerShell 命令。</strong> 代码框上方的 <code>powershell</code> 只是语言标签，不用输入。如果窗口中是 <code>PS C:\…&gt;</code> 一类提示符，说明已经在 PowerShell 中；如果打开的是 cmd，可先输入 <code>powershell</code> 并回车，再粘贴安装命令。</p>
+<p>还没安装：先看<a href="#a02">安装与启动</a>。已经装好：从<a href="#a04">完成第一次游玩</a>开始，再按需要查阅各部分功能文档。</p><nav class="pagination" aria-label="相邻文档"><a class="" href="#a01">← 入门指南</a><a class="" href="#a02">安装与启动 →</a></nav><footer class="article-footer"><span>DSH Tavern 使用文档</span><a class="" href="#help">需要帮助？</a></footer></article><article class="doc-page" id="a02" data-group="getting-started" data-title="安装与启动"><div class="breadcrumb">使用文档 <span>/</span> <a class="" href="#a01">入门指南</a> <span>/</span> 功能说明</div><h1 tabindex="-1">安装与启动</h1><p class="lead">先安装 DSH Tavern，再配置一个可用的文字模型。桌面版和命令行版选择一种即可。</p><h2 id="a02--section-1">选一种安装方式</h2>
+<div class="table-wrap" tabindex="0" role="region" aria-label="说明表格"><table><thead><tr><th scope="col">你的设备</th><th scope="col">安装方式</th></tr></thead><tbody><tr><td>Windows / macOS 电脑</td><td><a href="#a02--section-2">桌面版</a>：装好 DeepSeek Harness，再运行一条命令（推荐）</td></tr><tr><td>想用浏览器玩，或用 Linux</td><td><a href="#a02--section-3">命令行版</a>：需要 Node.js，运行一条命令</td></tr><tr><td>Android 手机</td><td><a href="#a02--section-4">Android APK</a>：下载安装即可</td></tr></tbody></table></div>
+<p>只装一种。不同方式的数据互相独立，换方式不会带走原来的聊天和人物卡。</p>
+<h2 id="a02--section-2">桌面版（Windows / macOS）</h2>
+<h3>1. 安装 DeepSeek Harness</h3>
+<p>从 <a href="https://www.deepseek.com/harness/">DSH 下载页面</a>下载并安装 <strong>0.2.1-rc.2</strong>。其他版本不保证兼容，看到新版提示也先别升级。</p>
+<p>装好后打开一次，再完全退出：Windows 在右下角托盘里退出，macOS 按 ⌘Q。</p>
+<h3>2. 运行安装命令</h3>
+<p><strong>Windows：</strong>从开始菜单打开 <strong>PowerShell</strong>，粘贴下面这行，按回车。</p>
 <div class="code-block"><div class="code-heading"><span>powershell</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>$env:DSH_TAVERN_HOST=&#39;desktop&#39;; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData(&#39;https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.ps1&#39;)); Invoke-Expression $tavernInstaller</code></pre></div>
-<p><strong>macOS 用户：运行下面这条命令。</strong> Windows 用户跳过这条。</p>
+<p><strong>macOS：</strong>打开「终端」，粘贴下面这行，按回车。</p>
 <div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>curl -fsSL &#39;https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.sh&#39; -o /tmp/dsh-tavern-install.sh &amp;&amp; DSH_TAVERN_HOST=desktop sh /tmp/dsh-tavern-install.sh</code></pre></div>
-<p>这里的命令会下载并执行本项目的安装脚本。请保留终端窗口，等到脚本报告安装完成；如果显示错误，先看<a href="#a02--section-9">安装排错</a>，不要接着尝试其他安装方式的命令。</p>
-<h3>第 4 步：重新打开官方 Desktop</h3>
-<ol><li>安装完成后，退出并重新打开 DeepSeek Harness。</li><li>酒馆直接加载到官方 desktop 配置，无需切换 Profile；原 tavern 数据目录继续保留。</li><li>返回主界面，确认显示酒馆界面。</li></ol>
-<p>看到酒馆界面，就完成了安装。接下来去<a href="#a02--section-5">配置模型并开始第一局</a>。这一方式由 Desktop 管理启动和停止，不需要运行 <code>dsh-tavern start</code>。</p>
-<h2 id="a02--section-3">B．命令行版（Windows / macOS / Linux / WSL2）</h2>
-<p>适合希望自己启动、停止服务，并通过浏览器使用酒馆的用户。使用 Desktop 的用户可以跳过本节。</p>
-<h3>第 1 步：准备 Node.js 和终端</h3>
-<p>先安装 <strong>Node.js 22.19 或更高版本</strong>，安装后重新打开终端。Windows 从开始菜单打开 <strong>PowerShell</strong>；macOS / Linux 打开系统终端；WSL2 用户在 WSL2 终端中操作。</p>
-<p>运行下面的命令检查版本。如果提示找不到命令，先完成 Node.js 安装再继续。</p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>node --version</code></pre></div>
-<p>无需预装 DSH：安装器会准备独立的固定版本 DSH 0.2.1-rc.2，不会复用或修改全局 DSH。Git 是可选的，有 Git 时便于增量更新，没有时会使用 ZIP 下载。</p>
-<h3>第 2 步：运行本系统的安装命令</h3>
-<p><strong>Windows PowerShell：</strong></p>
+<p>点代码框右上角的 <strong>复制</strong>，就能拿到完整命令。命令要粘贴到系统终端里，不是 DSH 的聊天框。等终端显示「DSH Tavern 已安装」再关窗口；报错时看<a href="#a02--section-7">出问题时</a>。</p>
+<h3>3. 打开酒馆</h3>
+<p>重新打开 DeepSeek Harness，看到酒馆界面就装好了。以后直接打开 DeepSeek Harness 即可。</p>
+<p>想用手机玩电脑上的酒馆：打开 <strong>设置 → 手机访问</strong>，选局域网或公网，用手机扫码。电脑和酒馆要保持运行。</p>
+<p>想切回原版 DSH：<strong>设置 → 原版DSH → 切到原版 DSH 并重启</strong>。在原版的 <strong>设置 → DSH酒馆</strong> 里可以再切回来。</p>
+<h2 id="a02--section-3">命令行版（Windows / macOS / Linux）</h2>
+<p>不需要桌面版。命令行版自带一套独立的 DSH，装在自己的目录里（默认 <code>~/.dsh-tavern</code>），不会改动你已有的 DSH。</p>
+<h3>1. 准备 Node.js</h3>
+<p>安装 <a href="https://nodejs.org/">Node.js</a> <strong>22.19 或更高版本</strong>，然后重新打开终端，运行 <code>node --version</code> 确认。</p>
+<h3>2. 运行安装命令</h3>
+<p><strong>Windows（PowerShell）：</strong></p>
 <div class="code-block"><div class="code-heading"><span>powershell</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>$env:DSH_TAVERN_HOST=&#39;cli&#39;; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData(&#39;https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.ps1&#39;)); Invoke-Expression $tavernInstaller</code></pre></div>
-<p><strong>macOS / Linux / WSL2：</strong></p>
+<p><strong>macOS / Linux：</strong></p>
 <div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>curl -fsSL &#39;https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.sh&#39; -o /tmp/dsh-tavern-install.sh &amp;&amp; DSH_TAVERN_HOST=cli sh /tmp/dsh-tavern-install.sh</code></pre></div>
-<p>点击对应代码框的 <strong>复制</strong>，粘贴到终端并回车。Windows 只执行 Windows 命令，其他系统只执行下面那条。</p>
-<h3>第 3 步：选择安装目录</h3>
-<p>首次安装时会询问目录，按提示输入选项并回车：</p>
-<div class="table-wrap" tabindex="0" role="region" aria-label="说明表格"><table><thead><tr><th scope="col">选项</th><th scope="col">安装到哪里</th><th scope="col">怎么选</th></tr></thead><tbody><tr><td>1</td><td>用户目录下的 <code>.dsh-tavern</code> 文件夹</td><td>不确定时选这一项，方便以后找回</td></tr><tr><td>2</td><td>当前目录（直接回车选这一项）</td><td>确认终端当前所在文件夹就是你想安装的位置时使用</td></tr><tr><td>3</td><td>你指定的其他完整路径</td><td>希望放在其他磁盘或专用文件夹时使用</td></tr></tbody></table></div>
-<p>请记住所选目录。程序、独立运行时和游戏数据存入这里；命令入口及包管理器缓存可能位于目录外。Node.js 仍使用系统安装的版本。</p>
-<h3>第 4 步：打开酒馆网页</h3>
-<p>等待安装器完成依赖安装并启动酒馆，首次安装会尝试打开浏览器。没有自动打开时，新开一个终端，再运行：</p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh-tavern open</code></pre></div>
-<p>仍打不开时，查看服务状态与访问地址：</p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh-tavern status</code></pre></div>
-<p>使用输出中的<strong>完整访问地址</strong>，其中可能带有鉴权 token，不要分享给别人。看到酒馆界面后，继续<a href="#a02--section-5">配置模型并开始第一局</a>。</p>
-<h3>命令行版命令一览</h3>
-<p>安装完成后，新开一个 PowerShell / 终端即可使用下列命令。Windows、macOS、Linux / WSL2 的 <code>dsh-tavern</code> 命令写法相同。<strong>每次只复制你要执行的那条，不要把整张表依次执行。</strong></p>
-<div class="table-wrap" tabindex="0" role="region" aria-label="说明表格"><table><thead><tr><th scope="col">命令</th><th scope="col">用途</th><th scope="col">什么时候用</th></tr></thead><tbody><tr><td><code>dsh-tavern start</code></td><td>启动酒馆后台服务</td><td>开机后，或服务已经停止时</td></tr><tr><td><code>dsh-tavern open</code></td><td>在浏览器中打开当前酒馆</td><td>服务已启动，但网页关掉了或没有自动打开时</td></tr><tr><td><code>dsh-tavern status</code></td><td>查看服务状态及可用的访问地址</td><td>确认是否正在运行，或排查网页打不开时</td></tr><tr><td><code>dsh-tavern stop</code></td><td>停止酒馆后台服务</td><td>暂时不用、备份数据或准备覆盖重装时</td></tr><tr><td><code>dsh-tavern restart</code></td><td>先停止，再启动酒馆服务</td><td>更新后需要手动重启，或按排错提示重启时</td></tr><tr><td><code>dsh-tavern update</code></td><td>在原安装位置更新酒馆</td><td>想通过终端更新时</td></tr><tr><td><code>dsh-tavern install</code></td><td>使用当前本地程序安装或修复 Tavern Profile、依赖及所需运行时</td><td>手动部署或修复本地安装配置时</td></tr><tr><td><code>dsh-tavern --help</code></td><td>显示命令帮助</td><td>忘记有哪些命令时</td></tr></tbody></table></div>
-<p>不带参数运行 <code>dsh-tavern</code> 等同于 <code>dsh-tavern status</code>。帮助命令也可以写成 <code>dsh-tavern help</code> 或 <code>dsh-tavern -h</code>。</p>
-<p><strong>启动服务：</strong></p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh-tavern start</code></pre></div>
-<p><strong>打开网页：</strong> 只负责打开页面，不会自动启动尚未运行的服务。若提示尚未就绪，先运行上面的启动命令。</p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh-tavern open</code></pre></div>
-<p><strong>查看运行状态和访问地址：</strong> 地址可能包含鉴权 token，请勿公开分享。</p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh-tavern status</code></pre></div>
-<p><strong>停止服务：</strong> 停止后网页无法继续生成，已有聊天和人物卡仍保留。先等当前生成结束并保存编辑内容。</p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh-tavern stop</code></pre></div>
-<p><strong>重启服务：</strong> 如果浏览器没有恢复连接，完成后再运行 <code>dsh-tavern open</code>。</p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh-tavern restart</code></pre></div>
-<p><strong>更新酒馆：</strong> 更新沿用已安装目录，保留数据。完整覆盖重装步骤见<a href="#a02--section-7">更新与重新安装</a>。</p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh-tavern update</code></pre></div>
-<p><strong>安装或修复本地配置：</strong> 此命令使用已经下载到本地的程序，不负责获取最新版酒馆源码。第一次安装请使用本节前面的完整安装命令；要更新程序，请用 <code>update</code>，或按覆盖重装步骤重新执行完整安装命令。</p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh-tavern install --host cli</code></pre></div>
-<p>在命令行版环境中，<code>dsh-tavern install</code> 默认使用 CLI 宿主；这里显式写出 <code>--host cli</code> 便于确认安装目标。<code>--host desktop</code> 和 <code>--host android</code> 用于对应宿主内安装，命令行版用户无需切换。</p>
-<p><strong>查看帮助：</strong></p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh-tavern --help</code></pre></div>
-<p><strong>常见操作顺序：</strong> 开机后先 <code>start</code> 再 <code>open</code>；只关闭了浏览器，直接 <code>open</code>；打不开先看 <code>status</code>；更新用 <code>update</code>；需要停止服务用 <code>stop</code>。关闭终端或浏览器不等于停止后台服务。</p>
-<h2 id="a02--section-4">C．Android 独立 APK（Android 11+ / ARM64）</h2>
-<p>适合想直接安装酒馆应用的用户，无需另装 DSHA，也无需输入安装命令。APK 内置 DSHA v0.2.0-rc2 与 DSH 0.2.0-rc.2，只运行酒馆自己的 <code>tavern</code> Profile（端口 3080），手机上只有一个 DSH 服务，内存和电量开销最低。</p>
-<h3>第 1 步：下载并安装 APK</h3>
-<p><a href="https://github.com/flizzywine/dsh-tavern/releases/latest/download/dsh-tavern-android-release.apk">下载 DSH Tavern Android APK</a></p>
-<p>下载后打开 APK，按照 Android 提示，允许当前浏览器或文件管理器安装应用，然后完成安装。</p>
-<h3>第 2 步：首次启动并等待安装</h3>
-<p>打开 <strong>DSH Tavern</strong> 应用，按首次引导完成内置环境部署（离线解压，不需联网）；之后会解包内置的酒馆与依赖并完成安装。期间保持应用运行。</p>
-<p>Android 仅提供独立 APK，要求 Android 11 及以上、ARM64；不再提供通过 DSHA 安装的方式。初始化失败时先保留错误日志，再点击启动重试。</p>
-<h3>第 3 步：进入酒馆</h3>
-<p>安装完成后会自动进入酒馆，看到界面后，继续<a href="#a02--section-5">配置模型并开始第一局</a>。以后直接打开此应用；酒馆更新在应用内完成。</p>
-<p>APK 使用独立包名 <code>io.github.flizzywine.dshtavern.standalone</code>，可以与旧版 v2.1 APK 和原版 DSHA 并存，数据各自独立。旧版 v2.1 APK 与本包签名不同，不能覆盖升级：先在旧包里导出存档和人物卡，装好本包后导入。两个应用不要同时运行。安装包本身不从应用内自更新，新版本从 Releases 下载覆盖安装。</p>
-<h2 id="a02--section-5">配置模型并开始第一局</h2>
-<p><strong>能打开酒馆界面表示安装完成；要让角色回复，还需要配置可用的文字模型。</strong> 每种安装方式都从这里继续。</p>
-<ol><li>准备模型服务提供的 <strong>API 密钥、服务地址、模型名称</strong>。模型调用可能产生费用。DSH 可以接入所有模型，不限于 DeepSeek，用哪家服务或本地模型都可以。</li><li>在酒馆左侧栏底部打开 <strong>设置 → 模型</strong>，按服务方要求填写并选择文字模型。具体操作见<a href="#a03">配置文字模型</a>。</li><li>导入一张 PNG / JSON 人物卡，选择新建游玩。</li><li>预览开场，按需设置玩家称呼，发送第一条行动。</li></ol>
-<p>看到新生成的剧情正文，就完成了第一次游玩。详细步骤见<a href="#a04">第一次游玩</a>。外部预设、长期偏好、文生图等功能可以之后再配置。</p>
-<h2 id="a02--section-6">关机后如何重新打开</h2>
-<p>日常启动不用重新安装。根据你当初选择的方式操作：</p>
-<div class="table-wrap" tabindex="0" role="region" aria-label="说明表格"><table><thead><tr><th scope="col">安装方式</th><th scope="col">以后从哪里打开</th></tr></thead><tbody><tr><td>A．DeepSeek Harness</td><td>打开 <strong>DeepSeek Harness</strong>，直接使用已安装的酒馆</td></tr><tr><td>B．命令行版</td><td>打开终端，依次运行下面的启动和打开命令</td></tr><tr><td>C．Android 独立 APK</td><td>打开 <strong>DSH Tavern</strong> 应用，点击 <strong>启动 → 进入</strong></td></tr></tbody></table></div>
-<p><strong>以下命令只供 B．命令行版使用。</strong> 启动服务并打开网页：</p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>dsh-tavern start
-dsh-tavern open</code></pre></div>
-<p>需要停止服务时运行 <code>dsh-tavern stop</code>，需要重启时运行 <code>dsh-tavern restart</code>。关闭浏览器页面不等于停止服务，电脑关机则会结束本机服务。</p>
-<h2 id="a02--section-7">更新与重新安装</h2>
-<p><strong>日常更新直接点酒馆里的更新按钮。更新失败、长期卡住，或想重新执行完整安装流程时，再做“整体重新安装（覆盖更新）”。</strong></p>
-<blockquote><p><strong>整体重新安装不会覆盖数据，只替换程序。</strong>重新运行原来的安装命令即可，人物卡、聊天和设置都会保留，不用先删除或卸载。</p></blockquote>
-<div class="table-wrap" tabindex="0" role="region" aria-label="说明表格"><table><thead><tr><th scope="col">你想做什么</th><th scope="col">用哪种办法</th><th scope="col">会不会清空数据</th></tr></thead><tbody><tr><td>正常获取新版酒馆</td><td>在界面中检查并进行更新</td><td>正常更新保留数据</td></tr><tr><td>修复旧安装、重新安装最新版酒馆程序</td><td>在原位置重新运行安装命令</td><td>按原目录覆盖安装会保留数据，操作前仍建议备份</td></tr><tr><td>删除所有数据、从零开始</td><td>卸载并清除数据</td><td>会丢失数据，本页的更新步骤不需要这样做</td></tr></tbody></table></div>
-<p>这里的“整体重新安装”指<strong>重新执行安装流程，更新酒馆程序并重新安装所需依赖</strong>。它会保留游戏数据和适配的宿主版本；健康的运行环境可能被复用，不保证把每个文件都重新下载。不要为了“更彻底”先删除数据文件夹、清除 Android 应用数据或卸载应用。</p>
-<h3>更新前：先保存、确认原安装、备份数据</h3>
-<ol><li>等当前生成或修改操作完成，保存正在编辑的内容。</li><li>确认原来用的是哪一种安装方式，继续用同一种更新。尤其不要把 Desktop 版换成命令行版来“更新”。</li><li>按<a href="#n07">数据备份</a>保存重要人物卡和聊天。命令行版可停止服务后备份原安装根目录中的 <code>profile-data/tavern</code>。</li><li>保持联网。如果之前已经有更新任务在运行，先等待其结束；确认卡住时关闭旧任务，再开始一次修复，不要同时运行多个安装器。</li></ol>
-<h3>方法一：直接点击更新按钮（日常使用）</h3>
-<ol><li>打开酒馆，展开左侧栏，找到底部显示 <strong>DSH Tavern 版本号和构建号</strong> 的更新区域。</li><li>点击 <strong>检查更新</strong>。发现新构建后，点击 <strong>进行更新</strong>；旧版界面可能直接显示 <strong>更新到最新版</strong>。</li><li>等待下载和安装。期间可能短暂断开连接，不要连续点击更新或立即关闭宿主。</li><li>根据完成提示重启或刷新，具体见下表。</li></ol>
-<div class="table-wrap" tabindex="0" role="region" aria-label="说明表格"><table><thead><tr><th scope="col">安装方式</th><th scope="col">更新完成后</th></tr></thead><tbody><tr><td>A．DeepSeek Harness</td><td>退出并重新打开 Desktop，等待酒馆加载</td></tr><tr><td>B．命令行版</td><td>按提示刷新网页；若提示自动重启失败，在终端运行 <code>dsh-tavern restart</code>，再 <code>dsh-tavern open</code></td></tr><tr><td>C．Android 独立 APK</td><td>返回应用的启动页，重启后再进入酒馆</td></tr></tbody></table></div>
-<p>看到 <strong>未发现更新构建</strong> 就表示检查时没有发现更新，无需重装。命令行版也可以直接在终端运行 <code>dsh-tavern update</code>，它会沿用已安装位置。</p>
-<p>检查更新会依次使用 GitHub API 与 jsDelivr，任一可达即可完成检查；只有 GitHub 不可达时，结果会附带提示，因为 jsDelivr 可能有数小时缓存延迟。两者都不可达时，可用环境变量把查询地址改到可访问的镜像，重启酒馆后生效：</p>
-<div class="table-wrap" tabindex="0" role="region" aria-label="说明表格"><table><thead><tr><th scope="col">环境变量</th><th scope="col">默认地址</th><th scope="col">用途</th></tr></thead><tbody><tr><td><code>DSH_TAVERN_COMMIT_URL</code></td><td>api.github.com 的 main 最新提交</td><td>判断最新构建</td></tr><tr><td><code>DSH_TAVERN_CDN_METADATA_URL</code></td><td>jsDelivr 上的 <code>dsh-tavern-runtime.json</code></td><td>GitHub 不可达时的备用清单</td></tr><tr><td><code>DSH_TAVERN_VERSION_URL</code></td><td>raw.githubusercontent.com 的 <code>package.json</code></td><td>仅用于显示版本号，失败不影响检查</td></tr></tbody></table></div>
-<h3>方法二 A：DeepSeek Harness 版整体重新安装（覆盖更新）</h3>
-<p><strong>最直接的办法：重新执行第一次安装酒馆时的那条命令。无需先卸载 Desktop，也无需删除 tavern Profile。</strong></p>
-<ol><li>保存操作并备份重要数据，确认 Desktop 仍为 <strong>0.2.1-rc.2</strong>。</li><li>退出桌面应用，打开系统 PowerShell 或终端。</li><li>复制下面自己系统对应的整条命令，粘贴到这个终端，按回车。以下命令与首次安装相同，会获取安装脚本并在原宿主中覆盖更新酒馆。</li></ol>
-<p><strong>Windows PowerShell：</strong></p>
-<div class="code-block"><div class="code-heading"><span>powershell</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>$env:DSH_TAVERN_HOST=&#39;desktop&#39;; $tavernInstaller=[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData(&#39;https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.ps1&#39;)); Invoke-Expression $tavernInstaller</code></pre></div>
-<p><strong>macOS：</strong></p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>curl -fsSL &#39;https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install.sh&#39; -o /tmp/dsh-tavern-install.sh &amp;&amp; DSH_TAVERN_HOST=desktop sh /tmp/dsh-tavern-install.sh</code></pre></div>
-<p><strong>命令执行后，继续完成以下操作：</strong></p>
-<ol><li>等待终端报告安装完成。如果显示错误，先保留错误日志，不要删除原数据再试。</li><li>退出并重新打开官方 Desktop，酒馆自动加载。</li><li>打开原聊天，确认人物卡、聊天和设置仍在，再检查更新区域的结果。</li></ol>
-<p>这会重新安装酒馆程序及依赖，<strong>不会重装或升级 Desktop 本身</strong>。如果 Desktop 应用已经损坏、连设置都打不开，应先备份其数据，再修复安装指定的 Desktop 0.2.1-rc.2，随后执行上述步骤。</p>
-<h3>方法二 B：命令行版整体重新安装（覆盖更新）</h3>
-<ol><li>保存操作，在终端运行 <code>dsh-tavern stop</code> 停止服务，然后备份数据。</li><li>找到<strong>原安装根目录</strong>，也就是包含 <code>apps</code>、<code>runtime</code>、<code>profile-data</code> 的那一层，不是 <code>apps/dsh-tavern</code> 源码文件夹。</li><li>在这个根目录打开 PowerShell / 终端，再运行 <a href="#a02--section-3">B．命令行版</a>中对应系统的安装命令。安装器会重新获取酒馆程序、安装依赖并检查独立 DSH 运行时。</li><li>如果再次询问安装目录，确认选择原位置。也可以在运行安装命令前设置 <code>DSH_TAVERN_CLI_HOME</code>，明确指定原安装根目录。</li><li>安装完成后新开终端，运行 <code>dsh-tavern status</code> 查看服务状态，再运行 <code>dsh-tavern open</code>。若服务未运行，先执行 <code>dsh-tavern start</code>。</li></ol>
-<p><strong>如何明确指定原目录：</strong> 下面仅是写法示例，必须把示例路径换成你自己的原安装根目录，不能直接照抄。设置后，在同一个终端中运行 B 的安装命令。</p>
-<p>Windows PowerShell 示例：</p>
-<div class="code-block"><div class="code-heading"><span>powershell</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>$env:DSH_TAVERN_CLI_HOME=&#39;D:\Apps\DSH-Tavern-CLI&#39;</code></pre></div>
-<p>macOS / Linux / WSL2 示例（仅当你原来确实装在这个默认位置时使用）：</p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>export DSH_TAVERN_CLI_HOME=&quot;$HOME/.dsh-tavern&quot;</code></pre></div>
-<p><strong>只有独立 DSH 运行时也需要强制重装时，才做下面这一步。</strong> 普通覆盖安装会复用健康的固定版本运行时；这不是漏更新。如果怀疑运行时损坏，可在同一个终端中、执行安装命令前再设置：</p>
-<p>Windows PowerShell：</p>
-<div class="code-block"><div class="code-heading"><span>powershell</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>$env:DSH_TAVERN_REINSTALL_RUNTIME=&#39;1&#39;</code></pre></div>
-<p>macOS / Linux / WSL2：</p>
-<div class="code-block"><div class="code-heading"><span>bash</span><button type="button" class="copy-code" aria-label="复制这段命令" hidden>复制</button></div><pre tabindex="0"><code>export DSH_TAVERN_REINSTALL_RUNTIME=1</code></pre></div>
-<p>然后运行 B 中的安装命令。完成后关闭这个终端，避免临时设置影响下次操作。此选项只适用于命令行版，重新安装的仍是本项目固定的 DSH 0.2.1-rc.2，不是升级到其他版本。</p>
-<h3>方法二 C：Android 独立 APK 更新与修复</h3>
-<p><strong>酒馆程序和 APK 应用是两层，覆盖安装 APK 不等于强制重新安装酒馆。</strong></p>
-<ol><li>日常更新酒馆，使用上面的方法一，完成后回到应用启动页重启。</li><li>要更新或修复 APK 应用本身，从 <a href="#a02--section-4">C．Android 独立 APK</a>下载本项目的安装包，在现有应用上覆盖安装。必须使用同签名安装包，不要先卸载，也不要点击系统设置中的“清除数据”。</li><li>打开应用，点击启动、进入，确认原聊天和人物卡仍在。</li></ol>
-<p>首次安装未完成的应用，会在再次启动时重试初始化。已完成初始化的应用可能复用现有酒馆文件，不能把“重新装了一次 APK”当成酒馆程序一定已重装。如果酒馆打不开或更新仍失败，保留启动日志，按本页 Android 排错处理；不要通过卸载来强迫它重新初始化。</p>
-<h3>怎样确认更新完成</h3>
-<p>重新打开酒馆后，在左侧栏底部检查当前版本和构建号，再点击 <strong>检查更新</strong>。版本号可能不变而构建号变化，所以不要只看大版本号。能打开原聊天、人物卡仍在，且更新检查没有报错、没有发现更新构建，就完成了这次更新。</p>
-<p>如果打开后数据像全新安装，先检查是不是选错了 Profile、安装目录或应用，不要立刻认定数据已删除，也不要马上覆盖或清理旧目录。</p>
-<h3>为什么不能随意升级 官方桌面版</h3>
-<p>当前适配的 DSH 是 <strong>0.2.1-rc.2</strong>。官方桌面版 的更新可能改变内置 DSH，导致酒馆不兼容；请等本项目明确适配后再升级。酒馆更新与宿主升级是两件事，安装器不会自动替你升级或降级 官方桌面版。命令行版使用自己的固定 DSH 运行时。</p>
-<h2 id="a02--section-8">可选：用手机访问电脑上的酒馆</h2>
-<p><strong>这里是“电脑运行，手机访问”，和在 Android 手机上安装应用是两种用法。</strong> 先完成电脑端安装，再按需配置；安装电脑端酒馆不需要先做本节。</p>
-<p>Desktop 安装和更新会自动配置 <a href="https://github.com/shaobeichen/dsh-pocket">dsh-pocket</a>。重启后，在 <strong>设置 → 手机访问</strong> 中选择局域网或公网访问，手机扫码连接。CLI 不提供 Pocket 手机访问，升级时会移除旧版 Pocket。使用时电脑及酒馆服务需要保持运行；选择局域网时，手机和电脑应在同一局域网。</p>
-<p>自行部署服务器的用户可参考 <a href="https://github.com/Yuuz12/dsh-webui-auth">dsh-webui-auth</a>，为已经能访问的 WebUI 添加账号密码认证。它不提供内网穿透，服务器地址、监听和端口需要自行配置。参考插件教程时，请保留本项目适配的 DSH 0.2.1-rc.2，不要照抄升级 DSH 的步骤。</p>
-<h2 id="a02--section-9">安装失败时</h2>
-<p>先确认自己用的是哪一种安装方式，停在了哪一步。保留<strong>最前面的具体错误、文件路径和前后日志</strong>，不要只截最后一句“失败”。反馈时附上系统版本、安装方式和错误截图，隐藏模型密钥、鉴权链接和私人剧情。</p>
-<h3>Desktop：命令报错、版本不匹配，或重启后没有酒馆</h3>
-<p>确认 Desktop 是 <strong>0.2.1-rc.2</strong>，且使用的是 A 中的 Desktop 安装命令。不要使用 B 中的命令行版命令。</p>
-<p>如果提示找不到官方运行环境，确认已安装指定版本，或用 DSH_DESKTOP_APP_EXECUTABLE 指向官方程序。若重启后仍是普通 DSH 界面，请检查安装日志中的配置验证结果；官方版无需切换 Profile。</p>
-<p>普通 Desktop 内置更新失败或一直停在更新中，可从系统终端重新执行 A 中的命令，完成后重启。仍失败时保留完整错误，不要反复换安装方式。</p>
-<h3>命令行版：命令无法识别或网页打不开</h3>
-<p><code>node</code> 无法识别：安装 Node.js 后重新打开 PowerShell / 终端，再运行 <code>node --version</code>。<code>dsh-tavern</code> 无法识别：先新开终端重试，仍失败时检查安装是否真正完成。</p>
-<p>网页打不开：运行 <code>dsh-tavern status</code> 查看状态；服务未运行时先 <code>dsh-tavern start</code>，再 <code>dsh-tavern open</code>。不要只输入不含鉴权信息的端口地址。</p>
-<h3>Android：初始化失败、白屏或提示需要认证</h3>
-<p>独立 APK 初始化失败时保留错误日志，再点击启动重试。安装日志位于容器内 <code>/root/.dsh/logs/tavern-install.log</code>。</p>
-<h3>能打开酒馆，但发送后没有回复</h3>
-<p>这时先检查<a href="#a03">文字模型配置</a>和服务返回的错误。能进入界面但不能生成，不等于安装失败，无需先重装。</p>
-<p>更多问题见<a href="#n08">常见问题</a>与<a href="#n04">排错日志</a>。需要手动安装或查找高级目录配置时，参考<a href="https://github.com/flizzywine/dsh-tavern/blob/main/docs/installation.md">完整安装说明</a>。</p>
-<p>安装包校验：<a href="https://github.com/flizzywine/dsh-tavern/releases/download/v2.1/dsh-tavern-android-release.apk.sha256">Android APK SHA-256 文件</a>。</p><nav class="pagination" aria-label="相邻文档"><a class="" href="#a01">← 产品概览</a><a class="" href="#index">全部功能索引 →</a></nav><footer class="article-footer"><span>DSH Tavern 使用文档</span><a class="" href="#help">需要帮助？</a></footer></article><article class="doc-page" id="compatibility" data-group="compatibility" data-title="酒馆生态兼容"><div class="breadcrumb">使用文档 <span>/</span> <a class="" href="#compatibility">酒馆生态兼容</a></div><h1 tabindex="-1">酒馆生态兼容</h1><p class="lead">已有的人物卡、世界书和预设，可以从这里继续使用。先了解支持范围，再按需要查看具体操作。</p><figure class="manual-screenshot"><a href="images/manual/card-picker.jpg" target="_blank" rel="noopener noreferrer" aria-label="放大查看选择人物卡与导入存档（新窗口）"><img src="images/manual/card-picker.jpg" alt="选择人物卡与导入存档：选卡器列出公开样例人物卡及剧本绑定状态；“导入存档”菜单可导入 DSH Tavern 存档（.dshsave）或 SillyTavern 聊天记录（.jsonl）。同一张卡可以创建不同游戏。" width="1280" height="720" loading="lazy" decoding="async"></a><figcaption><strong>选择人物卡与导入存档</strong> · 选卡器列出公开样例人物卡及剧本绑定状态；“导入存档”菜单可导入 DSH Tavern 存档（.dshsave）或 SillyTavern 聊天记录（.jsonl）。同一张卡可以创建不同游戏。<small>原创公开样例 · 灯塔小镇（CC0） · 2026-10-10 · 点击图片放大</small></figcaption></figure><figure class="manual-screenshot"><a href="images/manual/card-extensions.jpg" target="_blank" rel="noopener noreferrer" aria-label="放大查看查看正则与扩展资源（新窗口）"><img src="images/manual/card-extensions.jpg" alt="查看正则与扩展资源：展开“扩展内容”中的正则可以阅读查找正则和替换内容，并列出 MVU 相关资源；这里是只读检查，不执行卡内脚本。" width="1280" height="720" loading="lazy" decoding="async"></a><figcaption><strong>查看正则与扩展资源</strong> · 展开“扩展内容”中的正则可以阅读查找正则和替换内容，并列出 MVU 相关资源；这里是只读检查，不执行卡内脚本。<small>原创公开样例 · 灯塔小镇（CC0） · 2026-10-10 · 点击图片放大</small></figcaption></figure><p class="screenshot-source">实际应用截图 · DSH 0.1.5-rc.2 / DSH Tavern 2.5.0 · 49ff11b。<a href="examples/manual-demo/README.txt" target="_blank" rel="noopener noreferrer">样例说明 ↗</a> · <a href="examples/manual-demo/lighthouse-card.json" download>下载样例人物卡</a></p><h2 id="compatibility--section-1">可以带来哪些资源</h2>
+<p>首次安装会问装在哪里，不确定就选 1（用户目录下的 <code>.dsh-tavern</code>）。装完会尝试打开浏览器，没打开就运行 <code>dsh-tavern open</code>。</p>
+<h3>3. 日常使用</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="说明表格"><table><thead><tr><th scope="col">命令</th><th scope="col">作用</th></tr></thead><tbody><tr><td><code>dsh-tavern start</code></td><td>启动服务</td></tr><tr><td><code>dsh-tavern open</code></td><td>在浏览器打开酒馆</td></tr><tr><td><code>dsh-tavern status</code></td><td>查看是否在运行、访问地址</td></tr><tr><td><code>dsh-tavern stop</code></td><td>停止服务</td></tr><tr><td><code>dsh-tavern update</code></td><td>更新酒馆</td></tr></tbody></table></div>
+<p>开机后先 <code>start</code> 再 <code>open</code>。关掉浏览器不会停止服务。访问地址里带有鉴权 token，不要分享给别人。</p>
+<h2 id="a02--section-4">Android APK（Android 11+ / ARM64）</h2>
+<ol><li><a href="https://github.com/flizzywine/dsh-tavern/releases/latest/download/dsh-tavern-android-release.apk">下载 DSH Tavern Android APK</a>，按系统提示允许安装。</li><li>打开 <strong>DSH Tavern</strong>，按首次引导完成部署，等它自动进入酒馆。期间不要退出应用。</li><li>以后直接打开应用，点 <strong>启动 → 进入</strong>。</li></ol>
+<p>APK 自带运行环境，不用另装 DSHA。它能和旧版 v2.1 APK、原版 DSHA 同时安装，但数据不互通，旧包的存档要先导出再导入。</p>
+<h2 id="a02--section-5">开始游玩</h2>
+<p>装好后还要配一个文字模型，角色才能回复：</p>
+<ol><li>在酒馆左侧栏底部打开 <strong>设置 → 模型</strong>，填入服务地址、API 密钥和模型名。任何模型都可以，不限于 DeepSeek，见<a href="#a03">配置文字模型</a>。</li><li>导入一张 PNG / JSON 人物卡，新建游玩，发送第一句话。详见<a href="#a04">第一次游玩</a>。</li></ol>
+<h2 id="a02--section-6">更新</h2>
+<p>点酒馆左侧栏底部的 <strong>检查更新 → 进行更新</strong>，完成后按提示重启或刷新。更新只替换程序，人物卡、聊天和设置都会保留。</p>
+<p>应用内更新失败时，重新运行当初的安装命令就是覆盖更新，同样保留数据，不用先卸载。Android 应用本身的新版本从 <a href="https://github.com/flizzywine/dsh-tavern/releases">Releases</a> 下载，覆盖安装，不要先卸载。</p>
+<h2 id="a02--section-7">出问题时</h2>
+<ul><li><strong>终端报错：</strong>保留最前面的那条错误，不要只截最后一句「失败」。桌面版先确认 DeepSeek Harness 是 0.2.1-rc.2 并且已经完全退出，再重新运行命令。</li><li><strong>重启后没有酒馆界面：</strong>确认安装命令最后显示了「DSH Tavern 已安装」，再完全退出并重新打开 DeepSeek Harness。</li><li><strong>命令行版网页打不开：</strong>运行 <code>dsh-tavern status</code> 看服务是否在运行；没运行就 <code>dsh-tavern start</code>，再 <code>dsh-tavern open</code>。</li><li><strong>能打开但角色不回复：</strong>这不是安装问题，检查<a href="#a03">文字模型配置</a>。</li></ul>
+<p>还解决不了，带上系统版本、安装方式和完整错误，到 <a href="https://github.com/flizzywine/dsh-tavern/issues">GitHub Issues</a> 反馈；记得隐藏 API 密钥和访问地址里的 token。更多见<a href="#n08">常见问题</a>，目录和环境变量等高级设置见<a href="https://github.com/flizzywine/dsh-tavern/blob/main/docs/installation.md">完整安装说明</a>。</p><nav class="pagination" aria-label="相邻文档"><a class="" href="#a01">← 产品概览</a><a class="" href="#index">全部功能索引 →</a></nav><footer class="article-footer"><span>DSH Tavern 使用文档</span><a class="" href="#help">需要帮助？</a></footer></article><article class="doc-page" id="compatibility" data-group="compatibility" data-title="酒馆生态兼容"><div class="breadcrumb">使用文档 <span>/</span> <a class="" href="#compatibility">酒馆生态兼容</a></div><h1 tabindex="-1">酒馆生态兼容</h1><p class="lead">已有的人物卡、世界书和预设，可以从这里继续使用。先了解支持范围，再按需要查看具体操作。</p><figure class="manual-screenshot"><a href="images/manual/card-picker.jpg" target="_blank" rel="noopener noreferrer" aria-label="放大查看选择人物卡与导入存档（新窗口）"><img src="images/manual/card-picker.jpg" alt="选择人物卡与导入存档：选卡器列出公开样例人物卡及剧本绑定状态；“导入存档”菜单可导入 DSH Tavern 存档（.dshsave）或 SillyTavern 聊天记录（.jsonl）。同一张卡可以创建不同游戏。" width="1280" height="720" loading="lazy" decoding="async"></a><figcaption><strong>选择人物卡与导入存档</strong> · 选卡器列出公开样例人物卡及剧本绑定状态；“导入存档”菜单可导入 DSH Tavern 存档（.dshsave）或 SillyTavern 聊天记录（.jsonl）。同一张卡可以创建不同游戏。<small>原创公开样例 · 灯塔小镇（CC0） · 2026-10-10 · 点击图片放大</small></figcaption></figure><figure class="manual-screenshot"><a href="images/manual/card-extensions.jpg" target="_blank" rel="noopener noreferrer" aria-label="放大查看查看正则与扩展资源（新窗口）"><img src="images/manual/card-extensions.jpg" alt="查看正则与扩展资源：展开“扩展内容”中的正则可以阅读查找正则和替换内容，并列出 MVU 相关资源；这里是只读检查，不执行卡内脚本。" width="1280" height="720" loading="lazy" decoding="async"></a><figcaption><strong>查看正则与扩展资源</strong> · 展开“扩展内容”中的正则可以阅读查找正则和替换内容，并列出 MVU 相关资源；这里是只读检查，不执行卡内脚本。<small>原创公开样例 · 灯塔小镇（CC0） · 2026-10-10 · 点击图片放大</small></figcaption></figure><p class="screenshot-source">实际应用截图 · DSH 0.1.5-rc.2 / DSH Tavern 2.5.0 · 49ff11b。<a href="examples/manual-demo/README.txt" target="_blank" rel="noopener noreferrer">样例说明 ↗</a> · <a href="examples/manual-demo/lighthouse-card.json" download>下载样例人物卡</a></p><h2 id="compatibility--section-1">可以带来哪些资源</h2>
 <div class="table-wrap" tabindex="0" role="region" aria-label="说明表格"><table><thead><tr><th scope="col">资源或能力</th><th scope="col">可以做什么</th><th scope="col">继续阅读</th></tr></thead><tbody><tr><td>人物卡</td><td>导入 PNG / JSON，查看、编辑，导出 JSON</td><td><a href="#i01">导入人物卡</a></td></tr><tr><td>世界书</td><td>导入背景设定，编辑条目并关联人物卡</td><td><a href="#j01">认识世界书库</a></td></tr><tr><td>预设</td><td>检查和管理外部提示词与正则</td><td><a href="#l01">谨慎使用外部预设</a></td></tr><tr><td>正则与前端美化</td><td>处理正文格式，展示 HTML 内容和人物卡面板</td><td><a href="#d08">正则与 HTML</a></td></tr><tr><td>MVU</td><td>后台更新变量，在右侧持续展示状态栏</td><td><a href="#d02">MVU 状态栏</a></td></tr><tr><td>聊天记录</td><td>从选卡界面的“导入存档”导入 SillyTavern 聊天记录（.jsonl），作为一局新游戏接着玩</td><td><a href="#n02">导出与导入存档</a></td></tr></tbody></table></div>
 <h2 id="compatibility--section-2">支持范围怎么理解</h2>
 <p>能导入一张卡，不等于它依赖的全部第三方脚本都能执行。我们分别说明资源的导入、编辑、展示和运行支持，不用“全面兼容”代替具体条件。</p>
