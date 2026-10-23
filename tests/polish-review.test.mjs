@@ -27,6 +27,9 @@ test('原则作 system，人物卡、前文与正文作审稿材料', () => {
   const text = request.messages[0].content[0].text
   for (const part of ['【人物卡：罗峰】\n少年武者', '【玩家角色】阿杰', '【上一轮正文】\n上一轮', '【本轮玩家输入】\n继续', '【本轮正文】\n本轮正文']) assert.ok(text.includes(part), part)
   assert.throws(() => buildPolishReviewRequest({ principles: ' ', reply: 'x', input: '', previous: '' }), /精修原则为空/)
+  assert.ok(!text.includes('【玩家的修改意见】'))
+  const guided = buildPolishReviewRequest({ principles: prompt('polish'), input: '', previous: '', reply: '本轮正文', guidance: '侧重心理描写' })
+  assert.match(guided.messages[0].content[0].text, /【玩家的修改意见】\n侧重心理描写/)
 })
 
 test('修改清单逐条定位原文，重叠的后一条不可选，读不懂的输出退回意见框', () => {

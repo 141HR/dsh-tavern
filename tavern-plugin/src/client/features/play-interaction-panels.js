@@ -183,7 +183,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
             async function runPolish() {
                 setReviewing(true); setReviewNote("");
                 try {
-                    const result = await rpc("polishBody", {}, props.sessionId);
+                    const result = await rpc("polishBody", { guidance }, props.sessionId);
                     const skipped = result.edits.filter(edit => edit.status !== "ok").length;
                     if (result.guidance) { setGuidance(result.guidance); setReviewNote("审稿没有按格式输出修改清单，内容已填进意见框，可以按意见重新生成"); }
                     else if (!result.view) setReviewNote(skipped ? "审稿给出的 " + skipped + " 条修改都没在正文里找到原文，正文没有改动" : "审稿没有发现需要修改的地方");
@@ -199,7 +199,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
             }
 			return h(RegenGuideForm, {
 				title: "重新生成正文",
-				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改；精修：按原则直接改好，对比和撤销在「精修对比」页",
+				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改；精修：按原则直接改好（填了意见会一并照意见改），对比和撤销在「精修对比」页",
 				loading: reviewing ? "正在精修正文… " + reviewSeconds + " 秒" : panel.phase === "loading" ? (panel.restyle ? "正在换文风联想并重新生成…" : panel.rewrite ? "正在按意见改写正文…" : "正在重新生成正文…") : "",
 				extra: h(React.Fragment, null, styleEnabled ? h("div", { className: "dsh-tavern-regen-style" },
 					h("label", null, h("input", { type: "checkbox", checked: restyle, onChange: event => setRestyle(event.target.checked) }), " 同时换一段文风联想"),
@@ -210,7 +210,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 				placeholder: "指导意见（可选）",
 				examples: ["写得更长", "侧重心理描写", "加快节奏"],
 				submitLabel: "生成并替换正文",
-				secondary: { label: "精修", title: "按「正文精修原则」审读当前正文，直接改掉问题（一句到整段），不重新生成；前后对比与撤销在顶部「精修对比」页", disabled: reviewing, onClick: runPolish },
+				secondary: { label: "精修", title: "按「正文精修原则」审读当前正文，直接改掉问题（一句到整段），填了指导意见会优先照意见改；不重新生成；前后对比与撤销在顶部「精修对比」页", disabled: reviewing, onClick: runPolish },
 				onSubmit: generate,
 				onCancel: function () { setRegenPanel(null); }
 			});

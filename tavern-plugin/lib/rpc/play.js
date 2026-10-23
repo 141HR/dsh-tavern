@@ -155,7 +155,7 @@ export function createPlayHandlers(deps) {
       const chat = await chatHeaderWithLatestFloors(sessionId, 4)
       const card = await readCard(chat.cardPath).catch(() => undefined) || chat.cardDefinitionSnapshot?.raw?.data || chat.cardDefinitionSnapshot?.raw
       const request = buildPolishReviewRequest({ principles: runtimePrompt('polish'), card, playerName: chat.macroState?.userName,
-        ...polishReviewContext(chat.messages), reply: texts.join('\n\n') })
+        ...polishReviewContext(chat.messages), reply: texts.join('\n\n'), guidance: args?.guidance })
       const review = parsePolishReview(await callModel({ sessionId, ...request }), texts)
       const chosen = review.edits.filter(item => item.status === 'ok')
       if (review.fallback || !chosen.length) return { edits: review.edits, guidance: review.fallback, view: null }
