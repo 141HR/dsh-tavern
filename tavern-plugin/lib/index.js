@@ -672,6 +672,22 @@ export async function apply(ctx) {
     }
     return card
   }
+  // The card on disk for update checks on every read of a playing game: read again only when its
+  // file changed (any way of editing a card writes that file). Shared and read-only.
+  const latestCards = new Map()
+  async function readLatestCard(cardPath) {
+    const normalized = str(cardPath) === '' ? '' : normalizeResourcePath(cardPath, 'card')
+    const stamp = normalized ? (await fileResources.metadata(normalized).catch(() => null))?.updatedAt : 0
+    const cached = latestCards.get(normalized)
+    if (stamp && cached?.stamp === stamp) return cached.card
+    const card = await readCard(normalized)
+    latestCards.delete(normalized)
+    if (stamp && card) {
+      latestCards.set(normalized, { stamp, card })
+      while (latestCards.size > 8) latestCards.delete(latestCards.keys().next().value)
+    }
+    return card
+  }
   async function readCardExtensions(cardPath, chat, settings) {
     const workspace = chat?.cardDefinitionSnapshot || await readCardWorkspace(cardPath)
     if (workspace === undefined) return undefined
@@ -1719,7 +1735,7 @@ export async function apply(ctx) {
     return await conversationInitialization.ensureOpening(sessionId)
   }
   const contextPlanner = createContextPlanner({ prompt: runtimePrompt, callModel: callModel, now: Date.now, logger: console })
-  const playCardSnapshots = createPlayCardSnapshots({ worldBooks, planner: contextPlanner, readCard: readChatCard, readLatestCard: readCard, writeChat, updateChat,
+  const playCardSnapshots = createPlayCardSnapshots({ worldBooks, planner: contextPlanner, readCard: readChatCard, readLatestCard, writeChat, updateChat,
     userPreferenceProfile })
   const ensurePlayCardSnapshot = playCardSnapshots.ensure
   async function ensureNativeSystemPrefix(session, chat) {

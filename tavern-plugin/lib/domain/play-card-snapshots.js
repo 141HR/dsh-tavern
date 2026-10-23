@@ -145,10 +145,17 @@ export function createPlayCardSnapshots({ worldBooks, planner, readCard, readLat
   }
 
   function updateDigest(card, snapshot) {
-    return cardContentDigest({ card: cardContentDigest(card), worldbook: worldbookContentDigest(snapshot) })
+    return cardContentDigest({ card: digestOfCard(card), worldbook: worldbookContentDigest(snapshot) })
   }
 
-  function cardOnlyDigest(card) { return cardContentDigest({ card: cardContentDigest(card), worldbook: null }) }
+  // A status check runs on every read of a game with the same shared latest card: hash it once.
+  const cardDigests = new WeakMap()
+  function digestOfCard(card) {
+    if (!card || typeof card !== 'object') return cardContentDigest(card)
+    if (!cardDigests.has(card)) cardDigests.set(card, cardContentDigest(card))
+    return cardDigests.get(card)
+  }
+  function cardOnlyDigest(card) { return cardContentDigest({ card: digestOfCard(card), worldbook: null }) }
   // Any stored copy, even a legacy one, is replaced as a whole by an explicit reload.
   function keepsCopy(chat) { return chat.openingWorldbookSnapshot !== undefined && chat.openingWorldbookSnapshot !== null }
 
@@ -170,7 +177,7 @@ export function createPlayCardSnapshots({ worldBooks, planner, readCard, readLat
   }
 
   function cardStatusBase(chat, card) {
-    const cardChanged = !chat.cardContentDigest || chat.cardContentDigest !== cardContentDigest(card)
+    const cardChanged = !chat.cardContentDigest || chat.cardContentDigest !== digestOfCard(card)
     const migrations = (card?.extensions?.dsh_tavern?.stateMigrations || []).filter(plan => !chat.cardStateMigrationIds?.includes(plan.id)).flatMap(plan => plan.operations || []).map(op => op.op === 'move' ? op.from + ' → ' + op.path : op.op === 'convert' ? op.path + ' → ' + op.type : '删除 ' + op.path)
     return { legacy: !chat.cardContentDigest, cardChanged, migrations }
   }
