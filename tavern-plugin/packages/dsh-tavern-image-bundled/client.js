@@ -5236,7 +5236,12 @@ function versionsOf(jobId) {
         const pv = String(config[providerKey] || '')
         const md = String(config[modelKey] || '')
         const ef = String(config[effortKey] || '')
-        const models = (llmModels[pv] || []).filter(m => !onlyVision || m.vision)
+        const allModels = llmModels[pv] || []
+        const visionModels = allModels.filter(m => m.vision)
+        // 看图模型只列能看图的；但如果这个服务商一个都没标记（比如 opencode 渠道没有
+        // inputModalities 里的 image），不能因此变成空下拉 —— 退回全部并提示。
+        const noVisionMarked = Boolean(onlyVision) && Boolean(pv) && allModels.length > 0 && visionModels.length === 0
+        const models = !onlyVision ? allModels : (visionModels.length ? visionModels : allModels)
         const reason = llmReasoning[pv + '/' + md]
         const optStyle = {}
         const set = (patch) => setData(current => Object.assign({}, current, { config: Object.assign({}, current?.config || {}, patch) }))
@@ -5261,6 +5266,9 @@ function versionsOf(jobId) {
               models.map(m => h('option', { key: m.id, value: m.id, style: optStyle }, m.name + (onlyVision && m.vision ? '　👁' : ''))),
               md && !models.some(m => m.id === md) ? h('option', { value: md, style: optStyle }, md + '（当前值）') : null,
             ),
+              noVisionMarked ? h('div', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', marginTop: '4px' } },
+                '「' + pv + '」没有标记支持看图的模型，这里列出它的全部模型；能不能读图取决于该服务商是否真的支持图像输入。'
+              ) : null,
             h('select', {
               'aria-label': label + ' 推理等级', title: '推理等级', value: ef, style: select(),
               onChange: e => { set({ [effortKey]: e.target.value }); save({ [effortKey]: e.target.value }) },
