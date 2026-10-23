@@ -94,7 +94,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
   const pendingRollbacks = new Set()
   const pendingRegenerations = new Set()
   const pendingReplays = new Set()
-  const regenerationRecovery = createRegenerationRecovery({ chats, sessions, timeline, isActive: id => pendingRegenerations.has(id) })
+  const regenerationRecovery = createRegenerationRecovery({ chats, sessions, timeline, isActive: id => pendingRegenerations.has(id), repair: (sessionId, session) => repairSurface(sessionId, session) })
   // The save is the truth (docs/design/native-session-repair.md): when the native
   // surface no longer shows the round the save has, rewrite its tail from the save
   // instead of refusing. Repair reports its own failure and leaves a retry marker.
@@ -530,8 +530,13 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     if (saved?.phase !== 'committed' || saved.id !== operationId || saved.sessionId !== session.id || !saved.projection) {
       return await regenerationRecovery.complete({ chatId: chat.id, session, operationId }) || chat
     }
-    applyRegenerationProjection(session, saved.projection)
-    if (typeof sessions.flush === 'function') await sessions.flush(session)
+    try {
+      applyRegenerationProjection(session, saved.projection)
+      if (typeof sessions.flush === 'function') await sessions.flush(session)
+    } catch {
+      // The complete completion retries once, then ends the marker and repairs from the save.
+      return await regenerationRecovery.complete({ chatId: chat.id, session, operationId }) || chat
+    }
     const replacing = projectedReplacingTurns(chat)
     const head = await chats.patch(chat.id, chat._storageRevision, [{ op: 'delete', path: ['regenRecovery'] }, { op: 'delete', path: ['regenInProgress'] },
       replacing ? { op: 'set', path: ['replacingDshTurns'], value: replacing } : { op: 'delete', path: ['replacingDshTurns'] }], { source: 'foreground.regen-projected' })
@@ -552,7 +557,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     const chat = str(chatId) === '' ? await chatForSession(sessionId) : await readChat(chatId)
     if (chat === undefined || chat === null) throw new Error('聊天不存在: ' + chatId)
     if (pendingReplays.has(chat.id)) throw new Error('正在重放失败回合，请等待完成')
-    if (pendingRegenerations.has(chat.id) || chat.regenInProgress === true) throw new Error('正文正在重新生成，请等待完成')
+    await settleStaleRegeneration(chat)
     if (pendingRollbacks.has(chat.id)) throw new Error('正在回退本轮，请等待完成')
     const agent = sessions.get(chat.sessionId)
     if (agent === undefined || agent.session === undefined) throw new Error('无法访问 DSH 会话: ' + chat.sessionId)
@@ -636,7 +641,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     const chat = str(chatId) === '' ? await (chats.stateForSession || chatForSession)(sessionId) : await (chats.readState || readChat)(chatId)
     if (chat === undefined) throw new Error('聊天不存在: ' + chatId)
     if (pendingReplays.has(chat.id)) throw new Error('正在重放失败回合，请等待完成')
-    if (pendingRegenerations.has(chat.id) || chat.regenInProgress) throw new Error('正文正在重新生成，请先完成恢复或生成')
+    await settleStaleRegeneration(chat)
     if (pendingRollbacks.has(chat.id)) throw new Error('正在回退本轮，请等待完成')
     pendingRollbacks.add(chat.id)
     let restoredHandle
@@ -654,6 +659,16 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
   // 回退到某一轮：逐轮执行与「回退本轮」相同的回退，直到该轮成为最新一轮。
   // 中途无法继续（如更早的轮次已被上下文压缩）时保留已退回的轮次并提示用分叉。
   // 一次撤销恢复全部轮次：撤销点取第一步的回退前状态与最后一步的回退后状态。
+  // A marker no live regeneration owns is a leftover: recovery always ends it, so
+  // it can never keep rollback away. Only a regeneration still running refuses.
+  async function settleStaleRegeneration(chat) {
+    if (pendingRegenerations.has(chat.id)) throw new Error('正文正在重新生成，请先完成恢复或生成')
+    if (!chat.regenInProgress) return
+    await regenerationRecovery.recover(chat.id)
+    const state = chats.readState ? await chats.readState(chat.id) : await readChat(chat.id)
+    if (state?.regenInProgress) throw new Error('正文正在重新生成，请先完成恢复或生成')
+  }
+
   async function rollbackToTurn(sessionId, chatId, targetTurn) {
     const target = Number(targetTurn)
     if (!Number.isSafeInteger(target) || target < 1) throw new Error('回退目标轮次无效')
@@ -661,7 +676,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     const state = str(chatId) === '' ? await (chats.stateForSession || chatForSession)(sessionId) : await (chats.readState || readChat)(chatId)
     if (state === undefined) throw new Error('聊天不存在: ' + chatId)
     if (pendingReplays.has(state.id)) throw new Error('正在重放失败回合，请等待完成')
-    if (pendingRegenerations.has(state.id) || state.regenInProgress) throw new Error('正文正在重新生成，请先完成恢复或生成')
+    await settleStaleRegeneration(state)
     if (pendingRollbacks.has(state.id)) throw new Error('正在回退本轮，请等待完成')
     pendingRollbacks.add(state.id)
     let restoredHandle
