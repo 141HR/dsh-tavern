@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { projectPlayerContent } from './player-input-content.js'
 import { resolveRuntimePresetMacros } from './runtime-presets.js'
 import { projectRuntimePresetRequest } from './runtime-preset-lifecycle.js'
-import { STORY_INPUT_ONLY_PROMPT, STORY_SUBMIT_PROMPT, STORY_SUBMIT_PROMPT_STRICT, STORY_SUBMIT_TOOL_NAME } from './story-tool-submission.js'
+import { STORY_INPUT_ONLY_PROMPT, STORY_SUBMIT_PROMPT, STORY_SUBMIT_PROMPT_STRICT, STORY_SUBMIT_TOOL_NAME, withStorySubmitAck } from './story-tool-submission.js'
 import { NO_FOREGROUND_TOOLS_PROMPT, normalizeDisabledForegroundTools } from './foreground-tools.js'
 import { projectHistoryAsToolCalls } from './history-tool-call.js'
 import { markRequestHandled, requestHandledBy } from './request-lineage.js'
@@ -312,8 +312,10 @@ export function createNativePlayOrchestrationStrategy(options) {
       // declaration is missing, so replay only when this turn offers submit_story;
       // the per-game tool switch can still remove it after the global settings say on.
       const historyWanted = typeof options.historyToolCall === 'function' ? (await options.historyToolCall()) === true : false
-      const submitOffered = historyWanted && (typeof options.visibleTools !== 'function'
-        || (await options.visibleTools(sessionId)).includes(STORY_SUBMIT_TOOL_NAME))
+      const outputWanted = typeof options.storyOutputToolCall === 'function' ? (await options.storyOutputToolCall()) === true : false
+      const submitVisible = typeof options.visibleTools !== 'function'
+        || (await options.visibleTools(sessionId)).includes(STORY_SUBMIT_TOOL_NAME)
+      const submitOffered = historyWanted && submitVisible
       stagedRequests.set(sessionId, {
         turn: Math.max(0, Number(payload.turn) || 0),
         step: Math.max(1, Number(payload.step) || 1),
@@ -321,6 +323,7 @@ export function createNativePlayOrchestrationStrategy(options) {
         snapshot: snapshot || null,
         // Resolved here because the request projection below is synchronous.
         historyToolCall: submitOffered,
+        storyOutputToolCall: outputWanted && submitVisible,
         historyLayout: typeof options.historyLayout === 'function' ? String(await options.historyLayout() || 'story') : 'story'
       })
     }
@@ -408,6 +411,13 @@ export function createNativePlayOrchestrationStrategy(options) {
     }
     const labelled = labelPresetFront(request.messages, frontTexts.get(sessionId))
     if (labelled !== request.messages) request = Object.assign({}, request, { messages: labelled })
+    // A real assistant turn placed before the current player input, not after
+    // it: providers still see the player's message last, and the model reads its
+    // own submission commitment right before answering.
+    if (staged.storyOutputToolCall === true) {
+      const acknowledged = withStorySubmitAck(request.messages, staged.turn)
+      if (acknowledged !== request.messages) request = Object.assign({}, request, { messages: acknowledged })
+    }
     if (request === optionsValue) return null
     return markRequestHandled(request, PROJECTED)
   }

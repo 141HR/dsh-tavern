@@ -3489,6 +3489,7 @@ export async function apply(ctx) {
     requestIdForTurn,
     runtimePrompt,
     sessionStore,
+    storyOutputToolCall: async () => (await readTavernSettings()).storyOutputToolCall,
     turnOrchestrator,
     userMessageForTurn,
   })
