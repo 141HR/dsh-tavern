@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "c6348a45efa8f6b9c02857be2090f389bb9640f8",
-  "releaseSequence": 849,
+  "revision": "785963fd9c3ea2ec5a07f34441d75b0ea97682d8",
+  "releaseSequence": 850,
   "version": "3.1.0",
   "files": [
     {
@@ -596,8 +596,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "ba49e21988281fd1fe05d681357f432a41872bcdab21332c70714dfdcaa7c8a1",
-      "size": 2029083
+      "sha256": "3e06855cc5f42c0a6ffbcd502e371f02863ea88d0fdc41b238016f24f16b8169",
+      "size": 2029424
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -1951,8 +1951,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/session-view-projection.js",
-      "sha256": "446ad4e837c795e0c9feb0963849aa09e19241e4649ea3c13bb5189d47e115f7",
-      "size": 31384
+      "sha256": "f015000514fab19378341461b18256347ea62f320c18e7b2ca35b38d3197c5fd",
+      "size": 31510
     },
     {
       "path": "tavern-plugin/lib/domain/session-view-reader.js",
@@ -5141,8 +5141,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/play-controls.js",
-      "sha256": "89eb53b493223e7dd07cc4e379e3d77a64f3174f6443d11518c2fd29e2ffed46",
-      "size": 89856
+      "sha256": "93aac78ec4ceb6ded1e9686cee300d9ab8cf70f3134b0722c979ada255c51845",
+      "size": 90197
     },
     {
       "path": "tavern-plugin/src/client/features/play-interaction-panels.js",
