@@ -176,6 +176,7 @@ import { LEDGER_SUBMIT_TOOL } from './domain/story-ledger.js'
 import { createManualLedger } from './domain/manual-ledger.js'
 import { POSTURE_SUBMIT_TOOL } from './domain/posture-submission.js'
 import { createCastPresentation } from './domain/cast-presentation.js'
+import { createPolishRecords } from './domain/polish-records.js'
 import { createCastAssets } from './domain/cast-assets.js'
 import { createSpeech } from './domain/speech.js'
 import { createAssetPacks } from './domain/asset-packs.js'
@@ -2101,6 +2102,8 @@ export async function apply(ctx) {
     readChatCard
   })
   const pluginSettlementProgress = createPluginSettlementProgress()
+  // What each 精修 changed, shown on the 精修对比 page.
+  const polishRecords = createPolishRecords({ data: pluginData, turns: pluginTurns })
   // Dialogue speakers and emotions, annotated by settlement (docs/design/cast-presentation.md).
   const castPresentation = createCastPresentation({
     // On for every game with the global switch, and for games of a card whose stage is on (the stage reads the annotations).
@@ -3115,7 +3118,7 @@ export async function apply(ctx) {
   // Request handlers by area live in rpc/; bindings assigned later are read through getters.
   const rpcDeps = { TAVERN_PACKAGE_VERSION, agentCompaction, agentRegistry, appendStoryRounds,
     applicationUpdater, attachPlayChatDebug, backgroundAgentRunner, backgroundCatalog,
-    backgroundConfigForSession, bindScript, bodyEditor, callModel, candidateGenerator, candidateTasks,
+    backgroundConfigForSession, bindScript, bodyEditor, callModel, candidateGenerator, candidateTasks, polishRecords,
     cardMemory, cardOrganization, cardPacksOf, cardPlugins, cardPreparation, cardTaskPrompts, castAssets,
     castCardOf, castEdit, castPresentation, castStage, castView, chatForSession, chatHeaderForSession,
     chatHistoryImporter, chatPersistence, commands, compactionAbort, compatibilityDiagnostics,

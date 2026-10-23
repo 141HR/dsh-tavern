@@ -894,6 +894,7 @@ window.__ModuleLoader__.load({
 // @include features/play-controls.js
 
 // @include features/request-context.js
+// @include features/polish-compare.js
 
 
 		const inject = ["slots", "sessions", "workspaces", "layout", "connection", "conversation", "betterSidebar", "remote", "remote.commands", "tavernSessionSignals", "theme"];
@@ -916,6 +917,10 @@ window.__ModuleLoader__.load({
                 name: "conversation.view", id: "dsh-tavern:gallery", order: 12,
                 label: "画廊", inject: sessionId => ({ gallerySessionId: sessionId })
             }, SceneImageGallery)), "dsh-tavern: picture gallery");
+            ctx.effect(() => slots.inject("conversation.view", () => slots.register({
+                name: "conversation.view", id: "dsh-tavern:polish", order: 13,
+                label: "精修对比", inject: sessionId => ({ polishSessionId: sessionId })
+            }, PolishComparisonView)), "dsh-tavern: polish comparison");
 			// Public browser API for third-party plugins (docs/plugin-api.md).
 			tavernUiExtensions.service.ctx = ctx;
 			tavernUiExtensions.attachHost(ctx);

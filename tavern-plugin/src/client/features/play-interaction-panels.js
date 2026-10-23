@@ -198,6 +198,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
                     else if (!result.view) setReviewNote(skipped ? "审稿给出的 " + skipped + " 条修改都没在正文里找到原文，正文没有改动" : "审稿没有发现需要修改的地方");
                     else {
                         showView(result.view);
+                        window.dispatchEvent(new CustomEvent("dsh-tavern-polished", { detail: { sessionId: props.sessionId } }));
                         setPolishResult({ edits: result.edits.filter(edit => edit.status === "ok"), skipped, original: result.original, polished: result.polished, seconds: Math.round((Date.now() - started) / 1000), undone: false });
                     }
                 } catch (error) { setReviewNote("精修失败：" + String(error?.message || error)); }
@@ -208,6 +209,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
                 try {
                     const result = await rpc("undoPolish", { original: polishResult.original, polished: polishResult.polished }, props.sessionId);
                     showView(result.view);
+                    window.dispatchEvent(new CustomEvent("dsh-tavern-polished", { detail: { sessionId: props.sessionId } }));
                     setPolishResult(current => ({ ...current, undone: true }));
                 } catch (error) { setReviewNote("撤销失败：" + String(error?.message || error)); }
                 finally { setUndoing(false); }
@@ -216,11 +218,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
                 reviewNote ? h("div", { className: "dsh-tavern-choice-error" }, reviewNote) : null,
                 h("div", { className: "dsh-tavern-polish-summary" }, polishResult.undone ? "已撤销精修，正文恢复原样"
                     : "精修完成：改了 " + polishResult.edits.length + " 处，用时 " + polishResult.seconds + " 秒" + (polishResult.skipped ? "（另有 " + polishResult.skipped + " 条没找到原文，已跳过）" : "")),
-                polishResult.edits.map((edit, index) => h("div", { key: index, className: "dsh-tavern-polish-edit" },
-                    h("span", { className: "dsh-tavern-polish-body" },
-                        h("span", { className: "dsh-tavern-polish-title" }, (index + 1) + ". " + (edit.reason || "修改")),
-                        h("del", null, edit.find),
-                        edit.replace ? h("ins", null, edit.replace) : h("span", { className: "dsh-tavern-polish-reason" }, "（删去）")))),
+                polishResult.undone ? null : h("div", { className: "dsh-tavern-polish-reason" }, "前后全文对照见顶部「精修对比」页。"),
                 h("div", { className: "dsh-tavern-regen-foot" },
                     polishResult.undone ? null : h("button", { type: "button", className: "dsh-tavern-regen-cancel", disabled: undoing, onClick: undoPolish }, undoing ? "正在撤销…" : "撤销精修"),
                     h("button", { type: "button", className: "dsh-tavern-question-primary", onClick: () => setRegenPanel(null) }, "完成"))) : null;

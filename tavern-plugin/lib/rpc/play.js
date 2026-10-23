@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto'
 // In-game play, turn editing, compaction and background settlement requests.
 // `deps` carries the services ../index.js builds; dispatchMethod routes by method name.
 export function createPlayHandlers(deps) {
-  const { agentCompaction, agentRegistry, backgroundAgentRunner, backgroundCatalog, bodyEditor, callModel,
+  const { agentCompaction, agentRegistry, backgroundAgentRunner, backgroundCatalog, bodyEditor, callModel, polishRecords,
     candidateGenerator, candidateTasks, chatForSession, compactionAbort, conversationGuides, ctx,
     ledgerEditor, liveCardUpdate, manualCharacterDesign, manualLedger, notifyPluginTimeline, phoneChat,
     playCardSnapshots, pluginSettlementProgress, readBackgroundSuppression, readCard, readCardExtensions,
@@ -175,7 +175,7 @@ export function createPlayHandlers(deps) {
     // 精修: review the latest reply and apply every edit that still finds its text, as one body edit.
     // The texts before and after come back so the page can show the comparison and undo it.
     async polishBody(args) {
-      const sessionId = str(args?.sessionId)
+      const sessionId = str(args?.sessionId), started = Date.now()
       await reconcileStory(sessionId)
       const edit = await bodyEditor.read(sessionId)
       const texts = edit.parts.filter(part => part.kind === 'text').map(part => part.text)
@@ -189,7 +189,13 @@ export function createPlayHandlers(deps) {
       const polished = applyPolishEdits(texts, chosen)
       const view = await bodyEditor.save(sessionId, { token: edit.token, texts: polished })
       notifyPluginTimeline(sessionId, 'edit', { settled: true })
+      // The comparison page is a convenience: a record that cannot be kept never fails the 精修.
+      await polishRecords.save(sessionId, edit.turn, { original: texts.join('\n\n'), edits: chosen, seconds: Math.round((Date.now() - started) / 1000) })
+        .catch(error => console.warn('dsh-tavern: 精修对比记录保存失败', error))
       return { edits: review.edits, original: texts, polished, view }
+    },
+    async polishComparison(args) {
+      return { comparison: await polishRecords.latest(str(args?.sessionId)) }
     },
     // Undo 精修: only while the reply is still exactly what 精修 left.
     async undoPolish(args) {

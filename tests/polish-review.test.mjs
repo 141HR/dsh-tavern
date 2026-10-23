@@ -38,3 +38,27 @@ test('应用修改只替换选中的原句，原句不唯一或已不在就拒�
   assert.throws(() => applyPolishEdits(['甲。甲。'], [{ find: '甲。', replace: 'x' }]), /找不到要改的原句/)
   assert.throws(() => applyPolishEdits(['甲。'], [{ find: '丁', replace: 'x' }]), /找不到要改的原句/)
 })
+
+test('精修对比按原文顺序切出未改与改动段，找不到或重叠的修改跳过', async () => {
+  const { polishSegments } = await import('../tavern-plugin/lib/domain/polish-records.js')
+  const segments = polishSegments('甲。乙。丙。', [{ find: '丙。', replace: '丙改。', reason: 'b' }, { find: '甲。', replace: '', reason: 'a' }, { find: '甲。乙', replace: 'x' }, { find: '丁', replace: 'y' }])
+  assert.deepEqual(segments, [
+    { kind: 'edit', n: 2, find: '甲。', replace: '', reason: 'a' },
+    { kind: 'same', text: '乙。' },
+    { kind: 'edit', n: 1, find: '丙。', replace: '丙改。', reason: 'b' }
+  ])
+})
+
+test('只保留最近一次精修，那轮正文换了版本就不再显示', async () => {
+  const { createPolishRecords } = await import('../tavern-plugin/lib/domain/polish-records.js')
+  let game = null, key = 'k1'
+  const records = createPolishRecords({
+    data: { saveGame: async ({ data }) => { game = data }, readGame: async () => game },
+    turns: { resolveGame: async () => ({ chatId: 'c', sessionId: 's' }), currentKey: async () => key },
+    now: () => 5
+  })
+  await records.save('s', 3, { original: '甲。乙。', edits: [{ find: '乙。', replace: '乙改。', reason: '套话' }], seconds: 20 })
+  assert.deepEqual(await records.latest('s'), { turn: 3, at: 5, seconds: 20, count: 1, segments: [{ kind: 'same', text: '甲。' }, { kind: 'edit', n: 1, find: '乙。', replace: '乙改。', reason: '套话' }] })
+  key = 'k2'
+  assert.equal(await records.latest('s'), null)
+})
