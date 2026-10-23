@@ -1,6 +1,7 @@
 		// 精修对比: the latest 精修 of this game, original and polished text side by side, each change
 		// numbered and coloured with its reason. Shown while that turn still holds the polished text.
-		function tavernPolishParagraphs(segments, side) {
+		// Pointing at a change shows its reason and lights up the same change in the other column.
+		function tavernPolishParagraphs(segments, side, hover) {
 			const h = React.createElement;
 			const paragraphs = [[]];
 			function push(text, wrap) {
@@ -11,11 +12,13 @@
 			}
 			segments.forEach(function (segment, at) {
 				if (segment.kind === "same") { push(segment.text); return; }
-				const cls = "dsh-polish-mark";
-				if (side === "before") push(segment.find, function (piece) { return h("del", { key: at + piece, className: cls }, piece); });
-				else if (segment.replace) push(segment.replace, function (piece) { return h("ins", { key: at + piece, className: cls }, piece); });
-				else paragraphs[paragraphs.length - 1].push(h("span", { key: at + "cut", className: "dsh-polish-cut" }, "（删去）"));
-				paragraphs[paragraphs.length - 1].push(h("sup", { key: at + "n", className: "dsh-polish-badge dsh-polish-n" + (segment.n % 8) }, segment.n));
+				const lit = hover.current && hover.current.n === segment.n ? " is-lit" : "";
+				const events = hover.events(segment);
+				const cls = "dsh-polish-mark" + lit;
+				if (side === "before") push(segment.find, function (piece) { return h("del", Object.assign({ key: at + piece, className: cls }, events), piece); });
+				else if (segment.replace) push(segment.replace, function (piece) { return h("ins", Object.assign({ key: at + piece, className: cls }, events), piece); });
+				else paragraphs[paragraphs.length - 1].push(h("span", Object.assign({ key: at + "cut", className: "dsh-polish-cut" + lit }, events), "（删去）"));
+				paragraphs[paragraphs.length - 1].push(h("sup", Object.assign({ key: at + "n", className: "dsh-polish-badge dsh-polish-n" + (segment.n % 8) }, events), segment.n));
 			});
 			return paragraphs.filter(function (children) { return children.length; }).map(function (children, index) { return h("p", { key: index }, children); });
 		}
@@ -25,7 +28,17 @@
 			const sessionId = props.polishSessionId;
 			const [state, setState] = React.useState(null);
 			const [busy, setBusy] = React.useState(false);
+			const [tip, setTip] = React.useState(null);
 			const revision = React.useRef(0);
+			const hover = {
+				current: tip,
+				events: function (segment) {
+					function show(event) { setTip({ n: segment.n, reason: segment.reason || "修改", x: event.clientX, y: event.clientY }); }
+					return { onMouseEnter: show, onMouseMove: show, onMouseLeave: function () { setTip(null); },
+						// A tap shows it on touch screens; another tap hides it.
+						onClick: function (event) { if (tip && tip.n === segment.n) setTip(null); else show(event); } };
+				}
+			};
 			const load = React.useCallback(async function () {
 				const requested = ++revision.current;
 				setBusy(true);
@@ -56,8 +69,10 @@
 				current && current.error ? h("p", { role: "status" }, current.error) : null,
 				current && !comparison && !current.error ? h("p", { className: "dsh-context-empty" }, "还没有可对比的精修。在最后一轮正文下点「重新生成正文」→「精修」，改完回到这里看前后对比；撤销或再改动那轮正文后，这里就清空。") : null,
 				comparison ? h("div", { className: "dsh-polish-cols" },
-					h("div", { className: "dsh-polish-col" }, h("h4", null, "原文"), tavernPolishParagraphs(comparison.segments, "before")),
-					h("div", { className: "dsh-polish-col" }, h("h4", null, "精修"), tavernPolishParagraphs(comparison.segments, "after"))) : null,
+					h("div", { className: "dsh-polish-col" }, h("h4", null, "原文"), tavernPolishParagraphs(comparison.segments, "before", hover)),
+					h("div", { className: "dsh-polish-col" }, h("h4", null, "精修"), tavernPolishParagraphs(comparison.segments, "after", hover))) : null,
+				tip ? h("div", { className: "dsh-polish-tip", role: "tooltip", style: { left: Math.min(tip.x + 14, window.innerWidth - 336) + "px", top: (tip.y + 18) + "px" } },
+					h("span", { className: "dsh-polish-badge dsh-polish-n" + (tip.n % 8) }, tip.n), tip.reason) : null,
 				edits.length ? h("ol", { className: "dsh-polish-reasons" }, edits.map(function (segment) {
 					return h("li", { key: segment.n }, h("span", { className: "dsh-polish-badge dsh-polish-n" + (segment.n % 8) }, segment.n), segment.reason || "修改");
 				})) : null);

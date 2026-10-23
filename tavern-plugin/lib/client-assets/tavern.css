@@ -1455,6 +1455,12 @@ body.dsh-tavern-shell-active [data-dsh-panel-host] { overflow: clip; }
 del.dsh-polish-mark { text-decoration: line-through; text-decoration-color: rgba(214, 95, 95, .85); background: rgba(214, 95, 95, .08); }
 ins.dsh-polish-mark { text-decoration: none; background: rgba(76, 175, 125, .16); }
 .dsh-polish-cut { font-size: 12px; color: rgba(214, 95, 95, .9); }
+.dsh-polish-mark, .dsh-polish-cut, .dsh-polish-col .dsh-polish-badge { cursor: help; }
+del.dsh-polish-mark.is-lit { background: rgba(214, 95, 95, .22); }
+ins.dsh-polish-mark.is-lit { background: rgba(76, 175, 125, .34); }
+.dsh-polish-cut.is-lit { background: rgba(214, 95, 95, .16); border-radius: 3px; }
+.dsh-polish-tip { position: fixed; z-index: 1000; max-width: 320px; padding: 8px 12px; border-radius: 8px; background: var(--dsw-alias-bg-base, #fff); color: var(--dsw-alias-label-primary, #222); border: 1px solid var(--dsw-alias-border-l2, #ddd); box-shadow: 0 6px 20px rgba(0, 0, 0, .14); font-size: 13px; line-height: 1.6; pointer-events: none; }
+.dsh-polish-tip .dsh-polish-badge { vertical-align: 1px; margin: 0 6px 0 0; }
 .dsh-polish-badge { display: inline-block; min-width: 16px; height: 16px; padding: 0 3px; margin: 0 2px; border-radius: 8px; color: #fff; font: 600 10px/16px system-ui, sans-serif; text-align: center; text-indent: 0; vertical-align: super; }
 .dsh-polish-reasons { list-style: none; margin: 14px 0 0; padding: 0; font-size: 13px; line-height: 1.7; }
 .dsh-polish-reasons li { margin: 0 0 6px; }
