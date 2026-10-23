@@ -204,9 +204,16 @@ async function downloadRuntime({ metadataUrl, rootUrl, destination, installed, c
   const controller = new AbortController()
   const budget = AbortSignal.timeout(budgetMs)
   const signal = AbortSignal.any([controller.signal, budget])
-  let next = 0, done = 0, reused = 0, received = 0
-  const report = () => status(`下载代码（${source}）：${done}/${files.length} 文件，复用 ${reused}，已下载 ${(received / 1048576).toFixed(1)} MB`)
-  report()
+  let next = 0, done = 0, reused = 0, received = 0, reportedAt = 0
+  // A progress line every two seconds at most: the Windows installer appends each line to its log
+  // and echoes it, and a pipe it reads slower than we write stalls this process (and the download).
+  const report = (force = false) => {
+    const now = Date.now()
+    if (!force && now - reportedAt < 2000) return
+    reportedAt = now
+    status(`下载代码（${source}）：${done}/${files.length} 文件，复用 ${reused}，已下载 ${(received / 1048576).toFixed(1)} MB`)
+  }
+  report(true)
   const worker = async () => {
     while (next < files.length) {
       signal.throwIfAborted()
@@ -236,6 +243,7 @@ async function downloadRuntime({ metadataUrl, rootUrl, destination, installed, c
   }
   try {
     await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker))
+    report(true)
   } catch (error) {
     controller.abort()
     if (budget.aborted) throw new Error(`备用源下载超过 ${duration(budgetMs)}，将切换备用方案`, { cause: error })

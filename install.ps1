@@ -80,6 +80,33 @@ $RuntimePaths = @(
 # Machine-readable progress for the Windows launcher; also useful in terminals.
 function Write-InstallStatus([string]$Message) { Write-Host ("DSH_STATUS " + $Message) }
 
+# The first desktop install links the desktop profile to Tavern, which needs DeepSeek Harness
+# closed (later in-app updates rewrite the linked profile while it runs).
+function Test-DesktopLinked {
+  $Live = Join-Path $DshRoot 'profiles\desktop'
+  $Tavern = Join-Path $DshRoot 'profiles\tavern'
+  try {
+    $Item = Get-Item -LiteralPath $Live -Force -ErrorAction Stop
+    if (-not $Item.LinkType -or -not (Test-Path -LiteralPath $Tavern)) { return $false }
+    $Target = [string]@($Item.Target)[0]
+    if (-not [IO.Path]::IsPathRooted($Target)) { $Target = Join-Path (Split-Path -Parent $Live) $Target }
+    return [IO.Path]::GetFullPath($Target).TrimEnd('\') -ieq [IO.Path]::GetFullPath($Tavern).TrimEnd('\')
+  } catch { return $false }
+}
+# Close DeepSeek Harness for a first install, before minutes of downloads rather than at the end.
+# Returns whether it was running, so the installer reopens it when done.
+function Close-DesktopForFirstInstall {
+  if ($InstallHost -ne 'desktop' -or (Test-DesktopLinked)) { return $false }
+  if (-not @(Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue).Count) { return $false }
+  Write-InstallStatus '首次安装需要先退出 DeepSeek Harness，正在关闭（装完会自动重新打开）…'
+  Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue | ForEach-Object { try { [void]$_.CloseMainWindow() } catch {} }
+  for ($Wait = 0; $Wait -lt 10 -and @(Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue).Count; $Wait++) { Start-Sleep -Seconds 1 }
+  Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
+  if (@(Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue).Count) { throw '无法自动关闭 DeepSeek Harness：请在任务栏右下角托盘图标上右键退出，再重新运行安装命令。' }
+  return $true
+}
+
 function Test-Command([string]$Name) {
   return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
 }
@@ -335,9 +362,16 @@ async function downloadRuntime({ metadataUrl, rootUrl, destination, installed, c
   const controller = new AbortController()
   const budget = AbortSignal.timeout(budgetMs)
   const signal = AbortSignal.any([controller.signal, budget])
-  let next = 0, done = 0, reused = 0, received = 0
-  const report = () => status(`下载代码（${source}）：${done}/${files.length} 文件，复用 ${reused}，已下载 ${(received / 1048576).toFixed(1)} MB`)
-  report()
+  let next = 0, done = 0, reused = 0, received = 0, reportedAt = 0
+  // A progress line every two seconds at most: the Windows installer appends each line to its log
+  // and echoes it, and a pipe it reads slower than we write stalls this process (and the download).
+  const report = (force = false) => {
+    const now = Date.now()
+    if (!force && now - reportedAt < 2000) return
+    reportedAt = now
+    status(`下载代码（${source}）：${done}/${files.length} 文件，复用 ${reused}，已下载 ${(received / 1048576).toFixed(1)} MB`)
+  }
+  report(true)
   const worker = async () => {
     while (next < files.length) {
       signal.throwIfAborted()
@@ -367,6 +401,7 @@ async function downloadRuntime({ metadataUrl, rootUrl, destination, installed, c
   }
   try {
     await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker))
+    report(true)
   } catch (error) {
     controller.abort()
     if (budget.aborted) throw new Error(`备用源下载超过 ${duration(budgetMs)}，将切换备用方案`, { cause: error })
@@ -933,6 +968,8 @@ try {
       if ($CommunityDesktop) { throw ('检测到社区版 ' + $CommunityDesktop + '，当前版本只支持官方 DeepSeek Harness（https://deepseek.com/harness/）。继续用社区版请改用稳定版的安装命令：https://github.com/flizzywine/dsh-tavern/blob/stable/README.md') }
       throw '请先安装官方 DeepSeek Harness（https://deepseek.com/harness/）（装在其他位置时，可用 DSH_DESKTOP_APP_EXECUTABLE 指定程序路径）'
     }
+    $FirstDesktopInstall = -not (Test-DesktopLinked)
+    $ReopenDesktop = Close-DesktopForFirstInstall
     New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
     $OfficialDesktopModuleSource = @'
 // Bootstrap for official DeepSeek Harness only. Electron reads packaged app.asar files.
@@ -1233,7 +1270,10 @@ try {
     $Event = if ($Code -eq 0) { 'installer.stage.succeeded' } else { 'installer.stage.failed' }
     Write-UpdateLog $Event $Step ([string]$Code) ([string]$Started) $OutputFile
     if ($Code -ne 0) {
-      throw "步骤 $Step 失败（退出码 $Code）。`n$Combined`n诊断日志：$UpdateLogRoot/update-diagnostics.jsonl"
+      # The output was shown as it ran and is in the diagnostics log: name the reason once.
+      if ($CaptureOutput) { throw "步骤 $Step 失败（退出码 $Code）。`n$Combined" }
+      $Reason = @($Combined -split "`r?`n" | Where-Object { $_.Trim() -and $_ -notmatch '^INSTALLATION_PROCESS_FAILED|^DSH_STATUS ' }) | Select-Object -Last 1
+      throw ("步骤 $Step 失败（退出码 $Code）" + $(if ($Reason) { "：$($Reason.Trim())" } else { '。' }))
     }
     if ($CaptureOutput) { return $Stdout.Trim() }
   }
@@ -1398,6 +1438,7 @@ try {
     Invoke-InstallCommand 'dependencies.relink' $PnpmCommand @('--dir', $AppDir, 'install', '--offline', '--frozen-lockfile', '--reporter=append-only', '--fetch-timeout=30000', '--fetch-retries=2', '--fetch-retry-mintimeout=1000', '--fetch-retry-maxtimeout=5000') -TimeoutMs 300000
 
     Write-InstallStatus '本地配置：正在注册 Tavern 并检查兼容性…'
+    if (Close-DesktopForFirstInstall) { $ReopenDesktop = $true }
     Invoke-InstallCommand 'profile.install' 'node' @((Join-Path $AppDir 'bin\dsh-tavern.mjs'), 'install', '--host', $InstallHost) -TimeoutMs 1200000
     & node $Stager commit --app $AppDir
     $AppSwapped = $false
@@ -1434,11 +1475,15 @@ try {
     Invoke-InstallCommand 'dependencies.install' $PnpmCommand @('--dir', $AppDir, 'install', '--frozen-lockfile', '--reporter=append-only', '--fetch-timeout=30000', '--fetch-retries=2', '--fetch-retry-mintimeout=1000', '--fetch-retry-maxtimeout=5000')
 
     Write-InstallStatus '本地配置：正在注册 Tavern 并检查兼容性…'
+    if (Close-DesktopForFirstInstall) { $ReopenDesktop = $true }
     Invoke-InstallCommand 'profile.install' 'node' @((Join-Path $AppDir 'bin\dsh-tavern.mjs'), 'install', '--host', $InstallHost) -TimeoutMs 1200000
   }
   if ($InstallHost -eq 'desktop') {
-    Write-Host 'DSH Tavern Desktop 版安装完成。'
-    Write-Host '请重启官方 DeepSeek Harness，酒馆已安装到独立 tavern 配置；原版 desktop 已备份，可在设置 → Profile 切换中切换。'
+    Write-Host 'DSH Tavern Desktop 版安装完成。酒馆已安装到独立 tavern 配置；原版 desktop 已备份，可在设置 → Profile 切换中切换。'
+    if (($FirstDesktopInstall -or $ReopenDesktop) -and -not @(Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue).Count -and $OfficialDesktopExecutable) {
+      Write-Host '正在打开 DeepSeek Harness…'
+      Start-Process -FilePath $OfficialDesktopExecutable
+    } else { Write-Host '请重启官方 DeepSeek Harness 进入酒馆。' }
   }
   else {
     if ($env:DSH_TAVERN_DEFER_SERVICE_START -ne '1') {
