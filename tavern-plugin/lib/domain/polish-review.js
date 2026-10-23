@@ -1,9 +1,8 @@
-// 精修: an editor reads the latest reply against the principles and returns edits (exact
-// sentence replacements the player applies through the body editor) and notes (larger
-// problems the player can send through the ordinary guided regeneration).
+// 精修: an editor reads the latest reply against the principles and returns edits, exact
+// replacements of a phrase, sentence or whole paragraphs that the player ticks and applies
+// through the body editor.
 
 const CARD_LIMIT = 6000, PREVIOUS_LIMIT = 3000, INPUT_LIMIT = 2000
-const NOTES_TAIL = '其余部分保持原文，情节、事件顺序和对白原意不变，篇幅与原文相近。'
 
 function str(value) { return typeof value === 'string' ? value : value == null ? '' : String(value) }
 function head(text, limit) { const value = str(text).trim(); return value.length > limit ? value.slice(0, limit) + '……' : value }
@@ -35,7 +34,7 @@ export function buildPolishReviewRequest({ principles, card, playerName, input, 
     previous.trim() ? '【上一轮正文】\n' + tail(previous, PREVIOUS_LIMIT) : '',
     input.trim() ? '【本轮玩家输入】\n' + head(input, INPUT_LIMIT) : '',
     '【本轮正文】\n' + body,
-    '请按审稿标准写出修改意见。'
+    '请按审稿标准写出修改清单。'
   ].filter(Boolean)
   return { system: rules, messages: [{ role: 'user', content: [{ type: 'text', text: sections.join('\n\n') }] }] }
 }
@@ -46,26 +45,28 @@ function occurrences(texts, find) {
   return hits
 }
 
-/** The editor's JSON; anything unreadable becomes one note so the old guided path still works. */
+/** The editor's JSON. Unreadable output comes back as text for the guidance box (guided regeneration). */
 export function parsePolishReview(output, texts) {
   const raw = str(output).trim()
   const body = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   let value
   try { value = JSON.parse(body.slice(body.indexOf('{'), body.lastIndexOf('}') + 1)) } catch { value = undefined }
-  if (!value || typeof value !== 'object') return { edits: [], notes: raw ? [raw] : [] }
-  const edits = (Array.isArray(value.edits) ? value.edits : []).flatMap(edit => {
+  if (!value || typeof value !== 'object' || !Array.isArray(value.edits)) return { edits: [], fallback: raw }
+  const taken = []
+  const edits = value.edits.flatMap(edit => {
     const find = str(edit?.find)
     if (!find.trim()) return []
-    const hits = occurrences(texts, find).length
-    return [{ find, replace: str(edit?.replace), reason: str(edit?.reason).trim(), status: hits === 1 ? 'ok' : hits === 0 ? 'missing' : 'ambiguous' }]
+    const hits = occurrences(texts, find)
+    let status = hits.length === 1 ? 'ok' : hits.length === 0 ? 'missing' : 'ambiguous'
+    if (status === 'ok') {
+      const { part, at } = hits[0], end = at + find.length
+      // An earlier (more important) edit already covers part of this text.
+      if (taken.some(range => range.part === part && range.at < end && at < range.end)) status = 'overlap'
+      else taken.push({ part, at, end })
+    }
+    return [{ reason: str(edit?.reason).trim(), find, replace: str(edit?.replace), status }]
   })
-  const notes = (Array.isArray(value.notes) ? value.notes : []).map(note => str(note).trim()).filter(Boolean)
-  return { edits, notes }
-}
-
-/** Notes for the guidance box; empty when there are none. */
-export function polishNotesGuidance(notes) {
-  return notes.length ? notes.map((note, index) => (index + 1) + '. ' + note).join('\n') + '\n\n' + NOTES_TAIL : ''
+  return { edits, fallback: '' }
 }
 
 /** Apply chosen edits to the reply's text parts; each must still match exactly once. */

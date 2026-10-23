@@ -453,6 +453,8 @@ body.dsh-tavern-picker-open [id^="improved-phone-floating-button-"] { visibility
 .dsh-tavern-polish-body del { color: var(--dsw-alias-label-secondary); text-decoration-color: rgba(214, 95, 95, .8); }
 .dsh-tavern-polish-body ins { text-decoration: none; background: rgba(76, 175, 125, .14); border-radius: 4px; padding: 0 2px; }
 .dsh-tavern-polish-reason { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.dsh-tavern-polish-title { font-size: 13px; font-weight: 600; }
+.dsh-tavern-polish-body del, .dsh-tavern-polish-body ins { white-space: pre-wrap; }
 .dsh-tavern-regen-input::placeholder { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .dsh-tavern-regen-input:focus { outline: none; border-color: var(--dsh-tavern-accent-border); box-shadow: 0 0 0 3px var(--dsh-tavern-accent-soft); }
 .dsh-tavern-regen-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }

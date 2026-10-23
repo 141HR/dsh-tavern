@@ -1,7 +1,7 @@
 import { setAllFailedErrorVisibility, setFailedErrorVisibility } from '../domain/failed-error-visibility.js'
 import { sessionEvents } from '../domain/session-events.js'
 import { prepareTemplateHistory, synchronizeTemplateHistory } from '../domain/template-history.js'
-import { applyPolishEdits, buildPolishReviewRequest, parsePolishReview, polishNotesGuidance, polishReviewContext } from '../domain/polish-review.js'
+import { applyPolishEdits, buildPolishReviewRequest, parsePolishReview, polishReviewContext } from '../domain/polish-review.js'
 import { randomUUID } from 'node:crypto'
 
 // In-game play, turn editing, compaction and background settlement requests.
@@ -172,7 +172,7 @@ export function createPlayHandlers(deps) {
     async retryStyleReference(args) {
       return { styleReference: await retryStyleReference(args?.sessionId, { target: 'next', guidance: args?.guidance }) }
     },
-    // 精修: edits the player picks and applies as a body edit; notes go to the guidance box for regenBody.
+    // 精修: edits the player ticks and applies as a body edit.
     async polishReview(args) {
       const sessionId = str(args?.sessionId)
       const edit = await bodyEditor.read(sessionId)
@@ -182,7 +182,7 @@ export function createPlayHandlers(deps) {
       const request = buildPolishReviewRequest({ principles: runtimePrompt('polish'), card, playerName: chat.macroState?.userName,
         ...polishReviewContext(chat.messages), reply: texts.join('\n\n') })
       const review = parsePolishReview(await callModel({ sessionId, ...request }), texts)
-      return { token: edit.token, edits: review.edits, guidance: polishNotesGuidance(review.notes) }
+      return { token: edit.token, edits: review.edits, guidance: review.fallback }
     },
     async applyPolishEdits(args) {
       const sessionId = str(args?.sessionId)

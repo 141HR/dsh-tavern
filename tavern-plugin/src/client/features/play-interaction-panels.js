@@ -173,7 +173,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
             function generate() {
                 return interactions.regenerateBody(panel, guidance, { restyle: styleEnabled && restyle, styleGuidance });
             }
-            // 精修: sentence edits are listed to tick and apply in place; larger notes fill the guidance box.
+            // 精修: the editor's edits are listed to tick and apply in place; unreadable output falls back to the guidance box.
             async function runReview() {
                 setReviewing(true); setReviewNote(""); setReview(null);
                 try {
@@ -195,8 +195,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
                     notifyTavernDataChanged(["sessions"], "play-controls");
                     tavernCoordination.invalidate(props.sessionId);
                     setReview(null);
-                    // Notes stay in the box for an optional regeneration; nothing left closes the panel.
-                    if (!guidance.trim()) setRegenPanel(null);
+                    setRegenPanel(null);
                 } catch (error) { setReviewNote("应用修改失败：" + String(error?.message || error)); }
                 finally { setApplying(false); }
             }
@@ -204,19 +203,19 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
                 setReview(current => ({ ...current, edits: current.edits.map((edit, at) => at === index ? { ...edit, checked: !edit.checked } : edit) }));
             }
             const editList = review ? h("div", { className: "dsh-tavern-polish-edits" },
-                h("div", { className: "dsh-tavern-polish-head" }, "修改清单：勾选后直接替换原句，其余文字不动"),
+                h("div", { className: "dsh-tavern-polish-head" }, "修改清单：勾选后直接替换原文，其余文字不动"),
                 review.edits.map((edit, index) => h("label", { key: index, className: "dsh-tavern-polish-edit" + (edit.status === "ok" ? "" : " is-missing") },
                     h("input", { type: "checkbox", checked: edit.checked, disabled: edit.status !== "ok", onChange: () => toggle(index) }),
                     h("span", { className: "dsh-tavern-polish-body" },
+                        h("span", { className: "dsh-tavern-polish-title" }, (edit.reason || "修改") + (edit.status === "missing" ? "（原文里没找到这段）" : edit.status === "ambiguous" ? "（这段在正文里出现了不止一次）" : edit.status === "overlap" ? "（和上面某条修改重叠）" : "")),
                         h("del", null, edit.find),
-                        edit.replace ? h("ins", null, edit.replace) : h("span", { className: "dsh-tavern-polish-reason" }, "（删去）"),
-                        h("span", { className: "dsh-tavern-polish-reason" }, (edit.reason || "") + (edit.status === "missing" ? "（原文里没找到这句）" : edit.status === "ambiguous" ? "（这句在正文里出现了不止一次）" : ""))))),
+                        edit.replace ? h("ins", null, edit.replace) : h("span", { className: "dsh-tavern-polish-reason" }, "（删去）")))),
                 h("div", { className: "dsh-tavern-regen-foot" },
                     h("button", { type: "button", className: "dsh-tavern-question-primary", disabled: applying || !review.edits.some(edit => edit.checked && edit.status === "ok"), onClick: applyEdits },
                         applying ? "正在应用…" : "应用所选修改（" + review.edits.filter(edit => edit.checked && edit.status === "ok").length + "）"))) : null;
 			return h(RegenGuideForm, {
 				title: "重新生成正文",
-				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改；精修先审稿，列出逐句修改",
+				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改；精修：审稿列出修改清单，勾选后直接替换原文",
 				loading: panel.phase === "loading" ? (panel.restyle ? "正在换文风联想并重新生成…" : panel.rewrite ? "正在按意见改写正文…" : "正在重新生成正文…") : "",
 				extra: h(React.Fragment, null, editList, styleEnabled ? h("div", { className: "dsh-tavern-regen-style" },
 					h("label", null, h("input", { type: "checkbox", checked: restyle, onChange: event => setRestyle(event.target.checked) }), " 同时换一段文风联想"),
@@ -227,7 +226,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 				placeholder: "指导意见（可选）",
 				examples: ["写得更长", "侧重心理描写", "加快节奏"],
 				submitLabel: "生成并替换正文",
-				secondary: { label: reviewing ? "审稿中…" : "精修", title: "按「正文精修原则」审读当前正文：措辞问题列成修改清单，勾选后直接替换原句；较大的问题填进意见框，可再整轮重写", disabled: reviewing || applying, onClick: runReview },
+				secondary: { label: reviewing ? "审稿中…" : "精修", title: "按「正文精修原则」审读当前正文，列出修改清单（一句到整段），勾选后直接替换原文，不重新生成", disabled: reviewing || applying, onClick: runReview },
 				onSubmit: generate,
 				onCancel: function () { setRegenPanel(null); }
 			});
