@@ -815,6 +815,7 @@ body.dsh-tavern-picker-open [id^="improved-phone-floating-button-"] { visibility
 .dsh-tavern-debug-open { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid color-mix(in srgb, var(--dsh-tavern-accent) 40%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--dsh-tavern-accent) 8%, transparent); color: var(--dsh-tavern-accent); cursor: pointer; font-size: 12px; font-weight: 650; }
 .dsh-tavern-debug-open:hover { background: color-mix(in srgb, var(--dsh-tavern-accent) 16%, transparent); }
 .dsh-tavern-debug-open:disabled { cursor: wait; opacity: .6; }
+.dsh-card-error .dsh-tavern-btn + .dsh-tavern-btn { margin-left: 8px; }
 .dsh-tavern-status-settle { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .dsh-tavern-status-dot { width: 6px; height: 6px; border-radius: 50%; background: #6ea676; }
 .dsh-tavern-status-dot.running { background: #c68a3a; animation: dsh-tavern-pulse 1s infinite alternate; }
@@ -2201,7 +2202,7 @@ html.dsh-tavern-hide-process [data-chat-flow-kind="turn-process"]:has([data-turn
 .dsh-tavern-status-dashboard .dsh-tavern-settings-desc { font-size: 12px; line-height: 1.7; margin: 6px 0 12px; }
 .dsh-tavern-status-dashboard .dsh-tavern-card-reload { gap: 8px; align-items: center; }
 .dsh-tavern-status-dashboard .dsh-tavern-card-reload .dsh-tavern-btn { background: transparent; border: 1px solid var(--dsw-alias-border-l2); font-size: 11px; padding: 7px 10px; border-radius: 8px; }
-.dsh-tavern-status-dashboard .dsh-tavern-status-support { border-bottom: 1px solid var(--dsw-alias-border-l2); padding-bottom: 14px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.dsh-tavern-status-dashboard .dsh-tavern-status-support { display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--dsw-alias-border-l2); padding-bottom: 14px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .dsh-tavern-status-dashboard summary { cursor: pointer; }
 .dsh-tavern-status-dashboard .dsh-tavern-guide-section { padding: 16px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 14px; background: var(--dsw-specific-input-major); }
 .dsh-tavern-status-dashboard .dsh-tavern-guide-section > .dsh-tavern-status-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 15px; }

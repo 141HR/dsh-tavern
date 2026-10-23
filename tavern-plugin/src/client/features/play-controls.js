@@ -158,7 +158,6 @@
             const [styleError, setStyleError] = React.useState("");
             const [styleEditing, setStyleEditing] = React.useState(false);
             const [styleExpanded, setStyleExpanded] = React.useState(false);
-			const [debugBusy, setDebugBusy] = React.useState(false);
 			const [settlementRetryBusy, setSettlementRetryBusy] = React.useState(false);
 			const [cardUpdateBusy, setCardUpdateBusy] = React.useState(false);
             const [cardUpdateError, setCardUpdateError] = React.useState("");
@@ -215,13 +214,6 @@
                 } catch (err) { setResourceLinkError(String(err && err.message || err)); }
                 finally { setResourceLinkBusy(false); }
             }
-			async function openDebugger() {
-				if (!latestDebugTurn || debugBusy) return;
-				setDebugBusy(true);
-				try { await openPlayChatDebugWorkspace(props.sessionId, latestDebugTurn); }
-				catch (error) { tavernErrorHub.report("交给卡片 Agent 调试", error); }
-				finally { setDebugBusy(false); }
-			}
 			async function addGuide() {
 				const text = guideDraft.trim();
 				if (!text) return;
@@ -334,6 +326,9 @@
 					h("div", { className: "dsh-tavern-status-settle" }, h("span", { className: "dsh-tavern-status-dot " + (view.settleStatus || "idle") }), statusText)
 				),
 					h("div", { className: "dsh-tavern-status-body" },
+						h("section", { className: "dsh-tavern-status-section dsh-tavern-status-support" },
+							h("span", null, "遇到问题？卡不能玩、显示异常、太卡太慢，或者有疑问，都可以交给调试 Agent。"),
+							h(TavernDebugButton, { sessionId: props.sessionId, turn: latestDebugTurn, className: "dsh-tavern-debug-open" })),
                         props.submitStage ? h(TavernStageSection, { sessionId: props.sessionId, submit: props.submitStage, generating: running }) : null,
                         h(TavernBackgroundWait, {sessionId:props.sessionId, activity:view.activity}),
                         h(TavernSaveUpgrade, {key:props.sessionId,sessionId:props.sessionId,busy:running || view.activity?.busy || view.settleStatus === "running"}),
@@ -347,22 +342,16 @@
 					h(TavernCardAppDock, { sessionId: props.sessionId }),
 					view.settleStatus === "error" ? h("div", { className: "dsh-card-error" },
 						h("div", null, view.settleError || "后台结算失败，请重试。"),
-						h("button", { className: "dsh-tavern-btn", disabled: settlementRetryBusy, onClick: retrySettlement }, settlementRetryBusy ? "重试中…" : "重试后台结算")
+						h("button", { className: "dsh-tavern-btn", disabled: settlementRetryBusy, onClick: retrySettlement }, settlementRetryBusy ? "重试中…" : "重试后台结算"),
+						h(TavernDebugButton, { sessionId: props.sessionId, turn: latestDebugTurn, className: "dsh-tavern-btn" })
 					) : null,
-					view.worldBookError ? h("div", { className: "dsh-card-error" }, "世界书召回失败：" + view.worldBookError) : null,
-					view.foregroundError ? h("div", { className: "dsh-card-error" }, view.foregroundError.message || "前台正文生成失败，请重新生成本轮正文。") : null,
+					view.worldBookError ? h("div", { className: "dsh-card-error" }, h("div", null, "世界书召回失败：" + view.worldBookError), h(TavernDebugButton, { sessionId: props.sessionId, turn: latestDebugTurn, className: "dsh-tavern-btn" })) : null,
+					view.foregroundError ? h("div", { className: "dsh-card-error" }, h("div", null, view.foregroundError.message || "前台正文生成失败，请重新生成本轮正文。"), h(TavernDebugButton, { sessionId: props.sessionId, turn: latestDebugTurn, className: "dsh-tavern-btn" })) : null,
 					view.tavernHelper ? h(TavernPersistentStatusRuntime, { sessionId: props.sessionId, view: view, executeSlash: props.executeSlash,
 						panels: view.statusBarPlacement === "body" ? "pinned" : "all", section: true }) : null,
 					(view.presentationWarnings || []).map(function (warning, index) {
 						return h("div", { className: "dsh-card-error", key: "presentation-warning-" + index }, warning);
 					}),
-					h("details", { className: "dsh-tavern-status-section dsh-tavern-status-support" },
-                        h("summary", null, "遇到显示或生成问题？"),
-                        h("p", { className: "dsh-tavern-settings-desc" }, "正则加载、前端美化或内容生成异常，可交给卡片 Agent 排查。"),
-						h("div", { className: "dsh-tavern-debug-panel" },
-							h("button", { className: "dsh-tavern-debug-open", disabled: debugBusy || !latestDebugTurn, onClick: openDebugger }, debugBusy ? "正在打开卡片 Agent…" : "交给卡片 Agent 调试")
-						)
-					),
                     view.mode === "script" && view.scriptProgress ? h(ScriptNavigation, {
                         sessionId: props.sessionId, cursor: view.scriptProgress.cursor, total: view.scriptProgress.totalChunks, chunkSize: view.scriptProgress.chunkSize,
                         busy: running || view.activity?.busy || view.regenInProgress
@@ -541,6 +530,23 @@
 			return result;
 		}
 
+		// Any problem in a game (a card that will not play, wrong display, slowness, a plain question)
+		// goes to the debugging Agent in the card workbench, with this game attached as evidence.
+		function TavernDebugButton(props) {
+			const [busy, setBusy] = React.useState(false);
+			const live = useLiveTavernView(props.sessionId, "debug");
+			const turn = Number(props.turn) || Number(live.view && live.view.debugTurns && live.view.debugTurns[0] && live.view.debugTurns[0].turn) || 1;
+			async function open() {
+				if (busy) return;
+				setBusy(true);
+				try { await openPlayChatDebugWorkspace(props.sessionId, turn); }
+				catch (error) { tavernErrorHub.report("交给调试 Agent", error); }
+				finally { setBusy(false); }
+			}
+			return React.createElement("button", { type: "button", role: props.role, className: props.className, disabled: busy, onClick: open,
+				title: "卡不能玩、显示异常、太卡太慢，或有疑问：在卡片工作台打开调试 Agent，并附上这一局的记录" }, busy ? "正在打开调试 Agent…" : (props.label || "交给调试 Agent"));
+		}
+
 		function CandidateAction(props) {
 			const [busy, setBusy] = React.useState(false);
 			const candidatePanelState = useCandidatePanel();
@@ -648,7 +654,8 @@
 					}
 				} }, settlementActive ? "后台结算中…" : (activity.busy ? activity.label : ((busy || taskBusy) ? "生成中…" : (hasReadyPanel ? "重新生成候选项" : "生成候选项")))),
 				(canReplayFailed || canRollback) ? h("button", { className: "dsh-tavern-choice-trigger", disabled: frontRunning || (!canReplayFailed && activity.busy && !settlementActive) || regenBusy || replayBusy, title: canReplayFailed ? "移除被中断的回复并原样重放本轮请求（复用模型缓存）" : (settlementActive ? "重新生成将取消当前正文的后台结算" : (activity.busy ? activity.blockReason : "可选择填写意见，再重新生成并替换当前正文")), onClick: canReplayFailed ? replayFailed : openRegeneration }, replayBusy ? "重放中…" : regenBusy ? "重生成中…" : canReplayFailed ? "重新生成本轮" : "重新生成正文") : null,
-				canReplayFailed ? h("button", { className: "dsh-tavern-choice-trigger dsh-tavern-withdraw-failed", disabled: frontRunning || replayBusy || withdrawBusy, title: "清除这一轮：恢复到这一轮开始前，此前的剧情和变量不变，原输入放回输入框", onClick: withdrawFailed }, withdrawBusy ? "撤回中…" : "撤回这条输入") : null
+				canReplayFailed ? h("button", { className: "dsh-tavern-choice-trigger dsh-tavern-withdraw-failed", disabled: frontRunning || replayBusy || withdrawBusy, title: "清除这一轮：恢复到这一轮开始前，此前的剧情和变量不变，原输入放回输入框", onClick: withdrawFailed }, withdrawBusy ? "撤回中…" : "撤回这条输入") : null,
+				canReplayFailed ? h(TavernDebugButton, { sessionId: props.sessionId, className: "dsh-tavern-choice-trigger", label: "交给调试 Agent" }) : null
 			);
 		}
 
@@ -910,6 +917,7 @@
 					React.createElement(TavernRollbackAction, props),
                     React.createElement(TavernUndoRollbackAction, props),
                     React.createElement("button", { type: "button", role: "menuitem", disabled: restoring, title: "把已移除或已隐藏的失败提示显示回来，正文和历史不受影响", onClick: restoreErrorNotices }, "恢复全部错误提示"),
+					React.createElement(TavernDebugButton, { sessionId: props.sessionId, role: "menuitem", label: "遇到问题？交给调试 Agent" }),
 					React.createElement(TavernCompactionAction, Object.assign({}, props, { inMenu: true })))
 			);
 		}
