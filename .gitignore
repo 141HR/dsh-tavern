@@ -33,6 +33,8 @@ data/
 
 # Local installation context (host and isolated home)
 .dsh-tavern-local.json
+# Old dependency folders the installer sets aside when isolating tavern-plugin
+.legacy-node_modules-*/
 
 # The 大肥鱼 demo card (examples/dafeiyu-card): too big to ship with the program.
 /examples/dafeiyu-card/*.dshcard
