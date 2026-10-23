@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "39760a1a9839c1323beb4029ed8236af568cfaa1",
-  "releaseSequence": 868,
+  "revision": "62ceed0ae5ec11a563e0d5f401d9b69afc02036b",
+  "releaseSequence": 869,
   "version": "3.1.0",
   "files": [
     {
@@ -558,6 +558,91 @@
       "path": "tavern-plugin/lib/application-updater.js",
       "sha256": "79a5a976076a282f173ee2de416ecd15d22c779c44302a5f4ad78a729c46c084",
       "size": 39027
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/asset-packs/common.js",
+      "sha256": "8ceb704f2c73515b1c3cb95087635cf51e47a30b5a0ecec41f76a18f1fe6b3c5",
+      "size": 854
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/asset-packs/hash.js",
+      "sha256": "51621a61c1f3461d98d158e774bbb4c085673130214deebe2c6c8a2b79092644",
+      "size": 1815
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/asset-packs/index.js",
+      "sha256": "88c4dc680e7b5b4c509f78c61f17fbdb954a6e5ad0281af42ab93bc81dbe5ca2",
+      "size": 875
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/asset-packs/manifest.js",
+      "sha256": "293be012bfe401d6d846443cc2831955bf7b0b203d17718ac16b0869d2d78059",
+      "size": 7635
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/pack-v2/budget.js",
+      "sha256": "14818a5e1761e9e4910f2ec37bea77e633b8638002e3f9f955b9466de88a19ce",
+      "size": 151
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/pack-v2/image-closure.js",
+      "sha256": "4722241ed4cfa3758d85487f7845fe69d980b5286e85c33f9318f45471868eaa",
+      "size": 625
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/pack-v2/leases.js",
+      "sha256": "f0dfd3d0f98fd56db3d62bab5ae76249d72de3b072a19aa311e72dfcbb0e9bb4",
+      "size": 5866
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/pack-v2/media-store.js",
+      "sha256": "b764f94dd102cbd03438b9b1d767ec17db28618ab33f65d8815fa94f931b7635",
+      "size": 4502
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/pack-v2/media.js",
+      "sha256": "44b94afbcfad65980f04917f2b67b0b2ab110c0984fcf892d8939d90caf1f5cc",
+      "size": 14986
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/pack-v2/metadata-edit.js",
+      "sha256": "184c0df6504f3e2eab0b0ba5f587159bc6491bfc09f23d882e8375c907a53c34",
+      "size": 782
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/pack-v2/service.js",
+      "sha256": "ae31511267edd23ea6c4ed67d0ac5afdb1fc9c717639d7ca8f920ccf9fa0a208",
+      "size": 15999
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/pack-v2/storage-path.js",
+      "sha256": "0df6ffecc10873fe4792928506cd6d33a9ee01175284ac9e01257026106318a2",
+      "size": 785
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/pack-v2/storage.js",
+      "sha256": "0d24c94c20fafb5788cbb655190af7521fde40a7c487bf9aa40aa7131ca43a37",
+      "size": 16333
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/pack-v2/validation.js",
+      "sha256": "f0d19127f53668481f0c449426e2f4878b6b18c85c3a155cb8015158d1ea3ae1",
+      "size": 6504
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/shared/asset-pack-json.js",
+      "sha256": "cff6bfb985057dc1c4b601eea12b993200fb205dd71dc99aaf3ffd73a91f8705",
+      "size": 7265
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/shared/asset-pack-refs.js",
+      "sha256": "fcb4e78c632374ae3fe3f2da4145d72de0fa1d686ab8a017ee4f53c58652a6e9",
+      "size": 2853
+    },
+    {
+      "path": "tavern-plugin/lib/asset-library/shared/asset-variant-content.js",
+      "sha256": "736e6d7bde6138728873193666b08bf828cf40b737a3fdacb386a099e9f22102",
+      "size": 637
     },
     {
       "path": "tavern-plugin/lib/background-agent-runner.js",
@@ -4426,9 +4511,9 @@
     }
   ],
   "archive": {
-    "commit": "7c2fd41922c037c99cada4b428c23e387188d493",
+    "commit": "8bc8e45be16b8a4e589b9cd2f58845f00eeb0163",
     "path": "runtime.zip",
-    "sha256": "9ded730e02bf773a91d6d8bf17f913e2fa764e7fd9518167ca5e609fdb95c860",
-    "size": 9843141
+    "sha256": "b03ba325aabd16cd4212ef4e4f54a115898814333738fa7734e0991e5cc1e2d3",
+    "size": 9876720
   }
 }
