@@ -28,6 +28,7 @@ import { registerCardCoverTools } from './tools/card-cover.js'
 import { createCardValidationCheck } from './tools/card-validation-check.js'
 import { createSkillGatedTools } from './domain/skill-gated-tools.js'
 import { registerPlayChatTool } from './tools/play-chat.js'
+import { registerRuntimeHealthTool } from './tools/runtime-health.js'
 import { registerScriptTool } from './tools/script.js'
 import { registerWorldbookTools } from './tools/worldbook.js'
 import { registerPresetTools } from './tools/preset.js'
@@ -178,6 +179,7 @@ import { POSTURE_SUBMIT_TOOL } from './domain/posture-submission.js'
 import { createCastPresentation } from './domain/cast-presentation.js'
 import { createPolishRecords } from './domain/polish-records.js'
 import { createCardAutoReload } from './domain/card-auto-reload.js'
+import { createRuntimeLogBuffer, runtimeHealthReport } from './domain/runtime-health.js'
 import { createStageDirector, STAGE_UPDATE_TOOL } from './domain/stage-director.js'
 import { createStageDirectorStream } from './domain/stage-director-stream.js'
 import { stagePages } from './domain/stage-performance.js'
@@ -425,6 +427,9 @@ export async function apply(ctx) {
   const apiDiagnostics = createTavernApiDiagnostics(profileData)
   const compatibilityDiagnostics = createTavernCompatibilityDiagnosticStore(profileData)
   const requestPerformance = createRequestPerformance()
+  // Tavern's own recent warnings and errors, for the debugging Agent's runtime health report.
+  const runtimeLogs = createRuntimeLogBuffer()
+  ctx.effect(() => runtimeLogs.install())
   const performanceDiagnostics = createPerformanceDiagnostics()
   const tavernRemoteAssets = createTavernRemoteAssetPinStore({
     onDiagnostic: row => performanceDiagnostics.opening(row),
@@ -3618,6 +3623,9 @@ export async function apply(ctx) {
       worldbookRecallLog,
       displayRuntimeStore,
     })
+
+    registerRuntimeHealthTool({ chatForSession, tools,
+      runtimeHealth: () => runtimeHealthReport({ version: TAVERN_PACKAGE_VERSION, performance: requestPerformance, logs: runtimeLogs }) })
 
     registerScriptTool({
       chatForSession,
