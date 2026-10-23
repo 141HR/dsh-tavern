@@ -542,6 +542,9 @@
 			};
 			window.getWorldbookNames = function () { return state.worldbook && state.worldbook.name ? [state.worldbook.name] : []; };
 			window.getCharWorldbookNames = function () { return { primary: state.worldbook && state.worldbook.name || null, additional: [] }; };
+			// Global and extra bound books reach scripts merged into the game's one book; there is no separate chat book.
+			window.getGlobalWorldbookNames = function () { return []; };
+			window.getChatWorldbookName = function () { return null; };
 			window.getWorldbook = async function (name) {
 				if (state.worldbook && (name === "current" || name === state.worldbook.name)) {
                     const access = state.worldbook.resourceAccess;

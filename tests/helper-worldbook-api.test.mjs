@@ -106,3 +106,12 @@ test('脚本写世界书只传改动条目，版本没变不重传整本，别�
   await assert.rejects(host.adapter.patchWorldbook('audit', 'current', { version: stale.version, upserts: [{ name: '迟到' }], deletes: [] }), /已被其他操作修改/)
   assert.equal((await api.getWorldbook('审计书')).at(-1).name, '别处')
 })
+
+test('没有全局世界书和单独的聊天世界书时如实回答，不假装能新建世界书', async t => {
+  const host = await createHelperWorldbookHost(false)
+  t.after(host.cleanup)
+  const api = await connect(host)
+  assert.deepEqual(Array.from(api.getGlobalWorldbookNames()), [])
+  assert.equal(api.getChatWorldbookName('current'), null)
+  assert.equal(api.createWorldbook, undefined)
+})

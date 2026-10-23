@@ -15,6 +15,7 @@
 
 - 延迟资源模式仍向消息 iframe 传递当前世界书的轻量 `name/resourceAccess` 描述符；读取书名无需下载全部条目
 - `getWorldbookNames`、`getCharWorldbookNames` 读取实时上下文，不再固定为 iframe 初始化时的值
+- `getGlobalWorldbookNames` 返回 `[]`、`getChatWorldbookName` 返回 `null`（2026-10-24 补）：人物卡绑定的多本书和全局书合并成一本交给脚本，脚本不能按单本书名读写，因此不单独列出；DSH 没有单独的聊天世界书。`createWorldbook` 不提供：新建的书脚本无法按名读写，提供它只会让卡片界面亮起用不了的「新建世界书」
 - 世界书变更、名称、全局/角色变量通过上下文增量传播；部分 RPC 回包不会误删已有世界书描述符
 - 验证覆盖实际 `getSession` 的完整、延迟和缓存投影，以及消息 iframe RPC/上下文更新
 
