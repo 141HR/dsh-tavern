@@ -10,6 +10,20 @@ function object(value) {
 // resetting (deleting the key) restores it.
 const BLANK_ALLOWED_PROMPTS = new Set(['system-append'])
 
+// The single `storyToolCall` switch used to cover both directions; before that
+// history had a switch of its own. Reads migrate in place: a merged save turns
+// both on, and an old history-only save turns input on while output stays as it
+// was. Explicit new fields always win over the retired ones.
+export function storyToolCallSettings(document) {
+  const source = object(document)
+  const merged = Object.hasOwn(source, 'storyToolCall') ? source.storyToolCall === true : null
+  const history = Object.hasOwn(source, 'storyHistoryToolCall') ? source.storyHistoryToolCall === true : null
+  return {
+    input: Object.hasOwn(source, 'storyInputToolCall') ? source.storyInputToolCall === true : (history === null ? merged === true : history),
+    output: Object.hasOwn(source, 'storyOutputToolCall') ? source.storyOutputToolCall === true : merged === true
+  }
+}
+
 function promptOverride(document, name) {
   const value = object(document.promptOverrides)[name]
   return typeof value === 'string' && (value.trim() !== '' || BLANK_ALLOWED_PROMPTS.has(name)) ? value : null
@@ -196,10 +210,35 @@ export function applyTavernSettingsPatch(current, patch) {
     if (!['after-fill', 'after-send'].includes(input.candidateDismissMode)) throw new Error('无效的候选项收起方式')
     next.candidateDismissMode = input.candidateDismissMode
   }
-  if (Object.hasOwn(input, 'storyToolCall')) {
-    if (typeof input.storyToolCall !== 'boolean') throw new Error('正文走工具调用设置必须是布尔值')
-    next.storyToolCall = input.storyToolCall
-    // History replay used to be a switch of its own; it now follows this one.
+  // Two independent directions: input replays the history that is sent to the
+  // model, output turns this turn's body into a submission call. Legacy switches
+  // are folded into the pair and then dropped, so a later patch to one side can
+  // never fall back to a stale merged value.
+  if (Object.hasOwn(input, 'storyToolCall') || Object.hasOwn(input, 'storyHistoryToolCall') ||
+      Object.hasOwn(input, 'storyInputToolCall') || Object.hasOwn(input, 'storyOutputToolCall')) {
+    const current = storyToolCallSettings(next)
+    let inputToolCall = current.input
+    let outputToolCall = current.output
+    if (Object.hasOwn(input, 'storyToolCall')) {
+      if (typeof input.storyToolCall !== 'boolean') throw new Error('正文走工具调用设置必须是布尔值')
+      inputToolCall = input.storyToolCall
+      outputToolCall = input.storyToolCall
+    }
+    if (Object.hasOwn(input, 'storyHistoryToolCall')) {
+      if (typeof input.storyHistoryToolCall !== 'boolean') throw new Error('历史正文走工具调用设置必须是布尔值')
+      inputToolCall = input.storyHistoryToolCall
+    }
+    if (Object.hasOwn(input, 'storyInputToolCall')) {
+      if (typeof input.storyInputToolCall !== 'boolean') throw new Error('输入走工具调用设置必须是布尔值')
+      inputToolCall = input.storyInputToolCall
+    }
+    if (Object.hasOwn(input, 'storyOutputToolCall')) {
+      if (typeof input.storyOutputToolCall !== 'boolean') throw new Error('输出走工具调用设置必须是布尔值')
+      outputToolCall = input.storyOutputToolCall
+    }
+    next.storyInputToolCall = inputToolCall
+    next.storyOutputToolCall = outputToolCall
+    delete next.storyToolCall
     delete next.storyHistoryToolCall
   }
   if (Object.hasOwn(input, 'autoOpenStatusPanel')) {
@@ -277,6 +316,7 @@ export function presentTavernSettings(document, defaults) {
     return { name, text: custom === null ? String(defaults[name] || '') : custom, customized: custom !== null }
   })
   const story = prompts.find(function (item) { return item.name === 'story' }) || { text: '', customized: false }
+  const storyToolCalls = storyToolCallSettings(document)
   return {
     defaultPlaySettings: normalizePlayDefaults(object(document).defaultPlaySettings),
     defaultDisabledWritingSkills: Array.isArray(object(document).defaultDisabledWritingSkills) ? object(document).defaultDisabledWritingSkills.filter(name => typeof name === 'string') : [],
@@ -287,9 +327,8 @@ export function presentTavernSettings(document, defaults) {
     hideContextAndReasoning: object(document).hideContextAndReasoning !== false,
     headerItems: readHeaderItems(object(document).headerItems),
     candidateDismissMode: object(document).candidateDismissMode === 'after-fill' ? 'after-fill' : 'after-send',
-    // One switch for both: new bodies submitted as tool calls, history replayed as
-    // them. A save that turned on either of the two former switches keeps it on.
-    storyToolCall: object(document).storyToolCall === true || object(document).storyHistoryToolCall === true,
+    storyInputToolCall: storyToolCalls.input,
+    storyOutputToolCall: storyToolCalls.output,
     castPresentation: object(document).castPresentation === true,
     // Only the latest floors run a card's HTML interface; 0 renders every floor.
     autoOpenStatusPanel: object(document).autoOpenStatusPanel !== false,

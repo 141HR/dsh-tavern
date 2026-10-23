@@ -50,7 +50,7 @@ const pinScenario = process.argv.includes('--pin-panel')
 const displayScenario = pinScenario || process.argv.includes('--display-regression')
 const recoveryScenario = process.argv.includes('--surface-recovery')
 const helperApiScenario = process.argv.includes('--helper-api')
-// Story body submitted through the submit_story tool (per-conversation toggle, off by default).
+// Story body submitted through the submit_story tool (global input/output switches, off by default).
 const storyToolScenario = process.argv.includes('--story-tool')
 // Dialogue avatars: settlement annotates speakers, quoted lines show as speaker rows.
 const castScenario = process.argv.includes('--cast')
@@ -513,9 +513,9 @@ try {
     for (const [name, value] of Object.entries(patch)) assert.equal(result.settings?.[name], value, JSON.stringify(result))
     return result
   }
-  if (storyToolScenario) await step('开启正文走工具调用', async () => {
+  if (storyToolScenario) await step('开启输入与输出走工具调用', async () => {
     const chatUrl = page.url()
-    await setTavernSettings({ storyToolCall: true })
+    await setTavernSettings({ storyInputToolCall: true, storyOutputToolCall: true })
     // The stage is per card and off for ordinary cards; this card turns it on.
     const stage = await page.evaluate(async () => (await fetch('/api/dsh-tavern/setCardStage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: 'cards/e2e.json', enabled: true }) })).json())
     assert.equal(stage.enabled, true)

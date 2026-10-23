@@ -22,7 +22,16 @@ export const STORY_SUBMIT_PROMPT_STRICT = [
   '</output_method>'
 ].join('\n')
 
-/** A global switch (Tavern settings); it applies to story and script play only. */
+// Input-only: the tool is declared solely so the replayed history's calls name a
+// tool the provider knows about. It is not this turn's output channel.
+export const STORY_INPUT_ONLY_PROMPT = [
+  '<output_method>',
+  '历史里的 submit_story 调用只是过去正文的记录，不是本轮的提交要求。',
+  '本轮请直接输出正文，不要调用 submit_story。',
+  '</output_method>'
+].join('\n')
+
+/** A Tavern settings switch; it applies to story and script play only. */
 export function storyToolCallEnabled(chat, enabled) {
   return enabled === true && !!chat && (!chat.mode || chat.mode === 'story' || chat.mode === 'script')
 }
@@ -147,7 +156,7 @@ export function createStorySubmissionTool({ chatForSession, enabled, isBackgroun
       const sessionId = session?.id || ''
       if (!sessionId || isBackground(sessionId)) throw new Error('正文提交只用于前台游玩回合')
       const chat = await chatForSession(sessionId)
-      if (!storyToolCallEnabled(chat, await enabled())) throw new Error('未开启正文走工具调用')
+      if (!storyToolCallEnabled(chat, await enabled())) throw new Error('未开启输入或输出走工具调用')
       const turn = activeStoryTurn(session)
       if (turn === null) throw new Error('当前没有正在生成的游玩回合')
       const content = validContent(args?.content)
@@ -155,7 +164,7 @@ export function createStorySubmissionTool({ chatForSession, enabled, isBackgroun
       // The same body twice is the model repeating itself after a lost receipt;
       // returning it again is harmless and keeps the round from failing.
       if (previous && previous.content !== content) throw new Error('本轮已提交正文，不允许重复覆盖')
-      if (typeof exec.concludeTurn !== 'function') throw new Error('当前 DSH 版本不支持工具提交后结束回合，请关闭正文走工具调用或更新 DSH')
+      if (typeof exec.concludeTurn !== 'function') throw new Error('当前 DSH 版本不支持工具提交后结束回合，请关闭输出走工具调用或更新 DSH')
       exec.signal?.throwIfAborted()
       exec.concludeTurn()
       return content

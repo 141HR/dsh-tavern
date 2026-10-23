@@ -218,14 +218,14 @@ test('预设后段骰子同一轮各步一致，新一轮或重新生成重新�
 
 test('历史正文走工具调用：开关打开时请求里的旧正文变成提交参数，关掉后原样', async () => {
   const body = { id: 'body-1', role: 'assistant', source: { kind: 'model', provider: 'dsh-tavern', model: 'reply-projection' }, content: [{ type: 'text', text: '上一轮正文' }] }
-  async function requestWith(historyToolCall) {
+  async function requestWith(historyToolCall, visibleTools = ['submit_story']) {
     const run = strategies({ nativePlay: {
       async modeFor() { return 'story' },
       filterMessages(messages) { return messages },
       async resolvePreset() { return null },
       async prepareTurn() { return { frame: { userInput: { projectedText: '输入' } } } },
       appendFrame(input) { return { messages: input.messages, receipt: {} } },
-      recordFrame() {}, async visibleTools() { return ['submit_story'] },
+      recordFrame() {}, async visibleTools() { return visibleTools },
       modePrompt() { return '正文任务' }, controlledToolNames: new Set(),
       ...(historyToolCall === undefined ? {} : { historyToolCall: async () => historyToolCall })
     } })
@@ -237,6 +237,9 @@ test('历史正文走工具调用：开关打开时请求里的旧正文变成�
   // Nothing else staged, so an untouched request is handed back to the host as-is.
   const off = await requestWith(undefined)
   assert.equal(off, null, '开关关闭时不改请求')
+
+  // 本轮工具表里没有 submit_story（例如本局把它逐项关了）：不能造出调用未声明工具的假历史。
+  assert.equal(await requestWith(true, []), null, '提交工具没下发时不回放')
 
   const on = await requestWith(true)
   // 玩家消息与模型正文都变成提交调用；本轮输入（最后一条玩家消息）保持原样。
@@ -278,6 +281,7 @@ test('Anthropic：去掉本轮输入之前各轮回复的签名思考块，本�
 test('提交提示词按最终工具列表选择，插件工具关闭后仍留在目录里', async () => {
   let visibleNames = ['submit_story']
   let recorded = null
+  let outputToolCall = true
   const run = strategies({ nativePlay: {
     async modeFor() { return 'story' },
     filterMessages(messages) { return messages },
@@ -287,6 +291,7 @@ test('提交提示词按最终工具列表选择，插件工具关闭后仍留�
     recordFrame() {},
     async visibleTools() { return visibleNames },
     recordTools(_sessionId, tools) { recorded = tools },
+    async storyOutputToolCall() { return outputToolCall },
     modePrompt() { return 'story' },
     workspaceContext() { return '' },
     async ensureSessionPrefix() {},
@@ -310,6 +315,14 @@ test('提交提示词按最终工具列表选择，插件工具关闭后仍留�
   assert.deepEqual(recorded.map(tool => tool.name), ['plugin_tool'], '关闭的工具仍要出现在设置目录里')
   assert.match(filtered.sections.find(section => section.name === 'tavern:story-tool-submission').text, /不要调用任何其他工具/)
   chat.disabledForegroundTools = []
+
+  // 只开输入回放：submit_story 在工具表里，但不能把本轮也要求成工具输出。
+  outputToolCall = false
+  const inputOnly = await assemble([{ name: 'submit_story' }])
+  const inputOnlySection = inputOnly.sections.find(section => section.name === 'tavern:story-tool-submission')
+  assert.match(inputOnlySection.text, /历史里的 submit_story 调用只是过去正文的记录/)
+  assert.doesNotMatch(inputOnlySection.text, /本轮最终正文必须/)
+  outputToolCall = true
 
   visibleNames = []
   const none = await assemble([])

@@ -2892,7 +2892,10 @@ export async function apply(ctx) {
   const foregroundFrameBuilder = createForegroundFrameBuilder()
   const foregroundFrameSessionAdapter = createForegroundFrameSessionAdapter({ id: randomUUID })
   const turnOrchestrator = createTurnOrchestrator({
-    storyToolCall: async () => (await readTavernSettings()).storyToolCall,
+    // Either direction needs submit_story declared: output to submit this turn,
+    // input because the replayed history calls name that tool.
+    storyToolCall: async () => (await readTavernSettings()).storyOutputToolCall,
+    storyInputToolCall: async () => (await readTavernSettings()).storyInputToolCall,
     store: {
       chatForSession,
       storyContextForSession: sessionId => storyContext({ sessionId }),
@@ -3381,8 +3384,10 @@ export async function apply(ctx) {
   const controlledToolNames = new Set([STORY_SUBMIT_TOOL_NAME, 'tavern_read_variables', ...CARD_MEMORY_TOOLS, 'bash', 'pwsh', ...dshFileToolNames, 'skill', 'tavern_read_skill_reference', 'web_search', 'tavern_save_skill', ...cordisToolNames, 'tavern_user_profile_read', 'tavern_user_profile_save', 'tavern_user_profile_confirm', 'tavern_read_card', 'tavern_read_card_raw', 'tavern_search_card', 'tavern_replace_card_text', 'tavern_mvu_overview', 'tavern_apply_mvu', 'tavern_read_play_chat', 'tavern_read_script', 'tavern_recall_history', 'worldbook_search', 'tavern_read_worldbook', 'tavern_update_worldbook', 'tavern_read_preset', 'tavern_update_preset', 'tavern_read_regex_library', 'tavern_copy_card', 'tavern_set_card_cover', 'tavern_export_card_png', 'tavern_update_card', 'tavern_restore_card', 'tavern_validate_card', 'tavern_test_response'])
   const foregroundStrategies = createForegroundOrchestrationStrategies({
     nativePlay: {
-      // History is replayed as calls of the same submission tool, so it follows that switch.
-      historyToolCall: async () => (await readTavernSettings()).storyToolCall,
+      // Input side: replay past bodies as calls of the submission tool.
+      historyToolCall: async () => (await readTavernSettings()).storyInputToolCall,
+      // Output side: whether a new body must be submitted through the tool.
+      storyOutputToolCall: async () => (await readTavernSettings()).storyOutputToolCall,
       // Experiment switch for the replay layout: a word in a file, read per request
       // so one restart covers every arm. Absent or unreadable means the shipped one.
       historyLayout: async () => readHistoryLayoutFile(process.env.DSH_TAVERN_HISTORY_LAYOUT_FILE || historyLayoutFile()),
@@ -3493,7 +3498,12 @@ export async function apply(ctx) {
   if (tools !== undefined) {
     tools.register(defineTool(createStorySubmissionTool({
       chatForSession,
-      enabled: async () => (await readTavernSettings()).storyToolCall,
+      // Input-only requests still declare the tool for their replayed history;
+      // accepting a real submission there is harmless.
+      enabled: async () => {
+        const settings = await readTavernSettings()
+        return settings.storyInputToolCall === true || settings.storyOutputToolCall === true
+      },
       isBackground: function (sessionId) { return backgroundAgentRunner.owns(sessionId) }
     })))
     registerGameplayTools({

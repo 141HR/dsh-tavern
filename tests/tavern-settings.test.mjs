@@ -69,12 +69,46 @@ test('系统提示词方案：复制、重名加后缀、不能删除正在使�
   assert.equal(document.systemAppendEnabled, false)
 })
 
-test('正文与历史回放合成一个工具调用开关：旧存档任一开着都算开，改动后旧字段清掉', () => {
-  assert.equal(presentTavernSettings({}, {}).storyToolCall, false)
-  assert.equal(presentTavernSettings({ storyHistoryToolCall: true }, {}).storyToolCall, true)
-  assert.equal(presentTavernSettings({ storyToolCall: true }, {}).storyToolCall, true)
-  assert.equal(Object.hasOwn(presentTavernSettings({ storyHistoryToolCall: true }, {}), 'storyHistoryToolCall'), false)
-  const off = applyTavernSettingsPatch({ storyHistoryToolCall: true }, { storyToolCall: false })
-  assert.deepEqual(off, { storyToolCall: false })
-  assert.equal(presentTavernSettings(off, {}).storyToolCall, false)
+test('输入与输出走工具调用是两个独立开关：默认都关', () => {
+  const settings = presentTavernSettings({}, {})
+  assert.equal(settings.storyInputToolCall, false)
+  assert.equal(settings.storyOutputToolCall, false)
+  assert.equal(Object.hasOwn(settings, 'storyToolCall'), false)
+  assert.equal(Object.hasOwn(settings, 'storyHistoryToolCall'), false)
+})
+
+test('旧的合并开关拆成输入与输出：开启的旧存档两边都开', () => {
+  const merged = presentTavernSettings({ storyToolCall: true }, {})
+  assert.equal(merged.storyInputToolCall, true)
+  assert.equal(merged.storyOutputToolCall, true)
+  const off = presentTavernSettings({ storyToolCall: false }, {})
+  assert.equal(off.storyInputToolCall, false)
+  assert.equal(off.storyOutputToolCall, false)
+})
+
+test('更早的「历史正文也走工具调用」只恢复输入侧', () => {
+  const legacy = presentTavernSettings({ storyHistoryToolCall: true }, {})
+  assert.equal(legacy.storyInputToolCall, true)
+  assert.equal(legacy.storyOutputToolCall, false)
+  // 两个旧字段同时存在时各管各的：合并开关只决定输出侧。
+  const both = presentTavernSettings({ storyToolCall: false, storyHistoryToolCall: true }, {})
+  assert.equal(both.storyInputToolCall, true)
+  assert.equal(both.storyOutputToolCall, false)
+})
+
+test('改一边不会带上另一边；第一次改动就把旧字段折成明确的两项', () => {
+  const fromMerged = applyTavernSettingsPatch({ storyToolCall: true }, { storyOutputToolCall: false })
+  assert.deepEqual(fromMerged, { storyInputToolCall: true, storyOutputToolCall: false })
+  assert.equal(presentTavernSettings(fromMerged, {}).storyInputToolCall, true)
+
+  const fromHistory = applyTavernSettingsPatch({ storyHistoryToolCall: true }, { storyOutputToolCall: true })
+  assert.deepEqual(fromHistory, { storyInputToolCall: true, storyOutputToolCall: true })
+
+  const off = applyTavernSettingsPatch({ storyInputToolCall: true, storyOutputToolCall: true }, { storyInputToolCall: false })
+  assert.deepEqual(off, { storyInputToolCall: false, storyOutputToolCall: true })
+
+  const onlyInput = applyTavernSettingsPatch({}, { storyInputToolCall: true })
+  assert.deepEqual(onlyInput, { storyInputToolCall: true, storyOutputToolCall: false })
+  assert.throws(() => applyTavernSettingsPatch({}, { storyInputToolCall: 'yes' }), /输入走工具调用设置必须是布尔值/)
+  assert.throws(() => applyTavernSettingsPatch({}, { storyOutputToolCall: 1 }), /输出走工具调用设置必须是布尔值/)
 })

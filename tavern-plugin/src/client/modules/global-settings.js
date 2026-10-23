@@ -118,8 +118,10 @@ function createGlobalSettingsModule({ React, rpc, notifySettingsChanged, TavernD
                 // Most players never need this; it sits last, folded.
                 h(HeaderItemsSettings)),
             group("高级", "",
-                state.settings ? h(SettingSwitch, { settings: state.settings, name: "storyToolCall", title: "正文走工具调用",
-                    description: "让模型通过工具调用提交正文，历史里的正文和玩家消息也以工具参数的形式回放；可缓解 Gemini 等模型在正文中途截断或拒答。需要模型支持工具调用；正文生成完成后一次性显示，存档和界面不变。" }) : null,
+                state.settings ? h(SettingSwitch, { settings: state.settings, name: "storyInputToolCall", title: "输入走工具调用",
+                    description: "把发给模型的历史（此前的玩家消息和正文）以 submit_story 工具参数的形式回放，而不是普通对话文字；可降低续写被拒答。只影响请求，本轮输入、存档和界面保持不变。需要模型支持工具调用。" }) : null,
+                state.settings ? h(SettingSwitch, { settings: state.settings, name: "storyOutputToolCall", title: "输出走工具调用",
+                    description: "让模型通过 submit_story 提交本轮正文，可缓解 Gemini 等模型在正文中途截断或拒答。需要模型支持工具调用；正文生成完成后一次性显示。" }) : null,
                 h(PromptTemplateSettingsEntry)),
             state.error ? React.createElement("div", { className: "dsh-tavern-settings-error", role: "alert" }, "保存失败：" + state.error) : null
         );
