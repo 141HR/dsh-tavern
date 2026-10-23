@@ -1537,16 +1537,9 @@ export async function apply(ctx) {
   // lets a library edit enter this game without the explicit reload button.
   async function cardUpdateStatus(chat, context = {}) {
     try {
+      // A game just opened plays the card it was given, which is the card on disk.
       if (context.fresh === true) return playCardSnapshots.libraryBoundStatus(chat, context.card)
-      const card = context.card ?? await readCard(chat.cardPath)
-      // A game that keeps no copy has no world book to offer as an update, but the
-      // constant prefix still has to follow an edited book on the next read.
-      const synced = context.busy === true ? null
-        : await playCardSnapshots.autoSync(chat, card)
-      // A legacy copy still needs explicit synchronization; only a game without one follows the library.
-      if (!chat.openingWorldbookSnapshot) return playCardSnapshots.libraryBoundStatus(chat, card)
-      // One library read now serves both the automatic refresh and the badge.
-      return await playCardSnapshots.updateStatus(chat, card, synced?.observed)
+      return await playCardSnapshots.currentStatus(chat, { busy: context.busy === true })
     } catch (error) { return {available:true,error:String(error.message || error)} }
   }
   const liveCardUpdate = createLiveCardUpdate({readGlobals:readPromptTemplateGlobalVariables,
@@ -1678,7 +1671,7 @@ export async function apply(ctx) {
     return await conversationInitialization.ensureOpening(sessionId)
   }
   const contextPlanner = createContextPlanner({ prompt: runtimePrompt, callModel: callModel, now: Date.now, logger: console })
-  const playCardSnapshots = createPlayCardSnapshots({ worldBooks, planner: contextPlanner, readCard: readChatCard, writeChat, updateChat,
+  const playCardSnapshots = createPlayCardSnapshots({ worldBooks, planner: contextPlanner, readCard: readChatCard, readLatestCard: readCard, writeChat, updateChat,
     userPreferenceProfile })
   const ensurePlayCardSnapshot = playCardSnapshots.ensure
   async function ensureNativeSystemPrefix(session, chat) {

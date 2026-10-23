@@ -17,7 +17,9 @@ function cardAgent(chat) { return chat.mode === 'card' && chat.cardEditContext?.
 function preferenceOnly(chat) { return cardAgent(chat) && chat.cardReferenceContext?.version !== 1 }
 
 /** Owns snapshot preparation, migration, persistence and concurrent build sharing. */
-export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeChat, updateChat, userPreferenceProfile, logger = console }) {
+// `readCard(chat)` is the card the game plays with (frozen at opening, replaced by an explicit reload);
+// `readLatestCard(cardPath)` is the card on disk. Update detection and the reload digest compare the two.
+export function createPlayCardSnapshots({ worldBooks, planner, readCard, readLatestCard, writeChat, updateChat, userPreferenceProfile, logger = console }) {
   const pending = new Map()
   const syncing = new Set()
   const lastSyncWarning = new Map()
@@ -203,7 +205,7 @@ export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeCh
     if (syncing.has(key)) return null
     syncing.add(key)
     try {
-      const definition = card ?? await readCard(chat.cardPath)
+      const definition = card ?? await readCard(chat)
       // A game that keeps no copy already reads the library every turn; only its
       // fixed prefix can be stale, and it is the same "next read" promise.
       if (chat.openingWorldbookSnapshot?.version !== 1) return await refreshConstantPrefix(chat, definition)
@@ -326,5 +328,22 @@ export function createPlayCardSnapshots({ worldBooks, planner, readCard, writeCh
     }
   }
 
-  return Object.freeze({ prepare, ensure, settled, constantContext, updateStatus, libraryBoundStatus, autoSync, replacement, preferenceReplacement })
+  /**
+   * The reload badge and digest of a game, always against the card on disk: comparing the game's
+   * own frozen card with itself never sees an edit, and the digest must match what replacement()
+   * checks. A game with its own book copy refreshes that copy from the latest card as before; a game
+   * following the library refreshes its fixed prefix with the card it plays with (a card edit keeps
+   * its explicit reload).
+   */
+  async function currentStatus(chat, { busy = false } = {}) {
+    const latest = await readLatestCard(chat.cardPath)
+    if (!keepsCopy(chat)) {
+      if (!busy) await autoSync(chat, undefined)
+      return libraryBoundStatus(chat, latest)
+    }
+    const synced = busy ? null : await autoSync(chat, latest)
+    return await updateStatus(chat, latest, synced?.observed)
+  }
+
+  return Object.freeze({ prepare, ensure, settled, constantContext, updateStatus, libraryBoundStatus, autoSync, currentStatus, replacement, preferenceReplacement })
 }
