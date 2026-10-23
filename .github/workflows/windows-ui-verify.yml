@@ -46,8 +46,8 @@ jobs:
           Start-Process -FilePath $exe -ArgumentList '--remote-debugging-port=9222'
           for ($i = 0; $i -lt 60; $i++) { Start-Sleep 2; try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:9222/json/version | Out-Null; break } catch {} }
           Start-Sleep 15
-          node packaging/windows/ui-verify.mjs welcome "$env:RUNNER_TEMP\shots" first
-          node packaging/windows/ui-verify.mjs shot "$env:RUNNER_TEMP\shots" first
+          node scripts/windows-ui-verify.mjs welcome "$env:RUNNER_TEMP\shots" first
+          node scripts/windows-ui-verify.mjs shot "$env:RUNNER_TEMP\shots" first
           Get-Process | Where-Object { $_.Path -like '*Harness*' } | Stop-Process -Force
           Start-Sleep 5
 
@@ -86,8 +86,8 @@ jobs:
           Start-Process -FilePath $env:EXE -ArgumentList '--remote-debugging-port=9222'
           for ($i = 0; $i -lt 60; $i++) { Start-Sleep 2; try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:9222/json/version | Out-Null; break } catch {} }
           Start-Sleep 30
-          node packaging/windows/ui-verify.mjs welcome "$env:RUNNER_TEMP\shots" after
-          node packaging/windows/ui-verify.mjs shot "$env:RUNNER_TEMP\shots" after
+          node scripts/windows-ui-verify.mjs welcome "$env:RUNNER_TEMP\shots" after
+          node scripts/windows-ui-verify.mjs shot "$env:RUNNER_TEMP\shots" after
 
       - uses: actions/upload-artifact@v4
         if: always()

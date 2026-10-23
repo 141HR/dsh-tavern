@@ -17,7 +17,6 @@ docs export-ignore
 /.github export-ignore
 /claude export-ignore
 /scripts export-ignore
-/packaging export-ignore
 # android/ is required by setup.sh when installing from a source archive.
 /CONTEXT.md export-ignore
 /DESIGN.md export-ignore
