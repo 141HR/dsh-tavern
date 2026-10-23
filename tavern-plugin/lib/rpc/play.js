@@ -172,9 +172,11 @@ export function createPlayHandlers(deps) {
     async retryStyleReference(args) {
       return { styleReference: await retryStyleReference(args?.sessionId, { target: 'next', guidance: args?.guidance }) }
     },
-    // 精修: edits the player ticks and applies as a body edit.
-    async polishReview(args) {
+    // 精修: review the latest reply and apply every edit that still finds its text, as one body edit.
+    // The texts before and after come back so the page can show the comparison and undo it.
+    async polishBody(args) {
       const sessionId = str(args?.sessionId)
+      await reconcileStory(sessionId)
       const edit = await bodyEditor.read(sessionId)
       const texts = edit.parts.filter(part => part.kind === 'text').map(part => part.text)
       const chat = await chatForSession(sessionId)
@@ -182,15 +184,22 @@ export function createPlayHandlers(deps) {
       const request = buildPolishReviewRequest({ principles: runtimePrompt('polish'), card, playerName: chat.macroState?.userName,
         ...polishReviewContext(chat.messages), reply: texts.join('\n\n') })
       const review = parsePolishReview(await callModel({ sessionId, ...request }), texts)
-      return { token: edit.token, edits: review.edits, guidance: review.fallback }
+      const chosen = review.edits.filter(item => item.status === 'ok')
+      if (review.fallback || !chosen.length) return { edits: review.edits, guidance: review.fallback, view: null }
+      const polished = applyPolishEdits(texts, chosen)
+      const view = await bodyEditor.save(sessionId, { token: edit.token, texts: polished })
+      notifyPluginTimeline(sessionId, 'edit', { settled: true })
+      return { edits: review.edits, original: texts, polished, view }
     },
-    async applyPolishEdits(args) {
+    // Undo 精修: only while the reply is still exactly what 精修 left.
+    async undoPolish(args) {
       const sessionId = str(args?.sessionId)
       await reconcileStory(sessionId)
       const edit = await bodyEditor.read(sessionId)
-      if (edit.token !== args?.token) throw new Error('正文已变化，请重新审稿')
-      const texts = applyPolishEdits(edit.parts.filter(part => part.kind === 'text').map(part => part.text), Array.isArray(args?.edits) ? args.edits : [])
-      const view = await bodyEditor.save(sessionId, { token: edit.token, texts })
+      const texts = edit.parts.filter(part => part.kind === 'text').map(part => part.text)
+      const polished = Array.isArray(args?.polished) ? args.polished : [], original = Array.isArray(args?.original) ? args.original : []
+      if (texts.length !== polished.length || texts.some((text, index) => text !== polished[index]) || original.length !== texts.length || original.some(text => typeof text !== 'string')) throw new Error('精修后正文又改过了，无法撤销')
+      const view = await bodyEditor.save(sessionId, { token: edit.token, texts: original })
       notifyPluginTimeline(sessionId, 'edit', { settled: true })
       return { view }
     },

@@ -96,7 +96,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 				title: "重新生成候选项",
 				hint: isScript ? "跟随剧本，只重新生成一个推荐候选" : "行动候选与场景候选通用",
 				loading: panel.phase === "loading" ? "正在重新生成候选项…" : "",
-				error: panel.error || reviewNote,
+				error: panel.error,
 				value: guidance,
 				onChange: setGuidance,
 				placeholder: "对候选的要求（可选）",
@@ -120,6 +120,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 			}
 			const body = props.loading
 				? h("div", { className: "dsh-tavern-regen-loading" }, props.loading)
+				: props.override ? props.override
 				: h(React.Fragment, null,
 					props.error ? h("div", { className: "dsh-tavern-choice-error" }, props.error) : null,
 					h("textarea", {
@@ -160,73 +161,84 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 			const [styleGuidance, setStyleGuidance] = React.useState("");
 			const [reviewing, setReviewing] = React.useState(false);
 			const [reviewNote, setReviewNote] = React.useState("");
-			const [review, setReview] = React.useState(null);
-			const [applying, setApplying] = React.useState(false);
+			const [polishResult, setPolishResult] = React.useState(null);
+			const [undoing, setUndoing] = React.useState(false);
+			const [reviewSeconds, setReviewSeconds] = React.useState(0);
+			React.useEffect(() => {
+				if (!reviewing) return undefined;
+				const started = Date.now();
+				setReviewSeconds(0);
+				const timer = setInterval(() => setReviewSeconds(Math.floor((Date.now() - started) / 1000)), 1000);
+				return () => clearInterval(timer);
+			}, [reviewing]);
             React.useEffect(() => { setRestyle(false); setStyleGuidance(""); }, [props.sessionId]);
 			const styleState = useLiveTavernView(props.sessionId, "regen-style");
 			const styleEnabled = styleState.view?.styleReferenceEnabled === true;
 			const opened = panel && panel.sessionId === props.sessionId && panel.phase === "input";
 			React.useEffect(function () { if (opened) setGuidance(interactions.guidance(props.sessionId)); }, [opened, props.sessionId]);
-			React.useEffect(() => { if (!opened) setReview(null); }, [opened]);
+			React.useEffect(() => { if (!opened) setPolishResult(null); }, [opened]);
 			const h = React.createElement;
 			if (!isPlayMode(sessionMode) || running || !panel || panel.sessionId !== props.sessionId) return null;
             function generate() {
                 return interactions.regenerateBody(panel, guidance, { restyle: styleEnabled && restyle, styleGuidance });
             }
-            // 精修: the editor's edits are listed to tick and apply in place; unreadable output falls back to the guidance box.
-            async function runReview() {
-                setReviewing(true); setReviewNote(""); setReview(null);
+            // 精修: review and apply in one step, then show what changed so the player can judge it or undo it.
+            function showView(view) {
+                liveTavernView.setView(props.sessionId, view);
+                notifyTavernDataChanged(["sessions"], "play-controls");
+                tavernCoordination.invalidate(props.sessionId);
+            }
+            async function runPolish() {
+                const started = Date.now();
+                setReviewing(true); setReviewNote(""); setPolishResult(null);
                 try {
-                    const result = await rpc("polishReview", {}, props.sessionId);
-                    const edits = result.edits.map(edit => ({ ...edit, checked: edit.status === "ok" }));
-                    if (result.guidance) setGuidance(result.guidance);
-                    if (edits.length) setReview({ token: result.token, edits });
-                    if (!edits.length && !result.guidance) setReviewNote("审稿没有发现需要修改的地方");
-                } catch (error) { setReviewNote("审稿失败：" + String(error?.message || error)); }
+                    const result = await rpc("polishBody", {}, props.sessionId);
+                    const skipped = result.edits.filter(edit => edit.status !== "ok").length;
+                    if (result.guidance) { setGuidance(result.guidance); setReviewNote("审稿没有按格式输出修改清单，内容已填进意见框，可以按意见重新生成"); }
+                    else if (!result.view) setReviewNote(skipped ? "审稿给出的 " + skipped + " 条修改都没在正文里找到原文，正文没有改动" : "审稿没有发现需要修改的地方");
+                    else {
+                        showView(result.view);
+                        setPolishResult({ edits: result.edits.filter(edit => edit.status === "ok"), skipped, original: result.original, polished: result.polished, seconds: Math.round((Date.now() - started) / 1000), undone: false });
+                    }
+                } catch (error) { setReviewNote("精修失败：" + String(error?.message || error)); }
                 finally { setReviewing(false); }
             }
-            async function applyEdits() {
-                const chosen = review.edits.filter(edit => edit.checked && edit.status === "ok");
-                if (!chosen.length) return;
-                setApplying(true); setReviewNote("");
+            async function undoPolish() {
+                setUndoing(true); setReviewNote("");
                 try {
-                    const result = await rpc("applyPolishEdits", { token: review.token, edits: chosen.map(edit => ({ find: edit.find, replace: edit.replace })) }, props.sessionId);
-                    liveTavernView.setView(props.sessionId, result.view);
-                    notifyTavernDataChanged(["sessions"], "play-controls");
-                    tavernCoordination.invalidate(props.sessionId);
-                    setReview(null);
-                    setRegenPanel(null);
-                } catch (error) { setReviewNote("应用修改失败：" + String(error?.message || error)); }
-                finally { setApplying(false); }
+                    const result = await rpc("undoPolish", { original: polishResult.original, polished: polishResult.polished }, props.sessionId);
+                    showView(result.view);
+                    setPolishResult(current => ({ ...current, undone: true }));
+                } catch (error) { setReviewNote("撤销失败：" + String(error?.message || error)); }
+                finally { setUndoing(false); }
             }
-            function toggle(index) {
-                setReview(current => ({ ...current, edits: current.edits.map((edit, at) => at === index ? { ...edit, checked: !edit.checked } : edit) }));
-            }
-            const editList = review ? h("div", { className: "dsh-tavern-polish-edits" },
-                h("div", { className: "dsh-tavern-polish-head" }, "修改清单：勾选后直接替换原文，其余文字不动"),
-                review.edits.map((edit, index) => h("label", { key: index, className: "dsh-tavern-polish-edit" + (edit.status === "ok" ? "" : " is-missing") },
-                    h("input", { type: "checkbox", checked: edit.checked, disabled: edit.status !== "ok", onChange: () => toggle(index) }),
+            const polishView = polishResult ? h("div", { className: "dsh-tavern-polish-edits" },
+                reviewNote ? h("div", { className: "dsh-tavern-choice-error" }, reviewNote) : null,
+                h("div", { className: "dsh-tavern-polish-summary" }, polishResult.undone ? "已撤销精修，正文恢复原样"
+                    : "精修完成：改了 " + polishResult.edits.length + " 处，用时 " + polishResult.seconds + " 秒" + (polishResult.skipped ? "（另有 " + polishResult.skipped + " 条没找到原文，已跳过）" : "")),
+                polishResult.edits.map((edit, index) => h("div", { key: index, className: "dsh-tavern-polish-edit" },
                     h("span", { className: "dsh-tavern-polish-body" },
-                        h("span", { className: "dsh-tavern-polish-title" }, (edit.reason || "修改") + (edit.status === "missing" ? "（原文里没找到这段）" : edit.status === "ambiguous" ? "（这段在正文里出现了不止一次）" : edit.status === "overlap" ? "（和上面某条修改重叠）" : "")),
+                        h("span", { className: "dsh-tavern-polish-title" }, (index + 1) + ". " + (edit.reason || "修改")),
                         h("del", null, edit.find),
                         edit.replace ? h("ins", null, edit.replace) : h("span", { className: "dsh-tavern-polish-reason" }, "（删去）")))),
                 h("div", { className: "dsh-tavern-regen-foot" },
-                    h("button", { type: "button", className: "dsh-tavern-question-primary", disabled: applying || !review.edits.some(edit => edit.checked && edit.status === "ok"), onClick: applyEdits },
-                        applying ? "正在应用…" : "应用所选修改（" + review.edits.filter(edit => edit.checked && edit.status === "ok").length + "）"))) : null;
+                    polishResult.undone ? null : h("button", { type: "button", className: "dsh-tavern-regen-cancel", disabled: undoing, onClick: undoPolish }, undoing ? "正在撤销…" : "撤销精修"),
+                    h("button", { type: "button", className: "dsh-tavern-question-primary", onClick: () => setRegenPanel(null) }, "完成"))) : null;
 			return h(RegenGuideForm, {
 				title: "重新生成正文",
-				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改；精修：审稿列出修改清单，勾选后直接替换原文",
+				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改；精修：按原则直接改好，改完显示前后对比，可撤销",
 				loading: panel.phase === "loading" ? (panel.restyle ? "正在换文风联想并重新生成…" : panel.rewrite ? "正在按意见改写正文…" : "正在重新生成正文…") : "",
-				extra: h(React.Fragment, null, editList, styleEnabled ? h("div", { className: "dsh-tavern-regen-style" },
+				override: polishView,
+				extra: h(React.Fragment, null, styleEnabled ? h("div", { className: "dsh-tavern-regen-style" },
 					h("label", null, h("input", { type: "checkbox", checked: restyle, onChange: event => setRestyle(event.target.checked) }), " 同时换一段文风联想"),
 					restyle ? h("input", { className: "dsh-tavern-regen-input", value: styleGuidance, maxLength: 500, placeholder: "换参考的要求（可选），例如：要金庸的打斗描写", onChange: event => setStyleGuidance(event.target.value) }) : null) : null),
-				error: panel.error,
+				error: panel.error || reviewNote,
 				value: guidance,
 				onChange: setGuidance,
 				placeholder: "指导意见（可选）",
 				examples: ["写得更长", "侧重心理描写", "加快节奏"],
 				submitLabel: "生成并替换正文",
-				secondary: { label: reviewing ? "审稿中…" : "精修", title: "按「正文精修原则」审读当前正文，列出修改清单（一句到整段），勾选后直接替换原文，不重新生成", disabled: reviewing || applying, onClick: runReview },
+				secondary: { label: reviewing ? "精修中… " + reviewSeconds + " 秒" : "精修", title: "按「正文精修原则」审读当前正文，直接改掉问题（一句到整段），不重新生成；改完列出前后对比，可撤销", disabled: reviewing, onClick: runPolish },
 				onSubmit: generate,
 				onCancel: function () { setRegenPanel(null); }
 			});
