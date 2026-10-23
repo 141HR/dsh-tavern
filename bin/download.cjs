@@ -258,11 +258,11 @@ async function downloadRuntime({ metadataUrl, rootUrl, destination, installed, c
     }
   }
   let next = 0, done = 0, reused = 0, received = 0, reportedAt = 0
-  // A progress line every two seconds at most: the Windows installer appends each line to its log
+  // A progress line every five seconds at most: the Windows installer appends each line to its log
   // and echoes it, and a pipe it reads slower than we write stalls this process (and the download).
   const report = (force = false) => {
     const now = Date.now()
-    if (!force && now - reportedAt < 2000) return
+    if (!force && now - reportedAt < 5000) return
     reportedAt = now
     status(`下载代码（${source}）：${done}/${files.length} 文件，复用 ${reused}，已下载 ${(received / 1048576).toFixed(1)} MB`)
   }
@@ -315,7 +315,7 @@ async function extractRuntimeArchive({ archive, files, rootUrl, destination, sta
   const { bytes, url } = await download(urls, { label: '代码压缩包', sha256: archive.sha256, size: archive.size, stallMs, signal, fetch: request,
     onProgress: ({ host, received }) => {
       const now = Date.now()
-      if (now - reportedAt < 2000) return
+      if (now - reportedAt < 5000) return
       reportedAt = now
       status(`下载代码压缩包（${host}）：${megabytes(received)}/${megabytes(archive.size)} MB`)
     } })

@@ -77,8 +77,26 @@ $RuntimePaths = @(
   'tavern-plugin'
 )
 
-# Machine-readable progress for the Windows launcher; also useful in terminals.
-function Write-InstallStatus([string]$Message) { Write-Host ("DSH_STATUS " + $Message) }
+# A program reading the output (the in-app updater) gets the DSH_STATUS lines it parses; a person
+# at a console gets three numbered steps with one short line per update, and the details go to the
+# diagnostics log only.
+$FriendlyOutput = -not [Console]::IsOutputRedirected
+$InstallStarted = Get-Date
+$InstallSteps = @{ '下载代码' = 1; '安装依赖' = 2; '本地配置' = 3 }
+$script:CurrentInstallStep = 0
+function Write-InstallStatus([string]$Message) {
+  if (-not $FriendlyOutput) { Write-Host ("DSH_STATUS " + $Message); return }
+  $Stage = ($Message -split '[：（(，]', 2)[0]
+  if ($Stage -like '下载代码*' -or $Stage -like '下载源*' -or $Stage -like '代码*') { $Stage = '下载代码' }
+  $Number = $InstallSteps[$Stage]
+  if ($Number -and $Number -ne $script:CurrentInstallStep) {
+    $script:CurrentInstallStep = $Number
+    Write-Host ''
+    Write-Host ("[$Number/3] " + $Stage) -ForegroundColor Cyan
+  }
+  $Detail = if ($Message.StartsWith($Stage + '：')) { $Message.Substring($Stage.Length + 1) } else { $Message }
+  Write-Host ('      ' + $Detail)
+}
 
 # The first desktop install links the desktop profile to Tavern, which needs DeepSeek Harness
 # closed (later in-app updates rewrite the linked profile while it runs).
@@ -416,11 +434,11 @@ async function downloadRuntime({ metadataUrl, rootUrl, destination, installed, c
     }
   }
   let next = 0, done = 0, reused = 0, received = 0, reportedAt = 0
-  // A progress line every two seconds at most: the Windows installer appends each line to its log
+  // A progress line every five seconds at most: the Windows installer appends each line to its log
   // and echoes it, and a pipe it reads slower than we write stalls this process (and the download).
   const report = (force = false) => {
     const now = Date.now()
-    if (!force && now - reportedAt < 2000) return
+    if (!force && now - reportedAt < 5000) return
     reportedAt = now
     status(`下载代码（${source}）：${done}/${files.length} 文件，复用 ${reused}，已下载 ${(received / 1048576).toFixed(1)} MB`)
   }
@@ -473,7 +491,7 @@ async function extractRuntimeArchive({ archive, files, rootUrl, destination, sta
   const { bytes, url } = await download(urls, { label: '代码压缩包', sha256: archive.sha256, size: archive.size, stallMs, signal, fetch: request,
     onProgress: ({ host, received }) => {
       const now = Date.now()
-      if (now - reportedAt < 2000) return
+      if (now - reportedAt < 5000) return
       reportedAt = now
       status(`下载代码压缩包（${host}）：${megabytes(received)}/${megabytes(archive.size)} MB`)
     } })
@@ -1227,7 +1245,7 @@ if (require.main === module) {
     $ErrorActionPreference = 'Continue'
     foreach ($ProxyLine in @(& node (Get-DownloadModule) proxy-env 2>$null)) {
       if ([string]$ProxyLine -match '^([A-Z_]+)=(.*)$') { $AddedProxyNames += $Matches[1]; Set-Item -Path "Env:$($Matches[1])" -Value $Matches[2] }
-      elseif ([string]$ProxyLine -like 'DSH_STATUS *') { Write-Host $ProxyLine }
+      elseif ([string]$ProxyLine -like 'DSH_STATUS *') { Write-InstallStatus ([string]$ProxyLine).Substring(11) }
     }
   } catch { Write-Warning "无法读取系统代理设置：$($_.Exception.Message)" }
   finally { $ErrorActionPreference = $PreviousPreference }
@@ -1330,16 +1348,27 @@ try {
     $PreviousPreference = $ErrorActionPreference
     $Code = 1
     $InvocationError = ''
+    # At a console these steps show only their progress, every few seconds; everything else is logged.
+    $Quiet = $FriendlyOutput -and $Step -in @('source.files', 'dependencies.install', 'dependencies.relink', 'profile.install')
+    $PackageLabel = if ($Step -eq 'profile.install') { '本地配置' } else { '安装依赖' }
+    $ShownAt = [DateTime]::MinValue
     try {
       $ErrorActionPreference = 'Continue'
       & $Command @CommandArgs 2>&1 | ForEach-Object {
         $Line = [string]$_
         if ($_ -is [System.Management.Automation.ErrorRecord]) {
           [IO.File]::AppendAllText($ErrorFile, "$Line`n")
-          Write-Host $Line
+          if (-not $Quiet) { Write-Host $Line }
         } else {
           [IO.File]::AppendAllText($OutputFile, "$Line`n")
-          if (-not $CaptureOutput) { Write-Host $Line }
+          if ($FriendlyOutput -and $Line -like 'DSH_STATUS *') { Write-InstallStatus $Line.Substring(11) }
+          elseif ($Quiet) {
+            if ($Line -match '^Progress: resolved (\d+), reused (\d+), downloaded (\d+), added (\d+)' -and ($Line -like '*, done*' -or ([DateTime]::Now - $ShownAt).TotalSeconds -ge 5)) {
+              $ShownAt = [DateTime]::Now
+              Write-InstallStatus ("$PackageLabel：已就绪 $($Matches[4])/$($Matches[1]) 个包（本地复用 $($Matches[2])，新下载 $($Matches[3])）")
+            }
+          }
+          elseif (-not $CaptureOutput) { Write-Host $Line }
         }
       }
       $Code = $LASTEXITCODE
@@ -1360,7 +1389,7 @@ try {
     if ($CaptureOutput) { return $Stdout.Trim() }
   }
   Write-UpdateLog 'installer.started' 'bootstrap'
-  Write-Host "更新诊断日志：$UpdateLogRoot/update-diagnostics.jsonl"
+  if (-not $FriendlyOutput) { Write-Host "更新诊断日志：$UpdateLogRoot/update-diagnostics.jsonl" }
   $ArchivePath = Join-Path $TempDir 'app.zip'
   $ExtractDir = Join-Path $TempDir 'extract'
   $UsedGit = $false
@@ -1383,7 +1412,7 @@ try {
       Write-Warning ("Git 增量更新失败，正在尝试 jsDelivr 备用源：" + $_.Exception.Message)
     }
   }
-  if ($null -eq $GitCommand) { Write-UpdateLog 'installer.stage.failed' 'git.unavailable' '127'; Write-Warning '未找到 Git，正在尝试备用源。' }
+  if ($null -eq $GitCommand) { Write-UpdateLog 'installer.stage.failed' 'git.unavailable' '127'; if ($FriendlyOutput) { Write-InstallStatus '下载代码：未安装 Git，改用 jsDelivr 下载' } else { Write-Warning '未找到 Git，正在尝试备用源。' } }
   if (-not $UsedGit) {
     try {
       Write-InstallStatus '下载代码：正在连接 jsDelivr 备用源…'
@@ -1504,7 +1533,7 @@ try {
     & node $Stager prepare --app $AppDir --source $SourceDir.FullName --commit $TargetCommit | Out-Null
     Assert-LastCommand '准备新版本失败，当前版本未改动。'
     Write-InstallStatus '安装依赖：正在连接软件包仓库，已有缓存将直接复用…'
-    Invoke-InstallCommand 'dependencies.install' $PnpmCommand @('--dir', "$AppDir.staging", 'install', '--frozen-lockfile', '--reporter=append-only', '--fetch-timeout=30000', '--fetch-retries=2', '--fetch-retry-mintimeout=1000', '--fetch-retry-maxtimeout=5000')
+    Invoke-InstallCommand 'dependencies.install' $PnpmCommand @('--dir', "$AppDir.staging", 'install', '--frozen-lockfile', '--config.minimum-release-age=0', '--reporter=append-only', '--fetch-timeout=30000', '--fetch-retries=2', '--fetch-retry-mintimeout=1000', '--fetch-retry-maxtimeout=5000')
 
     if (Test-Path $OldLauncher) {
       $PreviousApp = $true
@@ -1517,7 +1546,7 @@ try {
     & node $Stager swap --app $AppDir
     Assert-LastCommand ('切换新版本失败，已恢复原版本。安装目录可能被占用：请关闭位于 ' + $AppDir + ' 中的终端、资源管理器窗口或编辑器后重试。')
     # Re-link in place: Windows junctions and pnpm metadata record absolute paths.
-    Invoke-InstallCommand 'dependencies.relink' $PnpmCommand @('--dir', $AppDir, 'install', '--offline', '--frozen-lockfile', '--reporter=append-only', '--fetch-timeout=30000', '--fetch-retries=2', '--fetch-retry-mintimeout=1000', '--fetch-retry-maxtimeout=5000') -TimeoutMs 300000
+    Invoke-InstallCommand 'dependencies.relink' $PnpmCommand @('--dir', $AppDir, 'install', '--offline', '--frozen-lockfile', '--config.minimum-release-age=0', '--reporter=append-only', '--fetch-timeout=30000', '--fetch-retries=2', '--fetch-retry-mintimeout=1000', '--fetch-retry-maxtimeout=5000') -TimeoutMs 300000
 
     Write-InstallStatus '本地配置：正在注册 Tavern 并检查兼容性…'
     if (Close-DesktopForFirstInstall) { $ReopenDesktop = $true }
@@ -1554,14 +1583,17 @@ try {
     }
 
     Write-InstallStatus '安装依赖：正在连接软件包仓库，已有缓存将直接复用…'
-    Invoke-InstallCommand 'dependencies.install' $PnpmCommand @('--dir', $AppDir, 'install', '--frozen-lockfile', '--reporter=append-only', '--fetch-timeout=30000', '--fetch-retries=2', '--fetch-retry-mintimeout=1000', '--fetch-retry-maxtimeout=5000')
+    Invoke-InstallCommand 'dependencies.install' $PnpmCommand @('--dir', $AppDir, 'install', '--frozen-lockfile', '--config.minimum-release-age=0', '--reporter=append-only', '--fetch-timeout=30000', '--fetch-retries=2', '--fetch-retry-mintimeout=1000', '--fetch-retry-maxtimeout=5000')
 
     Write-InstallStatus '本地配置：正在注册 Tavern 并检查兼容性…'
     if (Close-DesktopForFirstInstall) { $ReopenDesktop = $true }
     Invoke-InstallCommand 'profile.install' 'node' @((Join-Path $AppDir 'bin\dsh-tavern.mjs'), 'install', '--host', $InstallHost) -TimeoutMs 1200000
   }
   if ($InstallHost -eq 'desktop') {
-    Write-Host 'DSH Tavern Desktop 版安装完成。酒馆已安装到独立 tavern 配置；原版 desktop 已备份，可在设置 → Profile 切换中切换。'
+    $Elapsed = (Get-Date) - $InstallStarted
+    Write-Host ''
+    Write-Host ('DSH Tavern 安装完成，用时 ' + [int][math]::Floor($Elapsed.TotalMinutes) + ' 分 ' + $Elapsed.Seconds + ' 秒。') -ForegroundColor Green
+    Write-Host '酒馆装在独立的 tavern 配置里；原来的 desktop 配置已备份，可在设置 → Profile 切换中切回。'
     if (($FirstDesktopInstall -or $ReopenDesktop) -and -not @(Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue).Count -and $OfficialDesktopExecutable) {
       Write-Host '正在打开 DeepSeek Harness…'
       Start-Process -FilePath $OfficialDesktopExecutable

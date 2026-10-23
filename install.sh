@@ -977,11 +977,11 @@ async function downloadRuntime({ metadataUrl, rootUrl, destination, installed, c
     }
   }
   let next = 0, done = 0, reused = 0, received = 0, reportedAt = 0
-  // A progress line every two seconds at most: the Windows installer appends each line to its log
+  // A progress line every five seconds at most: the Windows installer appends each line to its log
   // and echoes it, and a pipe it reads slower than we write stalls this process (and the download).
   const report = (force = false) => {
     const now = Date.now()
-    if (!force && now - reportedAt < 2000) return
+    if (!force && now - reportedAt < 5000) return
     reportedAt = now
     status(`下载代码（${source}）：${done}/${files.length} 文件，复用 ${reused}，已下载 ${(received / 1048576).toFixed(1)} MB`)
   }
@@ -1034,7 +1034,7 @@ async function extractRuntimeArchive({ archive, files, rootUrl, destination, sta
   const { bytes, url } = await download(urls, { label: '代码压缩包', sha256: archive.sha256, size: archive.size, stallMs, signal, fetch: request,
     onProgress: ({ host, received }) => {
       const now = Date.now()
-      if (now - reportedAt < 2000) return
+      if (now - reportedAt < 5000) return
       reportedAt = now
       status(`下载代码压缩包（${host}）：${megabytes(received)}/${megabytes(archive.size)} MB`)
     } })
@@ -1260,7 +1260,7 @@ if [ "${INSTALL_HOST}" = "cli" ] && [ -f "${STAGER}" ]; then
   node "${STAGER}" prepare --app "${APP_DIR}" --source "${SOURCE_DIR}" --commit "${TARGET_COMMIT}" >/dev/null
 
   echo "正在安装程序依赖……"
-  run_install dependencies.install 600000 pnpm --dir "${APP_DIR}.staging" install --frozen-lockfile
+  run_install dependencies.install 600000 pnpm --dir "${APP_DIR}.staging" install --frozen-lockfile --config.minimum-release-age=0
 
   if [ -f "${APP_DIR}/bin/dsh-tavern.mjs" ]; then
     PREVIOUS_APP=1
@@ -1269,7 +1269,7 @@ if [ "${INSTALL_HOST}" = "cli" ] && [ -f "${STAGER}" ]; then
   APP_SWAPPED=1
   node "${STAGER}" swap --app "${APP_DIR}"
   # Re-link in place: Windows junctions and pnpm metadata record absolute paths.
-  run_install dependencies.relink 300000 pnpm --dir "${APP_DIR}" install --frozen-lockfile --offline
+  run_install dependencies.relink 300000 pnpm --dir "${APP_DIR}" install --frozen-lockfile --offline --config.minimum-release-age=0
 
   echo "正在配置 Tavern……"
   DSH_HOME=${DSH_ROOT} run_install profile.install 1200000 node "${APP_DIR}/bin/dsh-tavern.mjs" install --host "${INSTALL_HOST}"
@@ -1296,7 +1296,7 @@ else
   esac
 
   echo "正在安装程序依赖……"
-  run_install dependencies.install 600000 pnpm --dir "${APP_DIR}" install --frozen-lockfile
+  run_install dependencies.install 600000 pnpm --dir "${APP_DIR}" install --frozen-lockfile --config.minimum-release-age=0
 
   echo "正在配置 Tavern……"
   DSH_HOME=${DSH_ROOT} run_install profile.install 1200000 node "${APP_DIR}/bin/dsh-tavern.mjs" install --host "${INSTALL_HOST}"
