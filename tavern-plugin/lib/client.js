@@ -22819,6 +22819,10 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 					h(TavernPluginTasks, { sessionId: props.sessionId, activity: view.activity, busy: running || view.activity?.busy || view.activity?.phase === "pending" }),
 					h(TavernPluginStatusSections, { sessionId: props.sessionId }),
 					h(TavernLedger, { sessionId: props.sessionId, ledger: view.ledger, ledgerTask: view.ledgerTask, busy: running || view.activity?.busy }),
+					view.postureEnabled ? h("section", { className: "dsh-tavern-status-section" },
+						h("div", { className: "dsh-tavern-status-label" }, "人物姿势"),
+						view.posture ? h("div", { className: "dsh-tavern-status-now" }, view.posture) : h("div", { className: "dsh-tavern-status-empty" }, "等待第一轮状态结算")
+					) : null,
 					h(TavernMvuVariables, { sessionId: props.sessionId, view: view })
 
 				)

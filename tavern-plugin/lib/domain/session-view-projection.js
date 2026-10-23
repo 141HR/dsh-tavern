@@ -136,6 +136,7 @@ export function createSessionViewProjection({
       cardUpdate,
       statusBarPlacement: chat.statusBarPlacement === 'body' ? 'body' : 'sidebar',
       posture: chat.posture || '',
+      postureEnabled: chat.backgroundTasks?.posture !== false,
       styleReference: latestStyleReference(chat),
       styleReferenceEnabled: chat.backgroundTasks?.styleReference === true && (chat.mode || 'story') === 'story',
       ledger: readLedger(chat.ledger),
@@ -390,6 +391,7 @@ export function createSessionViewProjection({
     const changes = {baseRevision:previous.tavernHelper.stateRevision,indices:[...dirtyMessageIndices],layoutChanged,changedHeaderFields}
     const next = Object.assign({}, previous, volatileSessionViewFields(chat, activity, changes), {
       posture: chat.posture || '',
+      postureEnabled: chat.backgroundTasks?.posture !== false,
       styleReference: latestStyleReference(chat),
       styleReferenceEnabled: chat.backgroundTasks?.styleReference === true && (chat.mode || 'story') === 'story',
       guides: Array.isArray(chat.guides) ? chat.guides : [],
