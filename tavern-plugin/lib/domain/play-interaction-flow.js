@@ -78,15 +78,15 @@ function createPlayInteractionFlow({ rpc, coordinationView, coordination, applyB
         guide.set(null);
         if (panel.previous) candidates.set(panel.previous);
     }
-    async function regenerateBody(panel, guidance, { restyle = false, styleGuidance = "" } = {}) {
+    async function regenerateBody(panel, guidance, { restyle = false, styleGuidance = "", polish = false } = {}) {
         if (!panel || regeneration.getSnapshot() !== panel || pendingBodies.has(panel.sessionId)) return;
         const text = String(guidance || "").trim();
         if (text) guidanceBySession.set(panel.sessionId, text); else guidanceBySession.delete(panel.sessionId);
-        const loading = regeneration.set({ ...panel, phase: "loading", error: "", rewrite: text !== "", restyle });
+        const loading = regeneration.set({ ...panel, phase: "loading", error: "", rewrite: text !== "", restyle, polish });
         const candidate = candidates.getSnapshot();
         return once(pendingBodies, panel.sessionId, async () => {
             try {
-                const result = await rpc("regenBody", Object.assign({ guidance: text }, restyle ? { restyle: true, styleGuidance: String(styleGuidance || "").trim() } : {}), panel.sessionId);
+                const result = await rpc("regenBody", Object.assign({ guidance: text }, polish ? { polish: true } : {}, restyle ? { restyle: true, styleGuidance: String(styleGuidance || "").trim() } : {}), panel.sessionId);
                 applyBodyResult(panel.sessionId, result.view, panel.tail);
                 if (candidates.getSnapshot() === candidate) candidates.set(null);
                 if (regeneration.getSnapshot() === loading) regeneration.set(null);

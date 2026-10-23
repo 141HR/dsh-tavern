@@ -137,6 +137,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 							return h("button", { key: text, type: "button", className: "dsh-tavern-regen-example", onClick: function () { addExample(text); } }, text);
 						})),
 						h("button", { type: "button", className: "dsh-tavern-regen-cancel", onClick: props.onCancel }, "取消"),
+						props.secondary ? h("button", { type: "button", className: "dsh-tavern-regen-cancel", title: props.secondary.title, onClick: props.secondary.onClick }, props.secondary.label) : null,
 						h("button", { type: "button", className: "dsh-tavern-question-primary dsh-tavern-regen-submit", onClick: props.onSubmit }, props.submitLabel)
 					)
 				);
@@ -169,8 +170,8 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
             }
 			return h(RegenGuideForm, {
 				title: "重新生成正文",
-				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改",
-				loading: panel.phase === "loading" ? (panel.restyle ? "正在换文风联想并重新生成…" : panel.rewrite ? "正在按意见改写正文…" : "正在重新生成正文…") : "",
+				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改；精修只按原则改毛病",
+				loading: panel.phase === "loading" ? (panel.polish ? "正在按精修原则改写正文…" : panel.restyle ? "正在换文风联想并重新生成…" : panel.rewrite ? "正在按意见改写正文…" : "正在重新生成正文…") : "",
 				extra: styleEnabled ? h("div", { className: "dsh-tavern-regen-style" },
 					h("label", null, h("input", { type: "checkbox", checked: restyle, onChange: event => setRestyle(event.target.checked) }), " 同时换一段文风联想"),
 					restyle ? h("input", { className: "dsh-tavern-regen-input", value: styleGuidance, maxLength: 500, placeholder: "换参考的要求（可选），例如：要金庸的打斗描写", onChange: event => setStyleGuidance(event.target.value) }) : null) : null,
@@ -180,6 +181,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 				placeholder: "指导意见（可选）",
 				examples: ["写得更长", "侧重心理描写", "加快节奏"],
 				submitLabel: "生成并替换正文",
+				secondary: { label: "精修", title: "对照「正文精修原则」检查当前正文，只改违规处；意见框里的内容作为补充要求", onClick: () => interactions.regenerateBody(panel, guidance, { polish: true }) },
 				onSubmit: generate,
 				onCancel: function () { setRegenPanel(null); }
 			});

@@ -1,6 +1,7 @@
 import { setAllFailedErrorVisibility, setFailedErrorVisibility } from '../domain/failed-error-visibility.js'
 import { sessionEvents } from '../domain/session-events.js'
 import { prepareTemplateHistory, synchronizeTemplateHistory } from '../domain/template-history.js'
+import { polishGuidance } from '../domain/round-history.js'
 import { randomUUID } from 'node:crypto'
 
 // In-game play, turn editing, compaction and background settlement requests.
@@ -11,7 +12,7 @@ export function createPlayHandlers(deps) {
     ledgerEditor, liveCardUpdate, manualCharacterDesign, manualLedger, notifyPluginTimeline, phoneChat,
     playCardSnapshots, pluginSettlementProgress, readBackgroundSuppression, readCard, readCardExtensions,
     reconcileStory, reconcileWhenIdle, regenBody, replayFailedTurn, requestPerformance, retrySettlement,
-    retryStyleReference, rollbackTurn, runtimeGeneration, sessionActivity, sessionOperation,
+    retryStyleReference, rollbackTurn, runtimeGeneration, runtimePrompt, sessionActivity, sessionOperation,
     sessionStateForSession, sessionStore, sessionView, sessionViews, setPlayerName, stopBackground, str,
     templateHistoryFrom, undoRollbackTurn, updateChat, view, withCompactionSession } = deps
   return {
@@ -174,7 +175,8 @@ export function createPlayHandlers(deps) {
     async regenBody(args) {
       if (args?.restyle === true) await retryStyleReference(args.sessionId, { target: 'regenerate', guidance: args.styleGuidance })
       await reconcileStory(args && args.sessionId)
-      const view = await regenBody(args && args.chatId, args && args.guidance, args && args.sessionId)
+      const guidance = args?.polish === true ? polishGuidance(runtimePrompt('polish'), args.guidance) : args && args.guidance
+      const view = await regenBody(args && args.chatId, guidance, args && args.sessionId)
       notifyPluginTimeline(args && args.sessionId, 'regenerate')
       return { view }
     },
