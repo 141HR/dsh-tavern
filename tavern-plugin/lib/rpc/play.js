@@ -1,16 +1,15 @@
 import { setAllFailedErrorVisibility, setFailedErrorVisibility } from '../domain/failed-error-visibility.js'
 import { sessionEvents } from '../domain/session-events.js'
-import { prepareTemplateHistory, synchronizeTemplateHistory } from '../domain/template-history.js'
 import { applyPolishEdits, buildPolishReviewRequest, parsePolishReview, polishReviewContext } from '../domain/polish-review.js'
 import { randomUUID } from 'node:crypto'
 
 // In-game play, turn editing, compaction and background settlement requests.
 // `deps` carries the services ../index.js builds; dispatchMethod routes by method name.
 export function createPlayHandlers(deps) {
-  const { agentCompaction, agentRegistry, backgroundAgentRunner, backgroundCatalog, bodyEditor, callModel, polishRecords, chatHeaderWithLatestFloors,
+  const { agentCompaction, agentRegistry, backgroundAgentRunner, backgroundCatalog, bodyEditor, callModel, polishRecords, chatHeaderWithLatestFloors, applyCardUpdate, cardAutoReload,
     candidateGenerator, candidateTasks, chatForSession, compactionAbort, conversationGuides, ctx,
-    ledgerEditor, liveCardUpdate, manualCharacterDesign, manualLedger, notifyPluginTimeline, phoneChat,
-    playCardSnapshots, pluginSettlementProgress, readBackgroundSuppression, readCard, readCardExtensions,
+    ledgerEditor, manualCharacterDesign, manualLedger, notifyPluginTimeline, phoneChat,
+    pluginSettlementProgress, readBackgroundSuppression, readCard,
     reconcileStory, reconcileWhenIdle, regenBody, replayFailedTurn, requestPerformance, retrySettlement,
     retryStyleReference, rollbackTurn, runtimeGeneration, runtimePrompt, sessionActivity, sessionOperation,
     sessionStateForSession, sessionStore, sessionView, sessionViews, setPlayerName, stopBackground, str,
@@ -29,38 +28,11 @@ export function createPlayHandlers(deps) {
       if (!id.startsWith('background-')) return { turns: [] }
       return readBackgroundSuppression(id)
     },
+    // A legacy save's manual synchronization, or the retry after an automatic reload failed.
     async applyUpdatedCard(args) {
       const sessionId = str(args && args.sessionId)
-      if (typeof args.digest !== 'string' || !args.digest) throw new Error('请刷新后确认人物卡和世界书更新')
-      const conflict = new Error('游戏状态已变化，未应用更新，请稍后重试')
-      // Rebuild from the latest snapshot on a concurrent write. Never merge an
-      // old prepared save over new state, or skip the exact revision check.
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const chat = await chatForSession(sessionId)
-        if (!chat || !['story', 'script'].includes(chat.mode || 'story') || chat.requestMode === 'sillytavern') throw new Error('仅支持当前游玩会话')
-        if ((await sessionActivity(sessionId))?.busy || agentRegistry.get(sessionId)?.phase?.kind === 'running') throw new Error('请等待当前生成和后台任务完成后再应用人物卡')
-        // Applying the card restarts the card scripts; a regeneration left in progress could then never be restored.
-        if (chat.regenInProgress) throw new Error('上一次正文重新生成尚未完成：请先点「重新生成正文」完成或恢复它，再应用人物卡')
-        const card = await readCard(chat.cardPath)
-        if (!card) throw new Error('人物卡不存在')
-        const patch = await playCardSnapshots.replacement(chat, card, args.digest)
-        const prepared = await liveCardUpdate.prepare({...chat,...patch}, card, chat)
-        const nativeSession = sessionStore.get(sessionId) || agentRegistry.get(sessionId)?.session
-        if (nativeSession) prepareTemplateHistory(nativeSession, chat, prepared)
-        prepared.tavernHelperLifecycleRevision = (Number(chat.tavernHelperLifecycleRevision) || 0) + 1
-        const extensions = await readCardExtensions(chat.cardPath, prepared)
-        await liveCardUpdate.project(prepared, card, {projections:[]}, {charName:card.name,macroState:chat.macroState,regexScripts:extensions.regexScripts})
-        await playCardSnapshots.replacement(chat, await readCard(chat.cardPath), args.digest)
-        try {
-          const saved = await updateChat(chat.id, current => {
-            if (current._storageRevision !== chat._storageRevision || agentRegistry.get(sessionId)?.phase?.kind === 'running' || ['pending','running','waiting-runtime'].includes(current.settleStatus)) throw conflict
-            return prepared
-          }, { source: 'card-context.apply-update' })
-          if (nativeSession) await synchronizeTemplateHistory(nativeSession, saved, session => sessionStore.flush(session))
-          return { view: await view(saved, card) }
-        } catch (error) { if (error !== conflict) throw error }
-      }
-      throw conflict
+      cardAutoReload.retry(sessionId)
+      return { view: await applyCardUpdate(sessionId, args && args.digest) }
     },
     async getSession(args) {
       // A save opened for the first time in this process is checked once, while nothing runs.

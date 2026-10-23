@@ -134,6 +134,8 @@ export function createSessionViewProjection({
       // from a plain question by its turn. Null for play chats.
       cardSave: cardSaveViewOf(chat),
       cardUpdate,
+      // The automatic card reload, shown until the next turn.
+      cardAutoReload: chat.cardAutoReload && Number(chat.cardAutoReload.turn) === latestStoryTurn ? { at: chat.cardAutoReload.at } : null,
       statusBarPlacement: chat.statusBarPlacement === 'body' ? 'body' : 'sidebar',
       posture: chat.posture || '',
       postureEnabled: chat.backgroundTasks?.posture !== false,

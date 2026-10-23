@@ -177,6 +177,7 @@ import { createManualLedger } from './domain/manual-ledger.js'
 import { POSTURE_SUBMIT_TOOL } from './domain/posture-submission.js'
 import { createCastPresentation } from './domain/cast-presentation.js'
 import { createPolishRecords } from './domain/polish-records.js'
+import { createCardAutoReload } from './domain/card-auto-reload.js'
 import { createCastAssets } from './domain/cast-assets.js'
 import { createSpeech } from './domain/speech.js'
 import { createAssetPacks } from './domain/asset-packs.js'
@@ -1539,8 +1540,55 @@ export async function apply(ctx) {
     try {
       // A game just opened plays the card it was given, which is the card on disk.
       if (context.fresh === true) return playCardSnapshots.libraryBoundStatus(chat, context.card)
-      return await playCardSnapshots.currentStatus(chat, { busy: context.busy === true })
+      const status = await playCardSnapshots.currentStatus(chat, { busy: context.busy === true })
+      // An edited card or world book enters an idle game by itself; the page only hears about it.
+      if (context.busy !== true) cardAutoReload.schedule(chat.sessionId, status)
+      return { ...status, autoReloading: cardAutoReload.running(chat.sessionId), autoReloadError: cardAutoReload.failure(chat.sessionId) }
     } catch (error) { return {available:true,error:String(error.message || error)} }
+  }
+  const cardAutoReload = createCardAutoReload({
+    apply: (sessionId, digest) => applyCardUpdate(sessionId, digest, { auto: true }),
+    published: sessionId => sessionSignals.publish(sessionId, { kind: 'tavern-state', version: 'card-reload:' + Date.now() })
+  })
+  /** Replace a game's card and world book with the latest ones (what the old reload button did). */
+  async function applyCardUpdate(sessionId, digest, { auto = false } = {}) {
+    if (typeof digest !== 'string' || !digest) throw new Error('请刷新后确认人物卡和世界书更新')
+    const conflict = new Error('游戏状态已变化，未应用更新，请稍后重试')
+    // Rebuild from the latest snapshot on a concurrent write. Never merge an
+    // old prepared save over new state, or skip the exact revision check.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const chat = await chatForSession(sessionId)
+      if (!chat || !['story', 'script'].includes(chat.mode || 'story') || chat.requestMode === 'sillytavern') throw new Error('仅支持当前游玩会话')
+      if ((await sessionActivity(sessionId))?.busy || agentRegistry.get(sessionId)?.phase?.kind === 'running') throw new Error('请等待当前生成和后台任务完成后再应用人物卡')
+      // Applying the card restarts the card scripts; a regeneration left in progress could then never be restored.
+      if (chat.regenInProgress) throw new Error('上一次正文重新生成尚未完成：请先点「重新生成正文」完成或恢复它，再应用人物卡')
+      const card = await readCard(chat.cardPath)
+      if (!card) throw new Error('人物卡不存在')
+      const patch = await playCardSnapshots.replacement(chat, card, digest)
+      const prepared = await liveCardUpdate.prepare({...chat,...patch}, card, chat)
+      const nativeSession = sessionStore.get(sessionId) || agentRegistry.get(sessionId)?.session
+      if (nativeSession) prepareTemplateHistory(nativeSession, chat, prepared)
+      prepared.tavernHelperLifecycleRevision = (Number(chat.tavernHelperLifecycleRevision) || 0) + 1
+      // The page says so until the next turn.
+      if (auto) prepared.cardAutoReload = { at: Date.now(), turn: latestReplyTurn(chat) }
+      const extensions = await readCardExtensions(chat.cardPath, prepared)
+      await liveCardUpdate.project(prepared, card, {projections:[]}, {charName:card.name,macroState:chat.macroState,regexScripts:extensions.regexScripts})
+      await playCardSnapshots.replacement(chat, await readCard(chat.cardPath), digest)
+      try {
+        const saved = await updateChat(chat.id, current => {
+          if (current._storageRevision !== chat._storageRevision || agentRegistry.get(sessionId)?.phase?.kind === 'running' || ['pending','running','waiting-runtime'].includes(current.settleStatus)) throw conflict
+          return prepared
+        }, { source: auto ? 'card-context.auto-reload' : 'card-context.apply-update' })
+        if (nativeSession) await synchronizeTemplateHistory(nativeSession, saved, session => sessionStore.flush(session))
+        return await view(saved, card)
+      } catch (error) { if (error !== conflict) throw error }
+    }
+    throw conflict
+  }
+  function latestReplyTurn(chat) {
+    const messages = chat.messages || []
+    for (let index = messages.length - 1; index >= 0; index--) if (messages[index]?.role === 'assistant') return Number(messages[index].turn) || 0
+    return 0
   }
   const liveCardUpdate = createLiveCardUpdate({readGlobals:readPromptTemplateGlobalVariables,
     // Games without their own copy still preview against the book they play with.
@@ -3112,7 +3160,7 @@ export async function apply(ctx) {
   // Request handlers by area live in rpc/; bindings assigned later are read through getters.
   const rpcDeps = { TAVERN_PACKAGE_VERSION, agentCompaction, agentRegistry, appendStoryRounds,
     applicationUpdater, attachPlayChatDebug, backgroundAgentRunner, backgroundCatalog,
-    backgroundConfigForSession, bindScript, bodyEditor, callModel, candidateGenerator, candidateTasks, polishRecords, chatHeaderWithLatestFloors,
+    backgroundConfigForSession, bindScript, bodyEditor, callModel, candidateGenerator, candidateTasks, polishRecords, chatHeaderWithLatestFloors, applyCardUpdate, cardAutoReload,
     cardMemory, cardOrganization, cardPacksOf, cardPlugins, cardPreparation, cardTaskPrompts, castAssets,
     castCardOf, castEdit, castPresentation, castStage, castView, chatForSession, chatHeaderForSession,
     chatHistoryImporter, chatPersistence, commands, compactionAbort, compatibilityDiagnostics,

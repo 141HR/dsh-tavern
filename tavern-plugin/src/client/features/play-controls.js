@@ -262,9 +262,9 @@
 				} catch (err) { setGuideError(String(err && err.message || err)); }
 				finally { setGuideBusy(false); }
 			}
+			// Card and world book edits load by themselves; this is a legacy save's manual sync or a retry.
 			async function applyUpdatedCard() {
 				if (cardUpdateBusy || !view?.cardUpdate || view.cardUpdate.error) return;
-				if (!await askConfirm("加载人物卡和世界书的最新变化？\n\n重新加载会破坏提示词缓存，增加下一轮的 Token 费用和等待时间。")) return;
 				setCardUpdateBusy(true); setCardUpdateError("");
 				try { await rpc("applyUpdatedCard", { digest: view.cardUpdate.digest }, props.sessionId); liveTavernView.invalidate(props.sessionId); }
 				catch (error) { setCardUpdateError(String(error.message || error)); }
@@ -314,11 +314,15 @@
 			);
 			if (view.mode === "card") return null;
 			const statusText = view.settleStatus === "running" ? "正在执行后台结算" : (view.settleStatus === "error" ? "后台结算失败" : "后台结算已完成");
-			const cardUpdateNotice = !view.cardUpdate ? "" : view.cardUpdate.error ? "检查更新失败：" + view.cardUpdate.error
-				: view.cardUpdate.worldbookSyncRequired || view.cardUpdate.legacy ? "旧存档需同步"
-				: view.cardUpdate.cardChanged && view.cardUpdate.worldbookChanged ? "人物卡和世界书有变化"
-				: view.cardUpdate.cardChanged ? "人物卡有变化"
-				: view.cardUpdate.worldbookChanged ? "世界书有变化" : "";
+			// Edits apply by themselves: say what happened; only a legacy copy or a failure offers a button.
+			const cardUpdate = view.cardUpdate || {};
+			const cardReloadLine = cardUpdate.error ? { text: "检查人物卡更新失败：" + cardUpdate.error }
+				: cardUpdate.worldbookSyncRequired || cardUpdate.legacy ? { text: "旧存档的世界书副本需要手动同步一次", action: "同步人物卡和世界书" }
+				: cardUpdate.autoReloadError ? { text: "人物卡或世界书有变化，自动重新加载失败：" + cardUpdate.autoReloadError, action: "重试" }
+				: cardUpdate.autoReloading ? { text: "人物卡或世界书有变化，正在自动重新加载…" }
+				: cardUpdate.available && (cardUpdate.cardChanged || cardUpdate.worldbookChanged) ? { text: "人物卡或世界书有变化，空闲时自动重新加载" }
+				: view.cardAutoReload ? { text: "人物卡或世界书有变化，已自动重新加载（" + new Date(view.cardAutoReload.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + "）" }
+				: null;
 			return h("aside", { className: "dsh-tavern-status dsh-tavern-status-dashboard" },
 				h("div", { className: "dsh-tavern-status-head" },
 					h("div", { className: "dsh-tavern-status-role" }, view.card.name),
@@ -333,10 +337,10 @@
                         props.submitStage ? h(TavernStageSection, { sessionId: props.sessionId, submit: props.submitStage, generating: running }) : null,
                         h(TavernBackgroundWait, {sessionId:props.sessionId, activity:view.activity}),
                         h(TavernSaveUpgrade, {key:props.sessionId,sessionId:props.sessionId,busy:running || view.activity?.busy || view.settleStatus === "running"}),
-					["story", "script"].includes(view.mode || "story") && view.requestMode !== "sillytavern" && view.cardUpdate ? h("section", { className: "dsh-tavern-status-section" },
+					["story", "script"].includes(view.mode || "story") && view.requestMode !== "sillytavern" && cardReloadLine ? h("section", { className: "dsh-tavern-status-section" },
 						h("div", { className: "dsh-tavern-card-reload" },
-							h("button", { className: "dsh-tavern-btn" + (cardUpdateNotice ? "" : " quiet"), disabled: running || cardUpdateBusy || !!view.cardUpdate.error || view.settleStatus === "running", onClick: applyUpdatedCard }, cardUpdateBusy ? "正在重新加载人物卡和世界书…" : "重新加载人物卡和世界书"),
-							cardUpdateNotice ? h("span", { className: "dsh-tavern-card-reload-notice", role: "status" }, cardUpdateNotice) : null
+							h("span", { className: "dsh-tavern-card-reload-notice", role: "status" }, cardReloadLine.text),
+							cardReloadLine.action ? h("button", { className: "dsh-tavern-btn", disabled: running || cardUpdateBusy || view.settleStatus === "running", onClick: applyUpdatedCard }, cardUpdateBusy ? "正在加载…" : cardReloadLine.action) : null
 						),
 						cardUpdateError ? h("p", { className: "dsh-card-error", role: "alert" }, "未应用更新：" + cardUpdateError) : null
 					) : null,
