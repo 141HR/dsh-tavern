@@ -58,9 +58,34 @@ export function createCastPresentation({ enabled, turns, data, publish = () => {
       if (!candidates.length) continue
       const key = await turns.currentKey(game.sessionId, turn)
       const record = key && candidates.find(item => item.key === key)
-      if (Array.isArray(record?.data?.lines) && record.data.lines.length) result[turn] = record.data.lines
+      const lines = record ? record.data?.lines : key && await carriedFrom(game, turn, key, candidates)
+      if (Array.isArray(lines) && lines.length) result[turn] = lines
     }
     return { enabled: true, turns: result }
+  }
+
+  // A turn edited before edits carried their annotation (or by a path that skips it): rebuild the
+  // shown version's lines from the earlier version sharing the most quotes, when at least a third of
+  // the shown quotes are word for word there (a regenerated text shares almost none). A version
+  // waiting for settlement (a fresh regeneration) is left to settlement.
+  async function carriedFrom(game, turn, key, candidates) {
+    const material = typeof turns.readTurn === 'function' ? await turns.readTurn(game.sessionId, turn).catch(() => null) : null
+    if (!material || material.key !== key) return null
+    const quotes = dialogueQuotes(material.text)
+    if (!quotes.length) return null
+    let source = null, shared = 0
+    for (const item of candidates) {
+      const lines = Array.isArray(item.data?.lines) ? item.data.lines : []
+      const count = new Set(lines.filter(line => quotes.includes(line.quote)).map(line => line.quote)).size
+      if (count > shared) { source = lines; shared = count }
+    }
+    if (!source || shared * 3 < quotes.length) return null
+    // The old quote count is known when every quote was annotated.
+    const highest = Math.max(...source.map(line => line.n))
+    const lines = carryCastLines(source, source.length === highest ? highest : -1, quotes)
+    if (!lines.length) return null
+    await data.saveTurn({ chatId: game.chatId, owner: CAST_DATA_OWNER, turn, key, data: { version: 1, lines } }).catch(() => {})
+    return lines
   }
 
   /** One turn's annotation for the text version shown now, whether or not annotating is on. */

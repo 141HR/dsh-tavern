@@ -122,3 +122,25 @@ test('编辑正文后台词标注带到新版本：原句照旧，台词数不�
   assert.equal(published.length, 1)
   assert.ok((await data.turnsUpTo({ chatId: 'chat', owner: CAST_DATA_OWNER, turn: 2 })).some(item => item.key === 'v1'), '旧版本的标注留着，撤销回去头像还在')
 })
+
+test('修复前编辑过的轮次：读取时用旧版本标注补上当前版本；大半台词都换了就不补', async () => {
+  const files = new Map()
+  const store = {
+    async readJson(path) { return files.has(path) ? structuredClone(files.get(path)) : undefined },
+    async updateJson(path, change) { const next = change(files.has(path) ? structuredClone(files.get(path)) : undefined); files.set(path, next); return next }
+  }
+  const data = createPluginData({ store })
+  let shown = { key: 'v2', text: '她轻声说：“你好。”\n他答：「嗯，好」' }
+  const turns = {
+    resolveGame: async () => ({ chatId: 'chat', sessionId: 'game' }),
+    currentKey: async () => shown.key,
+    readTurn: async () => ({ chatId: 'chat', sessionId: 'game', turn: 2, key: shown.key, text: shown.text })
+  }
+  const cast = createCastPresentation({ enabled: async () => true, turns, data })
+  await data.saveTurn({ chatId: 'chat', owner: CAST_DATA_OWNER, turn: 2, key: 'v1', data: { version: 1, lines: [{ n: 1, quote: '你好。', speaker: '林曦', emotion: 'joy' }, { n: 2, quote: '嗯', speaker: '老周', emotion: 'neutral' }] } })
+  const read = await cast.forTurns('game', [2])
+  assert.deepEqual(read.turns[2].map(line => [line.quote, line.speaker]), [['你好。', '林曦'], ['嗯，好', '老周']])
+  assert.ok((await data.turnsUpTo({ chatId: 'chat', owner: CAST_DATA_OWNER, turn: 2 })).some(item => item.key === 'v2'), '补出来的标注存下，下次直接读')
+  shown = { key: 'v3', text: '全新的“第一句”和「第二句」' }
+  assert.deepEqual((await cast.forTurns('game', [2])).turns, {}, '重新生成的新文本不套旧说话人')
+})
