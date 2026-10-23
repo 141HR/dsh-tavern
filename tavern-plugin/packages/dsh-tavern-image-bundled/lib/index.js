@@ -5232,15 +5232,93 @@ export function resolveWeightMode(config = {}, backend = '', mode = 'tags') {
   return novelai ? 'keep' : 'convert'
 }
 
+/** 按权重组分段拆 tag：2::hair bun, double bun:: 算一组，不按裸逗号拆。 */
+function splitCharacterTagGroups(text) {
+  const source = String(text ?? '')
+  const groups = []
+  let buffer = ''
+  let weighted = false
+  const push = () => {
+    if (buffer.trim()) groups.push(buffer.trim())
+    buffer = ''
+  }
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === ':' && source[i + 1] === ':') {
+      weighted = !weighted
+      buffer += '::'
+      i++
+      continue
+    }
+    if (source[i] === ',' && !weighted) {
+      push()
+      continue
+    }
+    buffer += source[i]
+  }
+  push()
+  return groups.map(segment => {
+    const match = /^(-?\d+(?:\.\d+)?)\s*::([\s\S]*)::$/.exec(segment)
+    if (!match) return { weight: null, tags: [segment] }
+    return { weight: match[1], tags: match[2].split(',').map(tag => tag.trim()).filter(Boolean) }
+  })
+}
+
+function characterTagKey(tag) {
+  return String(tag ?? '').trim()
+    .replace(/^(-?\d+(?:\.\d+)?)\s*::([\s\S]*)::$/, '$2')
+    .replace(/^\(([\s\S]*?):\s*-?\d+(?:\.\d+)?\)$/, '$1')
+    .replace(/^[(\[{]+|[)\]}]+$/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+/**
+ * 角色负面优先：同一个 tag 在本角色负面里出现时，从本角色正面删掉。
+ * 只处理同一个角色，不跨角色；权重组按组保留，固定源文本不改。
+ */
+function dedupeCharacterNegativePriority(prompt, uc) {
+  const negativeKeys = new Set()
+  const negativeGroups = []
+  for (const group of splitCharacterTagGroups(uc)) {
+    const tags = []
+    for (const tag of group.tags) {
+      const key = characterTagKey(tag)
+      if (!key || negativeKeys.has(key)) continue
+      negativeKeys.add(key)
+      tags.push(tag)
+    }
+    if (!tags.length) continue
+    negativeGroups.push(group.weight === null ? tags.join(', ') : `${group.weight}::${tags.join(', ')}::`)
+  }
+
+  const positiveKeys = new Set()
+  const positiveGroups = []
+  for (const group of splitCharacterTagGroups(prompt)) {
+    const tags = []
+    for (const tag of group.tags) {
+      const key = characterTagKey(tag)
+      if (!key || positiveKeys.has(key) || negativeKeys.has(key)) continue
+      positiveKeys.add(key)
+      tags.push(tag)
+    }
+    if (!tags.length) continue
+    positiveGroups.push(group.weight === null ? tags.join(', ') : `${group.weight}::${tags.join(', ')}::`)
+  }
+
+  return { prompt: positiveGroups.join(', '), uc: negativeGroups.join(', ') }
+}
+
 function compileCharacterList(list, scoped, cfg, style, backend = cfg.imageBackend) {
   const weightMode = resolveWeightMode(cfg, backend, style)
   return (Array.isArray(list) ? list : []).map(item => {
     const raw = String(item?.prompt ?? '')
     const expanded = expandRosterCalls(raw, scoped, cfg.traitMode, { style })
-    const injected = injectDefinitions(expanded, scoped, cfg, { style, raw })
+    const injected = injectDefinitions(expanded, scoped, cfg, { style, raw, keepNegative: true })
     const prompt = normalizePrompts(applyWeights(injected.text, weightMode), scoped, { backend, style })
     const uc = [String(item?.uc ?? ''), ...(injected.negatives ?? [])].filter(Boolean).join(', ')
-    return { prompt, centers: String(item?.centers ?? '').trim(), uc: normalizePrompts(applyWeights(uc, weightMode), scoped, { backend, style }) }
+    const normalizedUc = normalizePrompts(applyWeights(uc, weightMode), scoped, { backend, style })
+    const cleaned = dedupeCharacterNegativePriority(prompt, normalizedUc)
+    return { prompt: cleaned.prompt, centers: String(item?.centers ?? '').trim(), uc: cleaned.uc }
   }).filter(item => item.prompt)
 }
 
@@ -5277,6 +5355,7 @@ function containsNameToken(text, key) {
 }
 export function injectDefinitions(text, definitions, config = {}, options = {}) {
   const source = String(text ?? '')
+  const keepNegative = options?.keepNegative === true
   if (!source || !definitions) return { text: source, hits: [] }
   const have = tagSet(source)
   const added = []
@@ -5369,7 +5448,7 @@ export function injectDefinitions(text, definitions, config = {}, options = {}) 
     for (const raw of personNegatives[0]) {
       for (const tag of splitTags(raw)) {
         const key = tag.toLowerCase()
-        if (!key || negatives.includes(tag) || shown(tag)) continue
+        if (!key || negatives.includes(tag) || (!keepNegative && shown(tag))) continue
         negatives.push(tag)
       }
     }
