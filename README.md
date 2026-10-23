@@ -15,7 +15,7 @@
 
 [![观看 3 分钟实机演示：兼容酒馆生态，更快、更稳、更鲜活](docs/images/readme/promo-video.jpg)](https://www.bilibili.com/video/BV1MHaU6NE7S/)
 
-[下载安装](#快速开始) · [使用文档](https://flizzywine.github.io/dsh-tavern/) · [宣传视频](https://www.bilibili.com/video/BV1MHaU6NE7S/) · [讨论区](https://github.com/flizzywine/dsh-tavern/discussions) · [Discord 交流群](https://discord.gg/hYAEjKnpra)
+[下载安装](#快速开始) · [使用文档](https://flizzywine.github.io/dsh-tavern/) · [宣传视频](https://www.bilibili.com/video/BV1MHaU6NE7S/) · [Discord 交流群](https://discord.gg/hYAEjKnpra)
 
 - **兼容 SillyTavern 生态**：人物卡、世界书、预设、正则美化、MVU、酒馆助手脚本，导入就能用。
 - **更快**：一轮约 10 秒，缓存命中率 95% 以上。
@@ -95,11 +95,8 @@
 | 插件                                                                           | 作用                                 |
 | ---------------------------------------------------------------------------- | ---------------------------------- |
 | [dsh-tavern-image](https://github.com/weixinlll/dsh-tavern-image)            | 剧情自动配图，支持 ComfyUI、NovelAI、Gemini 等多平台，带人物库 |
-| [dsh-card-updater](https://github.com/flizzywine/dsh-tavern/discussions/149) | 卡片更新器，作者发布新版时提醒你                   |
-| [dsh-wrongbook](https://github.com/flizzywine/dsh-tavern/discussions/150)    | 错题库，按人物卡记下调试踩过的坑                   |
-| [动态世界书生成](https://github.com/flizzywine/dsh-tavern/discussions/147)          | 后台结算时生成世界书条目                       |
 
-以上均为社区作者开发，更多插件见[讨论区的 Show and tell](https://github.com/flizzywine/dsh-tavern/discussions/categories/show-and-tell)。
+以上为社区作者开发，更多插件见 [Discord 交流群](https://discord.gg/hYAEjKnpra)的插件分享。
 
 **安装酒馆插件**：设置 → DSH Tavern → 插件，粘贴插件的 GitHub 地址，点「安装」，刷新页面即可；插件页会自动检查更新，也可点「检查更新」重查，有新版时显示「更新到 x.y.z」，更新后重启 DSH 生效；也可以随时「停用」或「启用」插件；连不上 GitHub 时，下载插件 ZIP 后在同一处上传。插件作者见[发布与一键安装](docs/plugin-publishing.md)。
 
@@ -193,7 +190,6 @@ curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install
 
 欢迎交流使用经验、分享人物卡或反馈问题：
 
-- **[GitHub Discussions](https://github.com/flizzywine/dsh-tavern/discussions)**：任何人都可以直接发帖。
 - **[Discord](https://discord.gg/hYAEjKnpra)**：DSH Tavern 交流频道，任何人都可以加入。
 
 除 Discord 外，本项目没有官方的 QQ 群、微信群或其他群聊。

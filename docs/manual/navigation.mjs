@@ -282,8 +282,7 @@ export const overview = {
 
 ## 去哪找插件
 
-- [Discord 交流群](https://discord.gg/hYAEjKnpra)：作者发布和讨论插件的地方，插件最全。
-- [讨论区的 Show and tell](https://github.com/flizzywine/dsh-tavern/discussions/categories/show-and-tell)
+- [Discord 交流群](https://discord.gg/hYAEjKnpra)：作者在这里分享和讨论插件。
 
 ## 自己写插件
 

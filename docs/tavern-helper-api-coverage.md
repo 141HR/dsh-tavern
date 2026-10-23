@@ -4,7 +4,6 @@
 
 - DSH Tavern：`4bbff696ebf9bd5b87e1aa2c899c723a5364385f`
 - Tavern Helper：`46ec10df770b47e1ce6562de747d72f1bde3549e`
-- 实例：[Discussion #127](https://github.com/flizzywine/dsh-tavern/discussions/127)
 
 本报告按「脚本能调用、能产生实际作用或合理结果」判断实现状态。原生实现和可用模拟都算已实现；实现机制与 SillyTavern 不同只列为差异，不因此归为缺失。空函数或假成功不算实现。
 
