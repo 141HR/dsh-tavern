@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "62ceed0ae5ec11a563e0d5f401d9b69afc02036b",
-  "releaseSequence": 869,
+  "revision": "06ea04bc99c1169b095b4aeddf947e93d37fe8b1",
+  "releaseSequence": 870,
   "version": "3.1.0",
   "files": [
     {
@@ -851,8 +851,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/card-files.js",
-      "sha256": "6e217056ecf37950b749bcd87b3b0b4b9f1e8dad069bb3f39209cd1f01d7940f",
-      "size": 11414
+      "sha256": "3a2e61b65e10dc8f06d8c9c88b62bad5611ae1c7f0bedb73018e0601915ba022",
+      "size": 12791
     },
     {
       "path": "tavern-plugin/lib/domain/card-import-identity.js",
@@ -936,8 +936,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/cast-assets.js",
-      "sha256": "087482299168a1c94d82d4a6d9d01400dd3af6b18877120008e7aa441a208a97",
-      "size": 16007
+      "sha256": "466db04da77cb7771e75cc90efea9eb39deed6d87a9084f8375e6c8ecfec32e6",
+      "size": 16647
     },
     {
       "path": "tavern-plugin/lib/domain/cast-presentation.js",
@@ -2155,6 +2155,11 @@
       "size": 9970
     },
     {
+      "path": "tavern-plugin/lib/domain/stage-material.js",
+      "sha256": "4cba875059993ead7783c70e92625cdf7b35fdff1fd874017a5f8e56900775a4",
+      "size": 10755
+    },
+    {
       "path": "tavern-plugin/lib/domain/stage-performance-playback.js",
       "sha256": "6ddf4081648735d6a7d3f60444fe68fe7343497a014a2564e881ea577f1053d5",
       "size": 1369
@@ -2611,13 +2616,13 @@
     },
     {
       "path": "tavern-plugin/lib/http/routes.js",
-      "sha256": "6d177f0365436c6e93d7ccbad3f1fde3a4da46e594a91907a31411067ae7db36",
-      "size": 25172
+      "sha256": "f9b8d32e444bd6b67f9782e681a7bc5cd184a2fe3d505b8be9dd2a4f26a58cb7",
+      "size": 28126
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "88b84081986cdfef65f01dad4fd6652bfa2122d2a86e20c0451a9584d4b32f7c",
-      "size": 229791
+      "sha256": "ac55453eeddd10b49f99ec3226f35f9c91b40e0d58a9bc1f01d610c7b9587461",
+      "size": 230893
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -4511,9 +4516,9 @@
     }
   ],
   "archive": {
-    "commit": "8bc8e45be16b8a4e589b9cd2f58845f00eeb0163",
+    "commit": "1731a0bc8ad0c09156bcf370be42b35e36886b7f",
     "path": "runtime.zip",
-    "sha256": "b03ba325aabd16cd4212ef4e4f54a115898814333738fa7734e0991e5cc1e2d3",
-    "size": 9876720
+    "sha256": "64fac35a8fae24047607c5113c49c8da79ff85305961fa32f1db87555d37f80f",
+    "size": 9882692
   }
 }
