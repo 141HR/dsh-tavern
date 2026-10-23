@@ -29,6 +29,8 @@
 			const [state, setState] = React.useState(null);
 			const [busy, setBusy] = React.useState(false);
 			const [tip, setTip] = React.useState(null);
+			const [undoing, setUndoing] = React.useState(false);
+			const [notice, setNotice] = React.useState("");
 			const revision = React.useRef(0);
 			const hover = {
 				current: tip,
@@ -56,6 +58,18 @@
 				window.addEventListener("dsh-tavern-polished", changed);
 				return function () { window.removeEventListener("dsh-tavern-polished", changed); };
 			}, [sessionId, load]);
+			async function undo() {
+				setUndoing(true); setNotice("");
+				try {
+					const result = await rpc("undoPolish", {}, sessionId);
+					liveTavernView.setView(sessionId, result.view);
+					notifyTavernDataChanged(["sessions"], "polish-compare");
+					tavernCoordination.invalidate(sessionId);
+					setNotice("已撤销精修，正文恢复成精修前的样子。");
+					await load();
+				} catch (error) { setNotice("撤销失败：" + String(error && error.message || error)); }
+				finally { setUndoing(false); }
+			}
 			const current = state && state.sessionId === sessionId ? state : null;
 			const comparison = current && current.comparison;
 			const edits = comparison ? comparison.segments.filter(function (segment) { return segment.kind === "edit"; }).sort(function (a, b) { return a.n - b.n; }) : [];
@@ -65,9 +79,12 @@
 						h("p", null, !current ? "读取中…" : comparison
 							? "第 " + comparison.turn + " 轮 · 改了 " + comparison.count + " 处" + (comparison.seconds ? " · 用时 " + comparison.seconds + " 秒" : "") + " · " + new Date(comparison.at).toLocaleString()
 							: current.error ? "读取失败" : "最近一次精修")),
-					h("button", { disabled: busy, onClick: load }, busy ? "读取中…" : "刷新")),
+					h("div", { className: "dsh-polish-actions" },
+						comparison ? h("button", { disabled: busy || undoing, onClick: undo }, undoing ? "正在撤销…" : "撤销精修") : null,
+						h("button", { disabled: busy, onClick: load }, busy ? "读取中…" : "刷新"))),
+				notice ? h("p", { role: "status" }, notice) : null,
 				current && current.error ? h("p", { role: "status" }, current.error) : null,
-				current && !comparison && !current.error ? h("p", { className: "dsh-context-empty" }, "还没有可对比的精修。在最后一轮正文下点「重新生成正文」→「精修」，改完回到这里看前后对比；撤销或再改动那轮正文后，这里就清空。") : null,
+				current && !comparison && !current.error ? h("p", { className: "dsh-context-empty" }, "还没有可对比的精修。在最后一轮正文下点「重新生成正文」→「精修」，改完回到这里看前后对比、撤销精修；那轮正文再改动或重新生成后，这里就清空。") : null,
 				comparison ? h("div", { className: "dsh-polish-cols" },
 					h("div", { className: "dsh-polish-col" }, h("h4", null, "原文"), tavernPolishParagraphs(comparison.segments, "before", hover)),
 					h("div", { className: "dsh-polish-col" }, h("h4", null, "精修"), tavernPolishParagraphs(comparison.segments, "after", hover))) : null,

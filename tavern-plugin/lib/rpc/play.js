@@ -189,23 +189,23 @@ export function createPlayHandlers(deps) {
       const polished = applyPolishEdits(texts, chosen)
       const view = await bodyEditor.save(sessionId, { token: edit.token, texts: polished })
       notifyPluginTimeline(sessionId, 'edit', { settled: true })
-      // The comparison page is a convenience: a record that cannot be kept never fails the 精修.
-      await polishRecords.save(sessionId, edit.turn, { original: texts.join('\n\n'), edits: chosen, seconds: Math.round((Date.now() - started) / 1000) })
-        .catch(error => console.warn('dsh-tavern: 精修对比记录保存失败', error))
-      return { edits: review.edits, original: texts, polished, view }
+      // The record backs the 精修对比 page and its undo; one that cannot be kept never fails the 精修.
+      await polishRecords.save(sessionId, edit.turn, { original: texts, edits: chosen, seconds: Math.round((Date.now() - started) / 1000) })
+        .catch(error => console.warn('dsh-tavern: 精修记录保存失败', error))
+      return { edits: review.edits, view }
     },
     async polishComparison(args) {
       return { comparison: await polishRecords.latest(str(args?.sessionId)) }
     },
-    // Undo 精修: only while the reply is still exactly what 精修 left.
+    // Undo the latest 精修, from the 精修对比 page: only while its turn still shows the polished text.
     async undoPolish(args) {
       const sessionId = str(args?.sessionId)
       await reconcileStory(sessionId)
+      const record = await polishRecords.current(sessionId)
+      if (!record) throw new Error('这轮正文在精修后又改过了，无法撤销')
       const edit = await bodyEditor.read(sessionId)
-      const texts = edit.parts.filter(part => part.kind === 'text').map(part => part.text)
-      const polished = Array.isArray(args?.polished) ? args.polished : [], original = Array.isArray(args?.original) ? args.original : []
-      if (texts.length !== polished.length || texts.some((text, index) => text !== polished[index]) || original.length !== texts.length || original.some(text => typeof text !== 'string')) throw new Error('精修后正文又改过了，无法撤销')
-      const view = await bodyEditor.save(sessionId, { token: edit.token, texts: original })
+      if (Number(edit.turn) !== Number(record.turn)) throw new Error('精修的那一轮已经不是最后一轮，无法撤销')
+      const view = await bodyEditor.save(sessionId, { token: edit.token, texts: record.original })
       notifyPluginTimeline(sessionId, 'edit', { settled: true })
       return { view }
     },

@@ -1,6 +1,6 @@
 // The latest 精修 of a game, for the 精修对比 page. One record per game in the per-game data store,
 // overwritten by the next 精修. It names the text version it produced: once an undo, a later edit
-// or a regeneration shows another version, the page has nothing to compare.
+// or a regeneration shows another version, the page has nothing to compare and nothing to undo.
 
 export const POLISH_DATA_OWNER = 'dsh-tavern.polish'
 
@@ -38,18 +38,25 @@ export function createPolishRecords({ data, turns, now = Date.now }) {
     const key = await turns.currentKey(game.sessionId, turn)
     if (!key) return false
     const kept = edits.map(edit => ({ reason: str(edit.reason), find: str(edit.find), replace: str(edit.replace) }))
-    await data.saveGame({ chatId: game.chatId, owner: POLISH_DATA_OWNER, data: { version: 1, turn, key, original: str(original), edits: kept, seconds: Number(seconds) || 0, at: now() } })
+    // `original` is the reply's text parts (around its HTML blocks), what an undo writes back.
+    await data.saveGame({ chatId: game.chatId, owner: POLISH_DATA_OWNER, data: { version: 2, turn, key, original: original.map(str), edits: kept, seconds: Number(seconds) || 0, at: now() } })
     return true
   }
 
-  /** The latest 精修 while its turn still shows the text it produced; null otherwise. */
-  async function latest(sessionId) {
+  /** The latest 精修 record while its turn still shows the text it produced; null otherwise. */
+  async function current(sessionId) {
     const game = await turns.resolveGame(sessionId)
     if (!game) return null
     const record = await data.readGame({ chatId: game.chatId, owner: POLISH_DATA_OWNER })
-    if (record?.version !== 1 || await turns.currentKey(game.sessionId, record.turn) !== record.key) return null
-    return { turn: record.turn, at: record.at, seconds: record.seconds, count: record.edits.length, segments: polishSegments(record.original, record.edits) }
+    if (record?.version !== 2 || !Array.isArray(record.original) || await turns.currentKey(game.sessionId, record.turn) !== record.key) return null
+    return record
   }
 
-  return Object.freeze({ save, latest })
+  /** What the 精修对比 page shows; null when there is nothing to compare. */
+  async function latest(sessionId) {
+    const record = await current(sessionId)
+    return record && { turn: record.turn, at: record.at, seconds: record.seconds, count: record.edits.length, segments: polishSegments(record.original.join('\n\n'), record.edits) }
+  }
+
+  return Object.freeze({ save, current, latest })
 }

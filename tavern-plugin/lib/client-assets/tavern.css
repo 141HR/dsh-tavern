@@ -1447,6 +1447,7 @@ body.dsh-tavern-shell-active [data-dsh-panel-host] { overflow: clip; }
 /* Gallery tab: this game's pictures, one row per turn. */
 .dsh-tavern-full-context button.danger { color: var(--dsw-alias-state-error-primary); }
 .dsh-tavern-gallery-turn + .dsh-tavern-gallery-turn { margin-top: 20px; }
+.dsh-polish-actions { display: flex; gap: 8px; }
 .dsh-polish-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .dsh-polish-col { min-width: 0; padding: 12px 16px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; font-size: 15px; line-height: 1.85; }
 .dsh-polish-col h4 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-secondary); }

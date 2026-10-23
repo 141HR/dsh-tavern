@@ -120,7 +120,6 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 			}
 			const body = props.loading
 				? h("div", { className: "dsh-tavern-regen-loading" }, props.loading)
-				: props.override ? props.override
 				: h(React.Fragment, null,
 					props.error ? h("div", { className: "dsh-tavern-choice-error" }, props.error) : null,
 					h("textarea", {
@@ -161,8 +160,6 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 			const [styleGuidance, setStyleGuidance] = React.useState("");
 			const [reviewing, setReviewing] = React.useState(false);
 			const [reviewNote, setReviewNote] = React.useState("");
-			const [polishResult, setPolishResult] = React.useState(null);
-			const [undoing, setUndoing] = React.useState(false);
 			const [reviewSeconds, setReviewSeconds] = React.useState(0);
 			React.useEffect(() => {
 				if (!reviewing) return undefined;
@@ -176,57 +173,34 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 			const styleEnabled = styleState.view?.styleReferenceEnabled === true;
 			const opened = panel && panel.sessionId === props.sessionId && panel.phase === "input";
 			React.useEffect(function () { if (opened) setGuidance(interactions.guidance(props.sessionId)); }, [opened, props.sessionId]);
-			React.useEffect(() => { if (!opened) setPolishResult(null); }, [opened]);
 			const h = React.createElement;
 			if (!isPlayMode(sessionMode) || running || !panel || panel.sessionId !== props.sessionId) return null;
             function generate() {
                 return interactions.regenerateBody(panel, guidance, { restyle: styleEnabled && restyle, styleGuidance });
             }
-            // 精修: review and apply in one step, then show what changed so the player can judge it or undo it.
-            function showView(view) {
-                liveTavernView.setView(props.sessionId, view);
-                notifyTavernDataChanged(["sessions"], "play-controls");
-                tavernCoordination.invalidate(props.sessionId);
-            }
+            // 精修: like a regeneration, the panel waits and closes once the polished reply is in;
+            // the comparison and its undo live on the 精修对比 page.
             async function runPolish() {
-                const started = Date.now();
-                setReviewing(true); setReviewNote(""); setPolishResult(null);
+                setReviewing(true); setReviewNote("");
                 try {
                     const result = await rpc("polishBody", {}, props.sessionId);
                     const skipped = result.edits.filter(edit => edit.status !== "ok").length;
                     if (result.guidance) { setGuidance(result.guidance); setReviewNote("审稿没有按格式输出修改清单，内容已填进意见框，可以按意见重新生成"); }
                     else if (!result.view) setReviewNote(skipped ? "审稿给出的 " + skipped + " 条修改都没在正文里找到原文，正文没有改动" : "审稿没有发现需要修改的地方");
                     else {
-                        showView(result.view);
+                        liveTavernView.setView(props.sessionId, result.view);
+                        notifyTavernDataChanged(["sessions"], "play-controls");
+                        tavernCoordination.invalidate(props.sessionId);
                         window.dispatchEvent(new CustomEvent("dsh-tavern-polished", { detail: { sessionId: props.sessionId } }));
-                        setPolishResult({ edits: result.edits.filter(edit => edit.status === "ok"), skipped, original: result.original, polished: result.polished, seconds: Math.round((Date.now() - started) / 1000), undone: false });
+                        setRegenPanel(null);
                     }
                 } catch (error) { setReviewNote("精修失败：" + String(error?.message || error)); }
                 finally { setReviewing(false); }
             }
-            async function undoPolish() {
-                setUndoing(true); setReviewNote("");
-                try {
-                    const result = await rpc("undoPolish", { original: polishResult.original, polished: polishResult.polished }, props.sessionId);
-                    showView(result.view);
-                    window.dispatchEvent(new CustomEvent("dsh-tavern-polished", { detail: { sessionId: props.sessionId } }));
-                    setPolishResult(current => ({ ...current, undone: true }));
-                } catch (error) { setReviewNote("撤销失败：" + String(error?.message || error)); }
-                finally { setUndoing(false); }
-            }
-            const polishView = polishResult ? h("div", { className: "dsh-tavern-polish-edits" },
-                reviewNote ? h("div", { className: "dsh-tavern-choice-error" }, reviewNote) : null,
-                h("div", { className: "dsh-tavern-polish-summary" }, polishResult.undone ? "已撤销精修，正文恢复原样"
-                    : "精修完成：改了 " + polishResult.edits.length + " 处，用时 " + polishResult.seconds + " 秒" + (polishResult.skipped ? "（另有 " + polishResult.skipped + " 条没找到原文，已跳过）" : "")),
-                polishResult.undone ? null : h("div", { className: "dsh-tavern-polish-reason" }, "前后全文对照见顶部「精修对比」页。"),
-                h("div", { className: "dsh-tavern-regen-foot" },
-                    polishResult.undone ? null : h("button", { type: "button", className: "dsh-tavern-regen-cancel", disabled: undoing, onClick: undoPolish }, undoing ? "正在撤销…" : "撤销精修"),
-                    h("button", { type: "button", className: "dsh-tavern-question-primary", onClick: () => setRegenPanel(null) }, "完成"))) : null;
 			return h(RegenGuideForm, {
 				title: "重新生成正文",
-				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改；精修：按原则直接改好，改完显示前后对比，可撤销",
-				loading: panel.phase === "loading" ? (panel.restyle ? "正在换文风联想并重新生成…" : panel.rewrite ? "正在按意见改写正文…" : "正在重新生成正文…") : "",
-				override: polishView,
+				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改；精修：按原则直接改好，对比和撤销在「精修对比」页",
+				loading: reviewing ? "正在精修正文… " + reviewSeconds + " 秒" : panel.phase === "loading" ? (panel.restyle ? "正在换文风联想并重新生成…" : panel.rewrite ? "正在按意见改写正文…" : "正在重新生成正文…") : "",
 				extra: h(React.Fragment, null, styleEnabled ? h("div", { className: "dsh-tavern-regen-style" },
 					h("label", null, h("input", { type: "checkbox", checked: restyle, onChange: event => setRestyle(event.target.checked) }), " 同时换一段文风联想"),
 					restyle ? h("input", { className: "dsh-tavern-regen-input", value: styleGuidance, maxLength: 500, placeholder: "换参考的要求（可选），例如：要金庸的打斗描写", onChange: event => setStyleGuidance(event.target.value) }) : null) : null),
@@ -236,7 +210,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 				placeholder: "指导意见（可选）",
 				examples: ["写得更长", "侧重心理描写", "加快节奏"],
 				submitLabel: "生成并替换正文",
-				secondary: { label: reviewing ? "精修中… " + reviewSeconds + " 秒" : "精修", title: "按「正文精修原则」审读当前正文，直接改掉问题（一句到整段），不重新生成；改完列出前后对比，可撤销", disabled: reviewing, onClick: runPolish },
+				secondary: { label: "精修", title: "按「正文精修原则」审读当前正文，直接改掉问题（一句到整段），不重新生成；前后对比与撤销在顶部「精修对比」页", disabled: reviewing, onClick: runPolish },
 				onSubmit: generate,
 				onCancel: function () { setRegenPanel(null); }
 			});
