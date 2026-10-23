@@ -444,6 +444,15 @@ body.dsh-tavern-picker-open [id^="improved-phone-floating-button-"] { visibility
 .dsh-tavern-regen-input { display: block; width: 100%; box-sizing: border-box; min-height: 64px; padding: 9px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 1.6; resize: vertical; transition: border-color .15s, box-shadow .15s; }
 .dsh-tavern-regen-style { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; font-size: 13px; }
 .dsh-tavern-regen-style input.dsh-tavern-regen-input { min-height: 0; padding: 6px 10px; }
+.dsh-tavern-polish-edits { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+.dsh-tavern-polish-head { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.dsh-tavern-polish-edit { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; font-size: 14px; line-height: 1.6; cursor: pointer; }
+.dsh-tavern-polish-edit input { margin-top: 5px; flex: none; }
+.dsh-tavern-polish-edit.is-missing { opacity: .55; cursor: default; }
+.dsh-tavern-polish-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dsh-tavern-polish-body del { color: var(--dsw-alias-label-secondary); text-decoration-color: rgba(214, 95, 95, .8); }
+.dsh-tavern-polish-body ins { text-decoration: none; background: rgba(76, 175, 125, .14); border-radius: 4px; padding: 0 2px; }
+.dsh-tavern-polish-reason { font-size: 12px; color: var(--dsw-alias-label-secondary); }
 .dsh-tavern-regen-input::placeholder { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .dsh-tavern-regen-input:focus { outline: none; border-color: var(--dsh-tavern-accent-border); box-shadow: 0 0 0 3px var(--dsh-tavern-accent-soft); }
 .dsh-tavern-regen-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }

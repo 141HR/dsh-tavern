@@ -160,39 +160,74 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 			const [styleGuidance, setStyleGuidance] = React.useState("");
 			const [reviewing, setReviewing] = React.useState(false);
 			const [reviewNote, setReviewNote] = React.useState("");
+			const [review, setReview] = React.useState(null);
+			const [applying, setApplying] = React.useState(false);
             React.useEffect(() => { setRestyle(false); setStyleGuidance(""); }, [props.sessionId]);
 			const styleState = useLiveTavernView(props.sessionId, "regen-style");
 			const styleEnabled = styleState.view?.styleReferenceEnabled === true;
 			const opened = panel && panel.sessionId === props.sessionId && panel.phase === "input";
 			React.useEffect(function () { if (opened) setGuidance(interactions.guidance(props.sessionId)); }, [opened, props.sessionId]);
+			React.useEffect(() => { if (!opened) setReview(null); }, [opened]);
 			const h = React.createElement;
 			if (!isPlayMode(sessionMode) || running || !panel || panel.sessionId !== props.sessionId) return null;
             function generate() {
                 return interactions.regenerateBody(panel, guidance, { restyle: styleEnabled && restyle, styleGuidance });
             }
-            // 精修 step one: the editor's notes replace the guidance; the player reads them, then generates.
-            async function review() {
-                setReviewing(true); setReviewNote("");
+            // 精修: sentence edits are listed to tick and apply in place; larger notes fill the guidance box.
+            async function runReview() {
+                setReviewing(true); setReviewNote(""); setReview(null);
                 try {
-                    const { guidance: notes } = await rpc("polishReview", {}, props.sessionId);
-                    if (notes) setGuidance(notes); else setReviewNote("审稿没有发现需要修改的地方");
+                    const result = await rpc("polishReview", {}, props.sessionId);
+                    const edits = result.edits.map(edit => ({ ...edit, checked: edit.status === "ok" }));
+                    if (result.guidance) setGuidance(result.guidance);
+                    if (edits.length) setReview({ token: result.token, edits });
+                    if (!edits.length && !result.guidance) setReviewNote("审稿没有发现需要修改的地方");
                 } catch (error) { setReviewNote("审稿失败：" + String(error?.message || error)); }
                 finally { setReviewing(false); }
             }
+            async function applyEdits() {
+                const chosen = review.edits.filter(edit => edit.checked && edit.status === "ok");
+                if (!chosen.length) return;
+                setApplying(true); setReviewNote("");
+                try {
+                    const result = await rpc("applyPolishEdits", { token: review.token, edits: chosen.map(edit => ({ find: edit.find, replace: edit.replace })) }, props.sessionId);
+                    liveTavernView.setView(props.sessionId, result.view);
+                    notifyTavernDataChanged(["sessions"], "play-controls");
+                    tavernCoordination.invalidate(props.sessionId);
+                    setReview(null);
+                    // Notes stay in the box for an optional regeneration; nothing left closes the panel.
+                    if (!guidance.trim()) setRegenPanel(null);
+                } catch (error) { setReviewNote("应用修改失败：" + String(error?.message || error)); }
+                finally { setApplying(false); }
+            }
+            function toggle(index) {
+                setReview(current => ({ ...current, edits: current.edits.map((edit, at) => at === index ? { ...edit, checked: !edit.checked } : edit) }));
+            }
+            const editList = review ? h("div", { className: "dsh-tavern-polish-edits" },
+                h("div", { className: "dsh-tavern-polish-head" }, "修改清单：勾选后直接替换原句，其余文字不动"),
+                review.edits.map((edit, index) => h("label", { key: index, className: "dsh-tavern-polish-edit" + (edit.status === "ok" ? "" : " is-missing") },
+                    h("input", { type: "checkbox", checked: edit.checked, disabled: edit.status !== "ok", onChange: () => toggle(index) }),
+                    h("span", { className: "dsh-tavern-polish-body" },
+                        h("del", null, edit.find),
+                        edit.replace ? h("ins", null, edit.replace) : h("span", { className: "dsh-tavern-polish-reason" }, "（删去）"),
+                        h("span", { className: "dsh-tavern-polish-reason" }, (edit.reason || "") + (edit.status === "missing" ? "（原文里没找到这句）" : edit.status === "ambiguous" ? "（这句在正文里出现了不止一次）" : ""))))),
+                h("div", { className: "dsh-tavern-regen-foot" },
+                    h("button", { type: "button", className: "dsh-tavern-question-primary", disabled: applying || !review.edits.some(edit => edit.checked && edit.status === "ok"), onClick: applyEdits },
+                        applying ? "正在应用…" : "应用所选修改（" + review.edits.filter(edit => edit.checked && edit.status === "ok").length + "）"))) : null;
 			return h(RegenGuideForm, {
 				title: "重新生成正文",
-				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改；精修先审稿出意见，看过再生成",
+				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改；精修先审稿，列出逐句修改",
 				loading: panel.phase === "loading" ? (panel.restyle ? "正在换文风联想并重新生成…" : panel.rewrite ? "正在按意见改写正文…" : "正在重新生成正文…") : "",
-				extra: styleEnabled ? h("div", { className: "dsh-tavern-regen-style" },
+				extra: h(React.Fragment, null, editList, styleEnabled ? h("div", { className: "dsh-tavern-regen-style" },
 					h("label", null, h("input", { type: "checkbox", checked: restyle, onChange: event => setRestyle(event.target.checked) }), " 同时换一段文风联想"),
-					restyle ? h("input", { className: "dsh-tavern-regen-input", value: styleGuidance, maxLength: 500, placeholder: "换参考的要求（可选），例如：要金庸的打斗描写", onChange: event => setStyleGuidance(event.target.value) }) : null) : null,
+					restyle ? h("input", { className: "dsh-tavern-regen-input", value: styleGuidance, maxLength: 500, placeholder: "换参考的要求（可选），例如：要金庸的打斗描写", onChange: event => setStyleGuidance(event.target.value) }) : null) : null),
 				error: panel.error,
 				value: guidance,
 				onChange: setGuidance,
 				placeholder: "指导意见（可选）",
 				examples: ["写得更长", "侧重心理描写", "加快节奏"],
 				submitLabel: "生成并替换正文",
-				secondary: { label: reviewing ? "审稿中…" : "精修", title: "按「正文精修原则」审读当前正文，把修改意见填进意见框；看过再生成", disabled: reviewing, onClick: review },
+				secondary: { label: reviewing ? "审稿中…" : "精修", title: "按「正文精修原则」审读当前正文：措辞问题列成修改清单，勾选后直接替换原句；较大的问题填进意见框，可再整轮重写", disabled: reviewing || applying, onClick: runReview },
 				onSubmit: generate,
 				onCancel: function () { setRegenPanel(null); }
 			});

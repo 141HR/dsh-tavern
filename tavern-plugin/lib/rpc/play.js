@@ -1,7 +1,7 @@
 import { setAllFailedErrorVisibility, setFailedErrorVisibility } from '../domain/failed-error-visibility.js'
 import { sessionEvents } from '../domain/session-events.js'
 import { prepareTemplateHistory, synchronizeTemplateHistory } from '../domain/template-history.js'
-import { buildPolishReviewRequest, polishReviewContext, polishReviewGuidance } from '../domain/polish-review.js'
+import { applyPolishEdits, buildPolishReviewRequest, parsePolishReview, polishNotesGuidance, polishReviewContext } from '../domain/polish-review.js'
 import { randomUUID } from 'node:crypto'
 
 // In-game play, turn editing, compaction and background settlement requests.
@@ -172,15 +172,27 @@ export function createPlayHandlers(deps) {
     async retryStyleReference(args) {
       return { styleReference: await retryStyleReference(args?.sessionId, { target: 'next', guidance: args?.guidance }) }
     },
-    // 精修 step one: notes for the guidance box; the player sends them through regenBody.
+    // 精修: edits the player picks and applies as a body edit; notes go to the guidance box for regenBody.
     async polishReview(args) {
       const sessionId = str(args?.sessionId)
       const edit = await bodyEditor.read(sessionId)
+      const texts = edit.parts.filter(part => part.kind === 'text').map(part => part.text)
       const chat = await chatForSession(sessionId)
       const card = await readCard(chat.cardPath).catch(() => undefined) || chat.cardDefinitionSnapshot?.raw?.data || chat.cardDefinitionSnapshot?.raw
       const request = buildPolishReviewRequest({ principles: runtimePrompt('polish'), card, playerName: chat.macroState?.userName,
-        ...polishReviewContext(chat.messages), reply: edit.parts.filter(part => part.kind === 'text').map(part => part.text).join('\n\n') })
-      return { guidance: polishReviewGuidance(await callModel({ sessionId, ...request })) }
+        ...polishReviewContext(chat.messages), reply: texts.join('\n\n') })
+      const review = parsePolishReview(await callModel({ sessionId, ...request }), texts)
+      return { token: edit.token, edits: review.edits, guidance: polishNotesGuidance(review.notes) }
+    },
+    async applyPolishEdits(args) {
+      const sessionId = str(args?.sessionId)
+      await reconcileStory(sessionId)
+      const edit = await bodyEditor.read(sessionId)
+      if (edit.token !== args?.token) throw new Error('正文已变化，请重新审稿')
+      const texts = applyPolishEdits(edit.parts.filter(part => part.kind === 'text').map(part => part.text), Array.isArray(args?.edits) ? args.edits : [])
+      const view = await bodyEditor.save(sessionId, { token: edit.token, texts })
+      notifyPluginTimeline(sessionId, 'edit', { settled: true })
+      return { view }
     },
     async regenBody(args) {
       if (args?.restyle === true) await retryStyleReference(args.sessionId, { target: 'regenerate', guidance: args.styleGuidance })
