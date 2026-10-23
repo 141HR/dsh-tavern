@@ -29,13 +29,6 @@ export function regenerationInputText(userText, guidance, rewriteBody) {
   return input + (guide !== '' ? '\n\n【本轮补充要求】\n' + guide : '')
 }
 
-// 精修 is a guided rewrite whose guidance is the principles; the player's own note rides after them.
-export function polishGuidance(principles, guidance) {
-  const rules = str(principles).trim(), extra = str(guidance).trim()
-  if (rules === '') throw new Error('正文精修原则为空，请在系统提示词里填写')
-  return extra === '' ? rules : rules + '\n\n另外，玩家的补充要求：' + extra
-}
-
 // What the model saw of a stored reply (same precedence as the body editor).
 function replyTextOf(message) { return str(message && (message.projectionText ?? message.sourceText ?? message.text)) }
 

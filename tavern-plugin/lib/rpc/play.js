@@ -1,13 +1,13 @@
 import { setAllFailedErrorVisibility, setFailedErrorVisibility } from '../domain/failed-error-visibility.js'
 import { sessionEvents } from '../domain/session-events.js'
 import { prepareTemplateHistory, synchronizeTemplateHistory } from '../domain/template-history.js'
-import { polishGuidance } from '../domain/round-history.js'
+import { buildPolishReviewRequest, polishReviewContext, polishReviewGuidance } from '../domain/polish-review.js'
 import { randomUUID } from 'node:crypto'
 
 // In-game play, turn editing, compaction and background settlement requests.
 // `deps` carries the services ../index.js builds; dispatchMethod routes by method name.
 export function createPlayHandlers(deps) {
-  const { agentCompaction, agentRegistry, backgroundAgentRunner, backgroundCatalog, bodyEditor,
+  const { agentCompaction, agentRegistry, backgroundAgentRunner, backgroundCatalog, bodyEditor, callModel,
     candidateGenerator, candidateTasks, chatForSession, compactionAbort, conversationGuides, ctx,
     ledgerEditor, liveCardUpdate, manualCharacterDesign, manualLedger, notifyPluginTimeline, phoneChat,
     playCardSnapshots, pluginSettlementProgress, readBackgroundSuppression, readCard, readCardExtensions,
@@ -172,11 +172,20 @@ export function createPlayHandlers(deps) {
     async retryStyleReference(args) {
       return { styleReference: await retryStyleReference(args?.sessionId, { target: 'next', guidance: args?.guidance }) }
     },
+    // 精修 step one: notes for the guidance box; the player sends them through regenBody.
+    async polishReview(args) {
+      const sessionId = str(args?.sessionId)
+      const edit = await bodyEditor.read(sessionId)
+      const chat = await chatForSession(sessionId)
+      const card = await readCard(chat.cardPath).catch(() => undefined) || chat.cardDefinitionSnapshot?.raw?.data || chat.cardDefinitionSnapshot?.raw
+      const request = buildPolishReviewRequest({ principles: runtimePrompt('polish'), card, playerName: chat.macroState?.userName,
+        ...polishReviewContext(chat.messages), reply: edit.parts.filter(part => part.kind === 'text').map(part => part.text).join('\n\n') })
+      return { guidance: polishReviewGuidance(await callModel({ sessionId, ...request })) }
+    },
     async regenBody(args) {
       if (args?.restyle === true) await retryStyleReference(args.sessionId, { target: 'regenerate', guidance: args.styleGuidance })
       await reconcileStory(args && args.sessionId)
-      const guidance = args?.polish === true ? polishGuidance(runtimePrompt('polish'), args.guidance) : args && args.guidance
-      const view = await regenBody(args && args.chatId, guidance, args && args.sessionId)
+      const view = await regenBody(args && args.chatId, args && args.guidance, args && args.sessionId)
       notifyPluginTimeline(args && args.sessionId, 'regenerate')
       return { view }
     },

@@ -96,7 +96,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 				title: "重新生成候选项",
 				hint: isScript ? "跟随剧本，只重新生成一个推荐候选" : "行动候选与场景候选通用",
 				loading: panel.phase === "loading" ? "正在重新生成候选项…" : "",
-				error: panel.error,
+				error: panel.error || reviewNote,
 				value: guidance,
 				onChange: setGuidance,
 				placeholder: "对候选的要求（可选）",
@@ -137,7 +137,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 							return h("button", { key: text, type: "button", className: "dsh-tavern-regen-example", onClick: function () { addExample(text); } }, text);
 						})),
 						h("button", { type: "button", className: "dsh-tavern-regen-cancel", onClick: props.onCancel }, "取消"),
-						props.secondary ? h("button", { type: "button", className: "dsh-tavern-regen-cancel", title: props.secondary.title, onClick: props.secondary.onClick }, props.secondary.label) : null,
+						props.secondary ? h("button", { type: "button", className: "dsh-tavern-regen-cancel", title: props.secondary.title, disabled: props.secondary.disabled, onClick: props.secondary.onClick }, props.secondary.label) : null,
 						h("button", { type: "button", className: "dsh-tavern-question-primary dsh-tavern-regen-submit", onClick: props.onSubmit }, props.submitLabel)
 					)
 				);
@@ -158,6 +158,8 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 			const [guidance, setGuidance] = React.useState(function () { return interactions.guidance(props.sessionId); });
 			const [restyle, setRestyle] = React.useState(false);
 			const [styleGuidance, setStyleGuidance] = React.useState("");
+			const [reviewing, setReviewing] = React.useState(false);
+			const [reviewNote, setReviewNote] = React.useState("");
             React.useEffect(() => { setRestyle(false); setStyleGuidance(""); }, [props.sessionId]);
 			const styleState = useLiveTavernView(props.sessionId, "regen-style");
 			const styleEnabled = styleState.view?.styleReferenceEnabled === true;
@@ -168,10 +170,19 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
             function generate() {
                 return interactions.regenerateBody(panel, guidance, { restyle: styleEnabled && restyle, styleGuidance });
             }
+            // 精修 step one: the editor's notes replace the guidance; the player reads them, then generates.
+            async function review() {
+                setReviewing(true); setReviewNote("");
+                try {
+                    const { guidance: notes } = await rpc("polishReview", {}, props.sessionId);
+                    if (notes) setGuidance(notes); else setReviewNote("审稿没有发现需要修改的地方");
+                } catch (error) { setReviewNote("审稿失败：" + String(error?.message || error)); }
+                finally { setReviewing(false); }
+            }
 			return h(RegenGuideForm, {
 				title: "重新生成正文",
-				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改；精修只按原则改毛病",
-				loading: panel.phase === "loading" ? (panel.polish ? "正在按精修原则改写正文…" : panel.restyle ? "正在换文风联想并重新生成…" : panel.rewrite ? "正在按意见改写正文…" : "正在重新生成正文…") : "",
+				hint: "不填意见是重新来一次；填了意见就在当前正文基础上改；精修先审稿出意见，看过再生成",
+				loading: panel.phase === "loading" ? (panel.restyle ? "正在换文风联想并重新生成…" : panel.rewrite ? "正在按意见改写正文…" : "正在重新生成正文…") : "",
 				extra: styleEnabled ? h("div", { className: "dsh-tavern-regen-style" },
 					h("label", null, h("input", { type: "checkbox", checked: restyle, onChange: event => setRestyle(event.target.checked) }), " 同时换一段文风联想"),
 					restyle ? h("input", { className: "dsh-tavern-regen-input", value: styleGuidance, maxLength: 500, placeholder: "换参考的要求（可选），例如：要金庸的打斗描写", onChange: event => setStyleGuidance(event.target.value) }) : null) : null,
@@ -181,7 +192,7 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 				placeholder: "指导意见（可选）",
 				examples: ["写得更长", "侧重心理描写", "加快节奏"],
 				submitLabel: "生成并替换正文",
-				secondary: { label: "精修", title: "对照「正文精修原则」检查当前正文，只改违规处；意见框里的内容作为补充要求", onClick: () => interactions.regenerateBody(panel, guidance, { polish: true }) },
+				secondary: { label: reviewing ? "审稿中…" : "精修", title: "按「正文精修原则」审读当前正文，把修改意见填进意见框；看过再生成", disabled: reviewing, onClick: review },
 				onSubmit: generate,
 				onCancel: function () { setRegenPanel(null); }
 			});

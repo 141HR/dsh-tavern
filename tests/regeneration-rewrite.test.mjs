@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { polishGuidance, regenerationInputText } from '../tavern-plugin/lib/domain/round-history.js'
+import { regenerationInputText } from '../tavern-plugin/lib/domain/round-history.js'
 import { projectRegenerationRequestMessages } from '../tavern-plugin/lib/domain/foreground-orchestration-strategies.js'
 
 test('不填意见是重新来一次，不带旧正文', () => {
@@ -30,12 +30,3 @@ test('请求里旧回复照样被去掉，旧正文只经由改写输入出现�
 })
 
 
-test('精修就是以精修原则为意见的改写，玩家意见作为补充', async () => {
-  const { prompt } = await import('../tavern-plugin/lib/prompt-catalog.js')
-  const rules = prompt('polish')
-  assert.match(rules, /只输出正文/)
-  assert.equal(polishGuidance(rules, ''), rules)
-  assert.equal(polishGuidance('原则', '写短点'), '原则\n\n另外，玩家的补充要求：写短点')
-  assert.throws(() => polishGuidance('  ', ''), /精修原则为空/)
-  assert.match(regenerationInputText('继续', polishGuidance('原则', ''), '旧正文'), /【当前正文】\n旧正文\n\n【改写要求】\n[^\n]*原则$/)
-})
