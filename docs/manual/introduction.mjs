@@ -76,7 +76,7 @@ export const installation = `
 
 | 你的情况 | 选择哪一种 | 需要输入命令吗 |
 | --- | --- | --- |
-| Windows / macOS，用 DeepSeek Harness 桌面版 | [A．DeepSeek Harness 安装](#a02--section-2) | Windows 可双击安装程序；macOS 在终端里运行一条命令 |
+| Windows / macOS，用 DeepSeek Harness 桌面版 | [A．DeepSeek Harness 安装](#a02--section-2) | 在系统终端里运行一条命令 |
 | 想用浏览器访问，并自己管理服务；或使用 Linux / WSL2 | [B．命令行版](#a02--section-3) | 需要，先准备 Node.js |
 | Android 11 及以上、ARM64，想直接装酒馆应用 | [C．Android 独立 APK](#a02--section-4) | 不需要 |
 | 已有适配版本的 DSH，准备新建 Tavern Profile | [用 DSH 命令安装 Tavern（试验）](#plugin-installation) | 需要 |
@@ -98,8 +98,6 @@ export const installation = `
 本项目当前要求 Desktop 内置的 DSH 为 **{{dshVersion}}**，对应的 Desktop 版本是 **0.2.1-rc.2**。其他版本不一定兼容，安装器检测到不匹配会停止。请使用这里指定的适配版本，不要因为提示有新版就先升级 Desktop。
 
 ### 第 2 步：打开系统终端
-
-**Windows 用户也可以不用终端：**先从托盘退出 DeepSeek Harness，[下载安装程序](https://github.com/flizzywine/dsh-tavern/releases/download/v3.0/dsh-tavern-install.cmd)，双击运行（出现安全提示时点「更多信息 → 仍要运行」），等窗口报告安装完成，再跳到第 4 步。下面的第 2、3 步是命令安装，两种方式任选其一。
 
 先退出官方桌面应用，再打开 Windows PowerShell 或 macOS 终端。安装器使用官方应用内置的 Node 和 pnpm；自定义安装位置可用 DSH_DESKTOP_APP_EXECUTABLE 指定。
 
@@ -314,12 +312,12 @@ dsh-tavern open
 
 **日常更新直接点酒馆里的更新按钮。更新失败、长期卡住，或想重新执行完整安装流程时，再做“整体重新安装（覆盖更新）”。**
 
-> **整体重新安装不会覆盖数据，只替换程序。**重新运行原来的安装命令或安装程序即可，人物卡、聊天和设置都会保留，不用先删除或卸载。
+> **整体重新安装不会覆盖数据，只替换程序。**重新运行原来的安装命令即可，人物卡、聊天和设置都会保留，不用先删除或卸载。
 
 | 你想做什么 | 用哪种办法 | 会不会清空数据 |
 | --- | --- | --- |
 | 正常获取新版酒馆 | 在界面中检查并进行更新 | 正常更新保留数据 |
-| 修复旧安装、重新安装最新版酒馆程序 | 在原位置重新运行安装命令或安装程序 | 按原目录覆盖安装会保留数据，操作前仍建议备份 |
+| 修复旧安装、重新安装最新版酒馆程序 | 在原位置重新运行安装命令 | 按原目录覆盖安装会保留数据，操作前仍建议备份 |
 | 删除所有数据、从零开始 | 卸载并清除数据 | 会丢失数据，本页的更新步骤不需要这样做 |
 
 这里的“整体重新安装”指**重新执行安装流程，更新酒馆程序并重新安装所需依赖**。它会保留游戏数据和适配的宿主版本；健康的运行环境可能被复用，不保证把每个文件都重新下载。不要为了“更彻底”先删除数据文件夹、清除 Android 应用数据或卸载应用。
@@ -356,7 +354,7 @@ dsh-tavern open
 
 ### 方法二 A：DeepSeek Harness 版整体重新安装（覆盖更新）
 
-**最直接的办法：重新执行第一次安装酒馆时的那条命令（Windows 也可以重新双击安装程序）。无需先卸载 Desktop，也无需删除 tavern Profile。**
+**最直接的办法：重新执行第一次安装酒馆时的那条命令。无需先卸载 Desktop，也无需删除 tavern Profile。**
 
 1. 保存操作并备份重要数据，确认 Desktop 仍为 **0.2.1-rc.2**。
 2. 退出桌面应用，打开系统 PowerShell 或终端。
@@ -450,7 +448,7 @@ Desktop 安装和更新会自动配置 [dsh-pocket](https://github.com/shaobeich
 
 ### Desktop：命令报错、版本不匹配，或重启后没有酒馆
 
-确认 Desktop 是 **0.2.1-rc.2**，且使用的是 A 中的 Desktop 安装命令或安装程序。不要使用 B 中的命令行版命令。
+确认 Desktop 是 **0.2.1-rc.2**，且使用的是 A 中的 Desktop 安装命令。不要使用 B 中的命令行版命令。
 
 如果提示找不到官方运行环境，确认已安装指定版本，或用 DSH_DESKTOP_APP_EXECUTABLE 指向官方程序。若重启后仍是普通 DSH 界面，请检查安装日志中的配置验证结果；官方版无需切换 Profile。
 
