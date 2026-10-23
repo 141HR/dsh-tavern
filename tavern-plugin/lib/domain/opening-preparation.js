@@ -7,7 +7,7 @@ import { OFFICIAL_MVU_VERSION } from './official-mvu-assets.js'
 import { randomUUID } from 'node:crypto'
 import { cardOpeningChoices } from './card-openings.js'
 import { inspectWorldBookDocument, updateWorldBookDocument, exportSillyTavernWorldBook } from './worldbook-resource.js'
-import { projectTavernHelperWorldbook, replaceTavernHelperWorldbookOperations } from './tavern-helper-worldbook.js'
+import { patchTavernHelperWorldbookEntries, projectTavernHelperWorldbook, replaceTavernHelperWorldbookOperations, tavernHelperWorldbookChanges, tavernHelperWorldbookVersion } from './tavern-helper-worldbook.js'
 import { createHelperGenerationTasks } from './helper-generation-tasks.js'
 import { helperGenerationHistory } from './helper-generation-prompts.js'
 
@@ -143,7 +143,20 @@ export function createOpeningPreparation({ readCard, worldBooks, generate, gener
       }
       if (!draft.runtimeEnabled) throw new Error('准备页脚本运行时未初始化')
       if (method === 'loadTavernWorldInfo') return { worldInfo: exportSillyTavernWorldBook(draft.document) }
-      if (method === 'getTavernHelperWorldbook') return { worldbook: present(draft).worldbook }
+      if (method === 'getTavernHelperWorldbook') {
+        const worldbook = draft.document ? projectTavernHelperWorldbook(inspectWorldBookDocument(draft.document)) : null
+        if (!worldbook) return { worldbook }
+        const version = tavernHelperWorldbookVersion(worldbook.entries)
+        return { worldbook: args.knownVersion === version ? { name: worldbook.name, version, unchanged: true } : { ...worldbook, version } }
+      }
+      if (method === 'patchTavernHelperWorldbook') {
+        if (!draft.document) throw new Error('当前人物卡没有绑定世界书')
+        const before = projectTavernHelperWorldbook(inspectWorldBookDocument(draft.document)).entries
+        if (tavernHelperWorldbookVersion(before) !== String(args.patch?.version ?? '')) throw new Error('世界书已被其他操作修改，请重新读取后重试')
+        const result = await this.replaceWorldbook(id, patchTavernHelperWorldbookEntries(before, args.patch), before)
+        const after = result.worldbook.entries
+        return { updated: true, worldbook: { name: result.worldbook.name, version: tavernHelperWorldbookVersion(after), ...tavernHelperWorldbookChanges(before, after) } }
+      }
       if (method === 'replaceTavernHelperWorldbook') {
         const result = await this.replaceWorldbook(id, args.entries, args.expectedEntries)
         return { updated: true, worldbook: result.worldbook }

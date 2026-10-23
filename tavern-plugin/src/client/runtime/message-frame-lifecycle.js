@@ -504,7 +504,7 @@
 						if (current()) event.source.postMessage({ type: "dsh-tavern-helper-response", token: data.token, requestId: data.requestId, ok: false, error: String(error.message || error) }, "*");
 					});
 				} else if (data.type === "dsh-tavern-helper-call" && props.sessionId) {
-					const allowedMethods = new Set(["generateTavernHelper", "generateTavernHelperRaw", "stopTavernHelperGeneration", "stopAllTavernHelperGeneration", "prepareSessionOpening", "createTavernHelperMessages", "updateTavernHelperPrompts", "updateTavernHelperVariables", "updateTavernHelperMessages", "getTavernHelperWorldbook", "replaceTavernHelperWorldbook"]);
+					const allowedMethods = new Set(["generateTavernHelper", "generateTavernHelperRaw", "stopTavernHelperGeneration", "stopAllTavernHelperGeneration", "prepareSessionOpening", "createTavernHelperMessages", "updateTavernHelperPrompts", "updateTavernHelperVariables", "updateTavernHelperMessages", "getTavernHelperWorldbook", "replaceTavernHelperWorldbook", "patchTavernHelperWorldbook"]);
 					if (data.method === "startSessionOpening") {
 						const request = sourceDocument.openingRequest;
 						const start = async function () {
