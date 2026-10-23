@@ -79,7 +79,6 @@ export const installation = `
 | Windows / macOS，用 DeepSeek Harness 桌面版 | [A．DeepSeek Harness 安装](#a02--section-2) | 在系统终端里运行一条命令 |
 | 想用浏览器访问，并自己管理服务；或使用 Linux / WSL2 | [B．命令行版](#a02--section-3) | 需要，先准备 Node.js |
 | Android 11 及以上、ARM64，想直接装酒馆应用 | [C．Android 独立 APK](#a02--section-4) | 不需要 |
-| 已有适配版本的 DSH，准备新建 Tavern Profile | [用 DSH 命令安装 Tavern（试验）](#plugin-installation) | 需要 |
 
 **用桌面版的就选 A；不知道怎么选，也选 A。**
 
@@ -471,40 +470,6 @@ Desktop 安装和更新会自动配置 [dsh-pocket](https://github.com/shaobeich
 更多问题见[常见问题](#n08)与[排错日志](#n04)。需要手动安装或查找高级目录配置时，参考[完整安装说明](https://github.com/flizzywine/dsh-tavern/blob/main/docs/installation.md)。
 
 安装包校验：[Android APK SHA-256 文件](https://github.com/flizzywine/dsh-tavern/releases/download/v2.1/dsh-tavern-android-release.apk.sha256)。
-`
-
-export const pluginInstallation = `
-## 适用条件
-
-已安装 **DSH 0.2.1-rc.2、Node.js 22.19+、pnpm**，准备新建独立的 \`tavern\` Profile。当前先支持普通 DSH CLI 的新安装。
-
-已通过专用安装器安装的 CLI、Desktop 或 Android 酒馆，请继续使用各自原有的更新方式，不要向同一个 Profile 叠装。其他安装方式见[安装与启动](#a02)。
-
-## 从 GitHub 安装
-
-需要 Git。在终端运行：
-
-` + code('bash', 'dsh plugin --profile tavern add @deepseek-ai/dsh-web-app github:flizzywine/dsh-tavern') + `
-
-DSH 会创建 Profile，装上网页组件和完整运行包并启用酒馆。新建的 \`tavern\` Profile 默认不带网页组件，所以要在同一条命令里一起加上。运行包包含侧栏、人物卡功能、预设和 Skill，无需自行构建。酒馆使用当前 DSH，启动时检查适配版本，不会另装或升级宿主。
-
-> **暂不可用：** DSH 0.2.1-rc.2 解析依赖时有缺陷，这条路线启动会报 \`createRequire.resolve.paths is not a function\`（[#300](https://github.com/flizzywine/dsh-tavern/issues/300)），需等 DSH 修复。在此之前请用[命令行安装方式](#a02)。
-
-## 启动与更新
-
-安装完成后运行：
-
-` + code('bash', 'dsh --profile tavern') + `
-
-打开酒馆网页，看到 Tavern 界面后，继续[配置文字模型](#a03)并[开始第一局](#a04)。
-
-更新时先关闭酒馆，重新运行上述 GitHub 安装命令，再启动。页面中的“查看更新命令”提供对应命令，这种安装方式不使用专用安装器的源码更新器。
-
-## 数据位置与使用边界
-
-数据位于当前 \`DSH_HOME\` 下的 \`profile-data/tavern/\`；未设置 \`DSH_HOME\` 时通常为 \`~/.dsh/profile-data/tavern/\`。程序由 Profile 的包管理器维护。
-
-这条路线不会迁移旧 CLI 的独立数据，也不附带 Desktop 的 Pocket 手机访问配置或宿主字体文件修改。侧栏终端复用宿主提供的 \`node-pty\`；宿主缺少此依赖时，终端会显示修复提示，酒馆仍可使用。
 `
 
 export const appearance = `
