@@ -169,14 +169,14 @@ curl -fsSL 'https://raw.githubusercontent.com/flizzywine/dsh-tavern/main/install
 
 ### 手机远程访问
 
-酒馆跑在电脑或服务器上，用手机浏览器也能玩。[详细说明 →](https://flizzywine.github.io/dsh-tavern/#a02--section-10)
+酒馆跑在电脑或服务器上，用手机浏览器也能玩。[详细说明 →](https://flizzywine.github.io/dsh-tavern/#a02--section-8)
 
 - **电脑运行、手机扫码**：安装 [dsh-pocket](https://github.com/shaobeichen/dsh-pocket)，在 **设置 → 手机访问** 选择局域网或公网，扫码即可。
 - **服务器部署、账号登录**：安装 [dsh-webui-auth](https://github.com/Yuuz12/dsh-webui-auth)，为远程网页加上登录认证。
 
 ### 开始游玩
 
-在 **设置 → 模型** 填入模型服务和 API 密钥（任意模型都可以，本地模型也行），导入人物卡就能开局。[图文教程 →](https://flizzywine.github.io/dsh-tavern/#a02--section-7)
+在 **设置 → 模型** 填入模型服务和 API 密钥（任意模型都可以，本地模型也行），导入人物卡就能开局。[图文教程 →](https://flizzywine.github.io/dsh-tavern/#a02--section-5)
 
 ### 更新、旧存档与切回原版
 
