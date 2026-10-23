@@ -185,6 +185,24 @@ test('bounded rollback falls back to the complete path when the revision moves b
   assert.deepEqual(after.guides, ['并发'])
 })
 
+test('regeneration adopts the new body when the native surface cannot place it, and marks the native tail for repair', async t => {
+  for (const bounded of [true, false]) {
+    const h = await fixture(t, bounded)
+    // The old body leaves the surface while the model writes: the replacement has nowhere to go.
+    const generate = h.agent.whenIdle
+    h.agent.whenIdle = async () => { await generate(); h.session.surface.nodes = h.session.surface.nodes.filter(seq => seq !== 1) }
+    const view = await h.rounds.regenerate('chat', '', 'session')
+    const after = await h.p.read('chat')
+    assert.equal(view.adopted.text, '重写正文82')
+    assert.equal(after.messages.at(-1).text, '重写正文82')
+    assert.equal(after.messages.at(-1).turn, 81)
+    assert.equal(after.regenInProgress, undefined)
+    assert.equal(after.regenRecovery, undefined)
+    assert.equal(after.nativeSync.status, 'stale')
+    assert.match(after.nativeSync.reason, /旧正文已经不在/)
+  }
+})
+
 test('bounded regeneration stores the same Chat and surface as the complete regeneration', async t => {
   const results = []
   for (const bounded of [true, false]) {

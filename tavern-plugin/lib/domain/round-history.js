@@ -110,6 +110,16 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     }
   }
 
+  // The save adopts the new body even when the native surface cannot place it
+  // (ownership mismatch, old body gone): completion then repairs the native tail
+  // from the save instead of refusing the regeneration.
+  function placeRegeneration(session, oldAssistantSeq, eventStart, data, operationId) {
+    try {
+      const replacement = planRegenerationSurface({ events: sessionEvents(session), nodes: session.surface.nodes, oldAssistantSeq, eventStart })
+      return regenerationProjection(replacement, data, operationId)
+    } catch (error) { return { unplaced: str(error?.message || error) || '原生位置对不上' } }
+  }
+
   async function regenerate(chatId, guidance, sessionId) {
     if (sessionPatch && !sessionPatch.replacementAllowed()) throw new Error(sessionPatch.blockReason())
     // Identity only; each regeneration path reads the story it changes.
@@ -283,9 +293,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
       if (body === '') {
         throw new Error('重新生成失败：模型返回空文本')
       }
-      const replacement = planRegenerationSurface({ events: sessionEvents(session), nodes: session.surface.nodes,
-        oldAssistantSeq: oldSeq, eventStart })
-      const projection = regenerationProjection(replacement, { turn: oldTurn, step: 1, message: { id: 'tavern-regen:' + operationId,
+      const projection = placeRegeneration(session, oldSeq, eventStart, { turn: oldTurn, step: 1, message: { id: 'tavern-regen:' + operationId,
         role: 'assistant', content: [{ type: 'text', text: body }], source: { ...oldSource, tavernStoryTurn: oldTurn } } }, operationId)
       // The persisted intent must only reference events already on disk.
       if (typeof sessions.flush === 'function') await sessions.flush(session)
@@ -464,8 +472,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
       }
       body = str(newAssistant.text).trim()
       if (body === '') throw new Error('重新生成失败：模型返回空文本')
-      const replacement = planRegenerationSurface({ events: sessionEvents(session), nodes: session.surface.nodes, oldAssistantSeq: oldSeq, eventStart })
-      const projection = regenerationProjection(replacement, { turn: oldTurn, step: 1, message: { id: 'tavern-regen:' + operationId,
+      const projection = placeRegeneration(session, oldSeq, eventStart, { turn: oldTurn, step: 1, message: { id: 'tavern-regen:' + operationId,
         role: 'assistant', content: [{ type: 'text', text: body }], source: { ...oldSource, tavernStoryTurn: oldTurn } } }, operationId)
       if (typeof sessions.flush === 'function') await sessions.flush(session)
       if (latest.regenRecovery?.id !== operationId) throw new Error('重新生成操作已失效')
@@ -527,7 +534,7 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
   // marker with a header patch. A moved revision uses the complete completion.
   async function completeRecent(chat, session, operationId) {
     const saved = chat.regenRecovery
-    if (saved?.phase !== 'committed' || saved.id !== operationId || saved.sessionId !== session.id || !saved.projection) {
+    if (saved?.phase !== 'committed' || saved.id !== operationId || saved.sessionId !== session.id || !saved.projection || saved.projection.unplaced) {
       return await regenerationRecovery.complete({ chatId: chat.id, session, operationId }) || chat
     }
     try {

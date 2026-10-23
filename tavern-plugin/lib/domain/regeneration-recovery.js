@@ -126,7 +126,7 @@ export function createRegenerationRecovery({ chats, sessions, timeline, isActive
       if (!saved || saved.phase !== 'committed' || (operationId && saved.id !== operationId)) return
       try {
         if (saved.sessionId !== session.id) throw new Error('重新生成恢复会话不匹配')
-        if (!saved.projection) throw new Error('重新生成缺少已提交正文的投影记录')
+        if (!saved.projection || saved.projection.unplaced) throw new Error(saved.projection?.unplaced || '重新生成缺少已提交正文的投影记录')
         applyRegenerationProjection(session, saved.projection)
         if (typeof sessions.flush === 'function') await sessions.flush(session)
       } catch (error) { nativeError = error }
