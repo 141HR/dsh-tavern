@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "revision": "7df3c3ea04fbeb73215b1f5e8ccb89176c1a6c65",
-  "releaseSequence": 842,
-  "version": "3.2.0",
+  "revision": "e756702fade7d9816f4b97670ab7d186f5c59540",
+  "releaseSequence": 843,
+  "version": "3.1.0",
   "files": [
     {
       "path": "android/apk/build-offline-bundle.sh",
@@ -166,8 +166,8 @@
     },
     {
       "path": "bin/dsh-compatibility.mjs",
-      "sha256": "691478d852dd3c5996a1692f0b43710357398f6def0583eff074deff10c8b951",
-      "size": 4907
+      "sha256": "173eb70b0b264fa5261fed01e7058458769f7383929843dc0a084010dbe749f9",
+      "size": 4790
     },
     {
       "path": "bin/dsh-tavern",
@@ -191,8 +191,8 @@
     },
     {
       "path": "bin/import-user-home.mjs",
-      "sha256": "f3f1e8c1ee393932013dc532d6e6e8a31243c459677b0e8654496816a131ba9c",
-      "size": 10147
+      "sha256": "f5d144875c8a597f260e4cf9c5a9dfb93646a09df90f12d19437e7cfa35baad0",
+      "size": 10123
     },
     {
       "path": "bin/installation-process.mjs",
@@ -231,8 +231,8 @@
     },
     {
       "path": "bin/official-desktop-runtime.cjs",
-      "sha256": "d5beb983bb82678b5f562c07e02e3c85419fe4be1074c50e99b56c3145aac009",
-      "size": 7082
+      "sha256": "744bcf8b312624ed5a513221566c5d898a1366faccdf257f6d2ca6284ecc69a9",
+      "size": 7041
     },
     {
       "path": "bin/plugin-dependencies.mjs",
@@ -336,8 +336,8 @@
     },
     {
       "path": "bin/validate-desktop-profile.mjs",
-      "sha256": "c6513c5a956bf1551b5916d3cfffa1f7ec51634ca40e38700137a29c5b233fbf",
-      "size": 2237
+      "sha256": "42dfaa485871e62c2cb15a929b1c694eff5f6d43b9c32d30b5077f13862b4ab5",
+      "size": 2527
     },
     {
       "path": "bin/vendor-dream-skin.mjs",
@@ -401,17 +401,17 @@
     },
     {
       "path": "install.ps1",
-      "sha256": "3cd96ca126794a0d2f143ea2a2c44e0c8efb296a711d6c3782430c71c9caf0d1",
-      "size": 86279
+      "sha256": "0ac20a354b585f1e5ee70923a6b108b7bf141833940fd519c5e5ed6c9728b7fd",
+      "size": 86238
     },
     {
       "path": "install.sh",
-      "sha256": "d45130075078edde84809649a6fd87ac8f13cc1b3ba648d7d3baf5a2261decb6",
-      "size": 66001
+      "sha256": "4d15bc2d8da55e518d3fa611d239c4fd9c1651efb0435a1bff0db2097a8f54ef",
+      "size": 65960
     },
     {
       "path": "package.json",
-      "sha256": "a750dd58ae9e74d4ad35f462adac41b07217a5c1ae09345601491fe7197a65a1",
+      "sha256": "088f6fcdf87bfa070833fa9cffdb0ecc06784cbe9cf5913166377eb4238d52b9",
       "size": 3749
     },
     {
@@ -581,8 +581,8 @@
     },
     {
       "path": "tavern-plugin/lib/application-updater.js",
-      "sha256": "e2e0159f27b216197aa854914c5ae2be9ba8b7562f9a2663d17566e90da64fb2",
-      "size": 40793
+      "sha256": "ce9f736735d5d5ddf15d9e38e3d6754c787fa4ffbd7f491f605fa9e5bf114e96",
+      "size": 40195
     },
     {
       "path": "tavern-plugin/lib/background-agent-runner.js",
@@ -621,8 +621,8 @@
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "5f5fe793d68814cce9c380ef5102a6a8e8ed504c621c4d5305c2961dbeab12bf",
-      "size": 2030368
+      "sha256": "929588df25c63dabcf365a58550a273d6a1732918dfba75280ad4d3f231326ae",
+      "size": 2029611
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -1530,11 +1530,6 @@
       "size": 6595
     },
     {
-      "path": "tavern-plugin/lib/domain/package-managed-update.js",
-      "sha256": "e20b760b931301ac97613fe298c218c286838891bce3a99f6bd36827bbb6f049",
-      "size": 8366
-    },
-    {
       "path": "tavern-plugin/lib/domain/performance-diagnostics.js",
       "sha256": "29e3fa6c7d482bd167cf7a89c1a3b6d1d7c631789f19cdbbc4041b5544477779",
       "size": 4148
@@ -2336,8 +2331,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/update-status-controller.js",
-      "sha256": "cc058196292746ae2381922e972328f0c813e14d1145f4b2fa3d624555685b70",
-      "size": 8950
+      "sha256": "3e85cb75c6e4b02dfecc0c6a9a4476f0a51cb04f404789743c2807b85db2b113",
+      "size": 8693
     },
     {
       "path": "tavern-plugin/lib/domain/uploads.js",
@@ -2511,8 +2506,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "74fdd9716d60ee54f1e6c822aba84a07000c71e6c5b414cf5d390e3b6c0d5d83",
-      "size": 219433
+      "sha256": "7709dd73c84b8bc0232acd039272b340b26e53e8039f46e3efc1d80ad5b37c35",
+      "size": 219382
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -4341,7 +4336,7 @@
     },
     {
       "path": "tavern-plugin/package.json",
-      "sha256": "eb69bdf229ae6dc1ea94da350a3b26fdc925453a637888dd34fd60c8c75c3941",
+      "sha256": "dbfae4104f45a70102e25cc3bd99c1451068cab2502d83d5a287767d9f950982",
       "size": 2163
     },
     {
@@ -5286,8 +5281,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/sidebar.js",
-      "sha256": "5a2b6db7df7988d721ab3eec7f2b96a4efeb7d742298abc73df948a3ee4cd4d6",
-      "size": 95193
+      "sha256": "8f8d5b3634eee8a5f85e05519e51078184b92c8d2421776abf6ceca94081aa4d",
+      "size": 94693
     },
     {
       "path": "tavern-plugin/src/client/features/skills.js",
