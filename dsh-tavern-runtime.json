@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "585a13faefcfd1cbdd5595744c3f6d7fed80239b",
-  "releaseSequence": 856,
+  "revision": "005b377d3733fbe33f08969f6c471cea88a822cf",
+  "releaseSequence": 857,
   "version": "3.1.0",
   "files": [
     {
@@ -461,8 +461,8 @@
     },
     {
       "path": "presets/tavern/skills/debug-card/references/evidence.md",
-      "sha256": "5ec1c07ad834bdb14ee582c533d63758b0ba1eddcc09781cd22ad3a887ac0afe",
-      "size": 7537
+      "sha256": "1f72e9cd45f864c93a2ab30e17e210c67b43ad6285685174d5bd99db4cd33c85",
+      "size": 7771
     },
     {
       "path": "presets/tavern/skills/debug-card/references/frame-sizing.md",
@@ -476,8 +476,8 @@
     },
     {
       "path": "presets/tavern/skills/debug-card/SKILL.md",
-      "sha256": "25b15dfacd814cb5d8ab4b8ae24d37dc2da047bc855b680f4a9ef1487dea02b4",
-      "size": 4519
+      "sha256": "d91f8c873408e6acdbf8bf3cfbf584dd69c99fab62ed3796f154a3d034b51be7",
+      "size": 6052
     },
     {
       "path": "presets/tavern/skills/edit-card/SKILL.md",
@@ -591,13 +591,13 @@
     },
     {
       "path": "tavern-plugin/lib/client-assets/tavern.css",
-      "sha256": "a6821da4b797a877a4acecc2df25f5c944a91e08008a924273ca33044223cbf3",
-      "size": 319326
+      "sha256": "ed2caf08f156b121ba80cc0841dd6f65478fa52857cb4c436089d1e6ce93a533",
+      "size": 319447
     },
     {
       "path": "tavern-plugin/lib/client.js",
-      "sha256": "c31414f113bc4d5abcb96ccb1397b42720eab2aac248452bc0a95256ee4de094",
-      "size": 2048276
+      "sha256": "af22d849e73046f115ccf098b8cf8db84f6038393e7f82bdfcde80c5376dfa46",
+      "size": 2049522
     },
     {
       "path": "tavern-plugin/lib/cordis-inspect.js",
@@ -1780,6 +1780,11 @@
       "size": 5857
     },
     {
+      "path": "tavern-plugin/lib/domain/runtime-health.js",
+      "sha256": "a8327a75367f936b636e91ee2bbc0c226fe7651704e3422f591af80de83cfc5c",
+      "size": 3730
+    },
+    {
       "path": "tavern-plugin/lib/domain/runtime-preset-lifecycle.js",
       "sha256": "4ad8671e75bacaa03902e743fed575fdec3d9442517f55ae1e400735a01491bf",
       "size": 7936
@@ -2041,8 +2046,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/skill-gated-tools.js",
-      "sha256": "9829865246fcec5c7a77da35efdf3bc6528e8216943e6380876d211627822f97",
-      "size": 1839
+      "sha256": "2879cdf3f43fb579f72c87b52723c8d52ac847fdab5bba996257c118a1bd34f7",
+      "size": 1869
     },
     {
       "path": "tavern-plugin/lib/domain/skill-visibility.js",
@@ -2326,8 +2331,8 @@
     },
     {
       "path": "tavern-plugin/lib/domain/turn-orchestration.js",
-      "sha256": "04a9146b4f0f595caf9870da14edc22a55358a9e55911f174b1d503759b24742",
-      "size": 48931
+      "sha256": "d8c1ae01438b2846529925cb5e95e446c0b183dc4454944f0b13c56564ff187b",
+      "size": 48961
     },
     {
       "path": "tavern-plugin/lib/domain/turn-settled-events.js",
@@ -2516,8 +2521,8 @@
     },
     {
       "path": "tavern-plugin/lib/index.js",
-      "sha256": "3d35ed3c481da72a1db5e8bd917cc1ffc122c9263318f42b62aebce03270124e",
-      "size": 229198
+      "sha256": "87726311f4928391c0e1d3a4fa6021c03d23981f09839bb26d8964187b58c0f4",
+      "size": 229736
     },
     {
       "path": "tavern-plugin/lib/plugin-api.js",
@@ -2633,6 +2638,11 @@
       "path": "tavern-plugin/lib/tools/regex-library.js",
       "sha256": "c34f4e7d8a30f1794ce3180e53b782db05b89bf27cc3726fa9b281f4f72fd14b",
       "size": 1444
+    },
+    {
+      "path": "tavern-plugin/lib/tools/runtime-health.js",
+      "sha256": "348ac09a598604ae40e18df04e849df198708528633ac821d9b7ef8d6ccea8b0",
+      "size": 1366
     },
     {
       "path": "tavern-plugin/lib/tools/script.js",
@@ -5191,8 +5201,8 @@
     },
     {
       "path": "tavern-plugin/src/client/features/play-controls.js",
-      "sha256": "beece8d07c2dcbed813702097ad4e0130238d763b72f7f34664eb92a2e738aba",
-      "size": 90632
+      "sha256": "253f255c57324a524c9452f0d64be429d9cecf166907bf0fcba71f9a8b8864fc",
+      "size": 91756
     },
     {
       "path": "tavern-plugin/src/client/features/play-interaction-panels.js",
