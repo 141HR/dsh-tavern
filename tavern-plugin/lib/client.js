@@ -1493,6 +1493,18 @@ window.__ModuleLoader__.load({
 		}
 
 		function rpc(method, args, sessionId, requestOptions) {
+			// While DSH restarts (after an update) it accepts requests a moment before Tavern's
+			// routes and auth are mounted: they answer 404/401/5xx without running the handler.
+			// Wait that window out instead of reporting it; a lasting failure still surfaces.
+			const RESTART_STATUSES = [401, 404, 502, 503, 504];
+			async function fetchThroughRestart(url, request) {
+				const deadline = Date.now() + 8000;
+				for (let delay = 250; ; delay = Math.min(delay * 2, 2000)) {
+					const response = await fetch(url, request);
+					if (!RESTART_STATUSES.includes(response.status) || Date.now() + delay > deadline || request.signal?.aborted) return response;
+					await new Promise(function (resolve) { window.setTimeout(resolve, delay); });
+				}
+			}
 			const runtimeControl = ["claimTavernScriptWork", "startTavernScriptWork", "getTavernScriptWorkState", "heartbeatTavernScriptRuntime", "completeTavernHelperEvent", "releaseTavernHelperRuntime"].includes(method);
 			const controlChannel = runtimeControl && typeof tavernSessionSignals !== "undefined" && typeof tavernSessionSignals.control === "function" ? tavernSessionSignals : null;
 			const started = Date.now();
@@ -1530,7 +1542,7 @@ window.__ModuleLoader__.load({
 			if (requestOptions && requestOptions.keepalive === true) request.keepalive = true;
 			const responsePromise = controlChannel
 				? Promise.resolve().then(() => controlChannel.control(method, JSON.parse(requestBody), requestOptions && requestOptions.signal))
-				: fetch("/api/dsh-tavern/" + method, request).then(async function (response) {
+				: fetchThroughRestart("/api/dsh-tavern/" + method, request).then(async function (response) {
                 if (trace) trace.headersMs = Math.round(performance.now() - clockStart);
                 const result = await readTavernJsonResponse(response, trace ? body => { trace.bodyChars = body.length; } : undefined);
                 if (trace) {
