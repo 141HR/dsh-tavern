@@ -3022,6 +3022,7 @@ export async function apply(ctx) {
     timeline: storyTimeline,
     activity: chat => backgroundTasks.activity(chat),
     cancelPreparation: chatId => worldbookPrefilter.cancel(chatId),
+    beforeReplyEdit: sessionId => castPresentation.beforeEdit(sessionId),
     project: async (text, chat) => {
       const extensions = await readCardExtensions(chat.cardPath, chat)
       return projectRuntimeReply(text, { charName: chat.cardName, macroState: chat.macroState,

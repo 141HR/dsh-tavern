@@ -1,11 +1,12 @@
 import { foldCastStage } from './cast-stage-state.js'
-import { CAST_DATA_OWNER, CAST_SUBMIT_TOOL, CAST_SUBMIT_TOOL_NAME, castSettlementText, dialogueQuotes, normalizeCastSubmission, recentSpeakers } from './cast-annotation.js'
+import { CAST_DATA_OWNER, CAST_SUBMIT_TOOL, CAST_SUBMIT_TOOL_NAME, carryCastLines, castSettlementText, dialogueQuotes, normalizeCastSubmission, recentSpeakers } from './cast-annotation.js'
 
 /**
  * Dialogue annotation as part of the background settlement. Tavern's own counterpart
  * of a plugin settlement tool: the tool stays in the cached prefix, the per-turn note
  * says whether to use it. Results live in the per-game turn data store, bound to the
- * story text version, so rollback, regeneration and edits need no synchronization.
+ * story text version, so rollback and regeneration need no synchronization. An edit of the
+ * reply (the player's, 精修, a plugin's) carries the annotation over to the edited version.
  */
 export function createCastPresentation({ enabled, turns, data, publish = () => {} }) {
   // The quotes numbered in this turn's note, so a submission maps back to text.
@@ -88,5 +89,34 @@ export function createCastPresentation({ enabled, turns, data, publish = () => {
     return figures
   }
 
-  return Object.freeze({ settlement, forTurns, annotation, beforeTurn })
+  /**
+   * Before an edit of the latest reply: read the shown version's annotation; the returned function,
+   * called once the edit is saved, copies it onto the edited version. Never throws: speakers are a nicety.
+   */
+  async function beforeEdit(sessionId) {
+    try {
+      const before = await turns.readTurn(sessionId)
+      if (!before) return async () => {}
+      const turn = before.turn
+      const record = (await records(before.chatId, turn)).find(item => item.turn === turn && item.key === before.key)
+      if (!Array.isArray(record?.data?.lines) || !record.data.lines.length) return async () => {}
+      const oldQuoteCount = dialogueQuotes(before.text).length
+      return async () => {
+        try {
+          const after = await turns.readTurn(sessionId, turn)
+          if (!after || after.key === before.key) return
+          if ((await records(after.chatId, turn)).some(item => item.turn === turn && item.key === after.key)) return
+          const lines = carryCastLines(record.data.lines, oldQuoteCount, dialogueQuotes(after.text))
+          if (!lines.length) return
+          await data.saveTurn({ chatId: after.chatId, owner: CAST_DATA_OWNER, turn, key: after.key, data: { version: 1, lines } })
+          publish(after.sessionId, { turn, textVersion: after.key, lines })
+        } catch (error) { console.warn('dsh-tavern: 编辑后保留台词标注失败', error) }
+      }
+    } catch (error) {
+      console.warn('dsh-tavern: 读取台词标注失败', error)
+      return async () => {}
+    }
+  }
+
+  return Object.freeze({ settlement, forTurns, annotation, beforeTurn, beforeEdit })
 }
