@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": "c81c0ddc242474b64aa8d2d472e1af794ad5eda7",
-  "releaseSequence": 848,
+  "revision": "c6348a45efa8f6b9c02857be2090f389bb9640f8",
+  "releaseSequence": 849,
   "version": "3.1.0",
   "files": [
     {
@@ -4961,8 +4961,8 @@
     },
     {
       "path": "tavern-plugin/prompts/card-personas/zhumi.md",
-      "sha256": "37020260455ce64c5a93b58abeb919fa2ff18c1d5630f1017b0d8211db3ccc26",
-      "size": 1906
+      "sha256": "540a36edaa4b9e81ab10b77aed153729d9d2f30e559d970577ee100791db0ffa",
+      "size": 1870
     },
     {
       "path": "tavern-plugin/prompts/card-reference.md",
