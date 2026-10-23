@@ -11,7 +11,7 @@ export function createPlayHandlers(deps) {
     ledgerEditor, manualCharacterDesign, manualLedger, notifyPluginTimeline, phoneChat,
     pluginSettlementProgress, readBackgroundSuppression, readCard,
     reconcileStory, reconcileWhenIdle, regenBody, replayFailedTurn, requestPerformance, retrySettlement,
-    retryStyleReference, rollbackTurn, runtimeGeneration, runtimePrompt, sessionActivity, sessionOperation,
+    retryStyleReference, rollbackTurn, rollbackToTurn, runtimeGeneration, runtimePrompt, sessionActivity, sessionOperation,
     sessionStateForSession, sessionStore, sessionView, sessionViews, setPlayerName, stopBackground, str,
     templateHistoryFrom, undoRollbackTurn, updateChat, view, withCompactionSession } = deps
   return {
@@ -232,6 +232,12 @@ export function createPlayHandlers(deps) {
       await reconcileStory(args && args.sessionId)
       const view = await rollbackTurn(args && args.sessionId, args && args.chatId, args && args.expectedTurn)
       notifyPluginTimeline(args && args.sessionId, 'rollback', { turn: args && args.expectedTurn })
+      return { view }
+    },
+    async rollbackToTurn(args) {
+      await reconcileStory(args && args.sessionId)
+      const view = await rollbackToTurn(args && args.sessionId, args && args.chatId, args && args.turn)
+      notifyPluginTimeline(args && args.sessionId, 'rollback', { turn: view?.rolledBackTo?.latest })
       return { view }
     },
     async getBackgroundProgress(args) {

@@ -23523,6 +23523,35 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
                 title: "恢复第 " + turn + " 轮正文和状态；新的操作会使此恢复点失效" }, busy ? "恢复中…" : "撤销回退（恢复第 " + turn + " 轮）");
         }
 
+        // 每轮消息上的「回退到这一轮」：一次删掉它之后的所有轮次，一次撤销即可全部恢复。
+        function TavernRollbackToAction(props) {
+            const messageId = String(props.messageId || "");
+            const liveState = useScopedLiveTavernView(props.sessionId, "rollback-to:" + messageId, [["mode"], ["canRollback"], ["rollbackTargetTurn"], ["forkTurnsByMessageId", messageId]]);
+            const [busy, setBusy] = React.useState(false);
+            const view = liveState.view;
+            const turn = Number(view && view.forkTurnsByMessageId && view.forkTurnsByMessageId[messageId]) || 0;
+            const latest = Number(view && view.rollbackTargetTurn) || 0;
+            if (!view || !isPlayMode(view.mode) || view.canRollback !== true || !(turn > 0) || !(latest > turn)) return null;
+            async function rollbackTo() {
+                if (busy) return;
+                if (!await askTavernConfirm("回退到第 " + turn + " 轮？\n\n第 " + turn + " 轮之后的所有输入和正文都会删除，剧情状态回到第 " + turn + " 轮结束时。之后可在菜单里「撤销回退」一次全部恢复。", { confirmText: "回退", cancelText: "取消" })) return;
+                setBusy(true);
+                try {
+                    const result = await rpc("rollbackToTurn", { turn: turn }, props.sessionId);
+                    historyProjection.rolledBack(props.sessionId, result && result.view);
+                    setCandidatePanel(null); setRegenPanel(null); setCandidateGuidePanel(null);
+                    notifyTavernDataChanged(["sessions"], "play-controls");
+                    if (result && result.view && result.view.rollbackWarning) tavernErrorHub.report("回退提示", new Error(result.view.rollbackWarning));
+                } catch (error) { tavernErrorHub.report("回退到这一轮", error); }
+                finally { setBusy(false); liveTavernView.invalidate(props.sessionId); tavernCoordination.invalidate(props.sessionId); }
+            }
+            const label = busy ? "正在回退…" : "回退到这一轮";
+            return React.createElement(DshUi.Tooltip, { label: label, side: "bottom" },
+                React.createElement("button", { type: "button", className: "dsh-tavern-message-fork dsh-tavern-message-rollback", "aria-label": label, disabled: busy, onClick: rollbackTo },
+                    React.createElement("svg", { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },
+                        React.createElement("path", { d: "M5 5v14" }), React.createElement("path", { d: "M19 12H9m4-5-5 5 5 5" }))));
+        }
+
 		const bodyEditPanel = { value: null, listeners: new Set() };
 		function setBodyEditPanel(value) {
 			bodyEditPanel.value = value;
@@ -24033,6 +24062,10 @@ function createPlayInteractionPanels({ interactions, useCandidatePanel, useCandi
 				}
 			}), "dsh-tavern: Better Sidebar status tab");
 			registerTavernStagePanels(ctx);
+			ctx.effect(() => slots.inject("conversation.chat.assistant-actions", () => slots.register(
+				{ name: "conversation.chat.assistant-actions", id: "dsh-tavern-rollback-to", order: 19, inject: function (sessionId) { return { sessionId: sessionId }; } },
+				TavernRollbackToAction
+			)), "dsh-tavern: rollback-to-turn action");
 			ctx.effect(() => slots.inject("conversation.input.dock", () => slots.register(
 				{ name: "conversation.input.dock", id: "dsh-tavern-candidate-actions", order: -130, label: "候选项操作" },
 				function (props) { return React.createElement(CandidateDockActions, Object.assign({}, props, {

@@ -651,6 +651,74 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     }
   }
 
+  // 回退到某一轮：逐轮执行与「回退本轮」相同的回退，直到该轮成为最新一轮。
+  // 中途无法继续（如更早的轮次已被上下文压缩）时保留已退回的轮次并提示用分叉。
+  // 一次撤销恢复全部轮次：撤销点取第一步的回退前状态与最后一步的回退后状态。
+  async function rollbackToTurn(sessionId, chatId, targetTurn) {
+    const target = Number(targetTurn)
+    if (!Number.isSafeInteger(target) || target < 1) throw new Error('回退目标轮次无效')
+    if (sessionPatch && !sessionPatch.replacementAllowed()) throw new Error(sessionPatch.blockReason())
+    const state = str(chatId) === '' ? await (chats.stateForSession || chatForSession)(sessionId) : await (chats.readState || readChat)(chatId)
+    if (state === undefined) throw new Error('聊天不存在: ' + chatId)
+    if (pendingReplays.has(state.id)) throw new Error('正在重放失败回合，请等待完成')
+    if (pendingRegenerations.has(state.id) || state.regenInProgress) throw new Error('正文正在重新生成，请先完成恢复或生成')
+    if (pendingRollbacks.has(state.id)) throw new Error('正在回退本轮，请等待完成')
+    pendingRollbacks.add(state.id)
+    let restoredHandle
+    try {
+      if (!sessions.get(state.sessionId)?.session && !sessions.getSession?.(state.sessionId) && typeof sessions.resume === 'function') {
+        restoredHandle = await sessions.resume(state.sessionId)
+      }
+      const recent = async () => chats.readRecent ? await chats.readRecent(state.id) : await readChat(state.id)
+      const latestOf = async () => latestStoryTurn(await recent())
+      let latest = await latestOf()
+      if (!(latest > target)) throw new Error('第 ' + target + ' 轮已经是最新一轮')
+      let result, first, removed = 0, stopped = ''
+      while (latest > target) {
+        try { result = await rollbackChat(state, null, restoredHandle?.agent) }
+        catch (error) { if (!removed) throw error; stopped = str(error?.message || error); break }
+        const next = await latestOf()
+        if (!result.clearedIncompleteTurns && !(next < latest)) { stopped = '回退没有前进'; break }
+        if (result.rolledBack) removed += 1
+        first ||= (await recent())?.rollbackUndo
+        latest = next
+      }
+      if (removed > 1 && first) result = await mergeRollbackUndo(state.id, first, recent) || result
+      if (stopped) result.rollbackWarning = [result.rollbackWarning, '已回退 ' + removed + ' 轮，停在第 ' + latest + ' 轮：更早的轮次已不在模型上下文中，不能原地回退（' + stopped + '）。想回到第 ' + target + ' 轮，请在那一轮的消息上点「从这一轮分叉」。'].filter(Boolean).join('；')
+      result.rolledBackTo = { target, latest, removed }
+      return result
+    } finally {
+      try { await restoredHandle?.dispose?.() }
+      finally { pendingRollbacks.delete(state.id) }
+    }
+  }
+
+  // The last step's undo point, widened to the state before the first step.
+  async function mergeRollbackUndo(chatId, first, recent) {
+    const chat = await recent()
+    const last = chat?.rollbackUndo
+    if (!first?.ready || !last?.ready) return undefined
+    const background = new Map()
+    for (const checkpoint of [...first.background, ...last.background]) {
+      const earlier = background.get(checkpoint.sessionId)
+      background.set(checkpoint.sessionId, earlier ? { ...earlier, afterCount: checkpoint.afterCount } : checkpoint)
+    }
+    const merged = { ...last, turn: first.turn, beforeRevision: first.beforeRevision,
+      foreground: { ...last.foreground, nodes: first.foreground.nodes }, background: [...background.values()] }
+    if (first.before) merged.before = first.before
+    else delete merged.before
+    const revision = Number(chat._storageRevision || 0)
+    const head = typeof chats.patch === 'function'
+      ? await chats.patch(chatId, revision, [{ op: 'set', path: ['rollbackUndo'], value: { ...merged, storageRevision: revision + 1 } }], { source: 'rollback.undo-point' })
+      : undefined
+    const saved = head ? { ...chat, ...head, messages: chat.messages } : await updateChat(chatId, current => {
+      if (!isDeepStrictEqual(current.rollbackUndo, last)) return current
+      current.rollbackUndo = { ...merged, storageRevision: Number(current._storageRevision || 0) + 1 }
+      return current
+    }, { source: 'rollback.undo-point' })
+    return await view(saved, await readChatCard(saved))
+  }
+
   async function rollbackChat(chat, requestedTurn, restoredAgent) {
     if (sessionPatch && !sessionPatch.replacementAllowed()) throw new Error(sessionPatch.blockReason())
     await stopRollbackGeneration(chat)
@@ -1126,5 +1194,5 @@ export function createRoundHistory({ chats, sessions, scripts, timeline, queueSe
     }
   }
 
-  return Object.freeze({ regenerate, replayFailed: replayFailedTurn, recover: regenerationRecovery.recover, rollback: rollbackTurn, undoRollback })
+  return Object.freeze({ regenerate, replayFailed: replayFailedTurn, recover: regenerationRecovery.recover, rollback: rollbackTurn, rollbackTo: rollbackToTurn, undoRollback })
 }

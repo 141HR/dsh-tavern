@@ -93,7 +93,7 @@ async function fixture(t, bounded) {
     queueSettlement: async () => { directed.push('settlement') }, cancelSettlement: async () => {},
     present: async value => { presented.push(isScopedMessages(value.messages) ? 'window' : 'full'); return { rolled: true } }
   })
-  return { p, rounds, calls, session, dispatched, presented, hooks, directed }
+  return { p, rounds, calls, session, dispatched, presented, hooks, directed, agent }
 }
 
 function comparable(chat) {
@@ -140,6 +140,38 @@ test('bounded rollback stores the same Chat as the complete rollback without rea
   }
   assert.deepEqual(undone[0].calls.filter(call => call !== 'read'), ['patch:rollback.undo'])
   assert.deepEqual(comparable(undone[0].restored), comparable(undone[1].restored))
+})
+
+test('rollback to a turn removes every later round and one undo restores them all', async t => {
+  for (const bounded of [true, false]) {
+    const h = await fixture(t, bounded)
+    for (const text of ['上楼', '开窗']) { h.agent.followup({ content: [{ type: 'text', text }] }); await h.agent.whenIdle() }
+    const before = await h.p.read('chat'), nodes = [...h.session.surface.nodes]
+    assert.equal(before.messages.at(-1).turn, 83)
+    const result = await h.rounds.rollbackTo('session', 'chat', 81)
+    assert.deepEqual(result.rolledBackTo, { target: 81, latest: 81, removed: 2 })
+    assert.equal(result.rollbackWarning, undefined)
+    const after = await h.p.read('chat')
+    assert.equal(after.messages.at(-1).turn, 81)
+    assert.equal(after.messages.length, before.messages.length - 4)
+    assert.equal(after.rollbackUndo.turn, 83)
+    await assert.rejects(h.rounds.rollbackTo('session', 'chat', 81), /已经是最新一轮/)
+    await h.rounds.undoRollback('session', 'chat')
+    const restored = await h.p.read('chat')
+    assert.deepEqual(restored.messages, before.messages)
+    assert.deepEqual(restored.variables, before.variables)
+    const texts = list => list.map(seq => h.session.events[seq].data).map(data => (data.message || data).content?.map(part => part.text).join(''))
+    assert.deepEqual(texts(h.session.surface.nodes), texts(nodes))
+  }
+})
+
+test('rollback to a turn stops where the model context ends and keeps the rounds it removed', async t => {
+  const h = await fixture(t, true)
+  h.agent.followup({ content: [{ type: 'text', text: '上楼' }] }); await h.agent.whenIdle()
+  const partial = await h.rounds.rollbackTo('session', 'chat', 70)
+  assert.deepEqual(partial.rolledBackTo, { target: 70, latest: 80, removed: 2 })
+  assert.match(partial.rollbackWarning, /已回退 2 轮，停在第 80 轮.*从这一轮分叉/)
+  assert.equal((await h.p.read('chat')).messages.at(-1).turn, 80)
 })
 
 test('bounded rollback falls back to the complete path when the revision moves before its patch', async t => {
