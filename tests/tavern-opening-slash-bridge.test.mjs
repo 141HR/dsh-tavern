@@ -19,6 +19,10 @@ function harness() {
   const listeners = new Map()
   const replies = [], calls = [], submitted = [], commands = []
   const draft = { pending: {} }
+  // Other page calls (a wizard's persist) wait here until the test opens the gate.
+  const gate = {}
+  gate.promise = new Promise(resolve => { gate.open = resolve })
+  gate.open()
   const frame = { contentWindow: { postMessage(message) { replies.push(message) } } }
   const hostWindow = {
     crypto: { randomUUID() { return 'opening-token' } },
@@ -36,7 +40,7 @@ function harness() {
     window: hostWindow,
     rpc: async function (method, payload) {
       calls.push({ method, payload })
-      if (method !== 'callOpeningRuntime') return {}
+      if (method !== 'callOpeningRuntime' || payload.method !== 'prepareOpeningCommand') { await gate.promise; return { updated: true } }
       // The same deferral the preparation draft performs on the host.
       const pending = parsePendingOpeningCommand(payload.args.line)
       if (pending) {
@@ -55,6 +59,11 @@ function harness() {
   const stop = lifecycle.start(function () {})
   return {
     calls, commands, replies, submitted, doc,
+    hold() { gate.promise = new Promise(resolve => { gate.open = resolve }) },
+    release() { gate.open() },
+    call(method, args, requestId) {
+      listeners.get('message')({ source: frame.contentWindow, data: { type: 'dsh-tavern-helper-call', token: doc.token, requestId, method, args } })
+    },
     send(line, requestId) {
       listeners.get('message')({ source: frame.contentWindow, data: { type: 'dsh-tavern-helper-call', token: doc.token, requestId, method: 'triggerTavernSlash', args: { line } } })
     },
@@ -92,6 +101,24 @@ test('只发 /send 不发 /trigger 的卡，页面安静下来后照样开局', 
     assert.deepEqual(h.submitted, [], '先留出卡自己保存数据的时间')
     await new Promise(resolve => setTimeout(resolve, 2200))
     assert.deepEqual(h.submitted, ['我推门而入'], '安静之后按 /send 开始')
+  } finally { h.stop() }
+})
+
+test('/send 之后卡仍在保存时不开局，最后一个调用结束后安静 2 秒才开局', async () => {
+  const h = harness()
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
+  try {
+    h.send('/send 我推门而入', 'one')
+    await settle()
+    h.hold()
+    h.call('updateTavernHelperVariables', { variables: { 门派: '青云' } }, 'persist')
+    await wait(2300)
+    assert.deepEqual(h.submitted, [], '保存还没结束，不能开局')
+    h.release()
+    await wait(1200)
+    assert.deepEqual(h.submitted, [], '保存刚结束，安静不满 2 秒')
+    await wait(1100)
+    assert.deepEqual(h.submitted, ['我推门而入'])
   } finally { h.stop() }
 })
 

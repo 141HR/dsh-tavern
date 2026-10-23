@@ -462,6 +462,34 @@
 				} else if (data.type === "dsh-tavern-helper-call" && !props.sessionId && props.openingPreview) {
 					// The pending frame initializes its private draft before it becomes visible.
 					if (sourceDocument.key !== desired.key) return;
+                    // A card that only ever sends /send has no /trigger to come; its text
+                    // still starts the game once the page is truly quiet (its persist ran),
+                    // as /send does in SillyTavern: no call of this page still running and
+                    // none for 2 s. Every call pauses the wait; the last one to settle re-arms it.
+                    const fireOpeningFallback = function () {
+                        sourceDocument.openingFallbackTimer = null;
+                        if (!listener || sourceDocument !== visible || sourceDocument.openingCommandStarted || !sourceDocument.openingFallbackWanted) return;
+                        sourceDocument.openingFallbackWanted = false;
+                        const plan = (sourceDocument.openingCommandQueue || Promise.resolve()).then(function () {
+                            return invoke("callOpeningRuntime", { id: props.openingPreview.preparationId,
+                                method: "prepareOpeningCommand", args: { line: "/trigger",
+                                    openingId: openingPreviewSelection(props.openingPreview, props.openingPreview.selectedIndex) } });
+                        });
+                        const started = plan.then(function (next) {
+                            if (!next || next.deferred) return null;
+                            if (!sourceDocument.openingCommandStarted) sourceDocument.openingCommandStarted = submitOpening(sourceDocument, next.input);
+                            return sourceDocument.openingCommandStarted;
+                        }).catch(function (error) { tavernErrorHub.report("开始游戏", error); });
+                        sourceDocument.openingCommandQueue = started.then(function () {}, function () {});
+                    };
+                    const settleOpeningCall = function () {
+                        sourceDocument.openingCalls = Math.max(0, (sourceDocument.openingCalls || 0) - 1);
+                        if (sourceDocument.openingCalls || !sourceDocument.openingFallbackWanted || sourceDocument.openingCommandStarted || !current()) return;
+                        if (sourceDocument.openingFallbackTimer) hostWindow.clearTimeout(sourceDocument.openingFallbackTimer);
+                        sourceDocument.openingFallbackTimer = hostWindow.setTimeout(fireOpeningFallback, 2000);
+                    };
+                    if (sourceDocument.openingFallbackTimer) { hostWindow.clearTimeout(sourceDocument.openingFallbackTimer); sourceDocument.openingFallbackTimer = null; }
+                    sourceDocument.openingCalls = (sourceDocument.openingCalls || 0) + 1;
                     if (data.method === "triggerTavernSlash") {
                         // Only a pipe ending in /trigger starts the game. Scripts also query
                         // (/pass {{user}}) or notify (/echo); answer those without starting.
@@ -477,6 +505,7 @@
                             if (current()) event.source.postMessage(result
                                 ? { type: "dsh-tavern-helper-response", token: data.token, requestId: data.requestId, ok: true, result: result }
                                 : { type: "dsh-tavern-helper-response", token: data.token, requestId: data.requestId, ok: false, error: "开局准备页只执行 /send 文本、/sys 文本或以 /trigger 结束的开局命令" }, "*");
+                            settleOpeningCall();
                             return;
                         }
                         // Calls arrive in the order the card makes them, so they queue
@@ -486,8 +515,8 @@
                             const plan = await invoke("callOpeningRuntime", { id: props.openingPreview.preparationId,
                                 method: "prepareOpeningCommand", args: { line: line,
                                     openingId: openingPreviewSelection(props.openingPreview, props.openingPreview.selectedIndex) } });
-                            if (plan && plan.deferred) return { pipe: "", deferred: true };
-                            if (sourceDocument.openingFallbackTimer) { hostWindow.clearTimeout(sourceDocument.openingFallbackTimer); sourceDocument.openingFallbackTimer = null; }
+                            if (plan && plan.deferred) { sourceDocument.openingFallbackWanted = true; return { pipe: "", deferred: true }; }
+                            sourceDocument.openingFallbackWanted = false;
                             if (!sourceDocument.openingCommandStarted) sourceDocument.openingCommandStarted = submitOpening(sourceDocument, plan.input);
                             return sourceDocument.openingCommandStarted;
                         }).catch(function (error) {
@@ -497,29 +526,9 @@
                         sourceDocument.openingCommandQueue = step.then(function () {}, function () {});
                         step.then(function (result) {
                             if (current()) event.source.postMessage({ type: "dsh-tavern-helper-response", token: data.token, requestId: data.requestId, ok: true, result }, "*");
-                            // A card that only ever sends /send has no /trigger to come: once
-                            // it has stayed quiet (its persist already ran) the prepared text
-                            // still starts the game, as /send does in SillyTavern.
-                            if (!current() || !result || !result.deferred || sourceDocument.openingCommandStarted) return;
-                            if (sourceDocument.openingFallbackTimer) hostWindow.clearTimeout(sourceDocument.openingFallbackTimer);
-                            sourceDocument.openingFallbackTimer = hostWindow.setTimeout(function () {
-                                sourceDocument.openingFallbackTimer = null;
-                                if (!listener || sourceDocument !== visible || sourceDocument.openingCommandStarted) return;
-                                const plan = (sourceDocument.openingCommandQueue || Promise.resolve()).then(function () {
-                                    return invoke("callOpeningRuntime", { id: props.openingPreview.preparationId,
-                                        method: "prepareOpeningCommand", args: { line: "/trigger",
-                                            openingId: openingPreviewSelection(props.openingPreview, props.openingPreview.selectedIndex) } });
-                                });
-                                const started = plan.then(function (next) {
-                                    if (!next || next.deferred) return null;
-                                    if (!sourceDocument.openingCommandStarted) sourceDocument.openingCommandStarted = submitOpening(sourceDocument, next.input);
-                                    return sourceDocument.openingCommandStarted;
-                                }).catch(function (error) { tavernErrorHub.report("开始游戏", error); });
-                                sourceDocument.openingCommandQueue = started.then(function () {}, function () {});
-                            }, 2000);
                         }, function (error) {
                             if (current()) event.source.postMessage({ type: "dsh-tavern-helper-response", token: data.token, requestId: data.requestId, ok: false, error: String(error.message || error) }, "*");
-                        });
+                        }).finally(settleOpeningCall);
                         return;
                     }
 					(data.method === "submitTavernHelperInput"
@@ -528,7 +537,7 @@
 						if (current()) event.source.postMessage({ type: "dsh-tavern-helper-response", token: data.token, requestId: data.requestId, ok: true, result }, "*");
 					}, function (error) {
 						if (current()) event.source.postMessage({ type: "dsh-tavern-helper-response", token: data.token, requestId: data.requestId, ok: false, error: String(error.message || error) }, "*");
-					});
+					}).finally(settleOpeningCall);
 				} else if (data.type === "dsh-tavern-helper-call" && props.sessionId) {
 					const allowedMethods = new Set(["generateTavernHelper", "generateTavernHelperRaw", "stopTavernHelperGeneration", "stopAllTavernHelperGeneration", "prepareSessionOpening", "createTavernHelperMessages", "updateTavernHelperPrompts", "updateTavernHelperVariables", "updateTavernHelperMessages", "getTavernHelperWorldbook", "replaceTavernHelperWorldbook", "patchTavernHelperWorldbook"]);
 					if (data.method === "startSessionOpening") {

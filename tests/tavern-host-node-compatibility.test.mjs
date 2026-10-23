@@ -40,12 +40,11 @@ test('兼容窗口交出的宿主节点在进入原生观察器前解包', async
     assert.ok(observer instanceof element.contentWindow.MutationObserver)
     assert.equal(element.contentWindow.MutationObserver.__dshTavernNodeCompatible, true)
 
-    // A script that observes something its document does not own still keeps
-    // running: retarget to the document root instead of throwing.
+    // A script that observes something that is not a node keeps running, and
+    // nothing is observed (never the whole document).
     const fallback = new element.contentWindow.MutationObserver(() => {})
-    fallback.observe({ not: 'a node' }, { childList: true })
-    assert.equal(fallback.targets.length, 1)
-    assert.equal(fallback.targets[0], element.contentWindow.document.documentElement)
+    assert.doesNotThrow(() => fallback.observe({ not: 'a node' }, { childList: true }))
+    assert.equal((fallback.targets || []).length, 0)
 
     // jQuery collections and array-likes observe each element they contain.
     const collection = new element.contentWindow.MutationObserver(() => {})
@@ -82,8 +81,8 @@ test('从宿主窗口拿到的观察器同样解包宿主节点', async () => {
     assert.deepEqual(observer.options, { childList: true, attributes: true })
 
     const fallback = new hostWindow.MutationObserver(() => {})
-    fallback.observe({ not: 'a node' }, { childList: true })
-    assert.equal(fallback.targets[0], dom.window.document.documentElement)
+    assert.doesNotThrow(() => fallback.observe({ not: 'a node' }, { childList: true }))
+    assert.equal((fallback.targets || []).length, 0)
     assert.equal(hostWindow.MutationObserver.__dshTavernNodeCompatible, true)
   } finally {
     dom.window.close()

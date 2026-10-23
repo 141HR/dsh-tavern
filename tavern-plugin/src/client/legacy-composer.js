@@ -170,11 +170,11 @@ function installFrameHostComposer(doc, ownsFrame, submit, report, fill, read) {
 
 // Chrome rejects compatibility proxies in WebIDL arguments ("parameter 1 is not
 // of type 'Node'"), which used to abort whole card scripts when they observed a
-// host node. Proxies publish their real node on this symbol; unwrap it, and turn
-// any unusable target into the document root instead of throwing.
+// host node. Proxies publish their real node on this symbol; unwrap it. A target
+// with no real node is skipped with a warning: observing the document root instead
+// would flood the card with every host mutation (streaming text included).
 function installTavernNodeCompatibility(window) {
-  const doc = window && window.document;
-  if (!doc) return;
+  if (!window || !window.document) return;
   const NODE = Symbol.for('dsh-tavern.hostNode');
   function unwrap(value) {
     if (!value || typeof value !== 'object') return null;
@@ -197,7 +197,7 @@ function installTavernNodeCompatibility(window) {
       const observe = observer.observe.bind(observer);
       observer.observe = function (target, options) {
         const targets = readTargets(target);
-        if (!targets.length) return observe(doc.documentElement, options);
+        if (!targets.length) { console.warn('dsh-tavern: 卡片脚本的 ' + name + ' 观察目标不是页面节点，已跳过'); return; }
         for (const node of targets) observe(node, options);
       };
       return observer;
@@ -246,7 +246,7 @@ function createTavernComposerWindow(frame, host = frame.parent) {
   // That constructor lives in the host realm, so it never meets the sandbox
   // patch; wrap it here so the proxy is unwrapped on the way in too.
   const OBSERVERS = new Set(['MutationObserver', 'IntersectionObserver', 'ResizeObserver']);
-  function compatibleObserver(Native, fallbackDocument) {
+  function compatibleObserver(Native, name) {
     if (typeof Native !== 'function' || Native.__dshTavernNodeCompatible === true) return Native;
     function CompatibleObserver(callback, ...rest) {
       const observer = new Native(callback, ...rest);
@@ -254,9 +254,9 @@ function createTavernComposerWindow(frame, host = frame.parent) {
       observer.observe = function (target, options) {
         const nodes = (Array.isArray(target) ? target : [target]).map(unwrap)
           .filter(node => node && typeof node === 'object' && typeof node.nodeType === 'number');
-        // An unusable target keeps the script alive: observe the document root
-        // instead of letting the native call throw.
-        if (!nodes.length) return observe(fallbackDocument && fallbackDocument.documentElement || host.document.documentElement, options);
+        // An unusable target keeps the script alive without observing anything:
+        // the document root would flood the card with every host mutation.
+        if (!nodes.length) { console.warn('dsh-tavern: 卡片脚本的 ' + name + ' 观察目标不是页面节点，已跳过'); return; }
         for (const node of nodes) observe(node, options);
       };
       return observer;
@@ -404,7 +404,7 @@ function createTavernComposerWindow(frame, host = frame.parent) {
       if (key === 'parent' || key === 'top') return windowView(host);
       if (key === 'document') return target === frame ? frame.document : documentView(target.document);
       if ((key === '$' || key === 'jQuery') && jq) return new Proxy(jq, {apply(_, receiver, args) { return jquery(...args); }});
-      if (OBSERVERS.has(key)) return compatibleObserver(target[key], target.document);
+      if (OBSERVERS.has(key)) return compatibleObserver(target[key], key);
       const value = target[key];
       return typeof value === 'function' && !value.prototype ? (...args) => value.apply(target, args.map(unwrap)) : value;
     }, set(_, key, value) { target[key] = value; return true; } });

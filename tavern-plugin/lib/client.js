@@ -5308,11 +5308,11 @@ function tavernModelRefusalNotice(text) {
 
 		// Chrome rejects compatibility proxies in WebIDL arguments ("parameter 1 is not
 		// of type 'Node'"), which used to abort whole card scripts when they observed a
-		// host node. Proxies publish their real node on this symbol; unwrap it, and turn
-		// any unusable target into the document root instead of throwing.
+		// host node. Proxies publish their real node on this symbol; unwrap it. A target
+		// with no real node is skipped with a warning: observing the document root instead
+		// would flood the card with every host mutation (streaming text included).
 		function installTavernNodeCompatibility(window) {
-		  const doc = window && window.document;
-		  if (!doc) return;
+		  if (!window || !window.document) return;
 		  const NODE = Symbol.for('dsh-tavern.hostNode');
 		  function unwrap(value) {
 		    if (!value || typeof value !== 'object') return null;
@@ -5335,7 +5335,7 @@ function tavernModelRefusalNotice(text) {
 		      const observe = observer.observe.bind(observer);
 		      observer.observe = function (target, options) {
 		        const targets = readTargets(target);
-		        if (!targets.length) return observe(doc.documentElement, options);
+		        if (!targets.length) { console.warn('dsh-tavern: 卡片脚本的 ' + name + ' 观察目标不是页面节点，已跳过'); return; }
 		        for (const node of targets) observe(node, options);
 		      };
 		      return observer;
@@ -5384,7 +5384,7 @@ function tavernModelRefusalNotice(text) {
 		  // That constructor lives in the host realm, so it never meets the sandbox
 		  // patch; wrap it here so the proxy is unwrapped on the way in too.
 		  const OBSERVERS = new Set(['MutationObserver', 'IntersectionObserver', 'ResizeObserver']);
-		  function compatibleObserver(Native, fallbackDocument) {
+		  function compatibleObserver(Native, name) {
 		    if (typeof Native !== 'function' || Native.__dshTavernNodeCompatible === true) return Native;
 		    function CompatibleObserver(callback, ...rest) {
 		      const observer = new Native(callback, ...rest);
@@ -5392,9 +5392,9 @@ function tavernModelRefusalNotice(text) {
 		      observer.observe = function (target, options) {
 		        const nodes = (Array.isArray(target) ? target : [target]).map(unwrap)
 		          .filter(node => node && typeof node === 'object' && typeof node.nodeType === 'number');
-		        // An unusable target keeps the script alive: observe the document root
-		        // instead of letting the native call throw.
-		        if (!nodes.length) return observe(fallbackDocument && fallbackDocument.documentElement || host.document.documentElement, options);
+		        // An unusable target keeps the script alive without observing anything:
+		        // the document root would flood the card with every host mutation.
+		        if (!nodes.length) { console.warn('dsh-tavern: 卡片脚本的 ' + name + ' 观察目标不是页面节点，已跳过'); return; }
 		        for (const node of nodes) observe(node, options);
 		      };
 		      return observer;
@@ -5542,7 +5542,7 @@ function tavernModelRefusalNotice(text) {
 		      if (key === 'parent' || key === 'top') return windowView(host);
 		      if (key === 'document') return target === frame ? frame.document : documentView(target.document);
 		      if ((key === '$' || key === 'jQuery') && jq) return new Proxy(jq, {apply(_, receiver, args) { return jquery(...args); }});
-		      if (OBSERVERS.has(key)) return compatibleObserver(target[key], target.document);
+		      if (OBSERVERS.has(key)) return compatibleObserver(target[key], key);
 		      const value = target[key];
 		      return typeof value === 'function' && !value.prototype ? (...args) => value.apply(target, args.map(unwrap)) : value;
 		    }, set(_, key, value) { target[key] = value; return true; } });
@@ -10939,6 +10939,34 @@ function bindTavernFontZoom(node, win) {
 				} else if (data.type === "dsh-tavern-helper-call" && !props.sessionId && props.openingPreview) {
 					// The pending frame initializes its private draft before it becomes visible.
 					if (sourceDocument.key !== desired.key) return;
+                    // A card that only ever sends /send has no /trigger to come; its text
+                    // still starts the game once the page is truly quiet (its persist ran),
+                    // as /send does in SillyTavern: no call of this page still running and
+                    // none for 2 s. Every call pauses the wait; the last one to settle re-arms it.
+                    const fireOpeningFallback = function () {
+                        sourceDocument.openingFallbackTimer = null;
+                        if (!listener || sourceDocument !== visible || sourceDocument.openingCommandStarted || !sourceDocument.openingFallbackWanted) return;
+                        sourceDocument.openingFallbackWanted = false;
+                        const plan = (sourceDocument.openingCommandQueue || Promise.resolve()).then(function () {
+                            return invoke("callOpeningRuntime", { id: props.openingPreview.preparationId,
+                                method: "prepareOpeningCommand", args: { line: "/trigger",
+                                    openingId: openingPreviewSelection(props.openingPreview, props.openingPreview.selectedIndex) } });
+                        });
+                        const started = plan.then(function (next) {
+                            if (!next || next.deferred) return null;
+                            if (!sourceDocument.openingCommandStarted) sourceDocument.openingCommandStarted = submitOpening(sourceDocument, next.input);
+                            return sourceDocument.openingCommandStarted;
+                        }).catch(function (error) { tavernErrorHub.report("开始游戏", error); });
+                        sourceDocument.openingCommandQueue = started.then(function () {}, function () {});
+                    };
+                    const settleOpeningCall = function () {
+                        sourceDocument.openingCalls = Math.max(0, (sourceDocument.openingCalls || 0) - 1);
+                        if (sourceDocument.openingCalls || !sourceDocument.openingFallbackWanted || sourceDocument.openingCommandStarted || !current()) return;
+                        if (sourceDocument.openingFallbackTimer) hostWindow.clearTimeout(sourceDocument.openingFallbackTimer);
+                        sourceDocument.openingFallbackTimer = hostWindow.setTimeout(fireOpeningFallback, 2000);
+                    };
+                    if (sourceDocument.openingFallbackTimer) { hostWindow.clearTimeout(sourceDocument.openingFallbackTimer); sourceDocument.openingFallbackTimer = null; }
+                    sourceDocument.openingCalls = (sourceDocument.openingCalls || 0) + 1;
                     if (data.method === "triggerTavernSlash") {
                         // Only a pipe ending in /trigger starts the game. Scripts also query
                         // (/pass {{user}}) or notify (/echo); answer those without starting.
@@ -10954,6 +10982,7 @@ function bindTavernFontZoom(node, win) {
                             if (current()) event.source.postMessage(result
                                 ? { type: "dsh-tavern-helper-response", token: data.token, requestId: data.requestId, ok: true, result: result }
                                 : { type: "dsh-tavern-helper-response", token: data.token, requestId: data.requestId, ok: false, error: "开局准备页只执行 /send 文本、/sys 文本或以 /trigger 结束的开局命令" }, "*");
+                            settleOpeningCall();
                             return;
                         }
                         // Calls arrive in the order the card makes them, so they queue
@@ -10963,8 +10992,8 @@ function bindTavernFontZoom(node, win) {
                             const plan = await invoke("callOpeningRuntime", { id: props.openingPreview.preparationId,
                                 method: "prepareOpeningCommand", args: { line: line,
                                     openingId: openingPreviewSelection(props.openingPreview, props.openingPreview.selectedIndex) } });
-                            if (plan && plan.deferred) return { pipe: "", deferred: true };
-                            if (sourceDocument.openingFallbackTimer) { hostWindow.clearTimeout(sourceDocument.openingFallbackTimer); sourceDocument.openingFallbackTimer = null; }
+                            if (plan && plan.deferred) { sourceDocument.openingFallbackWanted = true; return { pipe: "", deferred: true }; }
+                            sourceDocument.openingFallbackWanted = false;
                             if (!sourceDocument.openingCommandStarted) sourceDocument.openingCommandStarted = submitOpening(sourceDocument, plan.input);
                             return sourceDocument.openingCommandStarted;
                         }).catch(function (error) {
@@ -10974,29 +11003,9 @@ function bindTavernFontZoom(node, win) {
                         sourceDocument.openingCommandQueue = step.then(function () {}, function () {});
                         step.then(function (result) {
                             if (current()) event.source.postMessage({ type: "dsh-tavern-helper-response", token: data.token, requestId: data.requestId, ok: true, result }, "*");
-                            // A card that only ever sends /send has no /trigger to come: once
-                            // it has stayed quiet (its persist already ran) the prepared text
-                            // still starts the game, as /send does in SillyTavern.
-                            if (!current() || !result || !result.deferred || sourceDocument.openingCommandStarted) return;
-                            if (sourceDocument.openingFallbackTimer) hostWindow.clearTimeout(sourceDocument.openingFallbackTimer);
-                            sourceDocument.openingFallbackTimer = hostWindow.setTimeout(function () {
-                                sourceDocument.openingFallbackTimer = null;
-                                if (!listener || sourceDocument !== visible || sourceDocument.openingCommandStarted) return;
-                                const plan = (sourceDocument.openingCommandQueue || Promise.resolve()).then(function () {
-                                    return invoke("callOpeningRuntime", { id: props.openingPreview.preparationId,
-                                        method: "prepareOpeningCommand", args: { line: "/trigger",
-                                            openingId: openingPreviewSelection(props.openingPreview, props.openingPreview.selectedIndex) } });
-                                });
-                                const started = plan.then(function (next) {
-                                    if (!next || next.deferred) return null;
-                                    if (!sourceDocument.openingCommandStarted) sourceDocument.openingCommandStarted = submitOpening(sourceDocument, next.input);
-                                    return sourceDocument.openingCommandStarted;
-                                }).catch(function (error) { tavernErrorHub.report("开始游戏", error); });
-                                sourceDocument.openingCommandQueue = started.then(function () {}, function () {});
-                            }, 2000);
                         }, function (error) {
                             if (current()) event.source.postMessage({ type: "dsh-tavern-helper-response", token: data.token, requestId: data.requestId, ok: false, error: String(error.message || error) }, "*");
-                        });
+                        }).finally(settleOpeningCall);
                         return;
                     }
 					(data.method === "submitTavernHelperInput"
@@ -11005,7 +11014,7 @@ function bindTavernFontZoom(node, win) {
 						if (current()) event.source.postMessage({ type: "dsh-tavern-helper-response", token: data.token, requestId: data.requestId, ok: true, result }, "*");
 					}, function (error) {
 						if (current()) event.source.postMessage({ type: "dsh-tavern-helper-response", token: data.token, requestId: data.requestId, ok: false, error: String(error.message || error) }, "*");
-					});
+					}).finally(settleOpeningCall);
 				} else if (data.type === "dsh-tavern-helper-call" && props.sessionId) {
 					const allowedMethods = new Set(["generateTavernHelper", "generateTavernHelperRaw", "stopTavernHelperGeneration", "stopAllTavernHelperGeneration", "prepareSessionOpening", "createTavernHelperMessages", "updateTavernHelperPrompts", "updateTavernHelperVariables", "updateTavernHelperMessages", "getTavernHelperWorldbook", "replaceTavernHelperWorldbook", "patchTavernHelperWorldbook"]);
 					if (data.method === "startSessionOpening") {
