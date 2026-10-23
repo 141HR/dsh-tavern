@@ -14,6 +14,10 @@ test('审稿读本轮玩家输入和上一轮正文', () => {
   ]
   assert.deepEqual(polishReviewContext(messages), { input: '本轮输入', previous: '上一轮原文' })
   assert.deepEqual(polishReviewContext(messages.slice(0, 3)), { input: '第一句', previous: '开场' })
+  // Only the latest floors are read for a long save; earlier floors are absent.
+  const sparse = new Array(500)
+  sparse.splice(496, 4, ...messages.slice(1))
+  assert.deepEqual(polishReviewContext(sparse), { input: '本轮输入', previous: '上一轮原文' })
 })
 
 test('原则作 system，人物卡、前文与正文作审稿材料', () => {

@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto'
 // In-game play, turn editing, compaction and background settlement requests.
 // `deps` carries the services ../index.js builds; dispatchMethod routes by method name.
 export function createPlayHandlers(deps) {
-  const { agentCompaction, agentRegistry, backgroundAgentRunner, backgroundCatalog, bodyEditor, callModel, polishRecords,
+  const { agentCompaction, agentRegistry, backgroundAgentRunner, backgroundCatalog, bodyEditor, callModel, polishRecords, chatHeaderWithLatestFloors,
     candidateGenerator, candidateTasks, chatForSession, compactionAbort, conversationGuides, ctx,
     ledgerEditor, liveCardUpdate, manualCharacterDesign, manualLedger, notifyPluginTimeline, phoneChat,
     playCardSnapshots, pluginSettlementProgress, readBackgroundSuppression, readCard, readCardExtensions,
@@ -179,7 +179,8 @@ export function createPlayHandlers(deps) {
       await reconcileStory(sessionId)
       const edit = await bodyEditor.read(sessionId)
       const texts = edit.parts.filter(part => part.kind === 'text').map(part => part.text)
-      const chat = await chatForSession(sessionId)
+      // The header and the last few floors are all a review reads: this turn's input and the reply before.
+      const chat = await chatHeaderWithLatestFloors(sessionId, 4)
       const card = await readCard(chat.cardPath).catch(() => undefined) || chat.cardDefinitionSnapshot?.raw?.data || chat.cardDefinitionSnapshot?.raw
       const request = buildPolishReviewRequest({ principles: runtimePrompt('polish'), card, playerName: chat.macroState?.userName,
         ...polishReviewContext(chat.messages), reply: texts.join('\n\n') })

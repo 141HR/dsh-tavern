@@ -3119,7 +3119,7 @@ export async function apply(ctx) {
   // Request handlers by area live in rpc/; bindings assigned later are read through getters.
   const rpcDeps = { TAVERN_PACKAGE_VERSION, agentCompaction, agentRegistry, appendStoryRounds,
     applicationUpdater, attachPlayChatDebug, backgroundAgentRunner, backgroundCatalog,
-    backgroundConfigForSession, bindScript, bodyEditor, callModel, candidateGenerator, candidateTasks, polishRecords,
+    backgroundConfigForSession, bindScript, bodyEditor, callModel, candidateGenerator, candidateTasks, polishRecords, chatHeaderWithLatestFloors,
     cardMemory, cardOrganization, cardPacksOf, cardPlugins, cardPreparation, cardTaskPrompts, castAssets,
     castCardOf, castEdit, castPresentation, castStage, castView, chatForSession, chatHeaderForSession,
     chatHistoryImporter, chatPersistence, commands, compactionAbort, compatibilityDiagnostics,
